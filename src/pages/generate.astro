@@ -54,25 +54,27 @@ const imageURI = await fetch(image)
   <p><b>Date:</b> {date}</p>
   <br />
 
-  <div class="flex gap-4">
+  <div class="flex gap-8">
     <div
-      class="font-news box-content flex aspect-square w-96 flex-col items-center overflow-hidden border"
+      class="box-content flex aspect-square w-96 flex-col items-center overflow-hidden border font-news"
       id="title-slide"
     >
       <img src={"data:image/;base64," + imageURI} />
       <div
-        class="flex grow flex-col items-center justify-around gap-2 p-4 text-center leading-none"
+        class="flex grow flex-col items-center justify-around p-4 text-center leading-none"
       >
-        <p class="text-balance text-2xl font-semibold leading-tight">{title}</p>
-        <p>Article by: {author}</p>
-        <img src="/hare-logo.webp" class="w-12" />
+        <div>
+          <p class="text-balance pb-1 text-2xl font-semibold leading-tight">
+            {title}
+          </p>
+          <p>Article by: {author}</p>
+        </div>
+        <img src="/hare-banner.png" class="h-8" />
       </div>
     </div>
 
-    <br />
-
     <div
-      class="font-news relative box-content flex aspect-square w-96 flex-col overflow-hidden border"
+      class="relative box-content flex aspect-square w-96 flex-col overflow-hidden border font-news"
       id="content-slide"
     >
       <div class="absolute top-0 flex flex-col gap-2 p-4">

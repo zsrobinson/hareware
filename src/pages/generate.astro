@@ -1,0 +1,57 @@
+---
+import { JSDOM } from "jsdom";
+import Root from "../layouts/root.astro";
+
+let article = Astro.url.searchParams.get("article") || "";
+if (!article) Astro.redirect("/"); /* ensure we were given URL */
+
+const res = await fetch(article);
+const buffer = await res.arrayBuffer();
+const dom = new JSDOM(buffer);
+
+const title = dom.window.document
+  .querySelector(".entry-title")!
+  .innerHTML.trim();
+
+const author = dom.window.document
+  .querySelector(".entry-content p:first-of-type")!
+  .innerHTML.trim()
+  .split(": ")[1];
+
+const imageCredits = dom.window.document
+  .querySelector(".entry-content p:last-of-type em")!
+  .innerHTML.trim()
+  .split(": ")[1];
+
+const image = dom.window.document
+  .querySelector(".entry-content figure:first-of-type img")
+  ?.getAttribute("src");
+
+const date = dom.window.document
+  .querySelector(".wp-block-post-date time")
+  ?.innerHTML.trim();
+
+const firstPara = dom.window.document
+  .querySelector(".entry-content p:nth-of-type(2)")
+  ?.innerHTML.trim();
+
+const content = dom.window.document.querySelector("article")?.innerHTML;
+---
+
+<Root>
+  <h2>Generate</h2>
+  <b>Article:</b>
+  <code>{article}</code>
+
+  <p><b>Title:</b> {title}</p>
+  <p><b>Author:</b> {author}</p>
+  <p><b>Image Credits:</b> {imageCredits}</p>
+  <p><b>Image Source:</b> {image}</p>
+  <p><b>Date:</b> {date}</p>
+  <p><b>First Paragraph:</b> {firstPara}</p>
+
+  <details>
+    <summary> <b>Full Article</b> </summary>
+    <article set:html={content} />
+  </details>
+</Root>

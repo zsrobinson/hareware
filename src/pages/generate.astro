@@ -25,33 +25,87 @@ const imageCredits = dom.window.document
 
 const image = dom.window.document
   .querySelector(".entry-content figure:first-of-type img")
-  ?.getAttribute("src");
+  ?.getAttribute("src")!;
 
 const date = dom.window.document
   .querySelector(".wp-block-post-date time")
   ?.innerHTML.trim();
 
-const firstPara = dom.window.document
-  .querySelector(".entry-content p:nth-of-type(2)")
-  ?.innerHTML.trim();
+const paragraphs = [
+  ...dom.window.document.querySelectorAll(".entry-content p"),
+].slice(1);
 
-const content = dom.window.document.querySelector("article")?.innerHTML;
+const imageURI = await fetch(image)
+  .then((res) => res.arrayBuffer())
+  .then((buf) => Buffer.from(buf).toString("base64"));
 ---
 
 <Root>
-  <h2>Generate</h2>
   <b>Article:</b>
   <code>{article}</code>
 
   <p><b>Title:</b> {title}</p>
   <p><b>Author:</b> {author}</p>
   <p><b>Image Credits:</b> {imageCredits}</p>
-  <p><b>Image Source:</b> {image}</p>
-  <p><b>Date:</b> {date}</p>
-  <p><b>First Paragraph:</b> {firstPara}</p>
 
-  <details>
-    <summary> <b>Full Article</b> </summary>
-    <article set:html={content} />
-  </details>
+  <b>Image Source:</b>
+  <code id="image-source">{image}</code>
+
+  <p><b>Date:</b> {date}</p>
+  <br />
+
+  <div class="flex gap-4">
+    <div
+      class="font-news box-content flex aspect-square w-96 flex-col items-center overflow-hidden border"
+      id="title-slide"
+    >
+      <img src={"data:image/;base64," + imageURI} />
+      <div
+        class="flex grow flex-col items-center justify-around gap-2 p-4 text-center leading-none"
+      >
+        <p class="text-balance text-2xl font-semibold leading-tight">{title}</p>
+        <p>Article by: {author}</p>
+        <img src="/hare-logo.webp" class="w-12" />
+      </div>
+    </div>
+
+    <br />
+
+    <div
+      class="font-news relative box-content flex aspect-square w-96 flex-col overflow-hidden border"
+      id="content-slide"
+    >
+      <div class="absolute top-0 flex flex-col gap-2 p-4">
+        {paragraphs.map((para) => <p set:html={para.innerHTML} />)}
+      </div>
+      <div
+        class="pointer-events-none absolute top-0 aspect-square w-96 bg-gradient-to-b from-transparent from-40% to-white to-90%"
+      >
+      </div>
+      <p class="absolute bottom-3 w-full text-center font-bold">
+        Full Article in Bio
+      </p>
+    </div>
+  </div>
+
+  <br />
+
+  <script>
+    import { toPng } from "html-to-image";
+
+    const titleSlide = document.getElementById("title-slide")!;
+    const contentSlide = document.getElementById("content-slide")!;
+
+    toPng(titleSlide).then((dataUrl) => {
+      var img = new Image();
+      img.src = dataUrl;
+      /* document.body.appendChild(img); */
+    });
+
+    toPng(contentSlide).then((dataUrl) => {
+      var img = new Image();
+      img.src = dataUrl;
+      /* document.body.appendChild(img); */
+    });
+  </script>
 </Root>

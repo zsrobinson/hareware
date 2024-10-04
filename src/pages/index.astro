@@ -20,7 +20,10 @@ const articles = await getRecentArticles();
       articles ? (
         articles.map((article) => (
           <li>
-            <a href={"/generate?article=" + article.link}>{article.title}</a>
+            <a
+              href={"/generate?article=" + article.link}
+              set:html={article.title}
+            />
           </li>
         ))
       ) : (

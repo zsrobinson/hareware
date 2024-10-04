@@ -66,9 +66,10 @@ const imageURI = await fetch(image)
         class="flex grow flex-col items-center justify-around p-3 text-center leading-none"
       >
         <div>
-          <p class="text-balance pb-1 text-2xl font-semibold leading-tight">
-            {title}
-          </p>
+          <p
+            class="text-balance pb-1 text-2xl font-semibold leading-tight"
+            set:html={title}
+          />
           {author && <p>Article by: {author}</p>}
         </div>
         <img src="/hare-banner.png" class="h-8" />

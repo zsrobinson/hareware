@@ -19,13 +19,13 @@ const author = dom.window.document
   .split(": ")[1];
 
 const imageCredits = dom.window.document
-  .querySelector(".entry-content p:last-of-type em")!
+  .querySelector(".entry-content p:last-of-type")!
   .innerHTML.trim()
   .split(": ")[1];
 
 const image = dom.window.document
-  .querySelector(".entry-content figure:first-of-type img")
-  ?.getAttribute("src")!;
+  .querySelector(`meta[property="og:image"]`)
+  ?.getAttribute("content")!;
 
 const date = dom.window.document
   .querySelector(".wp-block-post-date time")
@@ -61,7 +61,7 @@ const imageURI = await fetch(image)
     >
       <img src={"data:image/;base64," + imageURI} />
       <div
-        class="flex grow flex-col items-center justify-around p-4 text-center leading-none"
+        class="flex grow flex-col items-center justify-around p-3 text-center leading-none"
       >
         <div>
           <p class="text-balance pb-1 text-2xl font-semibold leading-tight">

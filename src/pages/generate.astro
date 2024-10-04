@@ -4,6 +4,12 @@ import Root from "../layouts/root.astro";
 import { ContentSlide, TitleSlide } from "~/components/slides";
 import { Button } from "~/components/ui/button";
 import { FormatForm } from "~/components/format-form";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "~/components/ui/accordion";
 
 let article = Astro.url.searchParams.get("article") || "";
 if (!article) Astro.redirect("/"); /* ensure we were given URL */
@@ -67,6 +73,7 @@ const titleSize = titleSizeRaw as "xl" | "2xl" | "3xl";
   <a href={image}><code id="image-source">{image}</code></a>
 
   <p><span class="font-semibold">Date:</span> {date}</p>
+
   <br />
 
   <FormatForm
@@ -87,9 +94,9 @@ const titleSize = titleSizeRaw as "xl" | "2xl" | "3xl";
         variant={variant}
         titleSize={titleSize}
       />
-      <Button id="title-slide-download" variant="outline"
-        >Loading Image Download...</Button
-      >
+      <Button id="title-slide-download" variant="outline" disabled>
+        Loading...
+      </Button>
     </div>
 
     <div class="flex flex-col items-center gap-4 rounded-xl bg-zinc-100 p-4">
@@ -100,13 +107,11 @@ const titleSize = titleSizeRaw as "xl" | "2xl" | "3xl";
             : content.map((para) => <p set:html={para.innerHTML} />)
         }
       </ContentSlide>
-      <Button id="content-slide-download" variant="outline"
-        >Loading Image Download...</Button
-      >
+      <Button id="content-slide-download" variant="outline" disabled>
+        Loading...
+      </Button>
     </div>
   </div>
-
-  <br />
 
   <script>
     import { toPng } from "html-to-image";
@@ -129,6 +134,7 @@ const titleSize = titleSizeRaw as "xl" | "2xl" | "3xl";
       (dataURI) => {
         titleSlideDownload.innerText = "Download Title Slide";
         titleSlideDownload.onclick = () => download(dataURI, "title-slide.png");
+        titleSlideDownload.disabled = false;
       }
     );
 
@@ -136,6 +142,7 @@ const titleSize = titleSizeRaw as "xl" | "2xl" | "3xl";
       contentSlideDownload.innerText = "Download Content Slide";
       contentSlideDownload.onclick = () =>
         download(dataURI, "content-slide.png");
+      contentSlideDownload.disabled = false;
     });
   </script>
 </Root>

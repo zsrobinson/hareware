@@ -8,10 +8,31 @@ import "@fontsource-variable/newsreader";
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width" />
     <meta name="generator" content={Astro.generator} />
-    <title>Hare Instagram Post Creator</title>
+    <title>Hareware: Instagram Post Creator</title>
   </head>
 
-  <body class="m-8 bg-zinc-100">
+  <body class="m-8">
+    <nav>
+      <div class="flex items-end gap-4">
+        <a href="/" tabindex="-1">
+          <img src="/hareware-banner.png" alt="Hareware Banner" class="h-16" />
+        </a>
+
+        <div class="flex flex-col gap-1">
+          <a href="/">
+            <h1 class="text-2xl font-bold leading-none">
+              Instagram Post Creator
+            </h1>
+          </a>
+          <p class="text-sm leading-none">by Zachary Robinson</p>
+        </div>
+      </div>
+
+      <br />
+      <hr />
+      <br />
+    </nav>
+
     <slot />
   </body>
 </html>

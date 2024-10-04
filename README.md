@@ -8,3 +8,4 @@
   - get index of p tag that has "Image Credits:"
   - remove those indices from the content p tag array
   - use those removed tags for metadata (find date tag for date if not p)
+- another idea: more room for title by having author and hare logo on same line

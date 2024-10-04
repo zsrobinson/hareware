@@ -24,9 +24,8 @@ export function TitleSlide({
         <div>
           <p
             className={`text-balance pb-1 font-semibold leading-tight ${variant === "maroon" ? "text-white" : "text-black"} ${titleSize === "xl" ? "text-xl" : titleSize === "2xl" ? "text-2xl" : "text-3xl"}`}
-          >
-            {title}
-          </p>
+            dangerouslySetInnerHTML={{ __html: title }}
+          />
 
           {author && (
             <p

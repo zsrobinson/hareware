@@ -1,5 +1,8 @@
 ---
+import { getRecentArticles } from "../../lib/getRecentArticles";
 import Root from "../layouts/root.astro";
+
+const articles = await getRecentArticles();
 ---
 
 <Root>
@@ -8,4 +11,21 @@ import Root from "../layouts/root.astro";
     <input type="text" name="article" placeholder="article" />
     <button type="submit">Submit</button>
   </form>
+
+  <br />
+
+  <h2>Recent Articles:</h2>
+  <ul class="list-inside list-disc">
+    {
+      articles ? (
+        articles.map((article) => (
+          <li>
+            <a href={"/generate?article=" + article.link}>{article.title}</a>
+          </li>
+        ))
+      ) : (
+        <p>Cannot get recent articles.</p>
+      )
+    }
+  </ul>
 </Root>

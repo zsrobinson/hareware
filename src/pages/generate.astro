@@ -10,17 +10,17 @@ const buffer = await res.arrayBuffer();
 const dom = new JSDOM(buffer);
 
 const title = dom.window.document
-  .querySelector(".entry-title")!
-  .innerHTML.trim();
+  .querySelector(".entry-title")
+  ?.innerHTML.trim();
 
 const author = dom.window.document
-  .querySelector(".entry-content p:first-of-type")!
-  .textContent?.trim()
+  .querySelector(".entry-content p:first-of-type")
+  ?.textContent?.trim()
   .split(": ")[1];
 
 const imageCredits = dom.window.document
-  .querySelector(".entry-content p:last-of-type em")!
-  .innerHTML.trim()
+  .querySelector(".entry-content p:last-of-type em")
+  ?.innerHTML.trim()
   .split(": ")[1];
 
 const image = dom.window.document
@@ -56,7 +56,7 @@ const imageURI = await fetch(image)
   <p><b>Date:</b> {date}</p>
   <br />
 
-  <div class="flex gap-8">
+  <div class="flex min-w-max gap-8">
     <div
       class="box-content flex aspect-square w-96 flex-col items-center overflow-hidden bg-white font-news"
       id="title-slide"
@@ -118,10 +118,15 @@ const imageURI = await fetch(image)
       "content-slide-download"
     ) as HTMLButtonElement;
 
-    toPng(titleSlide).then((dataURI) => {
-      titleSlideDownload.innerText = "Download Title Slide";
-      titleSlideDownload.onclick = () => download(dataURI, "title-slide.png");
-    });
+    /* have to wait because of safari */
+    await new Promise((res) => setTimeout(res, 300));
+
+    toPng(titleSlide, { canvasHeight: 1000, canvasWidth: 1000 }).then(
+      (dataURI) => {
+        titleSlideDownload.innerText = "Download Title Slide";
+        titleSlideDownload.onclick = () => download(dataURI, "title-slide.png");
+      }
+    );
 
     toPng(contentSlide).then((dataURI) => {
       contentSlideDownload.innerText = "Download Content Slide";

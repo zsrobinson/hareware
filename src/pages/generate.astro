@@ -15,7 +15,7 @@ const title = dom.window.document
 
 const author = dom.window.document
   .querySelector(".entry-content p:first-of-type")!
-  .innerHTML.trim()
+  .textContent?.trim()
   .split(": ")[1];
 
 const imageCredits = dom.window.document
@@ -31,9 +31,11 @@ const date = dom.window.document
   .querySelector(".wp-block-post-date time")
   ?.innerHTML.trim();
 
-const paragraphs = [
-  ...dom.window.document.querySelectorAll(".entry-content p"),
-].slice(1);
+const content = [
+  ...dom.window.document.querySelectorAll(
+    ".entry-content p, .entry-content h2, .entry-content ol, .entry-content ul"
+  ),
+] as Element[];
 
 const imageURI = await fetch(image)
   .then((res) => res.arrayBuffer())
@@ -56,7 +58,7 @@ const imageURI = await fetch(image)
 
   <div class="flex gap-8">
     <div
-      class="box-content flex aspect-square w-96 flex-col items-center overflow-hidden border font-news"
+      class="box-content flex aspect-square w-96 flex-col items-center overflow-hidden bg-white font-news"
       id="title-slide"
     >
       <img src={"data:image/;base64," + imageURI} />
@@ -67,18 +69,22 @@ const imageURI = await fetch(image)
           <p class="text-balance pb-1 text-2xl font-semibold leading-tight">
             {title}
           </p>
-          <p>Article by: {author}</p>
+          {author && <p>Article by: {author}</p>}
         </div>
         <img src="/hare-banner.png" class="h-8" />
       </div>
     </div>
 
     <div
-      class="relative box-content flex aspect-square w-96 flex-col overflow-hidden border font-news"
+      class="relative box-content flex aspect-square w-96 flex-col overflow-hidden bg-white font-news"
       id="content-slide"
     >
       <div class="absolute top-0 flex flex-col gap-2 p-4">
-        {paragraphs.map((para) => <p set:html={para.innerHTML} />)}
+        {
+          author
+            ? content.slice(1).map((para) => <p set:html={para.innerHTML} />)
+            : content.map((para) => <p set:html={para.innerHTML} />)
+        }
       </div>
       <div
         class="pointer-events-none absolute top-0 aspect-square w-96 bg-gradient-to-b from-transparent from-40% to-white to-90%"
@@ -92,22 +98,35 @@ const imageURI = await fetch(image)
 
   <br />
 
+  <button id="title-slide-download">Loading Image Download...</button>
+  <br />
+  <button id="content-slide-download">Loading Image Download...</button>
+
+  <br />
+
   <script>
     import { toPng } from "html-to-image";
+    import download from "downloadjs";
 
     const titleSlide = document.getElementById("title-slide")!;
     const contentSlide = document.getElementById("content-slide")!;
 
-    toPng(titleSlide).then((dataUrl) => {
-      var img = new Image();
-      img.src = dataUrl;
-      /* document.body.appendChild(img); */
+    const titleSlideDownload = document.getElementById(
+      "title-slide-download"
+    ) as HTMLButtonElement;
+    const contentSlideDownload = document.getElementById(
+      "content-slide-download"
+    ) as HTMLButtonElement;
+
+    toPng(titleSlide).then((dataURI) => {
+      titleSlideDownload.innerText = "Download Title Slide";
+      titleSlideDownload.onclick = () => download(dataURI, "title-slide.png");
     });
 
-    toPng(contentSlide).then((dataUrl) => {
-      var img = new Image();
-      img.src = dataUrl;
-      /* document.body.appendChild(img); */
+    toPng(contentSlide).then((dataURI) => {
+      contentSlideDownload.innerText = "Download Content Slide";
+      contentSlideDownload.onclick = () =>
+        download(dataURI, "content-slide.png");
     });
   </script>
 </Root>

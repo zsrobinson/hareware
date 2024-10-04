@@ -1,7 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 
 export async function getRecentArticles(): Promise<
-  { title: string; link: string }[] | undefined
+  { title: string; link: string; date: string }[] | undefined
 > {
   try {
     const res = await fetch("https://theumdhare.com/feed");
@@ -13,6 +13,11 @@ export async function getRecentArticles(): Promise<
     return data.rss.channel.item.map((item: any) => ({
       title: item.title as string,
       link: item.link as string,
+      date: new Date(item.pubDate).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }),
     }));
   } catch (e) {
     return undefined;

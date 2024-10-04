@@ -1,19 +1,28 @@
 ---
+import { Input } from "~/components/ui/input";
 import { getRecentArticles } from "../../lib/getRecentArticles";
 import Root from "../layouts/root.astro";
+import { Button } from "~/components/ui/button";
 
 const articles = await getRecentArticles();
 ---
 
 <Root>
-  <form action="/generate">
-    <input type="text" name="article" placeholder="article" />
-    <button type="submit">Submit</button>
+  <p class="pb-2">Paste an article link to get started:</p>
+  <form action="/generate" class="flex gap-2">
+    <Input
+      type="text"
+      name="article"
+      placeholder="Article Link"
+      className="max-w-72 font-mono"
+    />
+    <Button type="submit">Submit</Button>
   </form>
 
   <br />
 
-  <h2>Recent Articles:</h2>
+  <p class="pb-2">Or, start from one of our recent articles:</p>
+
   <ul class="list-inside list-disc">
     {
       articles ? (
@@ -21,6 +30,7 @@ const articles = await getRecentArticles();
           <li>
             <a
               href={"/generate?article=" + article.link}
+              class="underline transition-opacity hover:opacity-60"
               set:html={article.title}
             />
           </li>

@@ -1,5 +1,6 @@
 ---
 import "@fontsource-variable/newsreader";
+import "~/styles/globals.css";
 ---
 
 <html lang="en">
@@ -13,18 +14,30 @@ import "@fontsource-variable/newsreader";
 
   <body class="m-8">
     <nav>
-      <div class="flex items-end gap-4">
+      <div class="flex flex-wrap items-end gap-4">
         <a href="/" tabindex="-1">
           <img src="/hareware-banner.png" alt="Hareware Banner" class="h-16" />
         </a>
 
         <div class="flex flex-col gap-1">
-          <a href="/">
-            <h1 class="text-2xl font-bold leading-none">
-              Instagram Post Creator
-            </h1>
-          </a>
-          <p class="text-sm leading-none">by Zachary Robinson</p>
+          <div class="flex items-center gap-2">
+            <a href="/">
+              <h1 class="text-2xl font-bold leading-none">
+                Instagram Post Creator
+              </h1>
+            </a>
+            <span class="rounded-md border p-1 text-sm leading-none">BETA</span>
+          </div>
+
+          <div class="text-sm leading-none">
+            by Zachary Robinson · View Project on
+            <a
+              href="https://github.com/zsrobinson/hareware"
+              class="text-sm leading-none underline"
+            >
+              GitHub
+            </a>
+          </div>
         </div>
       </div>
 

@@ -1,6 +1,9 @@
 ---
 import { JSDOM } from "jsdom";
 import Root from "../layouts/root.astro";
+import { ContentSlide, TitleSlide } from "~/components/slides";
+import { Button } from "~/components/ui/button";
+import { FormatForm } from "~/components/format-form";
 
 let article = Astro.url.searchParams.get("article") || "";
 if (!article) Astro.redirect("/"); /* ensure we were given URL */
@@ -10,8 +13,8 @@ const buffer = await res.arrayBuffer();
 const dom = new JSDOM(buffer);
 
 const title = dom.window.document
-  .querySelector(".entry-title")
-  ?.innerHTML.trim();
+  .querySelector(".entry-title")!
+  .innerHTML.trim();
 
 const author = dom.window.document
   .querySelector(".entry-content p:first-of-type")
@@ -40,68 +43,68 @@ const content = [
 const imageURI = await fetch(image)
   .then((res) => res.arrayBuffer())
   .then((buf) => Buffer.from(buf).toString("base64"));
+
+const variantRaw = Astro.url.searchParams.get("variant") || "white";
+if (variantRaw !== "white" && variantRaw !== "maroon" && variantRaw !== "gray")
+  Astro.redirect("/");
+const variant = variantRaw as "white" | "maroon" | "gray";
+
+const titleSizeRaw = Astro.url.searchParams.get("title-size") || "2xl";
+if (titleSizeRaw !== "xl" && titleSizeRaw !== "2xl" && titleSizeRaw !== "3xl")
+  Astro.redirect("/");
+const titleSize = titleSizeRaw as "xl" | "2xl" | "3xl";
 ---
 
 <Root>
-  <b>Article:</b>
-  <code>{article}</code>
+  <span class="font-semibold">Article:</span>
+  <a href={article}><code>{article}</code></a>
 
-  <p><b>Title:</b> {title}</p>
-  <p><b>Author:</b> {author}</p>
-  <p><b>Image Credits:</b> {imageCredits}</p>
+  <p><span class="font-semibold">Title:</span> {title}</p>
+  <p><span class="font-semibold">Author:</span> {author}</p>
+  <p><span class="font-semibold">Image Credits:</span> {imageCredits}</p>
 
-  <b>Image Source:</b>
-  <code id="image-source">{image}</code>
+  <span class="font-semibold">Image Source:</span>
+  <a href={image}><code id="image-source">{image}</code></a>
 
-  <p><b>Date:</b> {date}</p>
+  <p><span class="font-semibold">Date:</span> {date}</p>
   <br />
 
-  <div class="flex min-w-max gap-8">
-    <div
-      class="box-content flex aspect-square w-96 flex-col items-center overflow-hidden bg-white font-news"
-      id="title-slide"
-    >
-      <img src={"data:image/;base64," + imageURI} />
-      <div
-        class="flex grow flex-col items-center justify-around p-3 text-center leading-none"
+  <FormatForm
+    article={article}
+    variant={variant}
+    titleSize={titleSize}
+    client:load
+  />
+
+  <br />
+
+  <div class="flex min-w-max max-w-fit flex-col gap-4 lg:flex-row">
+    <div class="flex flex-col items-center gap-4 rounded-xl bg-zinc-100 p-4">
+      <TitleSlide
+        title={title}
+        author={author}
+        imageURI={imageURI}
+        variant={variant}
+        titleSize={titleSize}
+      />
+      <Button id="title-slide-download" variant="outline"
+        >Loading Image Download...</Button
       >
-        <div>
-          <p
-            class="text-balance pb-1 text-2xl font-semibold leading-tight"
-            set:html={title}
-          />
-          {author && <p>Article by: {author}</p>}
-        </div>
-        <img src="/hare-banner.png" class="h-8" />
-      </div>
     </div>
 
-    <div
-      class="relative box-content flex aspect-square w-96 flex-col overflow-hidden bg-white font-news"
-      id="content-slide"
-    >
-      <div class="absolute top-0 flex flex-col gap-2 p-4">
+    <div class="flex flex-col items-center gap-4 rounded-xl bg-zinc-100 p-4">
+      <ContentSlide>
         {
           author
             ? content.slice(1).map((para) => <p set:html={para.innerHTML} />)
             : content.map((para) => <p set:html={para.innerHTML} />)
         }
-      </div>
-      <div
-        class="pointer-events-none absolute top-0 aspect-square w-96 bg-gradient-to-b from-transparent from-40% to-white to-90%"
+      </ContentSlide>
+      <Button id="content-slide-download" variant="outline"
+        >Loading Image Download...</Button
       >
-      </div>
-      <p class="absolute bottom-3 w-full text-center font-bold">
-        Full Article in Bio
-      </p>
     </div>
   </div>
-
-  <br />
-
-  <button id="title-slide-download">Loading Image Download...</button>
-  <br />
-  <button id="content-slide-download">Loading Image Download...</button>
 
   <br />
 

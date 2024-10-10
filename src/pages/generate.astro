@@ -4,6 +4,7 @@ import { FormatForm } from "~/components/format-form";
 import { ContentSlide, TitleSlide } from "~/components/slides";
 import { Button } from "~/components/ui/button";
 import Root from "../layouts/root.astro";
+import { textSizeSchema, themeSchema } from "~/lib/types";
 
 let article = Astro.url.searchParams.get("article") || "";
 if (!article) Astro.redirect("/"); /* ensure we were given URL */
@@ -44,15 +45,13 @@ const imageURI = await fetch(image)
   .then((res) => res.arrayBuffer())
   .then((buf) => Buffer.from(buf).toString("base64"));
 
-const variantRaw = Astro.url.searchParams.get("variant") || "white";
-if (variantRaw !== "white" && variantRaw !== "maroon" && variantRaw !== "gray")
-  Astro.redirect("/");
-const variant = variantRaw as "white" | "maroon" | "gray";
+const themeRaw = Astro.url.searchParams.get("theme") || "white";
+const { data: theme } = themeSchema.safeParse(themeRaw);
+if (!theme) return Astro.redirect("/");
 
 const titleSizeRaw = Astro.url.searchParams.get("title-size") || "2xl";
-if (titleSizeRaw !== "xl" && titleSizeRaw !== "2xl" && titleSizeRaw !== "3xl")
-  Astro.redirect("/");
-const titleSize = titleSizeRaw as "xl" | "2xl" | "3xl";
+const { data: titleSize } = textSizeSchema.safeParse(titleSizeRaw);
+if (!titleSize) return Astro.redirect("/");
 ---
 
 <Root>
@@ -72,7 +71,7 @@ const titleSize = titleSizeRaw as "xl" | "2xl" | "3xl";
 
   <FormatForm
     article={article}
-    variant={variant}
+    theme={theme}
     titleSize={titleSize}
     client:load
   />
@@ -85,7 +84,7 @@ const titleSize = titleSizeRaw as "xl" | "2xl" | "3xl";
         title={title}
         author={author}
         imageURI={imageURI}
-        variant={variant}
+        theme={theme}
         titleSize={titleSize}
       />
       <Button id="title-slide-download" variant="outline" disabled>

@@ -7,30 +7,31 @@ import {
 } from "~/components/ui/select";
 import { Label } from "./ui/label";
 import { Button } from "./ui/button";
+import type { TextSize, Theme } from "~/lib/types";
 
 export function FormatForm({
   article,
-  variant,
+  theme,
   titleSize,
 }: {
   article: string;
-  variant: "white" | "maroon" | "gray";
-  titleSize: "xl" | "2xl" | "3xl";
+  theme: Theme;
+  titleSize: TextSize;
 }) {
   return (
     <form className="flex max-w-fit flex-col flex-wrap items-end gap-4 md:flex-row">
       <input type="hidden" name="article" value={article} />
 
       <div className="flex items-center gap-2">
-        <Label>Variant</Label>
-        <Select name="variant" defaultValue={variant}>
+        <Label>Theme</Label>
+        <Select name="theme" defaultValue={theme}>
           <SelectTrigger className="w-[180px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="white">White</SelectItem>
             <SelectItem value="maroon">Maroon</SelectItem>
-            <SelectItem value="gray">Gray</SelectItem>
+            <SelectItem value="pink">Pink</SelectItem>
           </SelectContent>
         </Select>
       </div>

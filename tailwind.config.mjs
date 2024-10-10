@@ -14,7 +14,8 @@ export default {
       },
       colors: {
         hare: "#AD1713",
-        "hare-dark": "#5C2217",
+        "hare-primary": "#5B2218",
+        "hare-secondary": "#FFD9D0",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         card: {

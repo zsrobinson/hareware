@@ -5,7 +5,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        news: ["source-serif-pro", "serif"],
+        news: ["Source Serif Pro", "serif"],
       },
       borderRadius: {
         lg: "var(--radius)",

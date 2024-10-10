@@ -1,141 +1,24 @@
 ---
-import { JSDOM } from "jsdom";
 import { FormatForm } from "~/components/format-form";
-import { ContentSlide, TitleSlide } from "~/components/slides";
-import { Button } from "~/components/ui/button";
 import Root from "../layouts/root.astro";
-import { textSizeSchema, themeSchema } from "~/lib/types";
+import { scrapeArticle } from "../lib/scrape-article";
 
-let article = Astro.url.searchParams.get("article") || "";
+const article = Astro.url.searchParams.get("article") || "";
 if (!article) Astro.redirect("/"); /* ensure we were given URL */
 
-const res = await fetch(article);
-const buffer = await res.arrayBuffer();
-const dom = new JSDOM(buffer);
-
-const title = dom.window.document
-  .querySelector(".entry-title")!
-  .innerHTML.trim();
-
-const author = dom.window.document
-  .querySelector(".entry-content p:first-of-type")
-  ?.textContent?.trim()
-  .split(": ")[1];
-
-const imageCredits = dom.window.document
-  .querySelector(".entry-content p:last-of-type em")
-  ?.innerHTML.trim()
-  .split(": ")[1];
-
-const image = dom.window.document
-  .querySelector(`meta[property="og:image"]`)
-  ?.getAttribute("content")!;
-
-const date = dom.window.document
-  .querySelector(".wp-block-post-date time")
-  ?.innerHTML.trim();
-
-const content = [
-  ...dom.window.document.querySelectorAll(
-    ".entry-content p, .entry-content h2, .entry-content ol, .entry-content ul"
-  ),
-] as Element[];
+const { title, author, image, content } = await scrapeArticle(article);
 
 const imageURI = await fetch(image)
   .then((res) => res.arrayBuffer())
   .then((buf) => Buffer.from(buf).toString("base64"));
-
-const themeRaw = Astro.url.searchParams.get("theme") || "white";
-const { data: theme } = themeSchema.safeParse(themeRaw);
-if (!theme) return Astro.redirect("/");
-
-const titleSizeRaw = Astro.url.searchParams.get("title-size") || "2xl";
-const { data: titleSize } = textSizeSchema.safeParse(titleSizeRaw);
-if (!titleSize) return Astro.redirect("/");
 ---
 
 <Root>
-  <span class="font-semibold">Article:</span>
-  <a href={article}><code>{article}</code></a>
-
-  <p><span class="font-semibold">Title:</span> {title}</p>
-  <p><span class="font-semibold">Author:</span> {author}</p>
-  <p><span class="font-semibold">Image Credits:</span> {imageCredits}</p>
-
-  <span class="font-semibold">Image Source:</span>
-  <a href={image}><code id="image-source">{image}</code></a>
-
-  <p><span class="font-semibold">Date:</span> {date}</p>
-
-  <br />
-
-  <FormatForm
-    article={article}
-    theme={theme}
-    titleSize={titleSize}
-    client:load
-  />
-
-  <br />
-
-  <div class="flex min-w-max max-w-fit flex-col gap-4 lg:flex-row">
-    <div class="flex flex-col items-center gap-4 rounded-xl bg-zinc-100 p-4">
-      <TitleSlide
-        title={title}
-        author={author}
-        imageURI={imageURI}
-        theme={theme}
-        titleSize={titleSize}
-      />
-      <Button id="title-slide-download" variant="outline" disabled>
-        Loading...
-      </Button>
-    </div>
-
-    <div class="flex flex-col items-center gap-4 rounded-xl bg-zinc-100 p-4">
-      <ContentSlide>
-        {
-          author
-            ? content.slice(1).map((para) => <p set:html={para.innerHTML} />)
-            : content.map((para) => <p set:html={para.innerHTML} />)
-        }
-      </ContentSlide>
-      <Button id="content-slide-download" variant="outline" disabled>
-        Loading...
-      </Button>
-    </div>
-  </div>
-
-  <script>
-    import { toPng } from "html-to-image";
-    import download from "downloadjs";
-
-    const titleSlide = document.getElementById("title-slide")!;
-    const contentSlide = document.getElementById("content-slide")!;
-
-    const titleSlideDownload = document.getElementById(
-      "title-slide-download"
-    ) as HTMLButtonElement;
-    const contentSlideDownload = document.getElementById(
-      "content-slide-download"
-    ) as HTMLButtonElement;
-
-    /* have to wait because of safari */
-    await new Promise((res) => setTimeout(res, 300));
-
-    toPng(titleSlide, { canvasHeight: 1000, canvasWidth: 1000 }).then(
-      (dataURI) => {
-        titleSlideDownload.innerText = "Download Title Slide";
-        titleSlideDownload.onclick = () => download(dataURI, "title-slide.png");
-        titleSlideDownload.disabled = false;
-      }
-    );
-
-    toPng(contentSlide).then((dataURI) => {
-      contentSlideDownload.innerText = "Download Content Slide";
-      contentSlideDownload.onclick = () =>
-        download(dataURI, "content-slide.png");
-      contentSlideDownload.disabled = false;
-    });
-  </script>
+  <FormatForm title={title} author={author} imageURI={imageURI} client:load>
+    {
+      author
+        ? content.slice(1).map((para) => <p set:html={para.innerHTML} />)
+        : content.map((para) => <p set:html={para.innerHTML} />)
+    }
+  </FormatForm>
 </Root>

@@ -1,0 +1,97 @@
+import { useAuthorState } from "./forms/author-form";
+import { useBackgroundState } from "./forms/background-form";
+import { useLogoState } from "./forms/logo-form";
+import { useTitleState } from "./forms/title-form";
+
+export function TitleSlide({ imageURI }: { imageURI: string }) {
+  const title = useTitleState();
+  const author = useAuthorState();
+  const logo = useLogoState();
+  const background = useBackgroundState();
+
+  return (
+    <div
+      className="relative box-content flex aspect-square w-96 flex-col items-center overflow-hidden font-news"
+      style={{ backgroundColor: background.color }}
+      id="title-slide"
+    >
+      <img src={"data:image/;base64," + imageURI} />
+
+      <div
+        className="flex grow flex-col items-center justify-around text-center leading-none"
+        style={{ padding: background.padding + "px" }}
+      >
+        <p
+          dangerouslySetInnerHTML={{ __html: title.content }}
+          className="text-balance font-semibold leading-tight"
+          style={{
+            color: title.color,
+            fontSize: title.size + "px",
+          }}
+        />
+
+        {logo.position === "inline" && (
+          <img
+            src={
+              logo.variant === "circle"
+                ? "/hare-logo.webp"
+                : logo.variant === "horizontal"
+                  ? "/hare-banner-white.png"
+                  : ""
+            }
+            style={{
+              height: logo.size + "px",
+              width: "auto",
+              opacity: logo.opacity,
+            }}
+            className={
+              "h-12 " + logo.filter === "invert"
+                ? "invert"
+                : logo.filter === "grayscale"
+                  ? "grayscale"
+                  : logo.filter === "sepia"
+                    ? "sepia"
+                    : ""
+            }
+          />
+        )}
+
+        {author && (
+          <p
+            dangerouslySetInnerHTML={{ __html: author.content }}
+            className="leading-tight"
+            style={{ color: author.color, fontSize: author.size + "px" }}
+          />
+        )}
+      </div>
+
+      {logo.position === "corner" && (
+        <img
+          src={
+            logo.variant === "circle"
+              ? "/hare-logo.webp"
+              : logo.variant === "horizontal"
+                ? "/hare-banner-white.png"
+                : ""
+          }
+          style={{
+            height: logo.size + "px",
+            width: "auto",
+            opacity: logo.opacity,
+            bottom: logo.yOffset + "px",
+            right: logo.xOffset + "px",
+          }}
+          className={
+            "absolute h-12 " + logo.filter === "invert"
+              ? "invert"
+              : logo.filter === "grayscale"
+                ? "grayscale"
+                : logo.filter === "sepia"
+                  ? "sepia"
+                  : ""
+          }
+        />
+      )}
+    </div>
+  );
+}

@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { Label } from "../ui/label";
 import {
   Select,
   SelectContent,
@@ -8,6 +7,12 @@ import {
   SelectValue,
 } from "../ui/select";
 import { Slider } from "../ui/slider";
+import {
+  Fieldset,
+  FieldsetItem,
+  FieldsetLabel,
+  FieldsetTitle,
+} from "./fieldset";
 
 const LOGO_MAX_SIZE = 48;
 const LOGO_MIN_SIZE = 16;
@@ -63,84 +68,100 @@ export function LogoForm() {
   } = useLogoState();
 
   return (
-    <div>
-      <h3>Hare Logo</h3>
+    <Fieldset>
+      <FieldsetTitle>Hare Logo</FieldsetTitle>
 
-      <Label>Variant</Label>
-      <Select value={variant} onValueChange={(value) => setVariant(value)}>
-        <SelectTrigger>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="circle">Circle</SelectItem>
-          <SelectItem value="horizontal-maroon">Horizontal (Maroon)</SelectItem>
-          <SelectItem value="horizontal-black">Horizontal (Black)</SelectItem>
-        </SelectContent>
-      </Select>
+      <FieldsetItem>
+        <FieldsetLabel>Variant</FieldsetLabel>
+        <Select value={variant} onValueChange={(value) => setVariant(value)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="circle">Circle</SelectItem>
+            <SelectItem value="horizontal-maroon">
+              Horizontal (Maroon)
+            </SelectItem>
+            <SelectItem value="horizontal-black">Horizontal (Black)</SelectItem>
+          </SelectContent>
+        </Select>
+      </FieldsetItem>
 
-      <Label>Size</Label>
-      <Slider
-        value={[size]}
-        onValueChange={(value) => setSize(value.at(0)!)}
-        min={LOGO_MIN_SIZE}
-        max={LOGO_MAX_SIZE}
-        step={1}
-      />
+      <FieldsetItem>
+        <FieldsetLabel>Size</FieldsetLabel>
+        <Slider
+          value={[size]}
+          onValueChange={(value) => setSize(value.at(0)!)}
+          min={LOGO_MIN_SIZE}
+          max={LOGO_MAX_SIZE}
+          step={1}
+        />
+      </FieldsetItem>
 
-      <Label>Filter</Label>
-      <Select value={filter} onValueChange={(value) => setFilter(value)}>
-        <SelectTrigger>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="none">None</SelectItem>
-          <SelectItem value="invert">Invert</SelectItem>
-          <SelectItem value="grayscale">Grayscale</SelectItem>
-          <SelectItem value="sepia">Sepia</SelectItem>
-        </SelectContent>
-      </Select>
+      <FieldsetItem>
+        <FieldsetLabel>Filter</FieldsetLabel>
+        <Select value={filter} onValueChange={(value) => setFilter(value)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">None</SelectItem>
+            <SelectItem value="invert">Invert</SelectItem>
+            <SelectItem value="grayscale">Grayscale</SelectItem>
+            <SelectItem value="sepia">Sepia</SelectItem>
+          </SelectContent>
+        </Select>
+      </FieldsetItem>
 
-      <Label>Opacity</Label>
-      <Slider
-        value={[opacity]}
-        onValueChange={(value) => setOpacity(value.at(0)!)}
-        min={LOGO_MIN_OPACITY}
-        max={LOGO_MAX_OPACITY}
-        step={1}
-      />
+      <FieldsetItem>
+        <FieldsetLabel>Opacity</FieldsetLabel>
+        <Slider
+          value={[opacity]}
+          onValueChange={(value) => setOpacity(value.at(0)!)}
+          min={LOGO_MIN_OPACITY}
+          max={LOGO_MAX_OPACITY}
+          step={1}
+        />
+      </FieldsetItem>
 
-      <Label>Position</Label>
-      <Select value={position} onValueChange={(value) => setPosition(value)}>
-        <SelectTrigger>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="inline">Inline</SelectItem>
-          <SelectItem value="corner">Corner</SelectItem>
-        </SelectContent>
-      </Select>
+      <FieldsetItem>
+        <FieldsetLabel>Position</FieldsetLabel>
+        <Select value={position} onValueChange={(value) => setPosition(value)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="inline">Inline</SelectItem>
+            <SelectItem value="corner">Corner</SelectItem>
+          </SelectContent>
+        </Select>
+      </FieldsetItem>
 
       {position === "corner" && (
         <>
-          <Label>X Offset</Label>
-          <Slider
-            value={[xOffset]}
-            onValueChange={(value) => setXOffset(value.at(0)!)}
-            min={LOGO_MIN_OFFSET}
-            max={LOGO_MAX_OFFSET}
-            step={1}
-          />
+          <FieldsetItem>
+            <FieldsetLabel>X Offset</FieldsetLabel>
+            <Slider
+              value={[xOffset]}
+              onValueChange={(value) => setXOffset(value.at(0)!)}
+              min={LOGO_MIN_OFFSET}
+              max={LOGO_MAX_OFFSET}
+              step={1}
+            />
+          </FieldsetItem>
 
-          <Label>Y Offset</Label>
-          <Slider
-            value={[yOffset]}
-            onValueChange={(value) => setYOffset(value.at(0)!)}
-            min={LOGO_MIN_OFFSET}
-            max={LOGO_MAX_OFFSET}
-            step={1}
-          />
+          <FieldsetItem>
+            <FieldsetLabel>Y Offset</FieldsetLabel>
+            <Slider
+              value={[yOffset]}
+              onValueChange={(value) => setYOffset(value.at(0)!)}
+              min={LOGO_MIN_OFFSET}
+              max={LOGO_MAX_OFFSET}
+              step={1}
+            />
+          </FieldsetItem>
         </>
       )}
-    </div>
+    </Fieldset>
   );
 }

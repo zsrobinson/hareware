@@ -1,7 +1,12 @@
 import { create } from "zustand";
 import { Input } from "../ui/input";
-import { Label } from "../ui/label";
 import { Slider } from "../ui/slider";
+import {
+  Fieldset,
+  FieldsetItem,
+  FieldsetLabel,
+  FieldsetTitle,
+} from "./fieldset";
 
 const AUTHOR_MAX_SIZE = 24;
 const AUTHOR_MIN_SIZE = 12;
@@ -35,31 +40,37 @@ export function AuthorForm() {
     useAuthorState();
 
   return (
-    <div>
-      <h3>Article Author</h3>
+    <Fieldset>
+      <FieldsetTitle>Article Author</FieldsetTitle>
 
-      <Label>Content</Label>
-      <Input
-        type="text"
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-      />
+      <FieldsetItem>
+        <FieldsetLabel>Content</FieldsetLabel>
+        <Input
+          type="text"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+        />
+      </FieldsetItem>
 
-      <Label>Size</Label>
-      <Slider
-        value={[size]}
-        onValueChange={(value) => setSize(value.at(0)!)}
-        min={AUTHOR_MIN_SIZE}
-        max={AUTHOR_MAX_SIZE}
-        step={1}
-      />
+      <FieldsetItem>
+        <FieldsetLabel>Size</FieldsetLabel>
+        <Slider
+          value={[size]}
+          onValueChange={(value) => setSize(value.at(0)!)}
+          min={AUTHOR_MIN_SIZE}
+          max={AUTHOR_MAX_SIZE}
+          step={1}
+        />
+      </FieldsetItem>
 
-      <Label>Color</Label>
-      <Input
-        type="color"
-        value={color}
-        onChange={(e) => setColor(e.target.value)}
-      />
-    </div>
+      <FieldsetItem>
+        <FieldsetLabel>Color</FieldsetLabel>
+        <Input
+          type="color"
+          value={color}
+          onChange={(e) => setColor(e.target.value)}
+        />
+      </FieldsetItem>
+    </Fieldset>
   );
 }

@@ -1,7 +1,12 @@
 import { create } from "zustand";
 import { Input } from "../ui/input";
-import { Label } from "../ui/label";
 import { Slider } from "../ui/slider";
+import {
+  Fieldset,
+  FieldsetItem,
+  FieldsetLabel,
+  FieldsetTitle,
+} from "./fieldset";
 
 const TITLE_MAX_SIZE = 48;
 const TITLE_MIN_SIZE = 16;
@@ -35,31 +40,37 @@ export function TitleForm() {
     useTitleState();
 
   return (
-    <div>
-      <h3>Article Title</h3>
+    <Fieldset>
+      <FieldsetTitle>Article Title</FieldsetTitle>
 
-      <Label>Content</Label>
-      <Input
-        type="text"
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-      />
+      <FieldsetItem>
+        <FieldsetLabel>Content</FieldsetLabel>
+        <Input
+          type="text"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+        />
+      </FieldsetItem>
 
-      <Label>Size</Label>
-      <Slider
-        value={[size]}
-        onValueChange={(value) => setSize(value.at(0)!)}
-        min={TITLE_MIN_SIZE}
-        max={TITLE_MAX_SIZE}
-        step={1}
-      />
+      <FieldsetItem>
+        <FieldsetLabel>Size</FieldsetLabel>
+        <Slider
+          value={[size]}
+          onValueChange={(value) => setSize(value.at(0)!)}
+          min={TITLE_MIN_SIZE}
+          max={TITLE_MAX_SIZE}
+          step={1}
+        />
+      </FieldsetItem>
 
-      <Label>Color</Label>
-      <Input
-        type="color"
-        value={color}
-        onChange={(e) => setColor(e.target.value)}
-      />
-    </div>
+      <FieldsetItem>
+        <FieldsetLabel>Color</FieldsetLabel>
+        <Input
+          type="color"
+          value={color}
+          onChange={(e) => setColor(e.target.value)}
+        />
+      </FieldsetItem>
+    </Fieldset>
   );
 }

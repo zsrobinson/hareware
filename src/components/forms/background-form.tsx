@@ -1,7 +1,12 @@
 import { create } from "zustand";
 import { Input } from "../ui/input";
-import { Label } from "../ui/label";
 import { Slider } from "../ui/slider";
+import {
+  Fieldset,
+  FieldsetItem,
+  FieldsetLabel,
+  FieldsetTitle,
+} from "./fieldset";
 
 const BACKGROUND_MAX_PADDING = 48;
 const BACKGROUND_MIN_PADDING = 0;
@@ -30,24 +35,28 @@ export function BackgroundForm() {
   const { padding, color, setPadding, setColor } = useBackgroundState();
 
   return (
-    <div>
-      <h3>Background</h3>
+    <Fieldset>
+      <FieldsetTitle>Background</FieldsetTitle>
 
-      <Label>Padding</Label>
-      <Slider
-        value={[padding]}
-        onValueChange={(value) => setPadding(value.at(0)!)}
-        min={BACKGROUND_MIN_PADDING}
-        max={BACKGROUND_MAX_PADDING}
-        step={1}
-      />
+      <FieldsetItem>
+        <FieldsetLabel>Padding</FieldsetLabel>
+        <Slider
+          value={[padding]}
+          onValueChange={(value) => setPadding(value.at(0)!)}
+          min={BACKGROUND_MIN_PADDING}
+          max={BACKGROUND_MAX_PADDING}
+          step={1}
+        />
+      </FieldsetItem>
 
-      <Label>Color</Label>
-      <Input
-        type="color"
-        value={color}
-        onChange={(e) => setColor(e.target.value)}
-      />
-    </div>
+      <FieldsetItem>
+        <FieldsetLabel>Color</FieldsetLabel>
+        <Input
+          type="color"
+          value={color}
+          onChange={(e) => setColor(e.target.value)}
+        />
+      </FieldsetItem>
+    </Fieldset>
   );
 }

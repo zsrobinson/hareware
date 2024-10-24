@@ -1,3 +1,4 @@
+import { CornersIcon, OpacityIcon } from "@radix-ui/react-icons";
 import { useLayoutState } from "~/lib/layout-state";
 import { Input } from "../ui/input";
 import { Slider } from "../ui/slider";
@@ -21,6 +22,7 @@ export function BackgroundForm() {
       <FieldsetTitle>Background</FieldsetTitle>
 
       <FieldsetItem>
+        <CornersIcon className="size-5 min-w-max" />
         <FieldsetLabel>Padding</FieldsetLabel>
         <Slider
           value={[padding]}
@@ -33,6 +35,7 @@ export function BackgroundForm() {
       </FieldsetItem>
 
       <FieldsetItem>
+        <OpacityIcon className="size-5 min-w-max" />
         <FieldsetLabel>Color</FieldsetLabel>
         <Input
           type="color"

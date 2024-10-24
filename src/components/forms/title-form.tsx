@@ -1,3 +1,8 @@
+import {
+  OpacityIcon,
+  SizeIcon,
+  TextAlignCenterIcon,
+} from "@radix-ui/react-icons";
 import { useLayoutState } from "~/lib/layout-state";
 import { Input } from "../ui/input";
 import { Slider } from "../ui/slider";
@@ -20,6 +25,7 @@ export function TitleForm() {
       <FieldsetTitle>Article Title</FieldsetTitle>
 
       <FieldsetItem>
+        <TextAlignCenterIcon className="size-5 min-w-max" />
         <FieldsetLabel>Content</FieldsetLabel>
         <Input
           type="text"
@@ -29,6 +35,7 @@ export function TitleForm() {
       </FieldsetItem>
 
       <FieldsetItem>
+        <SizeIcon className="size-5 min-w-max" />
         <FieldsetLabel>Size</FieldsetLabel>
         <Slider
           value={[size]}
@@ -41,6 +48,7 @@ export function TitleForm() {
       </FieldsetItem>
 
       <FieldsetItem>
+        <OpacityIcon className="size-5 min-w-max" />
         <FieldsetLabel>Color</FieldsetLabel>
         <Input
           type="color"

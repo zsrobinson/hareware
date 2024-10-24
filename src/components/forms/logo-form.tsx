@@ -1,4 +1,13 @@
-import { create } from "zustand";
+import {
+  Half1Icon,
+  HeightIcon,
+  ImageIcon,
+  MixIcon,
+  MoveIcon,
+  SizeIcon,
+  WidthIcon,
+} from "@radix-ui/react-icons";
+import { useLayoutState } from "~/lib/layout-state";
 import {
   Select,
   SelectContent,
@@ -13,7 +22,6 @@ import {
   FieldsetLabel,
   FieldsetTitle,
 } from "./fieldset";
-import { useLayoutState } from "~/lib/layout-state";
 
 const LOGO_MAX_SIZE = 48;
 const LOGO_MIN_SIZE = 16;
@@ -33,6 +41,7 @@ export function LogoForm() {
       <FieldsetTitle>Hare Logo</FieldsetTitle>
 
       <FieldsetItem>
+        <MixIcon className="size-5 min-w-max" />
         <FieldsetLabel>Variant</FieldsetLabel>
         <Select value={variant} onValueChange={(value) => setVariant(value)}>
           <SelectTrigger>
@@ -49,6 +58,7 @@ export function LogoForm() {
       </FieldsetItem>
 
       <FieldsetItem>
+        <SizeIcon className="size-5 min-w-max" />
         <FieldsetLabel>Size</FieldsetLabel>
         <Slider
           value={[size]}
@@ -61,6 +71,22 @@ export function LogoForm() {
       </FieldsetItem>
 
       <FieldsetItem>
+        <Half1Icon className="size-5 min-w-max" />
+        <FieldsetLabel>Opacity</FieldsetLabel>
+        <Slider
+          value={[opacity]}
+          onValueChange={(value) => setOpacity(value.at(0)!)}
+          min={LOGO_MIN_OPACITY}
+          max={LOGO_MAX_OPACITY}
+          step={0.01}
+        />
+        <p className="whitespace-pre font-mono text-sm">
+          {String(Math.round(opacity * 100)).padStart(3)}%
+        </p>
+      </FieldsetItem>
+
+      <FieldsetItem>
+        <ImageIcon className="size-5 min-w-max" />
         <FieldsetLabel>Filter</FieldsetLabel>
         <Select value={filter} onValueChange={(value) => setFilter(value)}>
           <SelectTrigger>
@@ -76,20 +102,7 @@ export function LogoForm() {
       </FieldsetItem>
 
       <FieldsetItem>
-        <FieldsetLabel>Opacity</FieldsetLabel>
-        <Slider
-          value={[opacity]}
-          onValueChange={(value) => setOpacity(value.at(0)!)}
-          min={LOGO_MIN_OPACITY}
-          max={LOGO_MAX_OPACITY}
-          step={0.01}
-        />
-        <p className="whitespace-pre font-mono text-sm">
-          {String(Math.round(opacity * 100)).padStart(3)}%
-        </p>
-      </FieldsetItem>
-
-      <FieldsetItem>
+        <MoveIcon className="size-5 min-w-max" />
         <FieldsetLabel>Position</FieldsetLabel>
         <Select value={position} onValueChange={(value) => setPosition(value)}>
           <SelectTrigger>
@@ -105,6 +118,7 @@ export function LogoForm() {
       {position === "corner" && (
         <>
           <FieldsetItem>
+            <WidthIcon className="size-5 min-w-max" />
             <FieldsetLabel>X Offset</FieldsetLabel>
             <Slider
               value={[xOffset]}
@@ -117,6 +131,7 @@ export function LogoForm() {
           </FieldsetItem>
 
           <FieldsetItem>
+            <HeightIcon className="size-5 min-w-max" />
             <FieldsetLabel>Y Offset</FieldsetLabel>
             <Slider
               value={[yOffset]}

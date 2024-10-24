@@ -16,7 +16,7 @@ import {
 
 const LOGO_MAX_SIZE = 48;
 const LOGO_MIN_SIZE = 16;
-const LOGO_MAX_OPACITY = 100;
+const LOGO_MAX_OPACITY = 1;
 const LOGO_MIN_OPACITY = 0;
 const LOGO_MAX_OFFSET = 48;
 const LOGO_MIN_OFFSET = 0;
@@ -82,7 +82,7 @@ export function LogoForm() {
             <SelectItem value="horizontal-maroon">
               Horizontal (Maroon)
             </SelectItem>
-            <SelectItem value="horizontal-black">Horizontal (Black)</SelectItem>
+            <SelectItem value="horizontal-white">Horizontal (White)</SelectItem>
           </SelectContent>
         </Select>
       </FieldsetItem>
@@ -120,7 +120,7 @@ export function LogoForm() {
           onValueChange={(value) => setOpacity(value.at(0)!)}
           min={LOGO_MIN_OPACITY}
           max={LOGO_MAX_OPACITY}
-          step={1}
+          step={0.01}
         />
       </FieldsetItem>
 

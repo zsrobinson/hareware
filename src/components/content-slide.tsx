@@ -7,7 +7,7 @@ export function ContentSlide({ children }: { children: ReactNode }) {
       className="relative box-content flex aspect-square w-96 flex-col overflow-hidden bg-white font-news"
       id="content-slide"
     >
-      <div className="absolute top-0 flex flex-col gap-2 p-4 text-hare-primary">
+      <div className="absolute top-0 flex flex-col gap-2 p-6 text-hare-primary">
         {children}
       </div>
 

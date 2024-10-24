@@ -35,9 +35,11 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
             src={
               logo.variant === "circle"
                 ? "/hare-logo.webp"
-                : logo.variant === "horizontal"
-                  ? "/hare-banner-white.png"
-                  : ""
+                : logo.variant === "horizontal-maroon"
+                  ? "/hare-banner.png"
+                  : logo.variant === "horizontal-white"
+                    ? "/hare-banner-white.png"
+                    : ""
             }
             style={{
               height: logo.size + "px",
@@ -45,13 +47,14 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
               opacity: logo.opacity,
             }}
             className={
-              "h-12 " + logo.filter === "invert"
+              "h-12 " +
+              (logo.filter === "invert"
                 ? "invert"
                 : logo.filter === "grayscale"
                   ? "grayscale"
                   : logo.filter === "sepia"
                     ? "sepia"
-                    : ""
+                    : "")
             }
           />
         )}
@@ -70,9 +73,11 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
           src={
             logo.variant === "circle"
               ? "/hare-logo.webp"
-              : logo.variant === "horizontal"
-                ? "/hare-banner-white.png"
-                : ""
+              : logo.variant === "horizontal-maroon"
+                ? "/hare-banner.png"
+                : logo.variant === "horizontal-white"
+                  ? "/hare-banner-white.png"
+                  : ""
           }
           style={{
             height: logo.size + "px",
@@ -82,13 +87,14 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
             right: logo.xOffset + "px",
           }}
           className={
-            "absolute h-12 " + logo.filter === "invert"
+            "absolute h-12 " +
+            (logo.filter === "invert"
               ? "invert"
               : logo.filter === "grayscale"
                 ? "grayscale"
                 : logo.filter === "sepia"
                   ? "sepia"
-                  : ""
+                  : "")
           }
         />
       )}

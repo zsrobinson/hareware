@@ -16,7 +16,7 @@ const imageURI = await fetch(image)
 <Root>
   <GeneratePage
     defaultTitleContent={title}
-    defaultAuthorContent={author}
+    defaultAuthorContent={"Article by " + author}
     imageURI={imageURI}
     client:load
   >

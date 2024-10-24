@@ -1,13 +1,10 @@
-import { useAuthorState } from "./forms/author-form";
-import { useBackgroundState } from "./forms/background-form";
-import { useLogoState } from "./forms/logo-form";
-import { useTitleState } from "./forms/title-form";
+import { useLayoutState } from "~/lib/layout-state";
 
 export function TitleSlide({ imageURI }: { imageURI: string }) {
-  const title = useTitleState();
-  const author = useAuthorState();
-  const logo = useLogoState();
-  const background = useBackgroundState();
+  const title = useLayoutState((state) => state.title);
+  const author = useLayoutState((state) => state.author);
+  const logo = useLayoutState((state) => state.logo);
+  const background = useLayoutState((state) => state.background);
 
   return (
     <div

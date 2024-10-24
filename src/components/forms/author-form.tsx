@@ -1,4 +1,4 @@
-import { create } from "zustand";
+import { useLayoutState } from "~/lib/layout-state";
 import { Input } from "../ui/input";
 import { Slider } from "../ui/slider";
 import {
@@ -11,33 +11,9 @@ import {
 const AUTHOR_MAX_SIZE = 24;
 const AUTHOR_MIN_SIZE = 12;
 
-export type AuthorState = {
-  content: string;
-  size: number;
-  color: string;
-};
-
-export type AuthorMutableState = AuthorState & {
-  setContent: (content: string) => void;
-  setSize: (size: number) => void;
-  setColor: (color: string) => void;
-  setState: (state: Partial<AuthorState>) => void;
-};
-
-export const useAuthorState = create<AuthorMutableState>()((set) => ({
-  content: "",
-  size: 12,
-  color: "#000000",
-
-  setContent: (content) => set(() => ({ content })),
-  setSize: (size) => set(() => ({ size })),
-  setColor: (color) => set(() => ({ color })),
-  setState: (state) => set(() => state),
-}));
-
 export function AuthorForm() {
   const { content, size, color, setContent, setSize, setColor } =
-    useAuthorState();
+    useLayoutState((state) => state.author);
 
   return (
     <Fieldset>

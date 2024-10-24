@@ -13,6 +13,7 @@ import {
   FieldsetLabel,
   FieldsetTitle,
 } from "./fieldset";
+import { useLayoutState } from "~/lib/layout-state";
 
 const LOGO_MAX_SIZE = 48;
 const LOGO_MIN_SIZE = 16;
@@ -21,51 +22,11 @@ const LOGO_MIN_OPACITY = 0;
 const LOGO_MAX_OFFSET = 48;
 const LOGO_MIN_OFFSET = 0;
 
-export type LogoState = {
-  variant: string;
-  size: number;
-  filter: string;
-  opacity: number;
-  position: string;
-  xOffset: number;
-  yOffset: number;
-};
-
-export type LogoMutableState = LogoState & {
-  setVariant: (variant: string) => void;
-  setSize: (size: number) => void;
-  setFilter: (filter: string) => void;
-  setOpacity: (opacity: number) => void;
-  setPosition: (position: string) => void;
-  setXOffset: (xOffset: number) => void;
-  setYOffset: (yOffset: number) => void;
-  setState: (state: Partial<LogoState>) => void;
-};
-
-export const useLogoState = create<LogoMutableState>()((set) => ({
-  variant: "circle",
-  size: 16,
-  filter: "none",
-  opacity: 100,
-  position: "corner",
-  xOffset: 12,
-  yOffset: 12,
-
-  setVariant: (variant) => set(() => ({ variant })),
-  setSize: (size) => set(() => ({ size })),
-  setFilter: (filter) => set(() => ({ filter })),
-  setOpacity: (opacity) => set(() => ({ opacity })),
-  setPosition: (position) => set(() => ({ position })),
-  setXOffset: (xOffset) => set(() => ({ xOffset })),
-  setYOffset: (yOffset) => set(() => ({ yOffset })),
-  setState: (state) => set(() => state),
-}));
-
 export function LogoForm() {
   // prettier-ignore
   const { variant, size, filter, opacity, position, xOffset, yOffset,
     setVariant, setSize, setFilter, setOpacity, setPosition, setXOffset, setYOffset
-  } = useLogoState();
+  } = useLayoutState((state) => state.logo);
 
   return (
     <Fieldset>

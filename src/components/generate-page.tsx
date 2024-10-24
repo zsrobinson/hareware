@@ -2,13 +2,14 @@ import download from "downloadjs";
 import { toPng } from "html-to-image";
 import { useEffect, type ReactNode } from "react";
 import { ContentSlide } from "./content-slide";
-import { AuthorForm, useAuthorState } from "./forms/author-form";
-import { BackgroundForm, useBackgroundState } from "./forms/background-form";
-import { LogoForm, useLogoState } from "./forms/logo-form";
-import { PresetForm, presets } from "./forms/preset-form";
-import { TitleForm, useTitleState } from "./forms/title-form";
+import { AuthorForm } from "./forms/author-form";
+import { BackgroundForm } from "./forms/background-form";
+import { LogoForm } from "./forms/logo-form";
+import { PresetForm } from "./forms/preset-form";
+import { TitleForm } from "./forms/title-form";
 import { TitleSlide } from "./title-slide";
 import { Button } from "./ui/button";
+import { useLayoutState } from "~/lib/layout-state";
 
 export function GeneratePage({
   defaultTitleContent,
@@ -17,25 +18,15 @@ export function GeneratePage({
   children,
 }: {
   defaultTitleContent: string;
-  defaultAuthorContent?: string;
+  defaultAuthorContent: string;
   imageURI: string;
   children: ReactNode;
 }) {
-  const title = useTitleState();
-  const author = useAuthorState();
-  const logo = useLogoState();
-  const background = useBackgroundState();
-  const state = { title, author, logo, background };
+  const state = useLayoutState();
 
   useEffect(() => {
-    title.setContent(defaultTitleContent);
-    author.setContent(defaultAuthorContent ?? "");
-
-    // set default preset
-    title.setState(presets["maroon"].title);
-    author.setState(presets["maroon"].author);
-    logo.setState(presets["maroon"].logo);
-    background.setState(presets["maroon"].background);
+    state.title.setContent(defaultTitleContent);
+    state.author.setContent(defaultAuthorContent);
   }, []);
 
   return (

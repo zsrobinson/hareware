@@ -7,7 +7,7 @@ export type LayoutPreset = PartialValues<LayoutState>;
 const whitePreset = {
   title: { color: "#5b2218", size: 24 },
   author: { color: "#5b2218", size: 14 },
-  logo: { variant: "circle", size: 48, filter: "none", opacity: 100, position: "inline" },
+  logo: { variant: "circle", size: 48, filter: "none", opacity: 1, position: "inline" },
   background: { padding: 12, color: "#ffffff" }
 };
 
@@ -15,7 +15,7 @@ const whitePreset = {
 const pinkPreset = {
   title: { color: "#5b2218", size: 24 },
   author: { color: "#5b2218", size: 14 },
-  logo: { variant: "circle", size: 48, filter: "none", opacity: 100, position: "inline" },
+  logo: { variant: "circle", size: 48, filter: "none", opacity: 1, position: "inline" },
   background: { padding: 12, color: "#ffd9d0" }
 }
 
@@ -23,7 +23,7 @@ const pinkPreset = {
 const maroonPreset = {
   title: { color: "#ffffff", size: 24 },
   author: { color: "#ffffff", size: 14 },
-  logo: { variant: "circle", size: 48, filter: "none", opacity: 100, position: "inline" },
+  logo: { variant: "circle", size: 48, filter: "none", opacity: 1, position: "inline" },
   background: { padding: 12, color: "#5b2118" }
 }
 

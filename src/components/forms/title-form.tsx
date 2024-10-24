@@ -37,6 +37,7 @@ export function TitleForm() {
           max={TITLE_MAX_SIZE}
           step={1}
         />
+        <p className="font-mono text-sm">{size}px</p>
       </FieldsetItem>
 
       <FieldsetItem>

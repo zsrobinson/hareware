@@ -57,6 +57,7 @@ export function LogoForm() {
           max={LOGO_MAX_SIZE}
           step={1}
         />
+        <p className="font-mono text-sm">{size}px</p>
       </FieldsetItem>
 
       <FieldsetItem>
@@ -83,6 +84,9 @@ export function LogoForm() {
           max={LOGO_MAX_OPACITY}
           step={0.01}
         />
+        <p className="whitespace-pre font-mono text-sm">
+          {String(Math.round(opacity * 100)).padStart(3)}%
+        </p>
       </FieldsetItem>
 
       <FieldsetItem>
@@ -109,6 +113,7 @@ export function LogoForm() {
               max={LOGO_MAX_OFFSET}
               step={1}
             />
+            <p className="font-mono text-sm">{xOffset}px</p>
           </FieldsetItem>
 
           <FieldsetItem>
@@ -120,6 +125,7 @@ export function LogoForm() {
               max={LOGO_MAX_OFFSET}
               step={1}
             />
+            <p className="font-mono text-sm">{yOffset}px</p>
           </FieldsetItem>
         </>
       )}

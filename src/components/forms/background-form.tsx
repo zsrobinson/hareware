@@ -29,6 +29,7 @@ export function BackgroundForm() {
           max={BACKGROUND_MAX_PADDING}
           step={1}
         />
+        <p className="font-mono text-sm">{padding}px</p>
       </FieldsetItem>
 
       <FieldsetItem>

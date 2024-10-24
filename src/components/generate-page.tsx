@@ -10,6 +10,7 @@ import { TitleForm } from "./forms/title-form";
 import { TitleSlide } from "./title-slide";
 import { Button } from "./ui/button";
 import { useLayoutState } from "~/lib/layout-state";
+import { DownloadIcon } from "@radix-ui/react-icons";
 
 export function GeneratePage({
   defaultTitleContent,
@@ -57,6 +58,7 @@ export function GeneratePage({
               );
             }}
           >
+            <DownloadIcon className="mr-2" />
             Download
           </Button>
         </div>
@@ -78,6 +80,7 @@ export function GeneratePage({
               );
             }}
           >
+            <DownloadIcon className="mr-2" />
             Download
           </Button>
         </div>

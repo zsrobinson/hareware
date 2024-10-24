@@ -39,19 +39,16 @@ export function GeneratePage({
   }, []);
 
   return (
-    <>
-      <PresetForm />
-      <br />
-      <TitleForm />
-      <br />
-      <AuthorForm />
-      <br />
-      <LogoForm />
-      <br />
-      <BackgroundForm />
-      <br />
+    <div className="flex flex-col items-start gap-8 md:flex-row">
+      <div className="flex min-w-max max-w-sm flex-col gap-8">
+        <PresetForm />
+        <TitleForm />
+        <AuthorForm />
+        <LogoForm />
+        <BackgroundForm />
+      </div>
 
-      <div className="flex min-w-max max-w-fit flex-col gap-4 lg:flex-row">
+      <div className="flex flex-wrap items-start gap-8">
         <div className="flex flex-col items-center gap-4 rounded-xl bg-zinc-100 p-4">
           <TitleSlide imageURI={imageURI} />
           <Button
@@ -94,10 +91,6 @@ export function GeneratePage({
           </Button>
         </div>
       </div>
-
-      <pre>
-        <code>{JSON.stringify(state, null, 2)}</code>
-      </pre>
-    </>
+    </div>
   );
 }

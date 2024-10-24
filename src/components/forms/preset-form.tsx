@@ -8,6 +8,7 @@ import {
 } from "../ui/select";
 import { useAuthorState, type AuthorState } from "./author-form";
 import { useBackgroundState, type BackgroundState } from "./background-form";
+import { Fieldset, FieldsetItem, FieldsetLabel } from "./fieldset";
 import { useLogoState, type LogoState } from "./logo-form";
 import { useTitleState, type TitleState } from "./title-form";
 
@@ -79,8 +80,8 @@ export function PresetForm() {
   });
 
   return (
-    <div>
-      <Label>Preset</Label>
+    <FieldsetItem>
+      <FieldsetLabel>Preset</FieldsetLabel>
       <Select
         value={currentPreset}
         onValueChange={(value) => {
@@ -102,6 +103,6 @@ export function PresetForm() {
           <SelectItem value="none">Custom</SelectItem>
         </SelectContent>
       </Select>
-    </div>
+    </FieldsetItem>
   );
 }

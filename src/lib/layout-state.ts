@@ -1,129 +1,70 @@
 import { create } from "zustand";
-import { DEFAULT_PRESET, type PartialValues } from "./layout-presets";
+import { presets } from "./color-presets";
+
+const DEFAULTS = {
+  ...presets.maroon,
+  titleSize: 24,
+  authorSize: 14,
+  logoPosition: "inline",
+  logoXOffset: 12,
+  logoYOffset: 12,
+  logoSize: 48,
+};
 
 export type LayoutState = {
-  title: {
-    content: string;
-    size: number;
-    color: string;
-  };
+  textColor: string;
+  bgColor: string;
 
-  author: {
-    content: string;
-    size: number;
-    color: string;
-  };
+  titleContent: string;
+  titleSize: number;
 
-  logo: {
-    variant: string;
-    size: number;
-    filter: string;
-    opacity: number;
-    position: string;
-    xOffset: number;
-    yOffset: number;
-  };
+  authorContent: string;
+  authorSize: number;
 
-  background: {
-    padding: number;
-    color: string;
-  };
+  logoPosition: string;
+  logoXOffset: number;
+  logoYOffset: number;
+  logoSize: number;
 };
 
 export type MutableLayoutState = LayoutState & {
-  title: {
-    setContent: (content: string) => void;
-    setSize: (size: number) => void;
-    setColor: (color: string) => void;
-  };
+  setTextColor: (textColor: string) => void;
+  setBgColor: (bgColor: string) => void;
 
-  author: {
-    setContent: (content: string) => void;
-    setSize: (size: number) => void;
-    setColor: (color: string) => void;
-  };
+  setTitleContent: (titleContent: string) => void;
+  setTitleSize: (titleSize: number) => void;
 
-  logo: {
-    setVariant: (variant: string) => void;
-    setSize: (size: number) => void;
-    setFilter: (filter: string) => void;
-    setOpacity: (opacity: number) => void;
-    setPosition: (position: string) => void;
-    setXOffset: (xOffset: number) => void;
-    setYOffset: (yOffset: number) => void;
-  };
+  setAuthorContent: (authorContent: string) => void;
+  setAuthorSize: (authorSize: number) => void;
 
-  background: {
-    setPadding: (padding: number) => void;
-    setColor: (color: string) => void;
-  };
+  setLogoPosition: (logoPosition: string) => void;
+  setLogoXOffset: (logoXOffset: number) => void;
+  setLogoYOffset: (logoYOffset: number) => void;
+  setLogoSize: (logoSize: number) => void;
 
-  setState: (state: PartialValues<LayoutState>) => void;
+  reset: () => void;
 };
 
 export const useLayoutState = create<MutableLayoutState>()((set) => ({
-  title: {
-    content: "",
-    size: DEFAULT_PRESET.title.size,
-    color: DEFAULT_PRESET.title.color,
+  ...DEFAULTS,
 
-    setContent: (content) =>
-      set((state) => ({ title: { ...state.title, content } })),
-    setSize: (size) => set((state) => ({ title: { ...state.title, size } })),
-    setColor: (color) => set((state) => ({ title: { ...state.title, color } })),
-  },
+  /* not part of defaults since shouldn't be reset */
+  titleContent: "",
+  authorContent: "",
 
-  author: {
-    content: "",
-    size: DEFAULT_PRESET.author.size,
-    color: DEFAULT_PRESET.author.color,
+  setTextColor: (textColor: string) => set({ textColor }),
+  setBgColor: (bgColor: string) => set({ bgColor }),
 
-    setContent: (content) =>
-      set((state) => ({ author: { ...state.author, content } })),
-    setSize: (size) => set((state) => ({ author: { ...state.author, size } })),
-    setColor: (color) =>
-      set((state) => ({ author: { ...state.author, color } })),
-  },
+  setTitleContent: (titleContent: string) => set({ titleContent }),
+  setTitleSize: (titleSize: number) => set({ titleSize }),
 
-  logo: {
-    variant: DEFAULT_PRESET.logo.variant,
-    size: DEFAULT_PRESET.logo.size,
-    filter: DEFAULT_PRESET.logo.filter,
-    opacity: DEFAULT_PRESET.logo.opacity,
-    position: DEFAULT_PRESET.logo.position,
-    xOffset: 12,
-    yOffset: 12,
+  setAuthorContent: (authorContent: string) => set({ authorContent }),
+  setAuthorSize: (authorSize: number) => set({ authorSize }),
 
-    setVariant: (variant) =>
-      set((state) => ({ logo: { ...state.logo, variant } })),
-    setSize: (size) => set((state) => ({ logo: { ...state.logo, size } })),
-    setFilter: (filter) =>
-      set((state) => ({ logo: { ...state.logo, filter } })),
-    setOpacity: (opacity) =>
-      set((state) => ({ logo: { ...state.logo, opacity } })),
-    setPosition: (position) =>
-      set((state) => ({ logo: { ...state.logo, position } })),
-    setXOffset: (xOffset) =>
-      set((state) => ({ logo: { ...state.logo, xOffset } })),
-    setYOffset: (yOffset) =>
-      set((state) => ({ logo: { ...state.logo, yOffset } })),
-  },
+  setLogoPosition: (logoPosition: string) => set({ logoPosition }),
+  setLogoXOffset: (logoXOffset: number) => set({ logoXOffset }),
+  setLogoYOffset: (logoYOffset: number) => set({ logoYOffset }),
+  setLogoSize: (logoSize: number) => set({ logoSize }),
 
-  background: {
-    padding: DEFAULT_PRESET.background.padding,
-    color: DEFAULT_PRESET.background.color,
-
-    setPadding: (padding) =>
-      set((state) => ({ background: { ...state.background, padding } })),
-    setColor: (color) =>
-      set((state) => ({ background: { ...state.background, color } })),
-  },
-
-  setState: (newState) =>
-    set((state) => ({
-      title: { ...state.title, ...newState.title },
-      author: { ...state.author, ...newState.author },
-      logo: { ...state.logo, ...newState.logo },
-      background: { ...state.background, ...newState.background },
-    })),
+  reset: () => set(DEFAULTS),
 }));

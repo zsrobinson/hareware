@@ -1,16 +1,12 @@
+import { DownloadIcon } from "@radix-ui/react-icons";
 import download from "downloadjs";
 import { toPng } from "html-to-image";
 import { useEffect, type ReactNode } from "react";
+import { useLayoutState } from "~/lib/layout-state";
 import { ContentSlide } from "./content-slide";
-import { AuthorForm } from "./forms/author-form";
-import { BackgroundForm } from "./forms/background-form";
-import { LogoForm } from "./forms/logo-form";
-import { PresetForm } from "./forms/preset-form";
-import { TitleForm } from "./forms/title-form";
+import { OptionsForm } from "./options-form";
 import { TitleSlide } from "./title-slide";
 import { Button } from "./ui/button";
-import { useLayoutState } from "~/lib/layout-state";
-import { DownloadIcon } from "@radix-ui/react-icons";
 
 export function GeneratePage({
   defaultTitleContent,
@@ -26,19 +22,13 @@ export function GeneratePage({
   const state = useLayoutState();
 
   useEffect(() => {
-    state.title.setContent(defaultTitleContent);
-    state.author.setContent(defaultAuthorContent);
+    state.setTitleContent(defaultTitleContent);
+    state.setAuthorContent(defaultAuthorContent);
   }, []);
 
   return (
     <div className="flex flex-col items-start gap-8 md:flex-row">
-      <div className="flex min-w-max max-w-sm flex-col gap-8">
-        <PresetForm />
-        <TitleForm />
-        <AuthorForm />
-        <LogoForm />
-        <BackgroundForm />
-      </div>
+      <OptionsForm />
 
       <div className="flex flex-wrap items-start gap-8">
         <div className="flex flex-col items-center gap-4 rounded-xl bg-zinc-100 p-4">

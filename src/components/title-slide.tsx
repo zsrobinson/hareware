@@ -1,98 +1,58 @@
 import { useLayoutState } from "~/lib/layout-state";
 
 export function TitleSlide({ imageURI }: { imageURI: string }) {
-  const title = useLayoutState((state) => state.title);
-  const author = useLayoutState((state) => state.author);
-  const logo = useLayoutState((state) => state.logo);
-  const background = useLayoutState((state) => state.background);
+  const state = useLayoutState();
 
   return (
     <div
       className="relative box-content flex aspect-square w-96 flex-col items-center overflow-hidden font-news"
-      style={{ backgroundColor: background.color }}
+      style={{ backgroundColor: state.bgColor }}
       id="title-slide"
     >
       <img src={"data:image/;base64," + imageURI} />
 
-      <div
-        className="flex grow flex-col items-center justify-around text-center leading-none"
-        style={{ padding: background.padding + "px" }}
-      >
+      <div className="flex grow flex-col items-center justify-around p-2 text-center leading-none">
         <p
-          dangerouslySetInnerHTML={{ __html: title.content }}
+          dangerouslySetInnerHTML={{ __html: state.titleContent }}
           className="text-balance font-semibold leading-tight"
           style={{
-            color: title.color,
-            fontSize: title.size + "px",
+            color: state.textColor,
+            fontSize: state.titleSize + "px",
           }}
         />
 
-        {logo.position === "inline" && (
+        {state.logoPosition === "inline" && (
           <img
-            src={
-              logo.variant === "circle"
-                ? "/hare-logo.webp"
-                : logo.variant === "horizontal-maroon"
-                  ? "/hare-banner.png"
-                  : logo.variant === "horizontal-white"
-                    ? "/hare-banner-white.png"
-                    : ""
-            }
+            src="/hare-logo.webp"
             style={{
-              height: logo.size + "px",
+              height: state.logoSize + "px",
               width: "auto",
-              opacity: logo.opacity,
             }}
-            className={
-              "h-12 " +
-              (logo.filter === "invert"
-                ? "invert"
-                : logo.filter === "grayscale"
-                  ? "grayscale"
-                  : logo.filter === "sepia"
-                    ? "sepia"
-                    : "")
-            }
           />
         )}
 
-        {author && (
+        {state.authorContent && (
           <p
-            dangerouslySetInnerHTML={{ __html: author.content }}
+            dangerouslySetInnerHTML={{ __html: state.authorContent }}
             className="leading-tight"
-            style={{ color: author.color, fontSize: author.size + "px" }}
+            style={{
+              color: state.textColor,
+              fontSize: state.authorSize + "px",
+            }}
           />
         )}
       </div>
 
-      {logo.position === "corner" && (
+      {state.logoPosition === "corner" && (
         <img
-          src={
-            logo.variant === "circle"
-              ? "/hare-logo.webp"
-              : logo.variant === "horizontal-maroon"
-                ? "/hare-banner.png"
-                : logo.variant === "horizontal-white"
-                  ? "/hare-banner-white.png"
-                  : ""
-          }
+          src="/hare-logo.webp"
           style={{
-            height: logo.size + "px",
+            height: state.logoSize + "px",
             width: "auto",
-            opacity: logo.opacity,
-            bottom: logo.yOffset + "px",
-            right: logo.xOffset + "px",
+            bottom: state.logoXOffset + "px",
+            right: state.logoYOffset + "px",
           }}
-          className={
-            "absolute h-12 " +
-            (logo.filter === "invert"
-              ? "invert"
-              : logo.filter === "grayscale"
-                ? "grayscale"
-                : logo.filter === "sepia"
-                  ? "sepia"
-                  : "")
-          }
+          className="absolute"
         />
       )}
     </div>

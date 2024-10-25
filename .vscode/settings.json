@@ -6,7 +6,9 @@
     "downloadjs",
     "fontsource",
     "hareware",
+    "nums",
     "tailwindcss",
-    "webp"
+    "webp",
+    "zustand"
   ]
 }

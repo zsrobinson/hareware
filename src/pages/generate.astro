@@ -1,5 +1,5 @@
 ---
-import { FormatForm } from "~/components/format-form";
+import { GeneratePage } from "~/components/generate-page";
 import Root from "../layouts/root.astro";
 import { scrapeArticle } from "../lib/scrape-article";
 
@@ -14,11 +14,16 @@ const imageURI = await fetch(image)
 ---
 
 <Root>
-  <FormatForm title={title} author={author} imageURI={imageURI} client:load>
+  <GeneratePage
+    defaultTitleContent={title}
+    defaultAuthorContent={"Article by " + author}
+    imageURI={imageURI}
+    client:load
+  >
     {
       author
         ? content.slice(1).map((para) => <p set:html={para.innerHTML} />)
         : content.map((para) => <p set:html={para.innerHTML} />)
     }
-  </FormatForm>
+  </GeneratePage>
 </Root>

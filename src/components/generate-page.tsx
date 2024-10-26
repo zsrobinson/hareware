@@ -43,7 +43,7 @@ export function GeneratePage({
       <OptionsForm />
 
       <div className="flex flex-wrap items-start gap-8">
-        <div className="flex flex-col items-center gap-4 rounded-xl bg-secondary p-4">
+        <div className="flex flex-col items-center gap-4 rounded-xl border bg-secondary p-4 dark:bg-primary-foreground">
           <TitleSlide imageURI={imageURI} />
           <div className="flex w-full justify-around" ref={animate}>
             <Button
@@ -66,7 +66,7 @@ export function GeneratePage({
             </Button>
 
             {isOverflowing && (
-              <div className="flex items-center gap-2 text-sm font-medium text-destructive">
+              <div className="flex items-center gap-2 text-sm font-medium text-red-600">
                 <ExclamationTriangleIcon className="mt-0.5" />
                 <span>Content may be overflowing</span>
               </div>
@@ -74,7 +74,7 @@ export function GeneratePage({
           </div>
         </div>
 
-        <div className="flex flex-col items-center gap-4 rounded-xl bg-secondary p-4">
+        <div className="flex flex-col items-center gap-4 rounded-xl border bg-secondary p-4 dark:bg-primary-foreground">
           <ContentSlide>{children}</ContentSlide>
           <Button
             variant="outline"

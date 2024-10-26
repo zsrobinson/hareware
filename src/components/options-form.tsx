@@ -39,8 +39,8 @@ export function OptionsForm() {
   ) ?? ["custom"];
 
   return (
-    <div>
-      <div className="flex flex-col gap-2">
+    <div className="w-[416px] min-w-max">
+      <div className="flex flex-grow flex-col gap-2">
         <FormItem>
           <StackIcon className="size-5 min-w-max" />
           <FormLabel>Preset</FormLabel>

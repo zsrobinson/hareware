@@ -1,8 +1,8 @@
 ---
-import { Input } from "~/components/ui/input";
-import { getRecentArticles } from "../../lib/getRecentArticles";
-import Root from "../layouts/root.astro";
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import Root from "../layouts/root.astro";
+import { getRecentArticles } from "../lib/getRecentArticles";
 
 const articles = await getRecentArticles();
 ---

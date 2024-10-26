@@ -3,7 +3,9 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import Root from "../layouts/root.astro";
 import { getRecentArticles } from "../lib/getRecentArticles";
+import { ExclamationTriangleIcon } from "@radix-ui/react-icons";
 
+const error = Astro.url.searchParams.get("error") !== null;
 const articles = await getRecentArticles();
 ---
 
@@ -18,6 +20,15 @@ const articles = await getRecentArticles();
     />
     <Button type="submit">Submit</Button>
   </form>
+
+  {
+    error && (
+      <div class="flex items-center gap-2 pt-2 text-sm font-medium text-red-600">
+        <ExclamationTriangleIcon className="mt-0.5" />
+        <span>Please double check your link and try again</span>
+      </div>
+    )
+  }
 
   <br />
 

@@ -4,7 +4,14 @@ import Root from "../layouts/root.astro";
 import { scrapeArticle } from "../lib/scrape-article";
 
 const article = Astro.url.searchParams.get("article") || "";
-if (!article) Astro.redirect("/"); /* ensure we were given URL */
+
+/* check that we have a good url */
+try {
+  const url = new URL(article);
+  if (url.hostname !== "theumdhare.com") throw new Error();
+} catch (e) {
+  return Astro.redirect("/?error");
+}
 
 const { title, author, image, content } = await scrapeArticle(article);
 

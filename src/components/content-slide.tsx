@@ -21,12 +21,12 @@ export function ContentSlide({ children }: { children: ReactNode }) {
       <div
         className="pointer-events-none absolute top-0 aspect-square w-96 bg-gradient-to-b"
         style={{
-          backgroundImage: `linear-gradient(rgba(0,0,0,0) 40%, ${state.bgColor} 90%)`,
+          backgroundImage: `linear-gradient(rgba(0,0,0,0) 50%, ${state.bgColor} 90%)`,
         }}
       ></div>
 
       <p
-        className="absolute bottom-3 w-full text-center font-bold"
+        className="absolute bottom-4 w-full text-center font-bold leading-none"
         style={{ color: state.textColor }}
       >
         Full Article in Bio

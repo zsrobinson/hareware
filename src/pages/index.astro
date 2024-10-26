@@ -8,7 +8,7 @@ const articles = await getRecentArticles();
 ---
 
 <Root>
-  <p class="pb-2">Paste an article link to get started:</p>
+  <p class="pb-2 font-semibold">Paste an article link to get started:</p>
   <form action="/generate" class="flex gap-2">
     <Input
       type="text"
@@ -21,7 +21,7 @@ const articles = await getRecentArticles();
 
   <br />
 
-  <p class="pb-2">Or, start from one of our recent articles:</p>
+  <p class="pb-2 font-semibold">Or, start from one of our recent articles:</p>
 
   <ul class="list-inside list-disc">
     {

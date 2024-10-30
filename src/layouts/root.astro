@@ -6,6 +6,8 @@ import "@fontsource/source-serif-pro/latin-600.css";
 import "@fontsource/source-serif-pro/latin-700-italic.css";
 import "@fontsource/source-serif-pro/latin-700.css";
 import "~/styles/globals.css";
+
+import { SafariWarning } from "../components/safari-warning";
 ---
 
 <html lang="en">
@@ -48,6 +50,7 @@ import "~/styles/globals.css";
         </div>
       </div>
 
+      <SafariWarning client:only="react" />
       <br />
       <hr />
       <br />

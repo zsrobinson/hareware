@@ -1,10 +1,10 @@
 import { XMLParser } from "fast-xml-parser";
 
-export async function getRecentArticles(): Promise<
-  { title: string; link: string; date: string }[] | undefined
-> {
+export async function getRecentArticles(
+  page: number,
+): Promise<{ title: string; link: string; date: string }[] | undefined> {
   try {
-    const res = await fetch("https://theumdhare.com/feed");
+    const res = await fetch(`https://theumdhare.com/feed?paged=${page}`);
     const buffer = Buffer.from(await res.arrayBuffer());
 
     const parser = new XMLParser();
@@ -14,8 +14,7 @@ export async function getRecentArticles(): Promise<
       title: item.title as string,
       link: item.link as string,
       date: new Date(item.pubDate).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
+        month: "short",
         day: "numeric",
       }),
     }));

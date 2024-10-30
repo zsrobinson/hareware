@@ -3,10 +3,17 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import Root from "../layouts/root.astro";
 import { getRecentArticles } from "../lib/getRecentArticles";
-import { ExclamationTriangleIcon } from "@radix-ui/react-icons";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ExclamationTriangleIcon,
+} from "@radix-ui/react-icons";
+
+const pageParam = Number(Astro.url.searchParams.get("page") ?? "1");
+const page = isNaN(pageParam) || pageParam < 0 ? 1 : pageParam;
 
 const error = Astro.url.searchParams.get("error") !== null;
-const articles = await getRecentArticles();
+const articles = await getRecentArticles(page);
 ---
 
 <Root>
@@ -23,7 +30,7 @@ const articles = await getRecentArticles();
 
   {
     error && (
-      <div class="flex items-center gap-2 pt-2 text-sm font-medium text-red-600">
+      <div class="flex items-center gap-2 pt-2 text-sm font-medium text-red-500">
         <ExclamationTriangleIcon className="mt-0.5" />
         <span>Please double check your link and try again</span>
       </div>
@@ -34,21 +41,44 @@ const articles = await getRecentArticles();
 
   <p class="pb-2 font-semibold">Or, start from one of our recent articles:</p>
 
-  <ul class="list-inside list-disc">
-    {
-      articles ? (
-        articles.map((article) => (
-          <li>
-            <a
-              href={"/generate?article=" + article.link}
-              class="underline transition-opacity hover:opacity-60"
-              set:html={article.title}
-            />
-          </li>
-        ))
-      ) : (
-        <p>Cannot get recent articles.</p>
-      )
-    }
-  </ul>
+  {
+    articles ? (
+      <>
+        <ul class="pb-2">
+          {articles.map((article) => (
+            <li class="flex pb-1">
+              <span
+                set:html={article.date}
+                class="w-16 shrink-0 text-nowrap pr-4 text-muted-foreground"
+              />
+              <a
+                class="underline decoration-muted-foreground transition-opacity hover:text-muted-foreground"
+                href={"/generate?article=" + article.link}
+                set:html={article.title}
+              />
+            </li>
+          ))}
+        </ul>
+
+        <div class="flex max-w-fit gap-4 border-t pt-2 text-muted-foreground">
+          {page > 1 && (
+            <a href={`/?page=${page - 1}`}>
+              <ChevronLeftIcon className="inline mb-0.5" />
+              <span class="underline">Previous</span>
+            </a>
+          )}
+          <p>Page {page}</p>
+          <a href={`/?page=${page + 1}`}>
+            <span class="underline">Next</span>
+            <ChevronRightIcon className="inline mb-0.5" />
+          </a>
+        </div>
+      </>
+    ) : (
+      <div class="flex items-center gap-2 text-sm font-medium text-red-500">
+        <ExclamationTriangleIcon className="mt-0.5" />
+        <span>Cannot get recent articles</span>
+      </div>
+    )
+  }
 </Root>

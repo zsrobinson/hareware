@@ -66,7 +66,7 @@ export function GeneratePage({
             </Button>
 
             {isOverflowing && (
-              <div className="flex items-center gap-2 text-sm font-medium text-red-600">
+              <div className="flex items-center gap-2 text-sm font-medium text-red-500">
                 <ExclamationTriangleIcon className="mt-0.5" />
                 <span>Content may be overflowing</span>
               </div>

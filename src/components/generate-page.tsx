@@ -1,8 +1,5 @@
-import {
-  CheckCircledIcon,
-  DownloadIcon,
-  ExclamationTriangleIcon,
-} from "@radix-ui/react-icons";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
+import { DownloadIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
 import download from "downloadjs";
 import { toPng } from "html-to-image";
 import { useEffect, useState, type ReactNode } from "react";
@@ -11,7 +8,6 @@ import { ContentSlide } from "./content-slide";
 import { OptionsForm } from "./options-form";
 import { TitleSlide } from "./title-slide";
 import { Button } from "./ui/button";
-import { useAutoAnimate } from "@formkit/auto-animate/react";
 
 export function GeneratePage({
   defaultTitleContent,
@@ -50,15 +46,12 @@ export function GeneratePage({
               variant="outline"
               id="title-slide-download"
               onClick={() => {
-                const titleSlide = document.getElementById("title-slide")!;
-                new Promise((res) => setTimeout(res, 500)).then(() =>
-                  toPng(titleSlide, {
-                    canvasHeight: 1000,
-                    canvasWidth: 1000,
-                  }).then((dataURI) => {
-                    download(dataURI, "title-slide.png");
-                  }),
-                );
+                toPng(document.getElementById("title-slide")!, {
+                  canvasHeight: 1000,
+                  canvasWidth: 1000,
+                }).then((dataURI) => {
+                  download(dataURI, "title-slide.png");
+                });
               }}
             >
               <DownloadIcon className="mr-2" />
@@ -80,15 +73,12 @@ export function GeneratePage({
             variant="outline"
             id="content-slide-download"
             onClick={() => {
-              const contentSlide = document.getElementById("content-slide")!;
-              new Promise((res) => setTimeout(res, 500)).then(() =>
-                toPng(contentSlide, {
-                  canvasHeight: 1000,
-                  canvasWidth: 1000,
-                }).then((dataURI) => {
-                  download(dataURI, "content-slide.png");
-                }),
-              );
+              toPng(document.getElementById("content-slide")!, {
+                canvasHeight: 1000,
+                canvasWidth: 1000,
+              }).then((dataURI) => {
+                download(dataURI, "content-slide.png");
+              });
             }}
           >
             <DownloadIcon className="mr-2" />

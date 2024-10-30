@@ -1,13 +1,13 @@
 ---
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import Root from "../layouts/root.astro";
-import { getRecentArticles } from "../lib/getRecentArticles";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ExclamationTriangleIcon,
 } from "@radix-ui/react-icons";
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import Root from "../layouts/root.astro";
+import { getRecentArticles } from "../lib/get-recent-articles";
 
 const pageParam = Number(Astro.url.searchParams.get("page") ?? "1");
 const page = isNaN(pageParam) || pageParam < 0 ? 1 : pageParam;

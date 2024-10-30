@@ -11,9 +11,9 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
     >
       <img src={"data:image/;base64," + imageURI} />
 
-      <div className="flex grow flex-col items-center justify-around p-2 text-center leading-none">
+      <div className="flex grow flex-col items-center justify-around p-2 text-center">
         <p
-          dangerouslySetInnerHTML={{ __html: state.titleContent }}
+          dangerouslySetInnerHTML={{ __html: state.title }}
           className="text-balance font-semibold leading-tight"
           style={{
             color: state.textColor,
@@ -21,40 +21,22 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
           }}
         />
 
-        {state.logoPosition === "inline" && (
-          <img
-            src="/hare-logo.webp"
-            style={{
-              height: state.logoSize + "px",
-              width: "auto",
-            }}
-          />
-        )}
-
-        {state.authorContent && (
+        <div className="flex w-full items-center">
           <p
-            dangerouslySetInnerHTML={{ __html: state.authorContent }}
-            className="leading-tight"
-            style={{
-              color: state.textColor,
-              fontSize: state.authorSize + "px",
-            }}
+            dangerouslySetInnerHTML={{ __html: state.authorByline }}
+            className="w-1/2 text-sm leading-tight opacity-60"
+            style={{ color: state.textColor }}
           />
-        )}
-      </div>
 
-      {state.logoPosition === "corner" && (
-        <img
-          src="/hare-logo.webp"
-          style={{
-            height: state.logoSize + "px",
-            width: "auto",
-            bottom: state.logoXOffset + "px",
-            right: state.logoYOffset + "px",
-          }}
-          className="absolute"
-        />
-      )}
+          <img src="/hare-logo.webp" className="w-12" />
+
+          <p
+            dangerouslySetInnerHTML={{ __html: state.imageByline }}
+            className="w-1/2 text-sm leading-tight opacity-60"
+            style={{ color: state.textColor }}
+          />
+        </div>
+      </div>
     </div>
   );
 }

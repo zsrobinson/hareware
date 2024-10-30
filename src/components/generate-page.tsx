@@ -10,13 +10,15 @@ import { TitleSlide } from "./title-slide";
 import { Button } from "./ui/button";
 
 export function GeneratePage({
-  defaultTitleContent,
-  defaultAuthorContent,
+  defaultTitle,
+  defaultAuthorByline,
+  defaultImageByline,
   imageURI,
   children,
 }: {
-  defaultTitleContent: string;
-  defaultAuthorContent: string;
+  defaultTitle: string;
+  defaultAuthorByline: string;
+  defaultImageByline: string;
   imageURI: string;
   children: ReactNode;
 }) {
@@ -25,8 +27,9 @@ export function GeneratePage({
   const [animate] = useAutoAnimate();
 
   useEffect(() => {
-    state.setTitleContent(defaultTitleContent);
-    state.setAuthorContent(defaultAuthorContent);
+    state.setTitle(defaultTitle);
+    state.setAuthorByline(defaultAuthorByline);
+    state.setImageByline(defaultImageByline);
   }, []);
 
   useEffect(() => {

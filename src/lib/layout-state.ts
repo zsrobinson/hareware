@@ -33,6 +33,8 @@ export type MutableLayoutState = LayoutState & {
 
   setTitleContent: (titleContent: string) => void;
   setTitleSize: (titleSize: number) => void;
+  incTitleSize: () => number;
+  decTitleSize: () => number;
 
   setAuthorContent: (authorContent: string) => void;
   setAuthorSize: (authorSize: number) => void;
@@ -45,7 +47,7 @@ export type MutableLayoutState = LayoutState & {
   reset: () => void;
 };
 
-export const useLayoutState = create<MutableLayoutState>()((set) => ({
+export const useLayoutState = create<MutableLayoutState>()((set, curr) => ({
   ...DEFAULTS,
 
   /* not part of defaults since shouldn't be reset */
@@ -57,6 +59,16 @@ export const useLayoutState = create<MutableLayoutState>()((set) => ({
 
   setTitleContent: (titleContent: string) => set({ titleContent }),
   setTitleSize: (titleSize: number) => set({ titleSize }),
+  incTitleSize: () => {
+    const newSize = curr().titleSize + 1;
+    set({ titleSize: newSize });
+    return newSize;
+  },
+  decTitleSize: () => {
+    const newSize = curr().titleSize - 1;
+    set({ titleSize: newSize });
+    return newSize;
+  },
 
   setAuthorContent: (authorContent: string) => set({ authorContent }),
   setAuthorSize: (authorSize: number) => set({ authorSize }),

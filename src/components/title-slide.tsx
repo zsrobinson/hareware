@@ -1,7 +1,42 @@
+import { useEffect } from "react";
 import { useLayoutState } from "~/lib/layout-state";
+
+const LEADING = 1.1;
 
 export function TitleSlide({ imageURI }: { imageURI: string }) {
   const state = useLayoutState();
+
+  function isOverflowing() {
+    const titleSlide = document.getElementById("title-slide")!;
+    return titleSlide.scrollHeight > titleSlide.clientHeight;
+  }
+
+  async function adjustTitleSize() {
+    await new Promise((res) => setTimeout(res, 100));
+    if (isOverflowing()) return shrinkTitleSize();
+    if (state.incTitleSize() > 30) {
+      return shrinkTitleSize();
+    }
+    await adjustTitleSize();
+  }
+
+  async function shrinkTitleSize() {
+    const size = state.decTitleSize();
+    await new Promise((res) => setTimeout(res, 100));
+    if (isOverflowing()) return shrinkTitleSize();
+
+    const title = document.getElementById("title-content")!;
+
+    // if (Math.round(title.clientHeight / (size * LEADING)) < 3) {
+    //   console.log(Math.floor(title.clientHeight / (size * LEADING)));
+    //   const logoFlex = document.getElementById("logo-flex")!;
+    //   logoFlex.style.setProperty("gap", "0.625rem", "important");
+    // }
+  }
+
+  useEffect(() => {
+    adjustTitleSize();
+  }, []);
 
   return (
     <div
@@ -11,9 +46,10 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
     >
       <img src={"data:image/;base64," + imageURI} />
 
-      <div className="flex grow flex-col gap-1 p-2">
-        <div className="flex grow flex-col items-center justify-around">
+      <div className="flex grow flex-col p-2 px-3 pt-3">
+        <div className="flex grow flex-col items-center justify-between gap-0.5">
           <p
+            id="title-content"
             dangerouslySetInnerHTML={{ __html: state.titleContent }}
             className="text-balance text-center font-semibold leading-[1.1]"
             style={{
@@ -21,9 +57,7 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
               fontSize: state.titleSize + "px",
             }}
           />
-        </div>
 
-        <div className="flex flex-col items-center gap-1">
           {state.logoPosition === "inline" && (
             <img
               src="/hare-logo.webp"

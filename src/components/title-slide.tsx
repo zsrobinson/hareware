@@ -11,36 +11,40 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
     >
       <img src={"data:image/;base64," + imageURI} />
 
-      <div className="flex grow flex-col items-center justify-around p-2 text-center leading-none">
-        <p
-          dangerouslySetInnerHTML={{ __html: state.titleContent }}
-          className="text-balance font-semibold leading-tight"
-          style={{
-            color: state.textColor,
-            fontSize: state.titleSize + "px",
-          }}
-        />
-
-        {state.logoPosition === "inline" && (
-          <img
-            src="/hare-logo.webp"
-            style={{
-              height: state.logoSize + "px",
-              width: "auto",
-            }}
-          />
-        )}
-
-        {state.authorContent && (
+      <div className="flex grow flex-col gap-1 p-2">
+        <div className="flex grow flex-col items-center justify-around">
           <p
-            dangerouslySetInnerHTML={{ __html: state.authorContent }}
-            className="leading-tight"
+            dangerouslySetInnerHTML={{ __html: state.titleContent }}
+            className="text-balance text-center font-semibold leading-[1.1]"
             style={{
               color: state.textColor,
-              fontSize: state.authorSize + "px",
+              fontSize: state.titleSize + "px",
             }}
           />
-        )}
+        </div>
+
+        <div className="flex flex-col items-center gap-1">
+          {state.logoPosition === "inline" && (
+            <img
+              src="/hare-logo.webp"
+              style={{
+                height: state.logoSize + "px",
+                width: "auto",
+              }}
+            />
+          )}
+
+          {state.authorContent && (
+            <p
+              dangerouslySetInnerHTML={{ __html: state.authorContent }}
+              className="leading-[1.1]"
+              style={{
+                color: state.textColor,
+                fontSize: state.authorSize + "px",
+              }}
+            />
+          )}
+        </div>
       </div>
 
       {state.logoPosition === "corner" && (

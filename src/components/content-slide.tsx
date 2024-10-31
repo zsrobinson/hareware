@@ -26,7 +26,7 @@ export function ContentSlide({ children }: { children: ReactNode }) {
       ></div>
 
       <p
-        className="absolute bottom-4 w-full text-center font-bold leading-none"
+        className="absolute bottom-4 w-full text-center font-semibold leading-none"
         style={{ color: state.textColor }}
       >
         Full Article in Bio

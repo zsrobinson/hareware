@@ -3,14 +3,18 @@ import {
   HeightIcon,
   MoveIcon,
   OpacityIcon,
+  ReloadIcon,
   SizeIcon,
   StackIcon,
   TextAlignCenterIcon,
+  TrackNextIcon,
+  TrashIcon,
   WidthIcon,
 } from "@radix-ui/react-icons";
 import type { ReactNode } from "react";
 import { presets } from "~/lib/color-presets";
 import { useLayoutState } from "~/lib/layout-state";
+import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import {
@@ -205,6 +209,32 @@ export function OptionsForm() {
           />
           <p className="font-mono text-sm">{state.logoSize}px</p>
         </FormItem>
+
+        <hr className="my-4" />
+
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={() => state.reset()}
+          >
+            <ReloadIcon className="mr-2" />
+            Reset Options
+          </Button>
+
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={() => {
+              const slot = document.querySelector("#content-slide astro-slot")!;
+              if (!slot.firstChild) return;
+              slot.removeChild(slot.firstChild);
+            }}
+          >
+            <TrackNextIcon className="mr-2" />
+            Shift Paragraph
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -26,11 +26,11 @@ import {
 } from "./ui/select";
 import { Slider } from "./ui/slider";
 
-function FormItem({ children }: { children: ReactNode }) {
+export function FormItem({ children }: { children: ReactNode }) {
   return <div className="flex h-9 items-center gap-2">{children}</div>;
 }
 
-function FormLabel({ children }: { children: ReactNode }) {
+export function FormLabel({ children }: { children: ReactNode }) {
   return <Label className="min-w-36">{children}</Label>;
 }
 
@@ -65,6 +65,7 @@ export function OptionsForm() {
               <SelectItem value="maroon">Maroon</SelectItem>
               <SelectItem value="pink">Pink</SelectItem>
               <SelectItem value="white">White</SelectItem>
+              <SelectItem value="red">Red (for quote template)</SelectItem>
               <SelectItem value="custom" disabled>
                 Custom
               </SelectItem>

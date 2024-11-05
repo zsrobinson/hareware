@@ -1,8 +1,6 @@
 import { useEffect } from "react";
 import { useLayoutState } from "~/lib/layout-state";
 
-const LEADING = 1.1;
-
 export function TitleSlide({ imageURI }: { imageURI: string }) {
   const state = useLayoutState();
 
@@ -14,24 +12,14 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
   async function adjustTitleSize() {
     await new Promise((res) => setTimeout(res, 100));
     if (isOverflowing()) return shrinkTitleSize();
-    if (state.incTitleSize() > 30) {
-      return shrinkTitleSize();
-    }
+    if (state.incTitleSize() > 30) return shrinkTitleSize();
     await adjustTitleSize();
   }
 
   async function shrinkTitleSize() {
-    const size = state.decTitleSize();
+    state.decTitleSize();
     await new Promise((res) => setTimeout(res, 100));
     if (isOverflowing()) return shrinkTitleSize();
-
-    const title = document.getElementById("title-content")!;
-
-    // if (Math.round(title.clientHeight / (size * LEADING)) < 3) {
-    //   console.log(Math.floor(title.clientHeight / (size * LEADING)));
-    //   const logoFlex = document.getElementById("logo-flex")!;
-    //   logoFlex.style.setProperty("gap", "0.625rem", "important");
-    // }
   }
 
   useEffect(() => {
@@ -44,7 +32,11 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
       style={{ backgroundColor: state.bgColor }}
       id="title-slide"
     >
-      <img src={"data:image/;base64," + imageURI} />
+      {imageURI ? (
+        <img src={imageURI} className="aspect-video w-full bg-secondary" />
+      ) : (
+        <div className="aspect-video w-full bg-secondary" />
+      )}
 
       <div className="flex grow flex-col p-2 px-3 pt-3">
         <div className="flex grow flex-col items-center justify-between gap-0.5">

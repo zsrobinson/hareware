@@ -12,11 +12,13 @@ import { Button } from "./ui/button";
 export function GeneratePage({
   defaultTitleContent,
   defaultAuthorContent,
+  articleLink,
   imageURI,
   children,
 }: {
   defaultTitleContent: string;
   defaultAuthorContent: string;
+  articleLink: string;
   imageURI: string;
   children: ReactNode;
 }) {
@@ -36,7 +38,7 @@ export function GeneratePage({
 
   return (
     <div className="flex flex-col items-start gap-8 md:flex-row">
-      <OptionsForm />
+      <OptionsForm articleLink={articleLink} />
 
       <div className="flex flex-wrap items-start gap-8">
         <div className="flex flex-col items-center gap-4 rounded-xl border bg-secondary p-4 dark:bg-primary-foreground">

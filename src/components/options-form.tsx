@@ -1,5 +1,6 @@
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import {
+  ExternalLinkIcon,
   HeightIcon,
   MoveIcon,
   OpacityIcon,
@@ -8,7 +9,6 @@ import {
   StackIcon,
   TextAlignCenterIcon,
   TrackNextIcon,
-  TrashIcon,
   WidthIcon,
 } from "@radix-ui/react-icons";
 import type { ReactNode } from "react";
@@ -34,7 +34,7 @@ export function FormLabel({ children }: { children: ReactNode }) {
   return <Label className="min-w-36">{children}</Label>;
 }
 
-export function OptionsForm() {
+export function OptionsForm({ articleLink }: { articleLink?: string }) {
   const state = useLayoutState();
   const [animate] = useAutoAnimate();
   const [currentPreset] = Object.entries(presets).find(
@@ -236,6 +236,22 @@ export function OptionsForm() {
             Shift Paragraph
           </Button>
         </div>
+
+        {articleLink && (
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => state.reset()}
+              asChild
+            >
+              <a href={articleLink} target="_blank">
+                <ExternalLinkIcon className="mr-2" />
+                View Original Article
+              </a>
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

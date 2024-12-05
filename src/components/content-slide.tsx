@@ -12,7 +12,7 @@ export function ContentSlide({ children }: { children: ReactNode }) {
       id="content-slide"
     >
       <div
-        className="absolute top-0 flex flex-col gap-2 p-6"
+        className="absolute top-0 flex list-inside flex-col gap-2 p-6"
         style={{ color: state.textColor }}
       >
         {children}

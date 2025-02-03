@@ -4,7 +4,7 @@ import {
   ExclamationTriangleIcon,
   FileIcon,
 } from "@radix-ui/react-icons";
-import * as download from "downloadjs";
+import download from "downloadjs";
 import { toPng } from "html-to-image";
 import { useEffect, useState } from "react";
 import { useLayoutState } from "~/lib/layout-state";

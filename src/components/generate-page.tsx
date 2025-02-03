@@ -1,6 +1,6 @@
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { DownloadIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
-import * as download from "downloadjs";
+import download from "downloadjs";
 import { toPng } from "html-to-image";
 import { useEffect, useState, type ReactNode } from "react";
 import { useLayoutState } from "~/lib/layout-state";

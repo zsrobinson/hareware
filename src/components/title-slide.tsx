@@ -38,8 +38,8 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
         <div className="aspect-video w-full bg-secondary" />
       )}
 
-      <div className="flex grow flex-col p-2 px-3 pt-3">
-        <div className="flex grow flex-col items-center justify-between gap-0.5">
+      <div className="flex grow flex-col p-2 px-3">
+        <div className="flex grow flex-col items-center justify-around gap-0.5">
           <p
             id="title-content"
             dangerouslySetInnerHTML={{ __html: state.titleContent }}
@@ -63,7 +63,7 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
           {state.authorContent && (
             <p
               dangerouslySetInnerHTML={{ __html: state.authorContent }}
-              className="leading-[1.1]"
+              className="text-center leading-[1.1]"
               style={{
                 color: state.textColor,
                 fontSize: state.authorSize + "px",

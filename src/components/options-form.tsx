@@ -164,6 +164,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
             <SelectContent>
               <SelectItem value="inline">Inline</SelectItem>
               <SelectItem value="corner">Corner</SelectItem>
+              <SelectItem value="none">None</SelectItem>
             </SelectContent>
           </Select>
         </FormItem>

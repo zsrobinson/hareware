@@ -199,18 +199,20 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
           </>
         )}
 
-        <FormItem>
-          <SizeIcon className="size-5 min-w-max" />
-          <FormLabel>Logo Size</FormLabel>
-          <Slider
-            value={[state.logoSize]}
-            onValueChange={(value) => state.setLogoSize(value.at(0)!)}
-            min={16}
-            max={64}
-            step={1}
-          />
-          <p className="font-mono text-sm">{state.logoSize}px</p>
-        </FormItem>
+        {state.logoPosition !== "none" && (
+          <FormItem>
+            <SizeIcon className="size-5 min-w-max" />
+            <FormLabel>Logo Size</FormLabel>
+            <Slider
+              value={[state.logoSize]}
+              onValueChange={(value) => state.setLogoSize(value.at(0)!)}
+              min={16}
+              max={64}
+              step={1}
+            />
+            <p className="font-mono text-sm">{state.logoSize}px</p>
+          </FormItem>
+        )}
 
         <hr className="my-4" />
 

@@ -1,0 +1,34 @@
+---
+import Root from "../layouts/root.astro";
+import { scrapeArticle } from "../lib/scrape-article";
+
+const article = Astro.url.searchParams.get("article") || "";
+
+/* check that we have a good url */
+try {
+  const url = new URL(article);
+  if (url.hostname !== "theumdhare.com") throw new Error();
+} catch (e) {
+  return Astro.redirect("/?error");
+}
+
+const { title, author, image, content } = await scrapeArticle(article);
+
+const SPECIAL: string[] = ["EM", "I", "IMG", "STRONG", "B", "LI"] as const;
+
+// have to loop recursively to get all element names
+function getSpecialElements(els: Element[]) {
+  const specialElements: Element[] = [];
+  for (const el of els) {
+    if (SPECIAL.includes(el.nodeName)) specialElements.push(el);
+    specialElements.push(...getSpecialElements(Array.from(el.children)));
+  }
+  return specialElements;
+}
+
+const filtered = getSpecialElements(content);
+---
+
+<Root>
+  {filtered.map((el) => <p>{el.innerHTML}</p>)}
+</Root>

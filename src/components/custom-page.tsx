@@ -54,7 +54,7 @@ export function CustomPage() {
       <OptionsForm />
 
       <div className="w-[416px] min-w-max shrink-0">
-        <div className="flex flex-grow flex-col gap-2">
+        <div className="flex grow flex-col gap-2">
           <FormItem>
             <FileIcon className="size-5 min-w-max" />
             <FormLabel>Image Upload</FormLabel>

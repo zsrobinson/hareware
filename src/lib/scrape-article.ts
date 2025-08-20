@@ -29,7 +29,7 @@ export async function scrapeArticle(article: string) {
 
   const content = [
     ...dom.window.document.querySelectorAll(
-      ".entry-content p, .entry-content h2, .entry-content ol, .entry-content ul",
+      ".entry-content p, .entry-content h2, .entry-content h3, .entry-content ol, .entry-content ul",
     ),
   ] as Element[];
 

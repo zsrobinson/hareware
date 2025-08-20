@@ -28,14 +28,14 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
 
   return (
     <div
-      className="relative box-content flex aspect-square w-96 flex-col items-center overflow-hidden font-news"
+      className="relative box-content flex aspect-square w-96 flex-col items-center overflow-hidden font-serif"
       style={{ backgroundColor: state.bgColor }}
       id="title-slide"
     >
       {imageURI ? (
-        <img src={imageURI} className="aspect-video w-full bg-secondary" />
+        <img src={imageURI} className="bg-secondary aspect-video w-full" />
       ) : (
-        <div className="aspect-video w-full bg-secondary" />
+        <div className="bg-secondary aspect-video w-full" />
       )}
 
       <div className="flex grow flex-col p-2 px-3">
@@ -43,7 +43,7 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
           <p
             id="title-content"
             dangerouslySetInnerHTML={{ __html: state.titleContent }}
-            className="text-balance text-center font-semibold leading-[1.1]"
+            className="font-display text-center leading-[1.1] font-semibold text-balance"
             style={{
               color: state.textColor,
               fontSize: state.titleSize + "px",
@@ -63,7 +63,7 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
           {state.authorContent && (
             <p
               dangerouslySetInnerHTML={{ __html: state.authorContent }}
-              className="text-center leading-[1.1]"
+              className="text-center leading-[1.1] font-medium"
               style={{
                 color: state.textColor,
                 fontSize: state.authorSize + "px",

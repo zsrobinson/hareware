@@ -6,7 +6,7 @@ export async function scrapeArticle(article: string) {
   const dom = new JSDOM(buffer);
 
   const title = dom.window.document
-    .querySelector(".entry-title")!
+    .querySelector(".wp-block-post-title")!
     .innerHTML.trim();
 
   const author = dom.window.document

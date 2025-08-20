@@ -59,7 +59,7 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
                   fontSize: state.bylineSize + "px",
                 }}
               >
-                <p>Article By</p>
+                <p>Article by</p>
                 <p dangerouslySetInnerHTML={{ __html: state.articleByline }} />
               </div>
             )}
@@ -74,7 +74,7 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
                   fontSize: state.bylineSize + "px",
                 }}
               >
-                <p>Image By</p>
+                <p>Image by</p>
                 <p dangerouslySetInnerHTML={{ __html: state.imageByline }} />
               </div>
             )}

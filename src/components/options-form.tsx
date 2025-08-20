@@ -66,7 +66,6 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
               <SelectItem value="maroon">Maroon</SelectItem>
               <SelectItem value="pink">Pink</SelectItem>
               <SelectItem value="white">White</SelectItem>
-              <SelectItem value="red">Red (for quote template)</SelectItem>
               <SelectItem value="custom" disabled>
                 Custom
               </SelectItem>

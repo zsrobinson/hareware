@@ -5,6 +5,16 @@ export async function scrapeArticle(article: string) {
   const buffer = await res.arrayBuffer();
   const dom = new JSDOM(buffer);
 
+  // remove all empty elements inside of the post
+  dom.window.document
+    .querySelector(".entry-content")
+    ?.querySelectorAll("*")
+    .forEach((el) => {
+      if (el.innerHTML.trim() === "") {
+        el.remove();
+      }
+    });
+
   const title = dom.window.document
     .querySelector(".wp-block-post-title")!
     .innerHTML.trim();
@@ -31,7 +41,7 @@ export async function scrapeArticle(article: string) {
     ...dom.window.document.querySelectorAll(
       ".entry-content p, .entry-content h2, .entry-content h3, .entry-content ol, .entry-content ul",
     ),
-  ] as Element[];
+  ].filter((el) => el.innerHTML !== "");
 
   return { title, author, imageCredits, image, date, content };
 }

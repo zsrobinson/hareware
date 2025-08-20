@@ -2,6 +2,7 @@ import { useAutoAnimate } from "@formkit/auto-animate/react";
 import {
   ExternalLinkIcon,
   HeightIcon,
+  InfoCircledIcon,
   MoveIcon,
   OpacityIcon,
   ReloadIcon,
@@ -43,7 +44,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
   ) ?? ["custom"];
 
   return (
-    <div className="w-[416px] min-w-max">
+    <div className="w-[416px] shrink-0">
       <div className="flex grow flex-col gap-2">
         <FormItem>
           <StackIcon className="size-5 min-w-max" />
@@ -102,8 +103,8 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
           <FormLabel>Title Content</FormLabel>
           <Input
             type="text"
-            value={state.titleContent}
-            onChange={(e) => state.setTitleContent(e.target.value)}
+            value={state.title}
+            onChange={(e) => state.setTitle(e.target.value)}
           />
         </FormItem>
 
@@ -126,96 +127,41 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
       <div className="flex flex-col gap-2">
         <FormItem>
           <TextAlignCenterIcon className="size-5 min-w-max" />
-          <FormLabel>Author Content</FormLabel>
+          <FormLabel>Article Byline</FormLabel>
           <Input
             type="text"
-            value={state.authorContent}
-            onChange={(e) => state.setAuthorContent(e.target.value)}
+            value={state.articleByline}
+            onChange={(e) => state.setArticleByline(e.target.value)}
+          />
+        </FormItem>
+
+        <FormItem>
+          <TextAlignCenterIcon className="size-5 min-w-max" />
+          <FormLabel>Image Byline</FormLabel>
+          <Input
+            type="text"
+            value={state.imageByline}
+            onChange={(e) => state.setImageByline(e.target.value)}
           />
         </FormItem>
 
         <FormItem>
           <SizeIcon className="size-5 min-w-max" />
-          <FormLabel>Author Size</FormLabel>
+          <FormLabel>Byline Size</FormLabel>
           <Slider
-            value={[state.authorSize]}
-            onValueChange={(value) => state.setAuthorSize(value.at(0)!)}
+            value={[state.bylineSize]}
+            onValueChange={(value) => state.setBylineSize(value.at(0)!)}
             min={12}
             max={24}
             step={1}
           />
-          <p className="font-mono text-sm">{state.authorSize}px</p>
+          <p className="font-mono text-sm">{state.bylineSize}px</p>
         </FormItem>
       </div>
 
       <hr className="my-4" />
 
-      <div className="flex flex-col gap-2" ref={animate}>
-        <FormItem>
-          <MoveIcon className="size-5 min-w-max" />
-          <FormLabel>Logo Position</FormLabel>
-          <Select
-            value={state.logoPosition}
-            onValueChange={(value) => state.setLogoPosition(value)}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="inline">Inline</SelectItem>
-              <SelectItem value="corner">Corner</SelectItem>
-              <SelectItem value="none">None</SelectItem>
-            </SelectContent>
-          </Select>
-        </FormItem>
-
-        {state.logoPosition === "corner" && (
-          <>
-            <FormItem>
-              <WidthIcon className="size-5 min-w-max" />
-              <FormLabel>Logo X Offset</FormLabel>
-              <Slider
-                value={[state.logoXOffset]}
-                onValueChange={(value) => state.setLogoXOffset(value.at(0)!)}
-                min={0}
-                max={48}
-                step={1}
-              />
-              <p className="font-mono text-sm">{state.logoXOffset}px</p>
-            </FormItem>
-
-            <FormItem>
-              <HeightIcon className="size-5 min-w-max" />
-              <FormLabel>Logo Y Offset</FormLabel>
-              <Slider
-                value={[state.logoYOffset]}
-                onValueChange={(value) => state.setLogoYOffset(value.at(0)!)}
-                min={0}
-                max={48}
-                step={1}
-              />
-              <p className="font-mono text-sm">{state.logoYOffset}px</p>
-            </FormItem>
-          </>
-        )}
-
-        {state.logoPosition !== "none" && (
-          <FormItem>
-            <SizeIcon className="size-5 min-w-max" />
-            <FormLabel>Logo Size</FormLabel>
-            <Slider
-              value={[state.logoSize]}
-              onValueChange={(value) => state.setLogoSize(value.at(0)!)}
-              min={16}
-              max={64}
-              step={1}
-            />
-            <p className="font-mono text-sm">{state.logoSize}px</p>
-          </FormItem>
-        )}
-
-        <hr className="my-4" />
-
+      <div className="flex flex-col gap-2">
         <div className="flex gap-2">
           <Button
             variant="secondary"
@@ -255,6 +201,14 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
             </Button>
           </div>
         )}
+      </div>
+      <div className="text-muted-foreground my-4 flex items-center gap-2 text-sm leading-[1.1]">
+        <InfoCircledIcon className="size-5 min-w-max" />
+        <p>
+          HTML tags are supported in the Title Content and Byline fields. If
+          needed, try adding a "&lt;br&gt;" tag to manually trigger a line
+          break.
+        </p>
       </div>
     </div>
   );

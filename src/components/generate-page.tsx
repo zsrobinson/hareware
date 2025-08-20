@@ -10,14 +10,16 @@ import { TitleSlide } from "./title-slide";
 import { Button } from "./ui/button";
 
 export function GeneratePage({
-  defaultTitleContent,
-  defaultAuthorContent,
+  defaultTitle,
+  defaultArticleByline,
+  defaultImageByline,
   articleLink,
   imageURI,
   children,
 }: {
-  defaultTitleContent: string;
-  defaultAuthorContent: string;
+  defaultTitle: string;
+  defaultArticleByline: string;
+  defaultImageByline: string;
   articleLink: string;
   imageURI: string;
   children: ReactNode;
@@ -27,8 +29,9 @@ export function GeneratePage({
   const [animate] = useAutoAnimate();
 
   useEffect(() => {
-    state.setTitleContent(defaultTitleContent);
-    state.setAuthorContent(defaultAuthorContent);
+    state.setTitle(defaultTitle);
+    state.setArticleByline(defaultArticleByline);
+    state.setImageByline(defaultImageByline);
   }, []);
 
   useEffect(() => {
@@ -41,7 +44,7 @@ export function GeneratePage({
       <OptionsForm articleLink={articleLink} />
 
       <div className="flex flex-wrap items-start gap-8">
-        <div className="flex flex-col items-center gap-4 rounded-xl border bg-secondary p-4 dark:bg-primary-foreground">
+        <div className="bg-secondary dark:bg-primary-foreground flex flex-col items-center gap-4 rounded-xl border p-4">
           <TitleSlide imageURI={imageURI} />
           <div className="flex w-full justify-around" ref={animate}>
             <Button
@@ -69,7 +72,7 @@ export function GeneratePage({
           </div>
         </div>
 
-        <div className="flex flex-col items-center gap-4 rounded-xl border bg-secondary p-4 dark:bg-primary-foreground">
+        <div className="bg-secondary dark:bg-primary-foreground flex flex-col items-center gap-4 rounded-xl border p-4">
           <ContentSlide>{children}</ContentSlide>
           <Button
             variant="outline"

@@ -12,7 +12,7 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
   async function adjustTitleSize() {
     await new Promise((res) => setTimeout(res, 100));
     if (isOverflowing()) return shrinkTitleSize();
-    if (state.incTitleSize() > 30) return shrinkTitleSize();
+    if (state.incTitleSize() > 32) return shrinkTitleSize();
     await adjustTitleSize();
   }
 
@@ -38,53 +38,49 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
         <div className="bg-secondary aspect-video w-full" />
       )}
 
-      <div className="flex grow flex-col p-2 px-3">
-        <div className="flex grow flex-col items-center justify-around gap-0.5">
+      <div className="flex w-full grow flex-col p-2 px-3">
+        <div className="flex grow flex-col items-center justify-around gap-2">
           <p
             id="title-content"
-            dangerouslySetInnerHTML={{ __html: state.titleContent }}
-            className="font-display text-center leading-[1.1] font-semibold text-balance"
+            dangerouslySetInnerHTML={{ __html: state.title }}
+            className="font-display text-center leading-[1.1] font-[600] text-balance"
             style={{
               color: state.textColor,
               fontSize: state.titleSize + "px",
             }}
           />
 
-          {state.logoPosition === "inline" && (
-            <img
-              src="/hare-logo.webp"
-              style={{
-                height: state.logoSize + "px",
-                width: "auto",
-              }}
-            />
-          )}
+          <div className="flex w-full items-center gap-2">
+            {state.articleByline && (
+              <div
+                className="basis-1/2 text-center leading-[1.15]"
+                style={{
+                  color: state.textColor,
+                  fontSize: state.bylineSize + "px",
+                }}
+              >
+                <p>Article By</p>
+                <p dangerouslySetInnerHTML={{ __html: state.articleByline }} />
+              </div>
+            )}
 
-          {state.authorContent && (
-            <p
-              dangerouslySetInnerHTML={{ __html: state.authorContent }}
-              className="text-center leading-[1.1] font-medium"
-              style={{
-                color: state.textColor,
-                fontSize: state.authorSize + "px",
-              }}
-            />
-          )}
+            <img src="/hare-logo.webp" className="h-12" />
+
+            {state.imageByline && (
+              <div
+                className="basis-1/2 text-center leading-[1.15]"
+                style={{
+                  color: state.textColor,
+                  fontSize: state.bylineSize + "px",
+                }}
+              >
+                <p>Image By</p>
+                <p dangerouslySetInnerHTML={{ __html: state.imageByline }} />
+              </div>
+            )}
+          </div>
         </div>
       </div>
-
-      {state.logoPosition === "corner" && (
-        <img
-          src="/hare-logo.webp"
-          style={{
-            height: state.logoSize + "px",
-            width: "auto",
-            bottom: state.logoXOffset + "px",
-            right: state.logoYOffset + "px",
-          }}
-          className="absolute"
-        />
-      )}
     </div>
   );
 }

@@ -35,8 +35,8 @@ export function CustomPage() {
   const [imageURI, setImageURI] = useState<string | undefined>();
 
   useEffect(() => {
-    state.setTitleContent("Lorem Ipsum");
-    state.setAuthorContent("Article by Lorem Ipsum");
+    state.setTitle("Lorem Ipsum");
+    state.setArticleByline("Lorem Ipsum");
   }, []);
 
   useEffect(() => {
@@ -78,7 +78,7 @@ export function CustomPage() {
       </div>
 
       <div className="flex flex-wrap items-start gap-8">
-        <div className="flex flex-col items-center gap-4 rounded-xl border bg-secondary p-4 dark:bg-primary-foreground">
+        <div className="bg-secondary dark:bg-primary-foreground flex flex-col items-center gap-4 rounded-xl border p-4">
           <TitleSlide imageURI={imageURI ?? ""} />
           <div className="flex w-full justify-around" ref={animate}>
             <Button
@@ -106,7 +106,7 @@ export function CustomPage() {
           </div>
         </div>
 
-        <div className="flex flex-col items-center gap-4 rounded-xl border bg-secondary p-4 dark:bg-primary-foreground">
+        <div className="bg-secondary dark:bg-primary-foreground flex flex-col items-center gap-4 rounded-xl border p-4">
           <ContentSlide>
             {content.split("\n\n").map((para, i) => (
               <p dangerouslySetInnerHTML={{ __html: para }} key={i} />

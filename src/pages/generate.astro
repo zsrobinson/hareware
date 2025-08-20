@@ -13,9 +13,8 @@ try {
   return Astro.redirect("/?error");
 }
 
-const { title, author, image, content } = await scrapeArticle(article);
-
-console.log(content.map((para) => para.nodeName));
+const { title, author, image, imageCredits, content } =
+  await scrapeArticle(article);
 
 const imageURI = await fetch(image)
   .then((res) => res.arrayBuffer())
@@ -24,8 +23,9 @@ const imageURI = await fetch(image)
 
 <Root>
   <GeneratePage
-    defaultTitleContent={title}
-    defaultAuthorContent={"Article by " + author}
+    defaultTitle={title}
+    defaultArticleByline={author ?? ""}
+    defaultImageByline={imageCredits ?? ""}
     articleLink={article}
     imageURI={imageURI}
     client:load

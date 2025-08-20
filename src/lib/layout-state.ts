@@ -4,45 +4,33 @@ import { presets } from "./color-presets";
 const DEFAULTS = {
   ...presets.maroon,
   titleSize: 24,
-  authorSize: 14,
-  logoPosition: "inline",
-  logoXOffset: 12,
-  logoYOffset: 12,
-  logoSize: 48,
+  bylineSize: 14,
 };
 
 export type LayoutState = {
   textColor: string;
   bgColor: string;
 
-  titleContent: string;
+  title: string;
   titleSize: number;
 
-  authorContent: string;
-  authorSize: number;
-
-  logoPosition: string;
-  logoXOffset: number;
-  logoYOffset: number;
-  logoSize: number;
+  articleByline: string;
+  imageByline: string;
+  bylineSize: number;
 };
 
 export type MutableLayoutState = LayoutState & {
   setTextColor: (textColor: string) => void;
   setBgColor: (bgColor: string) => void;
 
-  setTitleContent: (titleContent: string) => void;
+  setTitle: (title: string) => void;
   setTitleSize: (titleSize: number) => void;
   incTitleSize: () => number;
   decTitleSize: () => number;
 
-  setAuthorContent: (authorContent: string) => void;
-  setAuthorSize: (authorSize: number) => void;
-
-  setLogoPosition: (logoPosition: string) => void;
-  setLogoXOffset: (logoXOffset: number) => void;
-  setLogoYOffset: (logoYOffset: number) => void;
-  setLogoSize: (logoSize: number) => void;
+  setArticleByline: (articleByline: string) => void;
+  setImageByline: (imageByline: string) => void;
+  setBylineSize: (bylineSize: number) => void;
 
   reset: () => void;
 };
@@ -51,13 +39,14 @@ export const useLayoutState = create<MutableLayoutState>()((set, curr) => ({
   ...DEFAULTS,
 
   /* not part of defaults since shouldn't be reset */
-  titleContent: "",
-  authorContent: "",
+  title: "",
+  articleByline: "",
+  imageByline: "",
 
   setTextColor: (textColor: string) => set({ textColor }),
   setBgColor: (bgColor: string) => set({ bgColor }),
 
-  setTitleContent: (titleContent: string) => set({ titleContent }),
+  setTitle: (title: string) => set({ title }),
   setTitleSize: (titleSize: number) => set({ titleSize }),
   incTitleSize: () => {
     const newSize = curr().titleSize + 1;
@@ -70,13 +59,9 @@ export const useLayoutState = create<MutableLayoutState>()((set, curr) => ({
     return newSize;
   },
 
-  setAuthorContent: (authorContent: string) => set({ authorContent }),
-  setAuthorSize: (authorSize: number) => set({ authorSize }),
-
-  setLogoPosition: (logoPosition: string) => set({ logoPosition }),
-  setLogoXOffset: (logoXOffset: number) => set({ logoXOffset }),
-  setLogoYOffset: (logoYOffset: number) => set({ logoYOffset }),
-  setLogoSize: (logoSize: number) => set({ logoSize }),
+  setArticleByline: (articleByline: string) => set({ articleByline }),
+  setImageByline: (imageByline: string) => set({ imageByline }),
+  setBylineSize: (bylineSize: number) => set({ bylineSize }),
 
   reset: () => set(DEFAULTS),
 }));

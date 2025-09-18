@@ -1,0 +1,6 @@
+---
+import { getRandomArticle } from "../lib/get-random-article";
+
+const link = await getRandomArticle();
+return Astro.redirect(link, 307);
+---

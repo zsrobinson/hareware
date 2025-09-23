@@ -1,9 +1,20 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useLayoutState } from "~/lib/layout-state";
 
 /** Children as article content */
 export function ContentSlide({ children }: { children: ReactNode }) {
   const state = useLayoutState();
+
+  useEffect(() => {
+    const el = document.querySelector("#content-slide astro-slot");
+    const children = [...(el?.children ?? [])] as HTMLElement[];
+    for (let i = 0; i < state.paragraphShift; i++) {
+      children[i].style.display = "none";
+    }
+    for (let i = state.paragraphShift; i < children.length; i++) {
+      children[i].style.display = "block";
+    }
+  }, [state.paragraphShift]);
 
   return (
     <div

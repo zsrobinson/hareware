@@ -35,11 +35,7 @@ export function GeneratePage({
     const titleSlideImage = document.getElementById(
       "title-slide-image",
     ) as HTMLImageElement;
-    const contentSlideImage = document.getElementById(
-      "content-slide-image",
-    ) as HTMLImageElement;
     titleSlideImage.src = "";
-    contentSlideImage.src = "";
   }, [state]);
 
   useDebouncedEffect(
@@ -47,14 +43,29 @@ export function GeneratePage({
       const titleSlideImage = document.getElementById(
         "title-slide-image",
       ) as HTMLImageElement;
-      const contentSlideImage = document.getElementById(
-        "content-slide-image",
-      ) as HTMLImageElement;
       domToPng(document.getElementById("title-slide")!, {
         scale: 4,
       }).then((dataURI) => {
         titleSlideImage.src = dataURI;
       });
+    },
+    300,
+    [state],
+  );
+
+  useEffect(() => {
+    const contentSlideImage = document.getElementById(
+      "content-slide-image",
+    ) as HTMLImageElement;
+    contentSlideImage.src = "";
+  }, [state.bgColor, state.textColor, state.paragraphShift]);
+
+  useDebouncedEffect(
+    () => {
+      const contentSlideImage = document.getElementById(
+        "content-slide-image",
+      ) as HTMLImageElement;
+
       domToPng(document.getElementById("content-slide")!, {
         scale: 4,
       }).then((dataURI) => {
@@ -62,7 +73,7 @@ export function GeneratePage({
       });
     },
     300,
-    [state],
+    [state.bgColor, state.textColor, state.paragraphShift],
   );
 
   useEffect(() => {

@@ -5,6 +5,7 @@ const DEFAULTS = {
   ...presets.maroon,
   titleSize: 24,
   bylineSize: 14,
+  paragraphShift: 0,
 };
 
 export type LayoutState = {
@@ -17,6 +18,8 @@ export type LayoutState = {
   articleByline: string;
   imageByline: string;
   bylineSize: number;
+
+  paragraphShift: number;
 };
 
 export type MutableLayoutState = LayoutState & {
@@ -31,6 +34,8 @@ export type MutableLayoutState = LayoutState & {
   setArticleByline: (articleByline: string) => void;
   setImageByline: (imageByline: string) => void;
   setBylineSize: (bylineSize: number) => void;
+
+  incParagraphShift: () => void;
 
   reset: () => void;
 };
@@ -62,6 +67,8 @@ export const useLayoutState = create<MutableLayoutState>()((set, curr) => ({
   setArticleByline: (articleByline: string) => set({ articleByline }),
   setImageByline: (imageByline: string) => set({ imageByline }),
   setBylineSize: (bylineSize: number) => set({ bylineSize }),
+
+  incParagraphShift: () => set({ paragraphShift: curr().paragraphShift + 1 }),
 
   reset: () => set(DEFAULTS),
 }));

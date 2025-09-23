@@ -174,11 +174,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
           <Button
             variant="secondary"
             className="w-full"
-            onClick={() => {
-              const slot = document.querySelector("#content-slide astro-slot")!;
-              if (!slot.firstChild) return;
-              slot.removeChild(slot.firstChild);
-            }}
+            onClick={() => state.incParagraphShift()}
           >
             <TrackNextIcon className="mr-2" />
             Shift Paragraph

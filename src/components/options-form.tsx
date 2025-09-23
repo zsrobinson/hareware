@@ -44,7 +44,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
   ) ?? ["custom"];
 
   return (
-    <div className="w-[416px] shrink-0">
+    <div className="max-w-[416px] grow">
       <div className="flex grow flex-col gap-2">
         <FormItem>
           <StackIcon className="size-5 min-w-max" />

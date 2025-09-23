@@ -1,13 +1,16 @@
 import { useAutoAnimate } from "@formkit/auto-animate/react";
-import { DownloadIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
-import download from "downloadjs";
-import { toPng } from "html-to-image";
+import {
+  ExclamationTriangleIcon,
+  InfoCircledIcon,
+} from "@radix-ui/react-icons";
+import { domToPng } from "modern-screenshot";
 import { useEffect, useState, type ReactNode } from "react";
 import { useLayoutState } from "~/lib/layout-state";
+import { useDebouncedEffect } from "../lib/use-debounced-effect";
 import { ContentSlide } from "./content-slide";
+import { LoaderCircle } from "./loader-circle";
 import { OptionsForm } from "./options-form";
 import { TitleSlide } from "./title-slide";
-import { Button } from "./ui/button";
 
 export function GeneratePage({
   defaultTitle,
@@ -29,6 +32,40 @@ export function GeneratePage({
   const [animate] = useAutoAnimate();
 
   useEffect(() => {
+    const titleSlideImage = document.getElementById(
+      "title-slide-image",
+    ) as HTMLImageElement;
+    const contentSlideImage = document.getElementById(
+      "content-slide-image",
+    ) as HTMLImageElement;
+    titleSlideImage.src = "";
+    contentSlideImage.src = "";
+  }, [state]);
+
+  useDebouncedEffect(
+    () => {
+      const titleSlideImage = document.getElementById(
+        "title-slide-image",
+      ) as HTMLImageElement;
+      const contentSlideImage = document.getElementById(
+        "content-slide-image",
+      ) as HTMLImageElement;
+      domToPng(document.getElementById("title-slide")!, {
+        scale: 4,
+      }).then((dataURI) => {
+        titleSlideImage.src = dataURI;
+      });
+      domToPng(document.getElementById("content-slide")!, {
+        scale: 4,
+      }).then((dataURI) => {
+        contentSlideImage.src = dataURI;
+      });
+    },
+    300,
+    [state],
+  );
+
+  useEffect(() => {
     state.setTitle(defaultTitle);
     state.setArticleByline(defaultArticleByline);
     state.setImageByline(defaultImageByline);
@@ -41,28 +78,15 @@ export function GeneratePage({
 
   return (
     <div className="flex flex-col items-start gap-8 md:flex-row">
-      <OptionsForm articleLink={articleLink} />
+      <div className="flex flex-col gap-4">
+        <h2 className="text-xl font-semibold">Options</h2>
+        <OptionsForm articleLink={articleLink} />
+      </div>
 
       <div className="flex flex-wrap items-start gap-8">
-        <div className="bg-secondary dark:bg-primary-foreground flex flex-col items-center gap-4 rounded-xl border p-4">
-          <TitleSlide imageURI={imageURI} />
-          <div className="flex w-full justify-around" ref={animate}>
-            <Button
-              variant="outline"
-              id="title-slide-download"
-              onClick={() => {
-                toPng(document.getElementById("title-slide")!, {
-                  canvasHeight: 1000,
-                  canvasWidth: 1000,
-                }).then((dataURI) => {
-                  download(dataURI, "title-slide.png");
-                });
-              }}
-            >
-              <DownloadIcon className="mr-2" />
-              Download
-            </Button>
-
+        <div className="mr-4 flex w-96 flex-col gap-4">
+          <div className="flex justify-between" ref={animate}>
+            <h2 className="text-xl font-semibold">Title Slide</h2>
             {isOverflowing && (
               <div className="flex items-center gap-2 text-sm font-medium text-red-500">
                 <ExclamationTriangleIcon className="mt-0.5" />
@@ -70,25 +94,44 @@ export function GeneratePage({
               </div>
             )}
           </div>
+
+          <div className="relative">
+            <TitleSlide imageURI={imageURI} />
+            <div className="absolute top-0 left-0 z-10 flex h-full w-full items-center justify-center gap-2 bg-black/50 text-white">
+              <LoaderCircle className="animate-spin" />
+              Rendering
+            </div>
+            <img
+              id="title-slide-image"
+              className="absolute top-0 left-0 z-20 w-full"
+            />
+          </div>
+
+          <div className="text-muted-foreground flex items-center justify-center gap-2 text-sm leading-[1.1]">
+            <InfoCircledIcon className="size-5 min-w-max" />
+            <p>Hold or right click on the image to save.</p>
+          </div>
         </div>
 
-        <div className="bg-secondary dark:bg-primary-foreground flex flex-col items-center gap-4 rounded-xl border p-4">
-          <ContentSlide>{children}</ContentSlide>
-          <Button
-            variant="outline"
-            id="content-slide-download"
-            onClick={() => {
-              toPng(document.getElementById("content-slide")!, {
-                canvasHeight: 1000,
-                canvasWidth: 1000,
-              }).then((dataURI) => {
-                download(dataURI, "content-slide.png");
-              });
-            }}
-          >
-            <DownloadIcon className="mr-2" />
-            Download
-          </Button>
+        <div className="flex w-96 flex-col gap-4">
+          <h2 className="text-xl font-semibold">Content Slide</h2>
+
+          <div className="relative">
+            <ContentSlide>{children}</ContentSlide>
+            <div className="absolute top-0 left-0 z-10 flex h-full w-full items-center justify-center gap-2 bg-black/50 text-white">
+              <LoaderCircle className="animate-spin" />
+              Rendering
+            </div>
+            <img
+              id="content-slide-image"
+              className="absolute top-0 left-0 z-20 w-full"
+            />
+          </div>
+
+          <div className="text-muted-foreground flex items-center justify-center gap-2 text-sm leading-[1.1]">
+            <InfoCircledIcon className="size-5 min-w-max" />
+            <p>Hold or right click on the image to save.</p>
+          </div>
         </div>
       </div>
     </div>

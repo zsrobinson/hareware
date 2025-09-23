@@ -25,12 +25,12 @@ export function ContentSlide({ children }: { children: ReactNode }) {
         }}
       ></div>
 
-      <p
+      <span
         className="absolute bottom-4 w-full text-center leading-none font-semibold"
         style={{ color: state.textColor }}
       >
         Full Article in Bio
-      </p>
+      </span>
     </div>
   );
 }

@@ -30,6 +30,7 @@ const imageURI = await fetch(image)
     imageURI={imageURI}
     client:load
   >
+    <!-- must render here, cannot pass Element[] as prop since it gets serialized -->
     {
       author
         ? content.slice(1).map((para) => <Fragment set:html={para.outerHTML} />)

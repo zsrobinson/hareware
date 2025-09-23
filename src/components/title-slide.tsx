@@ -1,27 +1,33 @@
-import { useEffect } from "react";
+import { useEffect, type RefObject } from "react";
 import { useLayoutState } from "~/lib/layout-state";
 
-export function TitleSlide({ imageURI }: { imageURI: string }) {
+export function TitleSlide({
+  imageURI,
+  ref,
+}: {
+  imageURI: string;
+  ref: RefObject<HTMLDivElement | null>;
+}) {
   const state = useLayoutState();
+  const isOverflowing = () =>
+    ref.current!.scrollHeight > ref.current!.clientHeight;
 
-  function isOverflowing() {
-    const titleSlide = document.getElementById("title-slide")!;
-    return titleSlide.scrollHeight > titleSlide.clientHeight;
-  }
-
-  async function adjustTitleSize() {
+  // continue to increase title size until overflowing, then shrink until not
+  const adjustTitleSize = async () => {
     await new Promise((res) => setTimeout(res, 100));
     if (isOverflowing()) return shrinkTitleSize();
     if (state.incTitleSize() > 32) return shrinkTitleSize();
     await adjustTitleSize();
-  }
+  };
 
-  async function shrinkTitleSize() {
+  // shrink title size until no longer overflowing
+  const shrinkTitleSize = async () => {
     state.decTitleSize();
     await new Promise((res) => setTimeout(res, 100));
     if (isOverflowing()) return shrinkTitleSize();
-  }
+  };
 
+  // on mount, start title size adjustment process
   useEffect(() => {
     adjustTitleSize();
   }, []);
@@ -30,7 +36,7 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
     <div
       className="relative box-content flex aspect-square w-96 flex-col items-center overflow-hidden font-serif"
       style={{ backgroundColor: state.bgColor }}
-      id="title-slide"
+      ref={ref}
     >
       {imageURI ? (
         <img src={imageURI} className="bg-secondary aspect-video w-full" />
@@ -41,7 +47,6 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
       <div className="flex w-full grow flex-col p-2 px-3">
         <div className="flex grow flex-col items-center justify-around gap-2">
           <span
-            id="title-content"
             dangerouslySetInnerHTML={{ __html: state.title }}
             className="font-display text-center leading-[1.1] font-[600] text-balance"
             style={{

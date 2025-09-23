@@ -6,6 +6,7 @@ const DEFAULTS = {
   titleSize: 24,
   bylineSize: 14,
   paragraphShift: 0,
+  renderImages: true,
 };
 
 export type LayoutState = {
@@ -20,6 +21,7 @@ export type LayoutState = {
   bylineSize: number;
 
   paragraphShift: number;
+  renderImages: boolean;
 };
 
 export type MutableLayoutState = LayoutState & {
@@ -36,6 +38,7 @@ export type MutableLayoutState = LayoutState & {
   setBylineSize: (bylineSize: number) => void;
 
   incParagraphShift: () => void;
+  setRenderImages: (renderImages: boolean) => void;
 
   reset: () => void;
 };
@@ -69,6 +72,7 @@ export const useLayoutState = create<MutableLayoutState>()((set, curr) => ({
   setBylineSize: (bylineSize: number) => set({ bylineSize }),
 
   incParagraphShift: () => set({ paragraphShift: curr().paragraphShift + 1 }),
+  setRenderImages: (renderImages: boolean) => set({ renderImages }),
 
   reset: () => set(DEFAULTS),
 }));

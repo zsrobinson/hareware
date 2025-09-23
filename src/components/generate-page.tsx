@@ -4,7 +4,7 @@ import {
   InfoCircledIcon,
 } from "@radix-ui/react-icons";
 import { domToPng } from "modern-screenshot";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLayoutState } from "~/lib/layout-state";
 import { useDebouncedEffect } from "../lib/use-debounced-effect";
 import { ContentSlide } from "./content-slide";
@@ -31,60 +31,46 @@ export function GeneratePage({
   const [isOverflowing, setIsOverflowing] = useState(false);
   const [animate] = useAutoAnimate();
 
+  const titleSlideRef = useRef<HTMLDivElement>(null);
+  const contentSlideRef = useRef<HTMLDivElement>(null);
+  const titleSlideImgRef = useRef<HTMLImageElement>(null);
+  const contentSlideImgRef = useRef<HTMLImageElement>(null);
+
+  // on layout change, clear previous images
   useEffect(() => {
-    const titleSlideImage = document.getElementById(
-      "title-slide-image",
-    ) as HTMLImageElement;
-    titleSlideImage.src = "";
+    if (state.renderImages) {
+      titleSlideImgRef.current!.src = "";
+      contentSlideImgRef.current!.src = "";
+    }
   }, [state]);
 
+  // on layout change, generate new images
   useDebouncedEffect(
     () => {
-      const titleSlideImage = document.getElementById(
-        "title-slide-image",
-      ) as HTMLImageElement;
-      domToPng(document.getElementById("title-slide")!, {
-        scale: 4,
-      }).then((dataURI) => {
-        titleSlideImage.src = dataURI;
-      });
+      if (state.renderImages) {
+        domToPng(titleSlideRef.current!, { scale: 4 }).then((dataURI) => {
+          titleSlideImgRef.current!.src = dataURI;
+        });
+        domToPng(contentSlideRef.current!, { scale: 4 }).then((dataURI) => {
+          contentSlideImgRef.current!.src = dataURI;
+        });
+      }
     },
     300,
     [state],
   );
 
-  useEffect(() => {
-    const contentSlideImage = document.getElementById(
-      "content-slide-image",
-    ) as HTMLImageElement;
-    contentSlideImage.src = "";
-  }, [state.bgColor, state.textColor, state.paragraphShift]);
-
-  useDebouncedEffect(
-    () => {
-      const contentSlideImage = document.getElementById(
-        "content-slide-image",
-      ) as HTMLImageElement;
-
-      domToPng(document.getElementById("content-slide")!, {
-        scale: 4,
-      }).then((dataURI) => {
-        contentSlideImage.src = dataURI;
-      });
-    },
-    300,
-    [state.bgColor, state.textColor, state.paragraphShift],
-  );
-
+  // on mount, set article title and bylines from props
   useEffect(() => {
     state.setTitle(defaultTitle);
     state.setArticleByline(defaultArticleByline);
     state.setImageByline(defaultImageByline);
   }, []);
 
+  // on layout change, check if title slide is overflowing
   useEffect(() => {
-    const titleSlide = document.getElementById("title-slide")!;
-    setIsOverflowing(titleSlide.scrollHeight > titleSlide.clientHeight);
+    const slide = titleSlideRef.current!;
+    setIsOverflowing(slide.scrollHeight > slide.clientHeight);
   }, [state]);
 
   return (
@@ -107,20 +93,28 @@ export function GeneratePage({
           </div>
 
           <div className="relative">
-            <TitleSlide imageURI={imageURI} />
-            <div className="absolute top-0 left-0 z-10 flex h-full w-full items-center justify-center gap-2 bg-black/50 text-white">
-              <LoaderCircle className="animate-spin" />
-              Rendering
-            </div>
-            <img
-              id="title-slide-image"
-              className="absolute top-0 left-0 z-20 w-full"
-            />
+            <TitleSlide imageURI={imageURI} ref={titleSlideRef} />
+            {state.renderImages && (
+              <>
+                <div className="absolute top-0 left-0 z-10 flex h-full w-full items-center justify-center gap-2 bg-black/50 text-white">
+                  <LoaderCircle className="animate-spin" />
+                  Rendering
+                </div>
+                <img
+                  className="absolute top-0 left-0 z-20 w-full"
+                  ref={titleSlideImgRef}
+                />
+              </>
+            )}
           </div>
 
           <div className="text-muted-foreground flex items-center justify-center gap-2 text-sm leading-[1.1]">
             <InfoCircledIcon className="size-5 min-w-max" />
-            <p>Hold or right click on the image to save.</p>
+            {state.renderImages ? (
+              <p>Hold or right click the image to save.</p>
+            ) : (
+              <p>Screenshot the image to save.</p>
+            )}
           </div>
         </div>
 
@@ -128,20 +122,28 @@ export function GeneratePage({
           <h2 className="text-xl font-semibold">Content Slide</h2>
 
           <div className="relative">
-            <ContentSlide>{children}</ContentSlide>
-            <div className="absolute top-0 left-0 z-10 flex h-full w-full items-center justify-center gap-2 bg-black/50 text-white">
-              <LoaderCircle className="animate-spin" />
-              Rendering
-            </div>
-            <img
-              id="content-slide-image"
-              className="absolute top-0 left-0 z-20 w-full"
-            />
+            <ContentSlide ref={contentSlideRef}>{children}</ContentSlide>
+            {state.renderImages && (
+              <>
+                <div className="absolute top-0 left-0 z-10 flex h-full w-full items-center justify-center gap-2 bg-black/50 text-white">
+                  <LoaderCircle className="animate-spin" />
+                  Rendering
+                </div>
+                <img
+                  className="absolute top-0 left-0 z-20 w-full"
+                  ref={contentSlideImgRef}
+                />
+              </>
+            )}
           </div>
 
           <div className="text-muted-foreground flex items-center justify-center gap-2 text-sm leading-[1.1]">
             <InfoCircledIcon className="size-5 min-w-max" />
-            <p>Hold or right click on the image to save.</p>
+            {state.renderImages ? (
+              <p>Hold or right click the image to save.</p>
+            ) : (
+              <p>Screenshot the image to save.</p>
+            )}
           </div>
         </div>
       </div>

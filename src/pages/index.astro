@@ -11,7 +11,7 @@ import Root from "../layouts/root.astro";
 import { getRecentArticles } from "../lib/get-recent-articles";
 
 const pageParam = Number(Astro.url.searchParams.get("page") ?? "1");
-const page = isNaN(pageParam) || pageParam < 0 ? 1 : pageParam;
+const page = isNaN(pageParam) || pageParam <= 0 ? 1 : pageParam;
 
 const error = Astro.url.searchParams.get("error") !== null;
 const articles = await getRecentArticles(page);
@@ -42,7 +42,7 @@ const articles = await getRecentArticles(page);
     )
   }
 
-  <h2 class="pb-2 pt-8 font-semibold">
+  <h2 class="pt-8 pb-2 font-semibold">
     Or, start from one of our recent articles:
   </h2>
 
@@ -54,10 +54,10 @@ const articles = await getRecentArticles(page);
             <li class="flex pb-1">
               <span
                 set:html={article.date}
-                class="w-16 shrink-0 text-nowrap pr-4 text-muted-foreground"
+                class="text-muted-foreground w-16 shrink-0 pr-4 text-nowrap"
               />
               <a
-                class="underline decoration-muted-foreground hover:text-muted-foreground"
+                class="decoration-muted-foreground hover:text-muted-foreground underline"
                 href={"/generate?article=" + article.link}
                 set:html={article.title}
               />
@@ -65,7 +65,7 @@ const articles = await getRecentArticles(page);
           ))}
         </ul>
 
-        <div class="ml-4 flex max-w-fit gap-4 border-t pt-2 text-muted-foreground">
+        <div class="text-muted-foreground ml-4 flex max-w-fit gap-4 border-t pt-2">
           {page > 1 && (
             <a href={`/?page=${page - 1}`}>
               <ChevronLeftIcon className="inline mb-0.5" />
@@ -87,7 +87,7 @@ const articles = await getRecentArticles(page);
     )
   }
 
-  <h2 class="pb-2 pt-8 font-semibold">
+  <h2 class="pt-8 pb-2 font-semibold">
     Or, create a custom post for unpublished or draft articles:
   </h2>
 

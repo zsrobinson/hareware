@@ -76,7 +76,7 @@ export function GeneratePage({
   return (
     <div className="flex flex-col items-start gap-8 md:flex-row">
       <div className="flex flex-col gap-4">
-        <h2 className="text-xl font-semibold">Options</h2>
+        <h2 className="text-xl font-semibold">Layout Options</h2>
         <OptionsForm articleLink={articleLink} />
       </div>
 

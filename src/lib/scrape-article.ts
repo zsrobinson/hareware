@@ -1,5 +1,9 @@
 import { JSDOM } from "jsdom";
 
+/**
+ * scrapes the article content from wordpress
+ * @param article the full link, including schema and domain
+ */
 export async function scrapeArticle(article: string) {
   const res = await fetch(article);
   const buffer = await res.arrayBuffer();

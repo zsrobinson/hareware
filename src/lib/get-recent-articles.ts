@@ -1,7 +1,11 @@
 import { XMLParser } from "fast-xml-parser";
 
+/**
+ * gets recent articles from wordpress, paginated by groups of 10
+ * @param page defaults to 1, most recent
+ */
 export async function getRecentArticles(
-  page: number,
+  page = 1,
 ): Promise<{ title: string; link: string; date: string }[] | undefined> {
   try {
     const res = await fetch(`https://theumdhare.com/feed?paged=${page}`);

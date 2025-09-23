@@ -117,14 +117,16 @@ const WIDTH = 384;
 <img id="outputImage" width={WIDTH} height={WIDTH} />
 
 <script define:vars={{ articleURI, logoURI, WIDTH }}>
+  const SCALE = 2;
+
   // https://stackoverflow.com/a/5438011
   const svg = document.getElementById("svg");
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
   const outputImage = document.getElementById("outputImage");
   // Ensure canvas matches desired output size
-  canvas.width = WIDTH;
-  canvas.height = WIDTH;
+  canvas.width = canvas.height = WIDTH * SCALE;
+  context.scale(SCALE, SCALE);
 
   function loadImage(src) {
     return new Promise((resolve, reject) => {

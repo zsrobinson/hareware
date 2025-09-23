@@ -4,9 +4,7 @@
 
 @theme {
   --font-serif: "Source Serif 4", serif;
-
-  /* alternate version so that class can be targeted (see line 160) */
-  --font-display: "Source Serif 4", serif;
+  --font-display: "Source Serif 4 Display", serif;
 
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
@@ -154,13 +152,5 @@
 
   body {
     @apply bg-background text-foreground;
-  }
-}
-
-/* apply this directly on the class since safari doesn't support it in the
-   font declaration (https://caniuse.com/?search=font-variation-settings) */
-@layer utilities {
-  .font-display {
-    font-variation-settings: "opsz" 60;
   }
 }

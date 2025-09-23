@@ -12,7 +12,7 @@ export function ContentSlide({ children }: { children: ReactNode }) {
       id="content-slide"
     >
       <div
-        className="[&_h2]:font-display absolute top-0 flex max-w-full list-inside flex-col gap-2 p-6 break-words [&_h2]:pt-1 [&_h2]:text-xl [&_h2]:font-semibold"
+        className="[&_h2]:font-display absolute top-0 flex max-w-full list-inside flex-col gap-2 p-6 break-words [&_*]:my-[0.00001px]! [&_h2]:pt-1 [&_h2]:text-xl [&_h2]:font-semibold"
         style={{ color: state.textColor }}
       >
         {children}

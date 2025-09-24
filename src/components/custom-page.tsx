@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { useLayoutState } from "~/lib/layout-state";
 import { FormItem, FormLabel } from "./options-form";
-import { FileIcon, TextAlignCenterIcon } from "@radix-ui/react-icons";
+import {
+  ChevronRightIcon,
+  FileIcon,
+  TextAlignCenterIcon,
+} from "@radix-ui/react-icons";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { GeneratePage } from "./generate-page";
@@ -99,7 +103,10 @@ export function CustomPage() {
           className="h-64 w-full"
         />
 
-        <Button type="submit">Submit</Button>
+        <Button type="submit">
+          Next Step
+          <ChevronRightIcon />
+        </Button>
       </form>
     );
   }

@@ -1,27 +1,33 @@
-import { useEffect } from "react";
+import { useEffect, type RefObject } from "react";
 import { useLayoutState } from "~/lib/layout-state";
 
-export function TitleSlide({ imageURI }: { imageURI: string }) {
+export function TitleSlide({
+  imageURI,
+  ref,
+}: {
+  imageURI: string;
+  ref: RefObject<HTMLDivElement | null>;
+}) {
   const state = useLayoutState();
+  const isOverflowing = () =>
+    ref.current!.scrollHeight > ref.current!.clientHeight;
 
-  function isOverflowing() {
-    const titleSlide = document.getElementById("title-slide")!;
-    return titleSlide.scrollHeight > titleSlide.clientHeight;
-  }
-
-  async function adjustTitleSize() {
+  // continue to increase title size until overflowing, then shrink until not
+  const adjustTitleSize = async () => {
     await new Promise((res) => setTimeout(res, 100));
     if (isOverflowing()) return shrinkTitleSize();
     if (state.incTitleSize() > 32) return shrinkTitleSize();
     await adjustTitleSize();
-  }
+  };
 
-  async function shrinkTitleSize() {
+  // shrink title size until no longer overflowing
+  const shrinkTitleSize = async () => {
     state.decTitleSize();
     await new Promise((res) => setTimeout(res, 100));
     if (isOverflowing()) return shrinkTitleSize();
-  }
+  };
 
+  // on mount, start title size adjustment process
   useEffect(() => {
     adjustTitleSize();
   }, []);
@@ -30,7 +36,7 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
     <div
       className="relative box-content flex aspect-square w-96 flex-col items-center overflow-hidden font-serif"
       style={{ backgroundColor: state.bgColor }}
-      id="title-slide"
+      ref={ref}
     >
       {imageURI ? (
         <img src={imageURI} className="bg-secondary aspect-video w-full" />
@@ -40,8 +46,7 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
 
       <div className="flex w-full grow flex-col p-2 px-3">
         <div className="flex grow flex-col items-center justify-around gap-2">
-          <p
-            id="title-content"
+          <span
             dangerouslySetInnerHTML={{ __html: state.title }}
             className="font-display text-center leading-[1.1] font-[600] text-balance"
             style={{
@@ -53,14 +58,16 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
           <div className="flex w-full items-center gap-2">
             {state.articleByline && (
               <div
-                className="basis-1/2 text-center leading-[1.15]"
+                className="flex basis-1/2 flex-col text-center leading-[1.15]"
                 style={{
                   color: state.textColor,
                   fontSize: state.bylineSize + "px",
                 }}
               >
-                <p>Article by</p>
-                <p dangerouslySetInnerHTML={{ __html: state.articleByline }} />
+                <span>Article by</span>
+                <span
+                  dangerouslySetInnerHTML={{ __html: state.articleByline }}
+                />
               </div>
             )}
 
@@ -68,14 +75,14 @@ export function TitleSlide({ imageURI }: { imageURI: string }) {
 
             {state.imageByline && (
               <div
-                className="basis-1/2 text-center leading-[1.15]"
+                className="flex basis-1/2 flex-col text-center leading-[1.15]"
                 style={{
                   color: state.textColor,
                   fontSize: state.bylineSize + "px",
                 }}
               >
-                <p>Image by</p>
-                <p dangerouslySetInnerHTML={{ __html: state.imageByline }} />
+                <span>Image by</span>
+                <span dangerouslySetInnerHTML={{ __html: state.imageByline }} />
               </div>
             )}
           </div>

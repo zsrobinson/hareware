@@ -1,16 +1,14 @@
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import {
   ExternalLinkIcon,
-  HeightIcon,
+  ImageIcon,
   InfoCircledIcon,
-  MoveIcon,
   OpacityIcon,
   ReloadIcon,
   SizeIcon,
   StackIcon,
   TextAlignCenterIcon,
   TrackNextIcon,
-  WidthIcon,
 } from "@radix-ui/react-icons";
 import type { ReactNode } from "react";
 import { presets } from "~/lib/color-presets";
@@ -26,6 +24,7 @@ import {
   SelectValue,
 } from "./ui/select";
 import { Slider } from "./ui/slider";
+import { Switch } from "./ui/switch";
 
 export function FormItem({ children }: { children: ReactNode }) {
   return <div className="flex h-9 items-center gap-2">{children}</div>;
@@ -44,7 +43,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
   ) ?? ["custom"];
 
   return (
-    <div className="w-[416px] shrink-0">
+    <div className="max-w-[416px] grow">
       <div className="flex grow flex-col gap-2">
         <FormItem>
           <StackIcon className="size-5 min-w-max" />
@@ -174,11 +173,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
           <Button
             variant="secondary"
             className="w-full"
-            onClick={() => {
-              const slot = document.querySelector("#content-slide astro-slot")!;
-              if (!slot.firstChild) return;
-              slot.removeChild(slot.firstChild);
-            }}
+            onClick={() => state.incParagraphShift()}
           >
             <TrackNextIcon className="mr-2" />
             Shift Paragraph
@@ -201,12 +196,32 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
           </div>
         )}
       </div>
+
       <div className="text-muted-foreground my-4 flex items-center gap-2 text-sm leading-[1.1]">
         <InfoCircledIcon className="size-5 min-w-max" />
         <p>
           HTML tags are supported in the Title Content and Byline fields. If
           needed, try adding a "&lt;br&gt;" tag to manually trigger a line
           break.
+        </p>
+      </div>
+
+      <hr className="my-4" />
+
+      <FormItem>
+        <ImageIcon className="size-5 min-w-max" />
+        <FormLabel>Render Images</FormLabel>
+        <Switch
+          checked={state.renderImages}
+          onCheckedChange={(checked) => state.setRenderImages(checked)}
+        />
+      </FormItem>
+
+      <div className="text-muted-foreground flex items-center gap-2 pl-7 text-sm leading-[1.1]">
+        <p>
+          Only disable if the image renderer is not displaying the expected
+          output. This will fallback to the browser’s rendering and requires you
+          to take a screenshot.
         </p>
       </div>
     </div>

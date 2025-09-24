@@ -1,20 +1,11 @@
-import { useAutoAnimate } from "@formkit/auto-animate/react";
-import {
-  DownloadIcon,
-  ExclamationTriangleIcon,
-  FileIcon,
-} from "@radix-ui/react-icons";
-import download from "downloadjs";
-import { toPng } from "html-to-image";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLayoutState } from "~/lib/layout-state";
-import { longLoremIpsum } from "~/lib/lorem";
-import { ContentSlide } from "./content-slide";
-import { FormItem, FormLabel, OptionsForm } from "./options-form";
-import { TitleSlide } from "./title-slide";
-import { Button } from "./ui/button";
+import { FormItem, FormLabel } from "./options-form";
+import { FileIcon, TextAlignCenterIcon } from "@radix-ui/react-icons";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
+import { GeneratePage } from "./generate-page";
+import { Button } from "./ui/button";
 
 function fileToBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -26,110 +17,90 @@ function fileToBase64(file: File) {
 }
 
 export function CustomPage() {
-  const state = useLayoutState();
-  const [isOverflowing, setIsOverflowing] = useState(false);
-  const [animate] = useAutoAnimate();
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [title, setTitle] = useState("Lorem Ipsum");
+  const [articleByline, setArticleByline] = useState("Lorem Ipsum");
+  const [imageByline, setImageByline] = useState("Lorem Ipsum");
 
-  const [content, setContent] = useState(longLoremIpsum);
-  const [imageFile, setImageFile] = useState<File | undefined>();
+  const [content, setContent] = useState("Lorem Ipsum");
   const [imageURI, setImageURI] = useState<string | undefined>();
 
-  useEffect(() => {
-    state.setTitle("Lorem Ipsum");
-    state.setArticleByline("Lorem Ipsum");
-  }, []);
+  if (hasSubmitted) {
+    return (
+      <GeneratePage
+        defaultTitle={title}
+        defaultArticleByline={articleByline}
+        defaultImageByline={imageByline}
+        articleLink={""}
+        imageURI={imageURI ?? ""}
+      >
+        {content.split("\n\n").map((para, i) => (
+          <p dangerouslySetInnerHTML={{ __html: para }} key={i} />
+        ))}
+      </GeneratePage>
+    );
+  } else {
+    return (
+      <form
+        className="flex max-w-[416px] grow flex-col gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setHasSubmitted(true);
+        }}
+      >
+        <h2 className="text-xl font-semibold">Custom Article</h2>
 
-  useEffect(() => {
-    const titleSlide = document.getElementById("title-slide")!;
-    setIsOverflowing(titleSlide.scrollHeight > titleSlide.clientHeight);
-  }, [state]);
-
-  useEffect(() => {
-    if (!imageFile) return setImageURI("");
-    fileToBase64(imageFile).then((uri) => setImageURI(uri));
-  }, [imageFile]);
-
-  return (
-    <div className="flex flex-col items-start gap-8 md:flex-row">
-      <OptionsForm />
-
-      <div className="w-[416px] min-w-max shrink-0">
-        <div className="flex grow flex-col gap-2">
-          <FormItem>
-            <FileIcon className="size-5 min-w-max" />
-            <FormLabel>Image Upload</FormLabel>
-            <Input
-              type="file"
-              onChange={(e) => {
-                if (e.target.files?.length !== 1) return;
-                setImageFile(e.target.files[0]);
-                console.log("new image file: " + e.target.files[0].name);
-              }}
-            />
-          </FormItem>
-
-          <Textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Article Content"
-            className="h-64 w-full"
+        <FormItem>
+          <TextAlignCenterIcon className="size-5 min-w-max" />
+          <FormLabel>Title Content</FormLabel>
+          <Input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
           />
-        </div>
-      </div>
+        </FormItem>
 
-      <div className="flex flex-wrap items-start gap-8">
-        <div className="bg-secondary dark:bg-primary-foreground flex flex-col items-center gap-4 rounded-xl border p-4">
-          <TitleSlide imageURI={imageURI ?? ""} />
-          <div className="flex w-full justify-around" ref={animate}>
-            <Button
-              variant="outline"
-              id="title-slide-download"
-              onClick={() => {
-                toPng(document.getElementById("title-slide")!, {
-                  canvasHeight: 1000,
-                  canvasWidth: 1000,
-                }).then((dataURI) => {
-                  download(dataURI, "title-slide.png");
-                });
-              }}
-            >
-              <DownloadIcon className="mr-2" />
-              Download
-            </Button>
+        <FormItem>
+          <TextAlignCenterIcon className="size-5 min-w-max" />
+          <FormLabel>Article Byline</FormLabel>
+          <Input
+            type="text"
+            value={articleByline}
+            onChange={(e) => setArticleByline(e.target.value)}
+          />
+        </FormItem>
 
-            {isOverflowing && (
-              <div className="flex items-center gap-2 text-sm font-medium text-red-500">
-                <ExclamationTriangleIcon className="mt-0.5" />
-                <span>Content may be overflowing</span>
-              </div>
-            )}
-          </div>
-        </div>
+        <FormItem>
+          <TextAlignCenterIcon className="size-5 min-w-max" />
+          <FormLabel>Image Byline</FormLabel>
+          <Input
+            type="text"
+            value={imageByline}
+            onChange={(e) => setImageByline(e.target.value)}
+          />
+        </FormItem>
 
-        <div className="bg-secondary dark:bg-primary-foreground flex flex-col items-center gap-4 rounded-xl border p-4">
-          <ContentSlide>
-            {content.split("\n\n").map((para, i) => (
-              <p dangerouslySetInnerHTML={{ __html: para }} key={i} />
-            ))}
-          </ContentSlide>
-
-          <Button
-            variant="outline"
-            id="content-slide-download"
-            onClick={() => {
-              toPng(document.getElementById("content-slide")!, {
-                canvasHeight: 1000,
-                canvasWidth: 1000,
-              }).then((dataURI) => {
-                download(dataURI, "content-slide.png");
-              });
+        <FormItem>
+          <FileIcon className="size-5 min-w-max" />
+          <FormLabel>Image Upload</FormLabel>
+          <Input
+            type="file"
+            onChange={(e) => {
+              if (e.target.files?.length !== 1) return;
+              fileToBase64(e.target.files[0]).then((uri) => setImageURI(uri));
             }}
-          >
-            <DownloadIcon className="mr-2" />
-            Download
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
+          />
+        </FormItem>
+
+        <Textarea
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder="Article Content"
+          className="h-64 w-full"
+        />
+
+        <Button type="submit">Submit</Button>
+      </form>
+    );
+  }
 }

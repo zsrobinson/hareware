@@ -33,6 +33,7 @@ export function ContentSlide({
     >
       <div
         className="[&_h2]:font-display absolute top-0 flex max-w-full list-inside flex-col gap-2 p-6 break-words [&_*]:my-[0.00001px]! [&_h2]:pt-1 [&_h2]:text-xl [&_h2]:font-semibold"
+        // must keep my-[0.00001px] for bug with modern-screenshot and firefox
         style={{ color: state.textColor }}
       >
         {children}

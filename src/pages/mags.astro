@@ -1,0 +1,89 @@
+---
+import Root from "~/layouts/root.astro";
+import { sampleRequest, type Quote } from "~/lib/mags";
+
+const copies = Number(Astro.url.searchParams.get("copies") || "10");
+
+async function getQuote(copies: number) {
+  const request: typeof sampleRequest = {
+    ...sampleRequest,
+    itemSpecification: {
+      ...sampleRequest.itemSpecification,
+      copies,
+    },
+  };
+
+  const res = await fetch("https://mixam.com/api/offer", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:143.0) Gecko/20100101 Firefox/143.0",
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to get quote: ${res.status} ${res.statusText}`);
+  }
+
+  const quote: Quote = await res.json();
+  return quote;
+}
+
+// get quotes for 800-1200 copies in 100 increments
+const quotes = await Promise.all(
+  Array.from({ length: 15 }, (_, i) => getQuote(800 + i * 50)),
+);
+const max = Math.max(...quotes.map((q) => q.total));
+---
+
+<Root>
+  <!-- {
+    quotes.map((quote) => (
+      <div>
+        <h2>{quote.copies} copies</h2>
+        <p>
+          Total: {quote.total} ({quote.total / quote.copies} each)
+        </p>
+        <p>Shipping: {quote.offerTable[0].deliveryRates[0]?.total}</p>
+        <p>{(quote.total / Math.max(...quotes.map((q) => q.total))) * 100}</p>
+        <hr />
+      </div>
+    ))
+  } -->
+
+  <div>
+    <h2>Price Comparison</h2>
+    <div class="relative flex h-128 items-end gap-4 pl-2">
+      {
+        quotes.map((quote) => (
+          <div
+            class="w-16 grow-0 bg-blue-600/80"
+            style={{
+              height: `${(quote.total / max) * 100}%`,
+            }}
+          >
+            <p class="text-center text-sm">${quote.total.toFixed(0)}</p>
+          </div>
+        ))
+      }
+      {
+        Array.from({ length: 10 }, (_, i) => (
+          <div
+            class="absolute -z-10 w-full grow-0 border border-zinc-700"
+            style={{ bottom: `${(i + 1) * 10}%` }}
+          />
+        ))
+      }
+    </div>
+    <div class="flex gap-4 pt-2 pl-2">
+      {
+        quotes.map((quote) => (
+          <span class="w-16 text-center">{quote.copies}</span>
+        ))
+      }
+    </div>
+  </div>
+</Root>

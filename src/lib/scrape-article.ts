@@ -9,12 +9,12 @@ export async function scrapeArticle(article: string) {
   const buffer = await res.arrayBuffer();
   const dom = new JSDOM(buffer);
 
-  // remove all empty elements inside of the post
   dom.window.document
     .querySelector(".entry-content")
     ?.querySelectorAll("*")
     .forEach((el) => {
-      if (el.innerHTML.trim() === "") {
+      // remove all empty elements inside of the posts
+      if (el.innerHTML.trim() === "" && el.tagName !== "BR") {
         el.remove();
       }
     });

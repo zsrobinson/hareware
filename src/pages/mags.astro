@@ -32,9 +32,9 @@ async function getQuote(copies: number) {
   return quote;
 }
 
-// get quotes for 800-1200 copies in 100 increments
+// get quotes for 500-2500 copies in 100 increments
 const quotes = await Promise.all(
-  Array.from({ length: 15 }, (_, i) => getQuote(800 + i * 50)),
+  Array.from({ length: 40 }, (_, i) => getQuote(500 + i * 50))
 );
 const max = Math.max(...quotes.map((q) => q.total));
 ---
@@ -60,7 +60,7 @@ const max = Math.max(...quotes.map((q) => q.total));
       {
         quotes.map((quote) => (
           <div
-            class="w-16 grow-0 bg-blue-600/80"
+            class="w-8 shrink-0 grow-0 bg-blue-600/80"
             style={{
               height: `${(quote.total / max) * 100}%`,
             }}
@@ -81,7 +81,7 @@ const max = Math.max(...quotes.map((q) => q.total));
     <div class="flex gap-4 pt-2 pl-2">
       {
         quotes.map((quote) => (
-          <span class="w-16 text-center">{quote.copies}</span>
+          <span class="w-8 shrink-0 text-center">{quote.copies}</span>
         ))
       }
     </div>

@@ -1,0 +1,81 @@
+---
+import { GeneratePage } from "~/components/generate-page";
+import Root from "../layouts/root.astro";
+import { scrapeArticle } from "../lib/scrape-article";
+import type { late } from "astro:schema";
+import { Button } from "~/components/ui/button";
+import { Textarea } from "~/components/ui/textarea";
+
+const article = Astro.url.searchParams.get("article") || "";
+
+/* check that we have a good url */
+try {
+  const url = new URL(article);
+  if (url.hostname !== "theumdhare.com") throw new Error();
+} catch (e) {
+  return Astro.redirect("/?error");
+}
+
+const { title, author, image, imageCredits, content } =
+  await scrapeArticle(article);
+if (author) content.shift();
+if (imageCredits) content.pop();
+
+// grab first three paragraphs for testing
+while (content.length > 3) content.pop();
+
+const imageURI = await fetch(image)
+  .then((res) => res.arrayBuffer())
+  .then((buf) => "data:image/;base64," + Buffer.from(buf).toString("base64"));
+
+function processRTF(elements: ChildNode[], depth = 0) {
+  let output = "";
+  for (let element of elements) {
+    const children = [...element.childNodes];
+    if (children.length > 0) {
+      const inner = processRTF(children, depth + 1);
+      switch (element.nodeName) {
+        case "P":
+          output += `\\par${inner}`;
+          break;
+        case "STRONG":
+          output += `{\\b ${inner}}`;
+          break;
+        case "EM":
+          output += `{\\i ${inner}}`;
+          break;
+      }
+    } else {
+      output += element.textContent;
+    }
+  }
+  return output;
+}
+
+const rtf = `{\\rtf1\\ansi ${processRTF(content)}}`;
+const html = content.map((el) => el.outerHTML).join("");
+---
+
+<Root>
+  {title}
+  <Button id="copy">Copy</Button>
+  <Textarea />
+  {content.map((el) => <Fragment set:html={el.outerHTML} />)}
+
+  <script define:vars={{ rtf }}>
+    console.log("AHHHH");
+    const button = document.getElementById("copy");
+    button?.addEventListener("click", async () => {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/plain": new Blob([rtf], { type: "text/plain" }),
+        }),
+      ]);
+      button.innerText = "copied!";
+      button.disabled = true;
+      await new Promise((res) => setTimeout(res, 500));
+      button.innerText = "Copy";
+      button.disabled = false;
+    });
+  </script>
+</Root>

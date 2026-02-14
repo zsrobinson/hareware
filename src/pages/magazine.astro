@@ -1,0 +1,142 @@
+---
+import {
+  ChevronRightIcon,
+  ExclamationTriangleIcon,
+  FileTextIcon,
+  ImageIcon,
+  InfoCircledIcon,
+  TextAlignCenterIcon,
+  TextIcon,
+} from "@radix-ui/react-icons";
+import { FormItem, FormLabel } from "~/components/options-form";
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { CopyButton } from "../components/copy-button";
+import Root from "../layouts/root.astro";
+import { scrapeArticle } from "../lib/scrape-article";
+import { getTaggedText } from "../lib/get-tagged-text";
+
+const article = Astro.url.searchParams.get("article") || "";
+
+/* check that we have a good url */
+try {
+  const url = new URL(article);
+  if (url.hostname !== "theumdhare.com") throw new Error();
+} catch (e) {
+  return Astro.redirect("/?magazine-error");
+}
+
+const { title, author, image, imageCredits, section, date, content } =
+  await scrapeArticle(article);
+const { output, unprocessed } = getTaggedText(content);
+---
+
+<Root title="InDesign Article Exporter">
+  <div class="flex max-w-120 flex-col gap-2">
+    <form action="/magazine" class="mb-4 flex gap-2">
+      <Input
+        type="text"
+        name="article"
+        placeholder="Article Link"
+        className="w-full font-mono"
+        value={article}
+      />
+      <Button type="submit" variant="secondary">
+        Submit
+        <ChevronRightIcon />
+      </Button>
+    </form>
+
+    <FormItem>
+      <TextIcon className="size-5 min-w-max" />
+      <FormLabel>Title</FormLabel>
+      <Input type="text" value={title} id="title" readOnly />
+      <CopyButton id="title" client:load />
+    </FormItem>
+
+    <FormItem>
+      <TextAlignCenterIcon className="size-5 min-w-max" />
+      <FormLabel>Article Byline</FormLabel>
+      <Input
+        type="text"
+        value={`${section?.toUpperCase()} | Article by ${author}\t${date}`}
+        id="article-by"
+        readOnly
+      />
+      <CopyButton id="article-by" client:load />
+    </FormItem>
+
+    <FormItem>
+      <TextAlignCenterIcon className="size-5 min-w-max" />
+      <FormLabel>Image Byline</FormLabel>
+      <Input
+        type="text"
+        value={`Image by ${imageCredits}`}
+        id="image-by"
+        readOnly
+      />
+      <CopyButton id="image-by" client:load />
+    </FormItem>
+
+    <div class="my-4 flex items-start gap-2 overflow-hidden">
+      <FormItem>
+        <ImageIcon className="size-5 min-w-max" />
+        <FormLabel>Image</FormLabel>
+      </FormItem>
+      <img src={image} class="bg-secondary min-w-0 rounded-md object-contain" />
+    </div>
+
+    <FormItem>
+      <FileTextIcon className="size-5 min-w-max" />
+      <FormLabel>Content</FormLabel>
+      <Button id="button" variant="outline" className="w-full">
+        Download Text File
+      </Button>
+    </FormItem>
+
+    {
+      unprocessed.size > 0 && (
+        <div class="flex items-start gap-2 text-sm text-amber-600">
+          <ExclamationTriangleIcon className="inline size-5 min-w-max p-0.5" />
+          <p>
+            Some content uses special formatting and may not be accurately
+            represented. (tag{unprocessed.size > 1 && "s"}:
+            {[...unprocessed]
+              .map((tag) => (
+                <a
+                  href={`https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/${tag.toLowerCase()}`}
+                  target="_blank"
+                  class="whitespace inline-block underline"
+                >
+                  {tag.toLowerCase()}
+                </a>
+              ))
+              .reduce((acc, x) => (acc === null ? [x] : [acc, ", ", x]), null)}
+            )
+          </p>
+        </div>
+      )
+    }
+
+    <div class="text-muted-foreground flex items-start gap-2 text-sm">
+      <InfoCircledIcon className="inline size-5 min-w-max p-0.5" />
+      <p>Make sure to check that all content gets imported correctly!</p>
+    </div>
+  </div>
+
+  <script define:vars={{ output, title }}>
+    window.vars = { output, title };
+  </script>
+
+  <script>
+    import download from "downloadjs";
+    import { slugify } from "~/lib/utils";
+
+    const { output, title } = (window as any).vars;
+
+    const button = document.getElementById("button")!;
+    button.addEventListener("click", () => {
+      download(output, slugify(title) + ".txt", "text/plain");
+    });
+  </script>
+</Root>

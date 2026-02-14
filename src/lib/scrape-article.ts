@@ -35,10 +35,11 @@ export async function scrapeArticle(article: string) {
 
   const image = dom.window.document
     .querySelector(`meta[property="og:image"]`)
-    ?.getAttribute("content")!;
+    ?.getAttribute("content")
+    ?.split("?")[0]!;
 
   const date = dom.window.document
-    .querySelector(".wp-block-post-date time")
+    .querySelector(".wp-block-post-date.has-text-align-right time")
     ?.innerHTML.trim();
 
   const section = dom.window.document

@@ -1,0 +1,67 @@
+---
+import { getRecentArticles } from "~/lib/get-recent-articles";
+import { scrapeArticle } from "~/lib/scrape-article";
+
+const articles = await getRecentArticles();
+if (!articles) throw Error("cannot fetch recent articles");
+const scraped = await Promise.all(
+  articles.map(({ link }) => scrapeArticle(link)),
+);
+---
+
+<meta charset="utf-8" />
+
+<div
+  style="background-color: #5b2218 !important; padding: 8px 12px 8px 12px; line-height: 1.15; text-align: center;"
+>
+  <img
+    src="https://i0.wp.com/theumdhare.com/wp-content/uploads/2026/02/combination-mark.png?h=90"
+    style="height: 30px;"
+  />
+</div>
+
+<p>Hey Everyone,</p>
+
+<div
+  style="background-color: rgb(244, 204, 204); padding: 8px 12px 8px 12px; line-height: 1.15;"
+>
+  <b
+    ><font size="4"
+      >Our next general body meeting will be [DATE] at [TIME] in [LOCATION].</font
+    ></b
+  >
+</div>
+
+<p>[EMAIL BODY]</p>
+
+<br />
+<br />
+
+<hr />
+<b><font size="4">Latest Articles</font></b>
+<br />
+<br />
+
+<table>
+  {
+    scraped?.map((article) => (
+      <tr>
+        <td style="vertical-align: top; padding: 0 0 12px 0;">
+          <img
+            src={article.image.split("?")[0] + "?w=300"}
+            style="width: 150px"
+          />
+        </td>
+        <td style="vertical-align: top; padding: 0 0 12px 12px;">
+          <strong>
+            <a href={article.link} set:html={article.title} />
+          </strong>
+          <br />
+          Article by {article.author}
+          <br />
+          Image by {article.imageCredits}
+        </td>
+      </tr>
+    ))
+  }
+</table>

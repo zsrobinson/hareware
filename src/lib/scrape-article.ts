@@ -41,11 +41,24 @@ export async function scrapeArticle(article: string) {
     .querySelector(".wp-block-post-date time")
     ?.innerHTML.trim();
 
+  const section = dom.window.document
+    .querySelector(".taxonomy-category > a")
+    ?.innerHTML.trim();
+
   const content = [
     ...dom.window.document.querySelectorAll(
       ".entry-content p, .entry-content h2, .entry-content h3, .entry-content ol, .entry-content ul",
     ),
   ].filter((el) => el.innerHTML !== "");
 
-  return { title, author, imageCredits, image, date, content };
+  return {
+    title,
+    author,
+    imageCredits,
+    image,
+    date,
+    content,
+    link: article,
+    section,
+  };
 }

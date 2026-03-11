@@ -1,0 +1,85 @@
+---
+import { Textarea } from "~/components/ui/textarea";
+import { Button } from "~/components/ui/button";
+import Root from "~/layouts/root.astro";
+import {
+  ArrowTopLeftIcon,
+  ChevronRightIcon,
+  ExclamationTriangleIcon,
+  InfoCircledIcon,
+  Link2Icon,
+  QuoteIcon,
+} from "@radix-ui/react-icons";
+import { scrapeArticle } from "~/lib/scrape-article";
+import { getWordCount } from "~/lib/get-word-count";
+import { FormItem, FormLabel } from "~/components/options-form";
+
+function redirectError(error: string) {
+  const params = Astro.url.searchParams;
+  params.set("error", error);
+  console.log(params);
+  return Astro.redirect("/words?" + params);
+}
+
+const error = Astro.url.searchParams.get("error");
+
+const articlesStr = Astro.url.searchParams.get("articles");
+let counts: number[] = [];
+if (articlesStr && !error) {
+  const articles = articlesStr.split("\r\n").filter((a) => a !== "");
+
+  if (articles.length > 10) return redirectError("too-many");
+  if (articles.length < 1) return redirectError("too-few");
+  if (articles.some((a) => !URL.canParse(a)))
+    return redirectError("invalid-url");
+  if (articles.some((a) => new URL(a).hostname !== "theumdhare.com"))
+    return redirectError("wrong-domain");
+
+  counts = await Promise.all(articles.map((a) => getWordCount(a)));
+}
+---
+
+<Root title="Batch Word Counter">
+  <div class="flex max-w-120 flex-col gap-2">
+    <FormItem>
+      <Link2Icon className="size-5 min-w-max" />
+      <FormLabel>Article Links</FormLabel>
+    </FormItem>
+
+    <form action="/words" class="mb-4 flex flex-col gap-2">
+      <Textarea
+        name="articles"
+        className="h-56 resize-none"
+        defaultValue={articlesStr ?? ""}
+        placeholder="Enter up to ten article links, each on its own line."
+      />
+      <Button variant="secondary">Submit <ChevronRightIcon /></Button>
+
+      {
+        error && (
+          <div class="ml-4 flex items-center gap-2 pt-2 text-sm font-medium text-red-500">
+            <ExclamationTriangleIcon className="mt-0.5" />
+            <span>{error}</span>
+          </div>
+        )
+      }
+    </form>
+
+    {
+      counts.length !== 0 && (
+        <>
+          <FormItem>
+            <QuoteIcon className="size-5 min-w-max" />
+            <FormLabel>Word Counts</FormLabel>
+          </FormItem>
+
+          <Textarea
+            className="h-56 resize-none"
+            readOnly
+            value={counts.join("\n")}
+          />
+        </>
+      )
+    }
+  </div>
+</Root>

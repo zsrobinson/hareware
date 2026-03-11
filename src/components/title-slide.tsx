@@ -34,8 +34,11 @@ export function TitleSlide({
 
   return (
     <div
-      className="relative box-content flex aspect-square w-96 flex-col items-center overflow-hidden font-serif"
-      style={{ backgroundColor: state.bgColor }}
+      className="relative box-content flex w-96 flex-col items-center overflow-hidden font-serif"
+      style={{
+        backgroundColor: state.bgColor,
+        aspectRatio: state.ratio,
+      }}
       ref={ref}
     >
       {imageURI ? (
@@ -45,7 +48,7 @@ export function TitleSlide({
       )}
 
       <div className="flex w-full grow flex-col p-2 px-3">
-        <div className="flex grow flex-col items-center justify-around gap-2">
+        <div className="flex grow flex-col items-center justify-evenly gap-2">
           <span
             dangerouslySetInnerHTML={{ __html: state.title }}
             className="font-display text-center leading-[1.1] font-[600] text-balance"

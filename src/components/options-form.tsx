@@ -1,5 +1,5 @@
-import { useAutoAnimate } from "@formkit/auto-animate/react";
 import {
+  DimensionsIcon,
   ExternalLinkIcon,
   ImageIcon,
   InfoCircledIcon,
@@ -36,7 +36,6 @@ export function FormLabel({ children }: { children: ReactNode }) {
 
 export function OptionsForm({ articleLink }: { articleLink?: string }) {
   const state = useLayoutState();
-  const [animate] = useAutoAnimate();
   const [currentPreset] = Object.entries(presets).find(
     ([_, preset]) =>
       state.textColor === preset.textColor && state.bgColor === preset.bgColor,
@@ -90,6 +89,25 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
             value={state.bgColor}
             onChange={(e) => state.setBgColor(e.target.value)}
           />
+        </FormItem>
+
+        <FormItem>
+          <DimensionsIcon className="size-5 min-w-max" />
+          <FormLabel>Aspect Ratio</FormLabel>
+          <Select
+            value={state.ratio}
+            onValueChange={(value) => state.setRatio(value)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1/1">1:1</SelectItem>
+              <SelectItem value="4/5">4:5</SelectItem>
+              <SelectItem value="3/4">3:4</SelectItem>
+              <SelectItem value="9/16">9:16</SelectItem>
+            </SelectContent>
+          </Select>
         </FormItem>
       </div>
 

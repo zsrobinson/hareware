@@ -26,8 +26,11 @@ export function ContentSlide({
 
   return (
     <div
-      className="relative box-content flex aspect-square w-96 flex-col overflow-hidden font-serif"
-      style={{ backgroundColor: state.bgColor }}
+      className="relative box-content flex w-96 flex-col overflow-hidden font-serif"
+      style={{
+        backgroundColor: state.bgColor,
+        aspectRatio: state.ratio,
+      }}
       id="content-slide" // must keep, see lines 14-15
       ref={ref}
     >
@@ -40,9 +43,10 @@ export function ContentSlide({
       </div>
 
       <div
-        className="pointer-events-none absolute top-0 aspect-square w-96 bg-linear-to-b"
+        className="pointer-events-none absolute top-0 w-96 bg-linear-to-b"
         style={{
           backgroundImage: `linear-gradient(rgba(0,0,0,0) 50%, ${state.bgColor} 90%)`,
+          aspectRatio: state.ratio,
         }}
       ></div>
 

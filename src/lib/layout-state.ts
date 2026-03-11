@@ -3,6 +3,7 @@ import { presets } from "./color-presets";
 
 const DEFAULTS = {
   ...presets.maroon,
+  ratio: "1/1",
   titleSize: 24,
   bylineSize: 14,
   paragraphShift: 0,
@@ -12,6 +13,7 @@ const DEFAULTS = {
 export type LayoutState = {
   textColor: string;
   bgColor: string;
+  ratio: string;
 
   title: string;
   titleSize: number;
@@ -27,6 +29,7 @@ export type LayoutState = {
 export type MutableLayoutState = LayoutState & {
   setTextColor: (textColor: string) => void;
   setBgColor: (bgColor: string) => void;
+  setRatio: (ratio: string) => void;
 
   setTitle: (title: string) => void;
   setTitleSize: (titleSize: number) => void;
@@ -53,6 +56,7 @@ export const useLayoutState = create<MutableLayoutState>()((set, curr) => ({
 
   setTextColor: (textColor: string) => set({ textColor }),
   setBgColor: (bgColor: string) => set({ bgColor }),
+  setRatio: (ratio: string) => set({ ratio }),
 
   setTitle: (title: string) => set({ title }),
   setTitleSize: (titleSize: number) => set({ titleSize }),

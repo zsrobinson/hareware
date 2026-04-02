@@ -15,10 +15,6 @@ try {
 
 const { title, author, image, imageCredits, content } =
   await scrapeArticle(article);
-
-const imageURI = await fetch(image)
-  .then((res) => res.arrayBuffer())
-  .then((buf) => "data:image/;base64," + Buffer.from(buf).toString("base64"));
 ---
 
 <Root>
@@ -27,7 +23,7 @@ const imageURI = await fetch(image)
     defaultArticleByline={author ?? ""}
     defaultImageByline={imageCredits ?? ""}
     articleLink={article}
-    imageURI={imageURI}
+    imageURI={image}
     client:load
   >
     <!-- must render here, cannot pass Element[] as prop since it gets serialized -->

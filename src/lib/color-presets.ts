@@ -4,7 +4,8 @@ export type Preset = { textColor: string; bgColor: string };
 
 export const presets = {
   white: { textColor: "#5b2218", bgColor: "#ffffff" },
-  pink: { textColor: "#5b2218", bgColor: "#ffd9d0" },
+  pink: { textColor: "#5b2218", bgColor: "#f4dee0" },
+  pinkOld: { textColor: "#5b2218", bgColor: "#ffd9d0" },
   maroon: { textColor: "#ffffff", bgColor: "#5b2118" },
 };
 

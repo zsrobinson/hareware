@@ -1,6 +1,8 @@
 import { useEffect, type RefObject } from "react";
 import { useLayoutState } from "~/lib/layout-state";
 
+const MAX_AUTO_TITLE_SIZE = 36;
+
 export function TitleSlide({
   imageURI,
   ref,
@@ -16,7 +18,7 @@ export function TitleSlide({
   const adjustTitleSize = async () => {
     await new Promise((res) => setTimeout(res, 100));
     if (isOverflowing()) return shrinkTitleSize();
-    if (state.incTitleSize() > 32) return shrinkTitleSize();
+    if (state.incTitleSize() > MAX_AUTO_TITLE_SIZE) return shrinkTitleSize();
     await adjustTitleSize();
   };
 
@@ -74,7 +76,7 @@ export function TitleSlide({
               </div>
             )}
 
-            <img src="/hare-logo.webp" className="h-12" />
+            <img src="/hare-logo.webp" className="h-14 w-14" />
 
             {state.imageByline && (
               <div

@@ -3,9 +3,9 @@ import { presets } from "./color-presets";
 
 const DEFAULTS = {
   ...presets.maroon,
-  ratio: "1/1",
+  ratio: "3/4",
   titleSize: 24,
-  bylineSize: 14,
+  bylineSize: 16,
   paragraphShift: 0,
   renderImages: true,
 };

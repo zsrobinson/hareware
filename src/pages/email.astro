@@ -1,13 +1,23 @@
 ---
 import { EMAIL_IMAGE_WIDTH, toSizedImage } from "~/lib/image-url";
 import { getRecentArticles } from "~/lib/get-recent-articles";
+import { mapLimit } from "~/lib/map-limit";
 import { scrapeArticle } from "~/lib/scrape-article";
+
+/* a newsletter template listing the latest articles, not a live read of any one
+   of them — so unlike /generate this can sit on the cdn, which is what keeps
+   ten article fetches from running every time the page is opened */
+Astro.response.headers.set(
+  "cache-control",
+  "public, s-maxage=300, stale-while-revalidate=3600",
+);
 
 const articles = await getRecentArticles();
 if (!articles) throw Error("cannot fetch recent articles");
-const scraped = await Promise.all(
-  articles.map(({ link }) => scrapeArticle(link)),
-);
+
+/* three at a time rather than ten: this page is the one place that reliably
+   tripped wordpress.com's rate limit on its own */
+const scraped = await mapLimit(articles, 3, ({ link }) => scrapeArticle(link));
 ---
 
 <meta charset="utf-8" />

@@ -9,6 +9,7 @@ import {
   QuoteIcon,
 } from "@radix-ui/react-icons";
 import { getWordCount } from "~/lib/get-word-count";
+import { mapLimit } from "~/lib/map-limit";
 import { FormItem, FormLabel } from "~/components/options-form";
 
 function redirectError(error: string) {
@@ -32,7 +33,8 @@ if (articlesStr && !error) {
   if (articles.some((a) => new URL(a).hostname !== "theumdhare.com"))
     return redirectError("wrong-domain");
 
-  counts = await Promise.all(articles.map((a) => getWordCount(a)));
+  /* ten links at once is enough to start collecting 429s */
+  counts = await mapLimit(articles, 3, (a) => getWordCount(a));
 }
 ---
 

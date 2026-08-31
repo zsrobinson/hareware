@@ -8,6 +8,7 @@ import {
   Link2Icon,
   QuoteIcon,
 } from "@radix-ui/react-icons";
+import { toArticleLink } from "~/lib/article-url";
 import { getWordCount } from "~/lib/get-word-count";
 import { mapLimit } from "~/lib/map-limit";
 import { FormItem, FormLabel } from "~/components/options-form";
@@ -22,19 +23,36 @@ function redirectError(error: string) {
 const error = Astro.url.searchParams.get("error");
 
 const articlesStr = Astro.url.searchParams.get("articles");
-let counts: number[] = [];
+let counts: (number | null)[] = [];
 if (articlesStr && !error) {
-  const articles = articlesStr.split("\r\n").filter((a) => a !== "");
+  /* a textarea submits CRLF, but not every browser or paste agrees, and a
+     mismatch here used to be invisible: URL strips newlines before parsing, so
+     an unsplit blob came back canParse true and on theumdhare.com, then got
+     sent upstream as one enormous slug */
+  const articles = articlesStr
+    .split(/\r?\n/)
+    .map((a) => a.trim())
+    .filter((a) => a !== "");
 
   if (articles.length > 10) return redirectError("too-many");
   if (articles.length < 1) return redirectError("too-few");
-  if (articles.some((a) => !URL.canParse(a)))
+
+  /* takes a bare slug, a dated path or a full permalink, and rules out
+     anything that isn't the hare — which is both checks this used to do
+     itself, minus the newline blind spot */
+  const links = articles.map(toArticleLink);
+  if (links.some((link) => link === undefined))
     return redirectError("invalid-url");
-  if (articles.some((a) => new URL(a).hostname !== "theumdhare.com"))
-    return redirectError("wrong-domain");
 
   /* ten links at once is enough to start collecting 429s */
-  counts = await mapLimit(articles, 3, (a) => getWordCount(a));
+  counts = await mapLimit(links as string[], 3, async (link) => {
+    // one bad slug in ten shouldn't take the whole page down with it
+    try {
+      return await getWordCount(link);
+    } catch {
+      return null;
+    }
+  });
 }
 ---
 
@@ -50,7 +68,7 @@ if (articlesStr && !error) {
         name="articles"
         className="h-56 resize-none"
         defaultValue={articlesStr ?? ""}
-        placeholder="Enter up to ten article links, each on its own line."
+        placeholder="Enter up to ten article links or slugs, each on its own line."
       />
       <Button variant="secondary">Count Words <ChevronRightIcon /></Button>
 
@@ -75,7 +93,7 @@ if (articlesStr && !error) {
           <Textarea
             className="h-56 resize-none"
             readOnly
-            value={counts.join("\n")}
+            value={counts.map((count) => count ?? "—").join("\n")}
           />
         </>
       )

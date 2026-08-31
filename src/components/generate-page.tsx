@@ -3,7 +3,6 @@ import {
   ExclamationTriangleIcon,
   InfoCircledIcon,
 } from "@radix-ui/react-icons";
-import { domToPng } from "modern-screenshot";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLayoutState } from "~/lib/layout-state";
 import { useDebouncedEffect } from "../lib/use-debounced-effect";
@@ -44,17 +43,33 @@ export function GeneratePage({
     }
   }, [state]);
 
-  // on layout change, generate new images
+  // on layout change, generate new images. the renderer is the bulk of this
+  // island's javascript and nothing needs it until this fires, so it is pulled
+  // in here rather than held in front of hydration
   useDebouncedEffect(
     () => {
-      if (state.renderImages) {
-        domToPng(titleSlideRef.current!, { scale: 4 }).then((dataURI) => {
-          titleSlideImgRef.current!.src = dataURI;
-        });
-        domToPng(contentSlideRef.current!, { scale: 4 }).then((dataURI) => {
-          contentSlideImgRef.current!.src = dataURI;
-        });
-      }
+      if (!state.renderImages) return;
+
+      let cancelled = false;
+
+      (async () => {
+        const { domToPng } = await import("modern-screenshot");
+        if (cancelled) return;
+
+        const [titleURI, contentURI] = await Promise.all([
+          domToPng(titleSlideRef.current!, { scale: 4 }),
+          domToPng(contentSlideRef.current!, { scale: 4 }),
+        ]);
+        if (cancelled) return;
+
+        titleSlideImgRef.current!.src = titleURI;
+        contentSlideImgRef.current!.src = contentURI;
+      })();
+
+      // a newer layout supersedes whatever this run was about to paint
+      return () => {
+        cancelled = true;
+      };
     },
     300,
     [state],

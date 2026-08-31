@@ -1,4 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
+import { ORIGIN } from "./article-url";
 
 /**
  * gets recent articles from wordpress, paginated by groups of 10
@@ -8,7 +9,12 @@ export async function getRecentArticles(
   page = 1,
 ): Promise<{ title: string; link: string; date: string }[] | undefined> {
   try {
-    const res = await fetch(`https://theumdhare.com/feed?paged=${page}`);
+    // wordpress canonicalises this url — /feed?paged=n becomes /feed/?paged=n,
+    // and the parameter is dropped entirely for the first page. asking for the
+    // settled form saves a 301 on every request
+    const res = await fetch(
+      page > 1 ? `${ORIGIN}/feed/?paged=${page}` : `${ORIGIN}/feed/`,
+    );
     const text = await res.text();
 
     const parser = new XMLParser();

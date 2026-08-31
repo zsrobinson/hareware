@@ -2,6 +2,7 @@
 import { GeneratePage } from "~/components/generate-page";
 import Root from "../layouts/root.astro";
 import { toArticleLink, toArticleSlug } from "../lib/article-url";
+import { SLIDE_IMAGE_WIDTH, toSizedImage } from "../lib/image-url";
 import { scrapeArticle } from "../lib/scrape-article";
 
 const param = Astro.url.searchParams.get("article") || "";
@@ -30,7 +31,7 @@ const { title, author, image, imageCredits, content } = article;
     defaultArticleByline={author ?? ""}
     defaultImageByline={imageCredits ?? ""}
     articleLink={link}
-    imageURI={image}
+    imageURI={toSizedImage(image, SLIDE_IMAGE_WIDTH)}
     client:load
   >
     <!-- must render here, cannot pass Element[] as prop since it gets serialized -->

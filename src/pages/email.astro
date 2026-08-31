@@ -1,4 +1,5 @@
 ---
+import { EMAIL_IMAGE_WIDTH, toSizedImage } from "~/lib/image-url";
 import { getRecentArticles } from "~/lib/get-recent-articles";
 import { scrapeArticle } from "~/lib/scrape-article";
 
@@ -48,7 +49,7 @@ const scraped = await Promise.all(
       <tr>
         <td style="vertical-align: top; padding: 0 0 12px 0;">
           <img
-            src={article.image.split("?")[0] + "?w=300"}
+            src={toSizedImage(article.image, EMAIL_IMAGE_WIDTH)}
             style="width: 150px"
           />
         </td>

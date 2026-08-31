@@ -14,6 +14,7 @@ import { Input } from "~/components/ui/input";
 import { CopyButton } from "../components/copy-button";
 import Root from "../layouts/root.astro";
 import { toArticleLink, toArticleSlug } from "../lib/article-url";
+import { PREVIEW_IMAGE_WIDTH, toSizedImage } from "../lib/image-url";
 import { scrapeArticle } from "../lib/scrape-article";
 import { getTaggedText } from "../lib/get-tagged-text";
 
@@ -90,7 +91,10 @@ const { output, unprocessed } = getTaggedText(content);
         <ImageIcon className="size-5 min-w-max" />
         <FormLabel>Image</FormLabel>
       </FormItem>
-      <img src={image} class="bg-secondary min-w-0 rounded-md object-contain" />
+      <img
+        src={toSizedImage(image, PREVIEW_IMAGE_WIDTH)}
+        class="bg-secondary min-w-0 rounded-md object-contain"
+      />
     </div>
 
     <FormItem>

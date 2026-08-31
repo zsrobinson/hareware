@@ -9,7 +9,7 @@ export function TitleSlide({
   imageURI,
   ref,
 }: {
-  imageURI: string;
+  imageURI?: string;
   ref: RefObject<HTMLDivElement | null>;
 }) {
   const state = useLayoutState();

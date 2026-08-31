@@ -23,7 +23,7 @@ export function GeneratePage({
   defaultArticleByline: string;
   defaultImageByline: string;
   articleLink: string;
-  imageURI: string;
+  imageURI?: string;
   children: ReactNode;
 }) {
   const state = useLayoutState();

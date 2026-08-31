@@ -15,8 +15,13 @@ export const EMAIL_IMAGE_WIDTH = 300;
  * and without a quality it hands back a lossless conversion that comes out
  * larger than the png it replaced
  */
-export function toSizedImage(src: string, width: number): string {
-  if (!src) return src;
+export function toSizedImage(
+  src: string | undefined,
+  width: number,
+): string | undefined {
+  // undefined rather than "" on purpose: astro drops an undefined attribute,
+  // where an empty src would have the browser re-request the current page
+  if (!src) return undefined;
 
   // data uris come from the custom post uploader and aren't photon's to resize
   if (src.startsWith("data:")) return src;

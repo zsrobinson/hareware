@@ -19,19 +19,31 @@ const FIELDS = [
 /** one quick retry for a momentary refusal, then the rendered page instead */
 const RETRIES = 1;
 
+/**
+ * the longest we will wait before giving up on the api and reading the page
+ *
+ * this caps retry-after as well as our own backoff. the header is a request,
+ * not an instruction, and honouring a large one would hold the whole function
+ * open — ten articles at once on /email is exactly when a long one arrives, and
+ * timing out serves nobody when a slower answer is sitting right there
+ */
+const MAX_RETRY_WAIT = 1500;
+
+type Term = { name: string; taxonomy: string };
+
 type Post = {
   title: { rendered: string };
   content: { rendered: string };
   date: string;
   link: string;
   jetpack_featured_media_url?: string;
-  _embedded?: { "wp:term"?: { name: string }[][] };
+  _embedded?: { "wp:term"?: Term[][] };
 };
 
 type Document = ReturnType<typeof parseHTML>["document"];
 
-/** wordpress.com turned the api away and the rendered page is worth a try */
-class RateLimited extends Error {}
+/** the api couldn't answer, so the rendered page is worth a try */
+class Unavailable extends Error {}
 
 /**
  * scrapes the article content from wordpress
@@ -41,7 +53,7 @@ export async function scrapeArticle(article: string) {
   try {
     return fromPost(await fetchPost(toArticleSlug(article)));
   } catch (e) {
-    if (!(e instanceof RateLimited)) throw e;
+    if (!(e instanceof Unavailable)) throw e;
 
     // the api is throttled long before the rendered pages are, so the slow
     // route is still a better answer than no article
@@ -60,10 +72,14 @@ function fromPost(post: Post) {
   return {
     ...readEntryContent(document),
     title: post.title.rendered.trim(),
-    image: post.jetpack_featured_media_url?.split("?")[0] ?? "",
+    image: post.jetpack_featured_media_url?.split("?")[0],
     date: formatDate(post.date),
     link: post.link,
-    section: post._embedded?.["wp:term"]?.[0]?.[0]?.name,
+    // wp:term comes back grouped by taxonomy, and category happens to lead
+    // today — ask for it by name rather than trusting the order to hold
+    section: post._embedded?.["wp:term"]
+      ?.flat()
+      .find((term) => term.taxonomy === "category")?.name,
   };
 }
 
@@ -84,11 +100,10 @@ async function fromRenderedPage(link: string) {
     ...readEntryContent(document),
     title:
       document.querySelector(".wp-block-post-title")?.innerHTML.trim() ?? "",
-    image:
-      document
-        .querySelector(`meta[property="og:image"]`)
-        ?.getAttribute("content")
-        ?.split("?")[0] ?? "",
+    image: document
+      .querySelector(`meta[property="og:image"]`)
+      ?.getAttribute("content")
+      ?.split("?")[0],
     date: document
       .querySelector(".wp-block-post-date.has-text-align-right time")
       ?.innerHTML.trim(),
@@ -148,11 +163,24 @@ async function fetchPost(slug: string): Promise<Post> {
   const url = `${ORIGIN}/wp-json/wp/v2/posts?${params}`;
 
   for (let attempt = 0; ; attempt++) {
-    const res = await fetch(url);
+    let res: Response;
 
-    if (res.status === 429) {
-      if (attempt >= RETRIES) throw new RateLimited(slug);
-      await sleep(retryDelay(res.headers.get("retry-after"), attempt));
+    try {
+      res = await fetch(url);
+    } catch (e) {
+      // a refused connection or dns wobble is no less worth falling back on
+      // than a refusal we can read a status off
+      throw new Unavailable(`${slug}: ${e}`);
+    }
+
+    // 429 is what wordpress.com throttles with, but a 5xx is the same story
+    // from our side: the api can't answer and the rendered page still might
+    if (res.status === 429 || res.status >= 500) {
+      const wait = retryDelay(res.headers.get("retry-after"), attempt);
+      if (attempt >= RETRIES || wait > MAX_RETRY_WAIT)
+        throw new Unavailable(`${slug} (${res.status})`);
+
+      await sleep(wait);
       continue;
     }
 

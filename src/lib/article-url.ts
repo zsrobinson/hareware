@@ -1,4 +1,4 @@
-const ORIGIN = "https://theumdhare.com";
+export const ORIGIN = "https://theumdhare.com";
 const HOSTNAMES = ["theumdhare.com", "www.theumdhare.com"];
 
 /** the year/month/day folders wordpress nests its permalinks under */

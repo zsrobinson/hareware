@@ -4,12 +4,13 @@ import { getRecentArticles } from "~/lib/get-recent-articles";
 import { mapLimit } from "~/lib/map-limit";
 import { scrapeArticle } from "~/lib/scrape-article";
 
-/* a newsletter template listing the latest articles, not a live read of any one
-   of them — so unlike /generate this can sit on the cdn, which is what keeps
-   ten article fetches from running every time the page is opened */
+/* this page does render scraped titles and bylines, so the window has to stay
+   short enough that a title fixed mid-build isn't served stale behind it. the
+   concurrency cap below and the rendered-page fallback are what actually hold
+   the rate limit off — the cache is only here to spare a repeat opening */
 Astro.response.headers.set(
   "cache-control",
-  "public, s-maxage=300, stale-while-revalidate=3600",
+  "public, s-maxage=30, stale-while-revalidate=60",
 );
 
 const articles = await getRecentArticles();
@@ -17,7 +18,17 @@ if (!articles) throw Error("cannot fetch recent articles");
 
 /* three at a time rather than ten: this page is the one place that reliably
    tripped wordpress.com's rate limit on its own */
-const scraped = await mapLimit(articles, 3, ({ link }) => scrapeArticle(link));
+const scraped = (
+  await mapLimit(articles, 3, async ({ link }) => {
+    // an article pulled between the feed and the lookup shouldn't cost us the
+    // other nine, same as the batch counter
+    try {
+      return await scrapeArticle(link);
+    } catch {
+      return null;
+    }
+  })
+).filter((article) => article !== null);
 ---
 
 <meta charset="utf-8" />

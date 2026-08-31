@@ -37,6 +37,12 @@ const slideFonts = [
   </head>
 
   <body class="m-4 mb-16 md:m-8 md:mb-24">
+    <!-- client-side navigation replaces the browser's own loading indicator, so
+      this stands in for it. transition:persist keeps the live node through the
+      swap — a fresh copy from the incoming page would cut the finish short -->
+    <div id="nav-progress" transition:persist="nav-progress" aria-hidden="true">
+    </div>
+
     <nav>
       <div class="flex flex-wrap items-end gap-4">
         <a href="/" tabindex="-1">
@@ -70,5 +76,56 @@ const slideFonts = [
     </nav>
 
     <slot />
+
+    <script>
+      /* astro fires neither of these on a full page load, so the bar only ever
+         stands in where the browser has stopped showing its own indicator.
+         listeners on document survive the swaps, so registering once is enough */
+      const SHOW_AFTER = 150; // let quick navigations finish without a flash
+
+      let show: ReturnType<typeof setTimeout> | undefined;
+      let reset: ReturnType<typeof setTimeout> | undefined;
+
+      const bar = () => document.getElementById("nav-progress");
+
+      function start() {
+        const el = bar();
+        if (!el) return;
+
+        clearTimeout(show);
+        clearTimeout(reset);
+        el.removeAttribute("data-state"); // back to zero width, untransitioned
+
+        show = setTimeout(
+          () => el.setAttribute("data-state", "loading"),
+          SHOW_AFTER,
+        );
+      }
+
+      function finish() {
+        const el = bar();
+        if (!el) return;
+
+        clearTimeout(show);
+        const state = el.getAttribute("data-state");
+
+        // page-load lands a moment after preparation finished, so without this
+        // the second call would strip the bar mid-wind-down
+        if (state === "done") return;
+
+        // it never became visible, so there is nothing to wind down
+        if (state !== "loading") {
+          el.removeAttribute("data-state");
+          return;
+        }
+
+        el.setAttribute("data-state", "done");
+        reset = setTimeout(() => el.removeAttribute("data-state"), 400);
+      }
+
+      document.addEventListener("astro:before-preparation", start);
+      document.addEventListener("astro:after-preparation", finish);
+      document.addEventListener("astro:page-load", finish); // in case it didn't
+    </script>
   </body>
 </html>

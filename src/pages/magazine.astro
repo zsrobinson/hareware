@@ -13,21 +13,28 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { CopyButton } from "../components/copy-button";
 import Root from "../layouts/root.astro";
+import { toArticleLink, toArticleSlug } from "../lib/article-url";
 import { scrapeArticle } from "../lib/scrape-article";
 import { getTaggedText } from "../lib/get-tagged-text";
 
-const article = Astro.url.searchParams.get("article") || "";
+const param = Astro.url.searchParams.get("article") || "";
 
-/* check that we have a good url */
+/* check that we have a good article */
+const link = toArticleLink(param);
+if (!link) return Astro.redirect("/?magazine-error");
+
+/* tidy up the url when someone hands us a full permalink */
+const slug = toArticleSlug(link);
+if (param !== slug) return Astro.redirect(`/magazine?article=${slug}`);
+
+let article;
 try {
-  const url = new URL(article);
-  if (url.hostname !== "theumdhare.com") throw new Error();
+  article = await scrapeArticle(link);
 } catch (e) {
   return Astro.redirect("/?magazine-error");
 }
 
-const { title, author, image, imageCredits, section, date, content } =
-  await scrapeArticle(article);
+const { title, author, image, imageCredits, section, date, content } = article;
 const { output, unprocessed } = getTaggedText(content);
 ---
 
@@ -39,10 +46,10 @@ const { output, unprocessed } = getTaggedText(content);
         name="article"
         placeholder="Article Link"
         className="w-full font-mono"
-        defaultValue={article}
+        defaultValue={link}
       />
       <Button type="submit" variant="secondary">
-        Submit
+        Export Content
         <ChevronRightIcon />
       </Button>
     </form>

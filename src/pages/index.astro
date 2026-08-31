@@ -8,6 +8,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Link } from "~/components/ui/link";
 import Root from "../layouts/root.astro";
+import { toArticleSlug } from "../lib/article-url";
 import { getRecentArticles } from "../lib/get-recent-articles";
 
 const pageParam = Number(Astro.url.searchParams.get("page") ?? "1");
@@ -29,7 +30,7 @@ const articles = await getRecentArticles(page);
       className="max-w-72 font-mono"
     />
     <Button type="submit">
-      Submit
+      Create Post
       <ChevronRightIcon />
     </Button>
   </form>
@@ -59,7 +60,7 @@ const articles = await getRecentArticles(page);
               />
               <a
                 class="decoration-muted-foreground hover:text-muted-foreground underline"
-                href={"/generate?article=" + article.link}
+                href={"/generate?article=" + toArticleSlug(article.link)}
                 set:html={article.title}
               />
             </li>
@@ -93,7 +94,7 @@ const articles = await getRecentArticles(page);
   </h2>
 
   <Link variant="secondary" href="/custom" className="ml-4">
-    Open Custom Post Creator
+    Open Creator
     <ChevronRightIcon />
   </Link>
 
@@ -109,7 +110,7 @@ const articles = await getRecentArticles(page);
       className="max-w-72 font-mono"
     />
     <Button type="submit" variant="secondary">
-      Submit
+      Export Content
       <ChevronRightIcon />
     </Button>
   </form>
@@ -126,17 +127,7 @@ const articles = await getRecentArticles(page);
   <h2 class="pt-8 pb-2 font-semibold">Or, count words for articles in bulk:</h2>
 
   <Link variant="secondary" href="/words" className="ml-4">
-    Open Bulk Word Counter
+    Count Words
     <ChevronRightIcon />
   </Link>
-
-  <br />
-  <br />
-  <br />
-  <br />
-  <br />
-  <br />
-  <br />
-  <br />
-  <br />
 </Root>

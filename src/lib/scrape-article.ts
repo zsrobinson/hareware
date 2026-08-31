@@ -1,5 +1,5 @@
 import { parseHTML } from "linkedom";
-import { ORIGIN, toArticleSlug } from "./article-url";
+import { ORIGIN, toArticleLink, toArticleSlug } from "./article-url";
 
 /**
  * everything we need off a post, in one request. _links looks redundant next to
@@ -16,6 +16,9 @@ const FIELDS = [
   "_embedded",
 ].join(",");
 
+/** one quick retry for a momentary refusal, then the rendered page instead */
+const RETRIES = 1;
+
 type Post = {
   title: { rendered: string };
   content: { rendered: string };
@@ -25,19 +28,77 @@ type Post = {
   _embedded?: { "wp:term"?: { name: string }[][] };
 };
 
+type Document = ReturnType<typeof parseHTML>["document"];
+
+/** wordpress.com turned the api away and the rendered page is worth a try */
+class RateLimited extends Error {}
+
 /**
  * scrapes the article content from wordpress
  * @param article the full link, including schema and domain
  */
 export async function scrapeArticle(article: string) {
-  const post = await fetchPost(toArticleSlug(article));
+  try {
+    return fromPost(await fetchPost(toArticleSlug(article)));
+  } catch (e) {
+    if (!(e instanceof RateLimited)) throw e;
 
-  // the rest api hands back the same markup that lands inside .entry-content on
-  // the rendered page, so wrapping it lets the selectors below stay as they were
-  const { document } = parseHTML(
+    // the api is throttled long before the rendered pages are, so the slow
+    // route is still a better answer than no article
+    return fromRenderedPage(toArticleLink(article) ?? article);
+  }
+}
+
+/** the fields we need, off a rest api response */
+function fromPost(post: Post) {
+  // content.rendered is the markup that lands inside .entry-content on the
+  // page, so wrapping it lets one set of selectors serve both sources
+  const document = parseHTML(
     `<div class="entry-content">${post.content.rendered}</div>`,
-  );
+  ).document;
 
+  return {
+    ...readEntryContent(document),
+    title: post.title.rendered.trim(),
+    image: post.jetpack_featured_media_url?.split("?")[0] ?? "",
+    date: formatDate(post.date),
+    link: post.link,
+    section: post._embedded?.["wp:term"]?.[0]?.[0]?.name,
+  };
+}
+
+/**
+ * the same fields read off the rendered article page
+ *
+ * this is the original approach, kept for when the api turns us away. it moves
+ * 183 KB rather than 10 and eats a redirect on the way in, but wordpress.com
+ * serves these out of batcache and throttles them far less aggressively
+ */
+async function fromRenderedPage(link: string) {
+  const res = await fetch(link);
+  if (!res.ok) throw new Error(`wordpress returned ${res.status} for ${link}`);
+
+  const { document } = parseHTML(await res.text());
+
+  return {
+    ...readEntryContent(document),
+    title:
+      document.querySelector(".wp-block-post-title")?.innerHTML.trim() ?? "",
+    image:
+      document
+        .querySelector(`meta[property="og:image"]`)
+        ?.getAttribute("content")
+        ?.split("?")[0] ?? "",
+    date: document
+      .querySelector(".wp-block-post-date.has-text-align-right time")
+      ?.innerHTML.trim(),
+    link: res.url,
+    section: document.querySelector(".taxonomy-category > a")?.innerHTML.trim(),
+  };
+}
+
+/** the pieces that live inside .entry-content, whichever way we got there */
+function readEntryContent(document: Document) {
   // linkedom splits text at entity boundaries (`a&nbsp;b` becomes three text
   // nodes), which makes getTaggedText emit redundant typeface tags
   document.querySelector(".entry-content")?.normalize();
@@ -68,19 +129,8 @@ export async function scrapeArticle(article: string) {
     ),
   ].filter((el) => el.innerHTML !== "");
 
-  return {
-    title: post.title.rendered.trim(),
-    author,
-    imageCredits,
-    image: post.jetpack_featured_media_url?.split("?")[0] ?? "",
-    date: formatDate(post.date),
-    content,
-    link: post.link,
-    section: post._embedded?.["wp:term"]?.[0]?.[0]?.name,
-  };
+  return { author, imageCredits, content };
 }
-
-const RETRIES = 3;
 
 /**
  * the one post matching a slug
@@ -88,10 +138,6 @@ const RETRIES = 3;
  * this reads the rest api rather than the rendered page: the page is 183 KB of
  * theme chrome around the same content the api returns in about 10 KB, and a
  * bare slug permalink 301s to its dated form on the way in, which the api skips
- *
- * wordpress.com rate limits the api per client more tightly than it does the
- * rendered pages, and a burst of cache misses will come back 429 — /email asks
- * for ten articles at once — so a refused request is worth retrying
  */
 async function fetchPost(slug: string): Promise<Post> {
   const params = new URLSearchParams({
@@ -104,7 +150,8 @@ async function fetchPost(slug: string): Promise<Post> {
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(url);
 
-    if (res.status === 429 && attempt < RETRIES) {
+    if (res.status === 429) {
+      if (attempt >= RETRIES) throw new RateLimited(slug);
       await sleep(retryDelay(res.headers.get("retry-after"), attempt));
       continue;
     }

@@ -93,7 +93,7 @@ const articles = await getRecentArticles(page);
     Or, create a custom post for unpublished or draft articles:
   </h2>
 
-  <Link variant="secondary" href="/custom" className="ml-4">
+  <Link variant="secondary" href="/custom" className="ml-4" data-astro-prefetch>
     Open Creator
     <ChevronRightIcon />
   </Link>
@@ -126,7 +126,7 @@ const articles = await getRecentArticles(page);
 
   <h2 class="pt-8 pb-2 font-semibold">Or, count words for articles in bulk:</h2>
 
-  <Link variant="secondary" href="/words" className="ml-4">
+  <Link variant="secondary" href="/words" className="ml-4" data-astro-prefetch>
     Count Words
     <ChevronRightIcon />
   </Link>

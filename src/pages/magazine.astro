@@ -146,11 +146,16 @@ const { output, unprocessed } = getTaggedText(content);
     import download from "downloadjs";
     import { slugify } from "~/lib/utils";
 
-    const { output, title } = (window as any).vars;
+    // module scripts only evaluate once, so with view transitions in play the
+    // binding has to be redone every time we land on this page
+    document.addEventListener("astro:page-load", () => {
+      const button = document.getElementById("button");
+      if (!button) return; // navigated somewhere that isn't the exporter
 
-    const button = document.getElementById("button")!;
-    button.addEventListener("click", () => {
-      download(output, slugify(title) + ".txt", "text/plain");
+      const { output, title } = (window as any).vars;
+      button.addEventListener("click", () => {
+        download(output, slugify(title) + ".txt", "text/plain");
+      });
     });
   </script>
 </Root>

@@ -11,6 +11,10 @@ export default defineConfig({
   integrations: [react()],
   adapter: vercel({}),
 
+  // opt-in rather than prefetchAll: /generate and /magazine must always read
+  // the article live, so only links that don't hit wordpress get prefetched
+  prefetch: { prefetchAll: false, defaultStrategy: "hover" },
+
   vite: {
     plugins: [tailwindcss()],
   },

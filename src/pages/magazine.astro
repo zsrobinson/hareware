@@ -28,6 +28,9 @@ if (!link) return Astro.redirect("/?magazine-error");
 const slug = toArticleSlug(link);
 if (param !== slug) return Astro.redirect(`/magazine?article=${slug}`);
 
+/* same as /generate: the export has to reflect the article as it stands now */
+Astro.response.headers.set("cache-control", "private, no-store");
+
 let article;
 try {
   article = await scrapeArticle(link);

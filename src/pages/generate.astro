@@ -15,6 +15,10 @@ if (!link) return Astro.redirect("/?error");
 const slug = toArticleSlug(link);
 if (param !== slug) return Astro.redirect(`/generate?article=${slug}`);
 
+/* the article is read live so a title fixed mid-post shows up on the next
+   reload — say so out loud rather than leaving it to a cdn default */
+Astro.response.headers.set("cache-control", "private, no-store");
+
 let article;
 try {
   article = await scrapeArticle(link);

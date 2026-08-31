@@ -33,8 +33,6 @@ export type MutableLayoutState = LayoutState & {
 
   setTitle: (title: string) => void;
   setTitleSize: (titleSize: number) => void;
-  incTitleSize: () => number;
-  decTitleSize: () => number;
 
   setArticleByline: (articleByline: string) => void;
   setImageByline: (imageByline: string) => void;
@@ -60,16 +58,6 @@ export const useLayoutState = create<MutableLayoutState>()((set, curr) => ({
 
   setTitle: (title: string) => set({ title }),
   setTitleSize: (titleSize: number) => set({ titleSize }),
-  incTitleSize: () => {
-    const newSize = curr().titleSize + 1;
-    set({ titleSize: newSize });
-    return newSize;
-  },
-  decTitleSize: () => {
-    const newSize = curr().titleSize - 1;
-    set({ titleSize: newSize });
-    return newSize;
-  },
 
   setArticleByline: (articleByline: string) => set({ articleByline }),
   setImageByline: (imageByline: string) => set({ imageByline }),

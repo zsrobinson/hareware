@@ -1,6 +1,8 @@
-import { useEffect, type RefObject } from "react";
+import { useLayoutEffect, useRef, type RefObject } from "react";
 import { useLayoutState } from "~/lib/layout-state";
 
+/* the range the slider offers, which is what we search within */
+const MIN_AUTO_TITLE_SIZE = 16;
 const MAX_AUTO_TITLE_SIZE = 36;
 
 export function TitleSlide({
@@ -11,28 +13,62 @@ export function TitleSlide({
   ref: RefObject<HTMLDivElement | null>;
 }) {
   const state = useLayoutState();
-  const isOverflowing = () =>
-    ref.current!.scrollHeight > ref.current!.clientHeight;
+  const titleRef = useRef<HTMLSpanElement>(null);
+  const autoSized = useRef<number | null>(null);
 
-  // continue to increase title size until overflowing, then shrink until not
-  const adjustTitleSize = async () => {
-    await new Promise((res) => setTimeout(res, 100));
-    if (isOverflowing()) return shrinkTitleSize();
-    if (state.incTitleSize() > MAX_AUTO_TITLE_SIZE) return shrinkTitleSize();
-    await adjustTitleSize();
-  };
+  /**
+   * fit the title to the slide, once, as soon as there is a title to fit.
+   *
+   * reading scrollHeight forces a synchronous reflow, so a binary search over
+   * the slider's range settles inside a single frame — the old version stepped
+   * one pixel at a time behind a 100ms timer, which took upwards of a second
+   * and restarted the debounced png render on every step along the way.
+   *
+   * the title arrives from a parent effect a beat after mount, so this keys off
+   * the title rather than mount; past that first fit the size belongs to
+   * whoever is dragging the slider.
+   */
+  useLayoutEffect(() => {
+    if (autoSized.current !== null || !state.title) return;
 
-  // shrink title size until no longer overflowing
-  const shrinkTitleSize = async () => {
-    state.decTitleSize();
-    await new Promise((res) => setTimeout(res, 100));
-    if (isOverflowing()) return shrinkTitleSize();
-  };
+    const measure = () => {
+      const slide = ref.current;
+      const title = titleRef.current;
+      if (!slide || !title) return;
 
-  // on mount, start title size adjustment process
-  useEffect(() => {
-    adjustTitleSize();
-  }, []);
+      const fits = (size: number) => {
+        title.style.fontSize = `${size}px`;
+        return slide.scrollHeight <= slide.clientHeight;
+      };
+
+      let low = MIN_AUTO_TITLE_SIZE;
+      let high = MAX_AUTO_TITLE_SIZE;
+      let best = MIN_AUTO_TITLE_SIZE;
+
+      while (low <= high) {
+        const size = Math.floor((low + high) / 2);
+        if (fits(size)) {
+          best = size;
+          low = size + 1;
+        } else {
+          high = size - 1;
+        }
+      }
+
+      fits(best); // hold the winning size until the re-render catches up
+      autoSized.current = best;
+      state.setTitleSize(best);
+    };
+
+    measure();
+
+    // the serif loads with font-display: swap, so a measurement taken against
+    // fallback metrics can come out wrong. redo it after the swap, unless the
+    // slider has been touched in the meantime
+    document.fonts?.ready.then(() => {
+      if (autoSized.current === useLayoutState.getState().titleSize) measure();
+    });
+  }, [state.title]);
 
   return (
     <div
@@ -52,6 +88,7 @@ export function TitleSlide({
       <div className="flex w-full grow flex-col p-2 px-3">
         <div className="flex grow flex-col items-center justify-evenly gap-2">
           <span
+            ref={titleRef}
             dangerouslySetInnerHTML={{ __html: state.title }}
             className="font-display text-center leading-[1.1] font-[600] text-balance"
             style={{

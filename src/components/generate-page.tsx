@@ -56,14 +56,22 @@ export function GeneratePage({
         const { domToPng } = await import("modern-screenshot");
         if (cancelled) return;
 
+        const titleNode = titleSlideRef.current;
+        const contentNode = contentSlideRef.current;
+        if (!titleNode || !contentNode) return; // unmounted while importing
+
         const [titleURI, contentURI] = await Promise.all([
-          domToPng(titleSlideRef.current!, { scale: 4 }),
-          domToPng(contentSlideRef.current!, { scale: 4 }),
+          domToPng(titleNode, { scale: 4 }),
+          domToPng(contentNode, { scale: 4 }),
         ]);
         if (cancelled) return;
 
-        titleSlideImgRef.current!.src = titleURI;
-        contentSlideImgRef.current!.src = contentURI;
+        // navigating away mid-render nulls these. the debounce hook only clears
+        // a pending callback when the next one fires, so on unmount there is no
+        // next one and the cancelled flag above never gets set
+        if (titleSlideImgRef.current) titleSlideImgRef.current.src = titleURI;
+        if (contentSlideImgRef.current)
+          contentSlideImgRef.current.src = contentURI;
       })();
 
       // a newer layout supersedes whatever this run was about to paint
@@ -75,11 +83,15 @@ export function GeneratePage({
     [state],
   );
 
-  // on mount, set article title and bylines from props
+  // on mount, set article title and bylines from props, and give them back on
+  // the way out — under client-side navigation the store outlives this island,
+  // so anything left behind turns up on the next article
   useEffect(() => {
     state.setTitle(defaultTitle);
     state.setArticleByline(defaultArticleByline);
     state.setImageByline(defaultImageByline);
+
+    return () => useLayoutState.getState().clearArticle();
   }, []);
 
   // on layout change, check if title slide is overflowing

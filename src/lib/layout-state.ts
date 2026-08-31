@@ -33,8 +33,6 @@ export type MutableLayoutState = LayoutState & {
 
   setTitle: (title: string) => void;
   setTitleSize: (titleSize: number) => void;
-  incTitleSize: () => number;
-  decTitleSize: () => number;
 
   setArticleByline: (articleByline: string) => void;
   setImageByline: (imageByline: string) => void;
@@ -43,6 +41,7 @@ export type MutableLayoutState = LayoutState & {
   incParagraphShift: () => void;
   setRenderImages: (renderImages: boolean) => void;
 
+  clearArticle: () => void;
   reset: () => void;
 };
 
@@ -60,16 +59,6 @@ export const useLayoutState = create<MutableLayoutState>()((set, curr) => ({
 
   setTitle: (title: string) => set({ title }),
   setTitleSize: (titleSize: number) => set({ titleSize }),
-  incTitleSize: () => {
-    const newSize = curr().titleSize + 1;
-    set({ titleSize: newSize });
-    return newSize;
-  },
-  decTitleSize: () => {
-    const newSize = curr().titleSize - 1;
-    set({ titleSize: newSize });
-    return newSize;
-  },
 
   setArticleByline: (articleByline: string) => set({ articleByline }),
   setImageByline: (imageByline: string) => set({ imageByline }),
@@ -77,6 +66,13 @@ export const useLayoutState = create<MutableLayoutState>()((set, curr) => ({
 
   incParagraphShift: () => set({ paragraphShift: curr().paragraphShift + 1 }),
   setRenderImages: (renderImages: boolean) => set({ renderImages }),
+
+  /* hands back everything that belongs to one article. this store is a module
+     singleton, and client-side navigation keeps the module alive between
+     articles, so what isn't given back here follows you to the next one. the
+     layout options are deliberately left alone — those are worth keeping */
+  clearArticle: () =>
+    set({ title: "", articleByline: "", imageByline: "", paragraphShift: 0 }),
 
   reset: () => set(DEFAULTS),
 }));

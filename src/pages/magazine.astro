@@ -14,6 +14,7 @@ import { Input } from "~/components/ui/input";
 import { CopyButton } from "../components/copy-button";
 import Root from "../layouts/root.astro";
 import { toArticleLink, toArticleSlug } from "../lib/article-url";
+import { PREVIEW_IMAGE_WIDTH, toSizedImage } from "../lib/image-url";
 import { scrapeArticle } from "../lib/scrape-article";
 import { getTaggedText } from "../lib/get-tagged-text";
 
@@ -26,6 +27,9 @@ if (!link) return Astro.redirect("/?magazine-error");
 /* tidy up the url when someone hands us a full permalink */
 const slug = toArticleSlug(link);
 if (param !== slug) return Astro.redirect(`/magazine?article=${slug}`);
+
+/* same as /generate: the export has to reflect the article as it stands now */
+Astro.response.headers.set("cache-control", "private, no-store");
 
 let article;
 try {
@@ -90,7 +94,10 @@ const { output, unprocessed } = getTaggedText(content);
         <ImageIcon className="size-5 min-w-max" />
         <FormLabel>Image</FormLabel>
       </FormItem>
-      <img src={image} class="bg-secondary min-w-0 rounded-md object-contain" />
+      <img
+        src={toSizedImage(image, PREVIEW_IMAGE_WIDTH)}
+        class="bg-secondary min-w-0 rounded-md object-contain"
+      />
     </div>
 
     <FormItem>
@@ -142,11 +149,16 @@ const { output, unprocessed } = getTaggedText(content);
     import download from "downloadjs";
     import { slugify } from "~/lib/utils";
 
-    const { output, title } = (window as any).vars;
+    // module scripts only evaluate once, so with view transitions in play the
+    // binding has to be redone every time we land on this page
+    document.addEventListener("astro:page-load", () => {
+      const button = document.getElementById("button");
+      if (!button) return; // navigated somewhere that isn't the exporter
 
-    const button = document.getElementById("button")!;
-    button.addEventListener("click", () => {
-      download(output, slugify(title) + ".txt", "text/plain");
+      const { output, title } = (window as any).vars;
+      button.addEventListener("click", () => {
+        download(output, slugify(title) + ".txt", "text/plain");
+      });
     });
   </script>
 </Root>

@@ -2,6 +2,7 @@
 import { GeneratePage } from "~/components/generate-page";
 import Root from "../layouts/root.astro";
 import { toArticleLink, toArticleSlug } from "../lib/article-url";
+import { SLIDE_IMAGE_WIDTH, toSizedImage } from "../lib/image-url";
 import { scrapeArticle } from "../lib/scrape-article";
 
 const param = Astro.url.searchParams.get("article") || "";
@@ -14,6 +15,10 @@ if (!link) return Astro.redirect("/?error");
 const slug = toArticleSlug(link);
 if (param !== slug) return Astro.redirect(`/generate?article=${slug}`);
 
+/* the article is read live so a title fixed mid-post shows up on the next
+   reload — say so out loud rather than leaving it to a cdn default */
+Astro.response.headers.set("cache-control", "private, no-store");
+
 let article;
 try {
   article = await scrapeArticle(link);
@@ -24,13 +29,13 @@ try {
 const { title, author, image, imageCredits, content } = article;
 ---
 
-<Root>
+<Root preloadSlideFonts>
   <GeneratePage
     defaultTitle={title}
     defaultArticleByline={author ?? ""}
     defaultImageByline={imageCredits ?? ""}
     articleLink={link}
-    imageURI={image}
+    imageURI={toSizedImage(image, SLIDE_IMAGE_WIDTH)}
     client:load
   >
     <!-- must render here, cannot pass Element[] as prop since it gets serialized -->

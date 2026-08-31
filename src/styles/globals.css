@@ -155,3 +155,54 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* view transitions cross-fade the whole document by default, which reads as a
+   slideshow rather than as navigating. swap the page outright instead */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* stands in for the loading indicator the browser stops showing once navigation
+   happens client-side. the base rule declares no transition, so dropping
+   data-state snaps the bar back to nothing rather than animating it backwards */
+#nav-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100; /* over the app's own z-20 and the shadcn select's z-50 */
+  height: 3px;
+  width: 0;
+  background-color: var(--color-hare);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* decelerate toward 90% and never quite arrive, for as long as we are waiting */
+#nav-progress[data-state="loading"] {
+  width: 90%;
+  opacity: 1;
+  transition: width 2s cubic-bezier(0.1, 0.85, 0.3, 1);
+}
+
+/* then close the last of it quickly, and fade out behind that */
+#nav-progress[data-state="done"] {
+  width: 100%;
+  opacity: 0;
+  transition:
+    width 140ms ease-out,
+    opacity 200ms linear 140ms;
+}
+
+/* still reports that something is loading, just without the creep */
+@media (prefers-reduced-motion: reduce) {
+  #nav-progress[data-state="loading"] {
+    width: 90%;
+    transition: none;
+  }
+
+  #nav-progress[data-state="done"] {
+    transition: opacity 120ms linear;
+  }
+}

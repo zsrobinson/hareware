@@ -16,10 +16,15 @@ export function ContentSlide({
     const slotRef = document.querySelector("#content-slide astro-slot");
 
     const children = [...(slotRef?.children ?? [])] as HTMLElement[];
-    for (let i = 0; i < state.paragraphShift; i++) {
+
+    // shifting past the last paragraph is reachable — the counter has no
+    // ceiling — and indexing past the end here used to throw inside the effect
+    const shift = Math.min(state.paragraphShift, children.length);
+
+    for (let i = 0; i < shift; i++) {
       children[i].style.display = "none";
     }
-    for (let i = state.paragraphShift; i < children.length; i++) {
+    for (let i = shift; i < children.length; i++) {
       children[i].style.display = "block";
     }
   }, [state.paragraphShift]);

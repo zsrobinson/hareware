@@ -1,8 +1,11 @@
 ---
 import Root from "../layouts/root.astro";
 import { CustomPage } from "../components/custom-page";
+
+/* nothing here is per-request — the whole page is one client island */
+export const prerender = true;
 ---
 
-<Root>
+<Root preloadSlideFonts>
   <CustomPage client:load />
 </Root>

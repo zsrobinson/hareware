@@ -94,6 +94,12 @@ const slideFonts = [
 
         clearTimeout(show);
         clearTimeout(reset);
+
+        // a navigation started while one was already running: leave the bar
+        // where it is and let it keep creeping, rather than snapping it back
+        // to nothing and starting over, which reads as a flicker
+        if (el.getAttribute("data-state") === "loading") return;
+
         el.removeAttribute("data-state"); // back to zero width, untransitioned
 
         show = setTimeout(

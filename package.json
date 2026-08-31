@@ -27,7 +27,7 @@
     "clsx": "^2.1.1",
     "downloadjs": "^1.4.7",
     "fast-xml-parser": "^5.9.3",
-    "jsdom": "^29.1.1",
+    "linkedom": "^0.18.13",
     "modern-screenshot": "^4.7.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -40,7 +40,6 @@
   },
   "devDependencies": {
     "@types/downloadjs": "^1.4.6",
-    "@types/jsdom": "^28.0.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "prettier": "^3.9.4",

@@ -9,10 +9,10 @@ export async function getRecentArticles(
 ): Promise<{ title: string; link: string; date: string }[] | undefined> {
   try {
     const res = await fetch(`https://theumdhare.com/feed?paged=${page}`);
-    const buffer = Buffer.from(await res.arrayBuffer());
+    const text = await res.text();
 
     const parser = new XMLParser();
-    const data = parser.parse(buffer);
+    const data = parser.parse(text);
 
     return data.rss.channel.item.map((item: any) => ({
       title: item.title as string,

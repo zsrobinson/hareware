@@ -16,6 +16,14 @@ const page = isNaN(pageParam) || pageParam < 0 ? 1 : pageParam;
 
 const error = Astro.url.searchParams.get("error") !== null;
 const magazineError = Astro.url.searchParams.get("magazine-error") !== null;
+
+/* the list of articles is not the article. worst case a just-published piece is
+   missing from it for half a minute, and its link still works if pasted in */
+Astro.response.headers.set(
+  "cache-control",
+  "public, s-maxage=30, stale-while-revalidate=300",
+);
+
 const articles = await getRecentArticles(page);
 ---
 

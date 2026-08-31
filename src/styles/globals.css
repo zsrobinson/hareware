@@ -6,6 +6,7 @@
   --font-serif: "Source Serif 4", serif;
   --font-display: "Source Serif 4 Display", serif;
 
+  --radius-xl: calc(var(--radius) + 4px);
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -112,7 +113,7 @@
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
+    --radius: 0.625rem;
   }
 
   @media (prefers-color-scheme: dark) {

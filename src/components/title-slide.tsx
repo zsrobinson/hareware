@@ -80,7 +80,16 @@ export function TitleSlide({
       ref={ref}
     >
       {imageURI ? (
-        <img src={imageURI} className="bg-secondary aspect-video w-full" />
+        <img
+          src={imageURI}
+          // photon answers with access-control-allow-origin: *, so asking for
+          // the image as cors leaves the cached copy reusable when the png
+          // renderer inlines it, rather than making it fetch the image a second
+          // time on every re-render. uploads arrive as data uris, which have
+          // nothing to negotiate
+          crossOrigin={imageURI.startsWith("data:") ? undefined : "anonymous"}
+          className="bg-secondary aspect-video w-full"
+        />
       ) : (
         <div className="bg-secondary aspect-video w-full" />
       )}

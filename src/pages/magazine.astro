@@ -38,8 +38,8 @@ try {
   return Astro.redirect("/?magazine-error");
 }
 
-const { title, author, image, imageCredits, section, date, content } = post;
-const { output, unprocessed } = getTaggedText(content);
+const { title, author, image, imageCredits, section, date, body } = post;
+const { output, unprocessed } = getTaggedText(body);
 ---
 
 <Root title="InDesign Article Exporter">

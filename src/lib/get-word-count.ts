@@ -1,14 +1,10 @@
 /**
- * the number of words in an article, ignoring the byline and image credits
- * @param content the content elements from `scrapeArticle`
+ * the number of words in an article
+ * @param body the body elements from `scrapeArticle`, already trimmed of the
+ * byline and image credits
  */
-export function getWordCount(content: Element[]) {
-  const words = content
-    .filter(
-      (el) =>
-        !el.textContent?.includes("Article by:") &&
-        !el.textContent?.includes("Image Credits:"),
-    )
+export function getWordCount(body: Element[]) {
+  const words = body
     .map((el) => el.textContent)
     .join(" ")
     .split(" ")

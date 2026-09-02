@@ -49,8 +49,8 @@ if (articlesStr && !error) {
   counts = await mapLimit(links as string[], 3, async (link) => {
     // one bad slug in ten shouldn't take the whole page down with it
     try {
-      const { content } = await scrapeArticle(link);
-      return getWordCount(content);
+      const { body } = await scrapeArticle(link);
+      return getWordCount(body);
     } catch {
       return null;
     }

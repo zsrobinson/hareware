@@ -1,7 +1,7 @@
 import { scrapeArticle } from "./scrape-article";
 
-export async function getWordCount(article: string) {
-  const { content } = await scrapeArticle(article);
+export async function getWordCount(link: string) {
+  const { content } = await scrapeArticle(link);
   const words = content
     .filter(
       (el) =>

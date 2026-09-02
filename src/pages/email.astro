@@ -28,7 +28,7 @@ const scraped = (
       return null;
     }
   })
-).filter((article) => article !== null);
+).filter((post) => post !== null);
 ---
 
 <meta charset="utf-8" />
@@ -66,22 +66,22 @@ const scraped = (
 
 <table>
   {
-    scraped?.map((article) => (
+    scraped?.map((post) => (
       <tr>
         <td style="vertical-align: top; padding: 0 0 12px 0;">
           <img
-            src={toSizedImage(article.image, EMAIL_IMAGE_WIDTH)}
+            src={toSizedImage(post.image, EMAIL_IMAGE_WIDTH)}
             style="width: 150px"
           />
         </td>
         <td style="vertical-align: top; padding: 0 0 12px 12px;">
           <strong>
-            <a href={article.link} set:html={article.title} />
+            <a href={post.link} set:html={post.title} />
           </strong>
           <br />
-          Article by {article.author}
+          Article by {post.author}
           <br />
-          Image by {article.imageCredits}
+          Image by {post.imageCredits}
         </td>
       </tr>
     ))

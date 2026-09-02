@@ -19,14 +19,14 @@ if (param !== slug) return Astro.redirect(`/generate?article=${slug}`);
    reload — say so out loud rather than leaving it to a cdn default */
 Astro.response.headers.set("cache-control", "private, no-store");
 
-let article;
+let post;
 try {
-  article = await scrapeArticle(link);
+  post = await scrapeArticle(link);
 } catch (e) {
   return Astro.redirect("/?error");
 }
 
-const { title, author, image, imageCredits, content } = article;
+const { title, author, image, imageCredits, content } = post;
 ---
 
 <Root preloadSlideFonts>

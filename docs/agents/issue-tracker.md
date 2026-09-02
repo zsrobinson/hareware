@@ -13,6 +13,31 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
+## Issue relationships
+
+Parent/child and blocking relationships live in GitHub's own graph, not in issue bodies.
+
+- **Sub-issue**: `gh api --method POST repos/<owner>/<repo>/issues/<parent>/sub_issues -F sub_issue_id=<child-db-id>`
+- **Blocking**: `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`
+
+Both take the issue's numeric **database id** (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`), never the `#number` or `node_id`. GitHub reports open blockers as `issue_dependencies_summary.blocked_by`, which is the live gate: a ticket is unblocked once every blocker is closed.
+
+Issue bodies therefore run straight from what to build into acceptance criteria. Where a skill's template carries `## Parent` or `## Blocked by` sections — those exist for trackers with no native support — wire the relationship and leave the sections out, so each fact has one home.
+
+Naming another issue in prose stays welcome where it explains *why* two tickets relate. The graph records that they relate; it cannot record why.
+
+## Finding work
+
+`is:blocked` is dependency-aware in issue search, though GitHub's search-qualifier documentation omits it. The frontier — everything startable right now — is:
+
+```sh
+gh issue list --search 'is:open has:parent-issue -is:blocked'
+```
+
+`has:parent-issue` drops the parent issues, which are never work in themselves. Narrow with `label:ready-for-agent no:assignee` for unclaimed agent work, or `label:ready-for-human` for work needing judgement.
+
+`blocked-by:<n>` and `parent-issue:<n>` both parse and silently return nothing. Only the `has:`, `no:` and `is:` forms are live.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
@@ -39,7 +64,7 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
 
 - **Map**: a single issue labelled `wayfinder:map`, holding the Notes / Decisions-so-far / Fog body. `gh issue create --label wayfinder:map`.
 - **Child ticket**: an issue linked to the map as a GitHub sub-issue (`gh api` on the sub-issues endpoint). Where sub-issues aren't enabled, add the child to a task list in the map body and put `Part of #<map>` at the top of the child body. Labels: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, the ticket is assigned to the driving dev.
-- **Blocking**: GitHub's **native issue dependencies**, the canonical, UI-visible representation. Add an edge with `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`, where `<blocker-db-id>` is the blocker's numeric **database id** (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`, _not_ the `#number` or `node_id`). GitHub reports `issue_dependencies_summary.blocked_by` (open blockers only, the live gate). Where dependencies aren't available, fall back to a `Blocked by: #<n>, #<n>` line at the top of the child body. A ticket is unblocked when every blocker is closed.
+- **Blocking**: GitHub's native issue dependencies — see **Issue relationships** above for the call and the database-id gotcha. A ticket is unblocked when every blocker is closed.
 - **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (`issue_dependencies_summary.blocked_by > 0`, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
 - **Claim**: `gh issue edit <n> --add-assignee @me`, the session's first write.
 - **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far.

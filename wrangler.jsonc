@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "hareware",
+  "compatibility_date": "2026-09-02",
+
+  // linkedom and fast-xml-parser both reach for node builtins
+  "compatibility_flags": ["nodejs_compat"],
+
+  /**
+   * vercel's cdn honoured the cache-control headers the pages set on their own
+   * responses; cloudflare does not cache a worker's own response unless asked.
+   * this is the ask — with it, `s-maxage` on / and /email means what it did
+   * before, and `private, no-store` on /generate and /magazine still opts out
+   *
+   * a cache hit skips the worker altogether, which is also what keeps the feed
+   * pages off wordpress.com's rate limit
+   */
+  "cache": { "enabled": true },
+
+  "observability": { "enabled": true },
+
+  // main, assets and the build output are filled in by @astrojs/cloudflare
+}

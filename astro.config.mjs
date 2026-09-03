@@ -30,5 +30,23 @@ export default defineConfig({
 
   vite: {
     plugins: [tailwindcss()],
+
+    /*
+      both of these are pulled in by astro at request time rather than at boot,
+      so vite's ssr optimizer discovers them once the first request arrives,
+      re-bundles, and reloads the program underneath the running workerd — which
+      then reaches for a chunk hash that no longer exists and the dev server
+      dies before it ever serves a page. naming them up front means the optimizer
+      finishes before the worker starts and never has to reload
+
+      `noop` is the image service `imageService: "passthrough"` selects. drop
+      these only after checking a cold `rm -rf node_modules/.vite && astro dev`
+      still logs no "dependency optimized" line
+    */
+    ssr: {
+      optimizeDeps: {
+        include: ["astro/assets/services/noop", "astro/app/manifest"],
+      },
+    },
   },
 });

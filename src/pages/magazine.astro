@@ -20,27 +20,37 @@ import { scrapeArticle } from "../lib/scrape-article";
 import { getTaggedText } from "../lib/get-tagged-text";
 
 const param = Astro.url.searchParams.get("article") || "";
+const invalid = Astro.url.searchParams.get("error") !== null;
 
-/* check that we have a good article */
-const link = toArticleLink(param);
-if (!link) return Astro.redirect("/?magazine-error");
-
-/* tidy up the url when someone hands us a full permalink */
-const slug = toArticleSlug(link);
-if (param !== slug) return Astro.redirect(`/magazine?article=${slug}`);
-
-/* same as /generate: the export has to reflect the article as it stands now */
+/* same as /generate: the export has to reflect the article as it stands now,
+   and this renders who you are into the sidebar either way */
 Astro.response.headers.set("cache-control", "private, no-store");
 
-let post;
-try {
-  post = await scrapeArticle(link);
-} catch (e) {
-  return Astro.redirect("/?magazine-error");
+/* the exporter has two states, and asking for an article is the first of them
+   rather than a bounce back to the post generator's landing page */
+let link: string | undefined;
+let post: Awaited<ReturnType<typeof scrapeArticle>> | null = null;
+
+if (param) {
+  /* check that we have a good article */
+  link = toArticleLink(param);
+  if (!link) return Astro.redirect("/magazine?error");
+
+  /* tidy up the url when someone hands us a full permalink */
+  const slug = toArticleSlug(link);
+  if (param !== slug) return Astro.redirect(`/magazine?article=${slug}`);
+
+  try {
+    post = await scrapeArticle(link);
+  } catch (e) {
+    return Astro.redirect("/magazine?error");
+  }
 }
 
-const { title, author, image, imageCredits, section, date, body } = post;
-const { output, unprocessed } = getTaggedText(body);
+const { title, author, image, imageCredits, section, date, body } = post ?? {};
+const { output, unprocessed } = body
+  ? getTaggedText(body)
+  : { output: "", unprocessed: new Set<string>() };
 const session = getSession(Astro.request);
 ---
 
@@ -60,87 +70,103 @@ const session = getSession(Astro.request);
       </Button>
     </form>
 
-    <FormItem>
-      <TypeIcon className="size-5 min-w-max" />
-      <FormLabel>Title</FormLabel>
-      <Input type="text" value={title} id="title" readOnly />
-      <CopyButton id="title" client:load />
-    </FormItem>
-
-    <FormItem>
-      <AlignCenterIcon className="size-5 min-w-max" />
-      <FormLabel>Article Byline</FormLabel>
-      <Input
-        type="text"
-        value={`${section?.toUpperCase()} | Article by ${author}\t${date}`}
-        id="article-by"
-        readOnly
-      />
-      <CopyButton id="article-by" client:load />
-    </FormItem>
-
-    <FormItem>
-      <AlignCenterIcon className="size-5 min-w-max" />
-      <FormLabel>Image Byline</FormLabel>
-      <Input
-        type="text"
-        value={`Image by ${imageCredits}`}
-        id="image-by"
-        readOnly
-      />
-      <CopyButton id="image-by" client:load />
-    </FormItem>
-
-    <div class="my-4 flex items-start gap-2 overflow-hidden">
-      <FormItem>
-        <ImageIcon className="size-5 min-w-max" />
-        <FormLabel>Image</FormLabel>
-      </FormItem>
-      <img
-        src={toSizedImage(image, PREVIEW_IMAGE_WIDTH)}
-        class="bg-secondary min-w-0 rounded-md object-contain"
-      />
-    </div>
-
-    <FormItem>
-      <FileTextIcon className="size-5 min-w-max" />
-      <FormLabel>Content</FormLabel>
-      <Button id="button" variant="outline" className="w-full">
-        Download Text File
-      </Button>
-    </FormItem>
-
     {
-      unprocessed.size > 0 && (
-        <div class="flex items-start gap-2 text-sm text-amber-600">
-          <TriangleAlertIcon className="inline size-5 min-w-max p-0.5" />
-          <p>
-            Some content uses special formatting and may not be accurately
-            represented. (tag{unprocessed.size > 1 && "s"}:
-            {[...unprocessed]
-              .map((tag) => (
-                <a
-                  href={`https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/${tag.toLowerCase()}`}
-                  target="_blank"
-                  class="whitespace inline-block underline"
-                >
-                  {tag.toLowerCase()}
-                </a>
-              ))
-              .reduce((acc, x) => (acc === null ? [x] : [acc, ", ", x]), null)}
-            )
-          </p>
+      invalid && (
+        <div class="flex items-center gap-2 pb-2 text-sm font-medium text-red-500">
+          <TriangleAlertIcon className="mt-0.5" />
+          <span>Please double check your link and try again</span>
         </div>
       )
     }
 
-    <div class="text-muted-foreground flex items-start gap-2 text-sm">
-      <InfoIcon className="inline size-5 min-w-max p-0.5" />
-      <p>
-        To import into InDesign, go to “File → Place” and select the text file.
-        Make sure to check that all content gets imported correctly!
-      </p>
-    </div>
+    {
+      post && (
+        <>
+          <FormItem>
+            <TypeIcon className="size-5 min-w-max" />
+            <FormLabel>Title</FormLabel>
+            <Input type="text" value={title} id="title" readOnly />
+            <CopyButton id="title" client:load />
+          </FormItem>
+
+          <FormItem>
+            <AlignCenterIcon className="size-5 min-w-max" />
+            <FormLabel>Article Byline</FormLabel>
+            <Input
+              type="text"
+              value={`${section?.toUpperCase()} | Article by ${author}\t${date}`}
+              id="article-by"
+              readOnly
+            />
+            <CopyButton id="article-by" client:load />
+          </FormItem>
+
+          <FormItem>
+            <AlignCenterIcon className="size-5 min-w-max" />
+            <FormLabel>Image Byline</FormLabel>
+            <Input
+              type="text"
+              value={`Image by ${imageCredits}`}
+              id="image-by"
+              readOnly
+            />
+            <CopyButton id="image-by" client:load />
+          </FormItem>
+
+          <div class="my-4 flex items-start gap-2 overflow-hidden">
+            <FormItem>
+              <ImageIcon className="size-5 min-w-max" />
+              <FormLabel>Image</FormLabel>
+            </FormItem>
+            <img
+              src={toSizedImage(image, PREVIEW_IMAGE_WIDTH)}
+              class="bg-secondary min-w-0 rounded-md object-contain"
+            />
+          </div>
+
+          <FormItem>
+            <FileTextIcon className="size-5 min-w-max" />
+            <FormLabel>Content</FormLabel>
+            <Button id="button" variant="outline" className="w-full">
+              Download Text File
+            </Button>
+          </FormItem>
+
+          {unprocessed.size > 0 && (
+            <div class="flex items-start gap-2 text-sm text-amber-600">
+              <TriangleAlertIcon className="inline size-5 min-w-max p-0.5" />
+              <p>
+                Some content uses special formatting and may not be accurately
+                represented. (tag{unprocessed.size > 1 && "s"}:
+                {[...unprocessed]
+                  .map((tag) => (
+                    <a
+                      href={`https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/${tag.toLowerCase()}`}
+                      target="_blank"
+                      class="whitespace inline-block underline"
+                    >
+                      {tag.toLowerCase()}
+                    </a>
+                  ))
+                  .reduce(
+                    (acc, x) => (acc === null ? [x] : [acc, ", ", x]),
+                    null,
+                  )}
+                )
+              </p>
+            </div>
+          )}
+
+          <div class="text-muted-foreground flex items-start gap-2 text-sm">
+            <InfoIcon className="inline size-5 min-w-max p-0.5" />
+            <p>
+              To import into InDesign, go to “File → Place” and select the text
+              file. Make sure to check that all content gets imported correctly!
+            </p>
+          </div>
+        </>
+      )
+    }
   </div>
 
   <script define:vars={{ output, title }} is:inline>

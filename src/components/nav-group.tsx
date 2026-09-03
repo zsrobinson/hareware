@@ -19,7 +19,7 @@ export function NavGroup({
   return (
     <ul className="flex flex-col gap-0.5" aria-label={label}>
       {items.map((item) => {
-        const active = isActive(pathname, item.href);
+        const active = isActive(pathname, item);
 
         return (
           <li key={item.href}>

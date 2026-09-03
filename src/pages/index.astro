@@ -15,7 +15,6 @@ const pageParam = Number(Astro.url.searchParams.get("page") ?? "1");
 const page = isNaN(pageParam) || pageParam < 0 ? 1 : pageParam;
 
 const error = Astro.url.searchParams.get("error") !== null;
-const magazineError = Astro.url.searchParams.get("magazine-error") !== null;
 
 /* the list of articles is not the article. worst case a just-published piece is
    missing from it for half a minute, and its link still works if pasted in */
@@ -105,39 +104,6 @@ const articles = await getRecentArticles(page);
     Open Creator
     <ChevronRightIcon />
   </Link>
-
-  <h2 class="pt-8 pb-2 font-semibold">
-    Or, paste an article link to export article content for InDesign:
-  </h2>
-
-  <form action="/magazine" class="ml-4 flex gap-2">
-    <Input
-      type="text"
-      name="article"
-      placeholder="Article Link"
-      className="max-w-72 font-mono"
-    />
-    <Button type="submit" variant="secondary">
-      Export Content
-      <ChevronRightIcon />
-    </Button>
-  </form>
-
-  {
-    magazineError && (
-      <div class="ml-4 flex items-center gap-2 pt-2 text-sm font-medium text-red-500">
-        <TriangleAlertIcon className="mt-0.5" />
-        <span>Please double check your link and try again</span>
-      </div>
-    )
-  }
-
-  <h2 class="pt-8 pb-2 font-semibold">Or, count words for articles in bulk:</h2>
-
-  <Link variant="secondary" href="/words" className="ml-4" data-astro-prefetch>
-    Count Words
-    <ChevronRightIcon />
-  </Link>
 </Dashboard>
 
 <script>
@@ -146,13 +112,18 @@ const articles = await getRecentArticles(page);
      survive the swaps and only need registering once */
   let keepScroll: number | null = null;
 
+  const content = () => document.getElementById("content");
+
   document.addEventListener("astro:before-preparation", (event) => {
     const source = (event as any).sourceElement as Element | undefined;
-    keepScroll = source?.closest("[data-keep-scroll]") ? window.scrollY : null;
+    keepScroll = source?.closest("[data-keep-scroll]")
+      ? (content()?.scrollTop ?? null)
+      : null;
   });
 
   document.addEventListener("astro:after-swap", () => {
-    if (keepScroll !== null) document.documentElement.scrollTop = keepScroll;
+    const el = content();
+    if (keepScroll !== null && el) el.scrollTop = keepScroll;
     keepScroll = null;
   });
 </script>

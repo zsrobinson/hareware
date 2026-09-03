@@ -79,6 +79,7 @@ const collapsed = Astro.isPrerendered
         session={session}
         cached={cached}
         pathname={Astro.url.pathname}
+        returnTo={`${Astro.url.pathname}${Astro.url.search}`}
       />
 
       <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -92,7 +93,8 @@ const collapsed = Astro.isPrerendered
           <SidebarSheet
             client:media="(max-width: 767px)"
             pathname={Astro.url.pathname}
-            signedIn={session !== null}
+            returnTo={`${Astro.url.pathname}${Astro.url.search}`}
+            session={session}
           />
 
           <button

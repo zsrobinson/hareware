@@ -19,6 +19,10 @@
 
   "observability": { "enabled": true },
 
+  // Public OAuth application identifier. The README setup checklist replaces
+  // this placeholder after the club-owned Discord application is created.
+  "vars": { "DISCORD_CLIENT_ID": "" },
+
   // what `npm create cloudflare -- --framework=astro` declares. the adapter
   // would inject all three, but naming them keeps plain `wrangler` commands
   // working against this file on their own

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavGroup } from "~/components/nav-group";
 import { editorialNav } from "~/lib/nav";
-import { useSignedIn } from "~/lib/use-session";
+import { useSession } from "~/lib/use-session";
 
 /*
   `/` and `/email` are cached at the edge, so their html has to be identical
@@ -13,7 +13,7 @@ import { useSignedIn } from "~/lib/use-session";
   server-side, which is why this takes no props: it is only ever the fallback
 */
 export function EditorialNav() {
-  const signedIn = useSignedIn();
+  const signedIn = useSession() !== null;
   const [pathname, setPathname] = useState("");
 
   useEffect(() => setPathname(window.location.pathname), []);

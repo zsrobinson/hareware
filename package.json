@@ -6,6 +6,7 @@
     "dev": "astro dev",
     "start": "astro dev",
     "build": "astro check && astro build",
+    "test": "vitest run",
     "preview": "astro preview",
     "deploy": "astro build && wrangler deploy",
     "astro": "astro"
@@ -44,6 +45,7 @@
     "prettier-plugin-astro": "^0.14.1",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "vite": "^8.2.2",
+    "vitest": "^5.0.0",
     "wrangler": "^4.128.0"
   }
 }

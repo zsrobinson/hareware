@@ -2,6 +2,7 @@
 import { Textarea } from "~/components/ui/textarea";
 import { Button } from "~/components/ui/button";
 import Dashboard from "~/layouts/dashboard.astro";
+import { getSessionSecret } from "~/lib/auth-config";
 import { getSession } from "~/lib/session";
 import {
   ChevronRightIcon,
@@ -61,7 +62,7 @@ if (articlesStr && !error) {
    theirs alone — the scraping below is per-request anyway */
 Astro.response.headers.set("cache-control", "private, no-store");
 
-const session = getSession(Astro.request);
+const session = await getSession(Astro.request, getSessionSecret());
 ---
 
 <Dashboard title="Word Counter" session={session}>

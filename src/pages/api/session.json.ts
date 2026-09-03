@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { getSessionSecret } from "~/lib/auth-config";
 import { getSession } from "~/lib/session";
 
 /*
@@ -6,13 +7,19 @@ import { getSession } from "~/lib/session";
   sidebar cannot know from the markup whether to show the editorial nav. it
   asks here instead, which is never cached
 */
-export const GET: APIRoute = ({ request }) => {
-  const session = getSession(request);
+export const GET: APIRoute = async ({ request }) => {
+  const session = await getSession(request, getSessionSecret());
 
-  return new Response(JSON.stringify({ signedIn: session !== null }), {
-    headers: {
-      "content-type": "application/json",
-      "cache-control": "private, no-store",
+  return new Response(
+    JSON.stringify({
+      signedIn: session !== null,
+      discordUserId: session?.discordUserId ?? null,
+    }),
+    {
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "private, no-store",
+      },
     },
-  });
+  );
 };

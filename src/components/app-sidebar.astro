@@ -5,8 +5,13 @@ import { NavGroup } from "~/components/nav-group";
 import { editorialNav, toolsNav } from "~/lib/nav";
 import type { Session } from "~/lib/session";
 
-type Props = { session: Session | null; pathname: string; cached: boolean };
-const { session, pathname, cached } = Astro.props;
+type Props = {
+  session: Session | null;
+  pathname: string;
+  returnTo: string;
+  cached: boolean;
+};
+const { session, pathname, returnTo, cached } = Astro.props;
 ---
 
 {
@@ -64,5 +69,5 @@ const { session, pathname, cached } = Astro.props;
     <NavGroup items={toolsNav} pathname={pathname} label="Tools" />
   </nav>
 
-  <SidebarAccount client:idle signedIn={session !== null} />
+  <SidebarAccount client:idle session={session} returnTo={returnTo} />
 </aside>

@@ -41,3 +41,51 @@ npx wrangler versions upload   # uploads a version, prints a preview url
 
 Pushes deploy through Cloudflare Workers Builds. `npm run deploy` publishes from
 a terminal when you need it.
+
+## Discord OAuth setup
+
+OAuth uses one Discord application for localhost and production. This is a
+one-time setup; its automatically created bot user is left untouched until the
+bot itself is implemented.
+
+1. Enable two-factor authentication on your Discord account, then create or
+   select the club's [Developer Team](https://discord.com/developers/teams).
+2. [Create the HareWare application](https://discord.com/developers/applications?new_application=true)
+   under that team. On **OAuth2 → General**, copy its Client ID into
+   `DISCORD_CLIENT_ID` in `wrangler.jsonc`.
+3. Copy the Client Secret into a new ignored `.dev.vars` file. Generate the
+   session key with `openssl rand -hex 32` and put that in the same file:
+
+   ```dotenv
+   DISCORD_CLIENT_SECRET="paste the Discord client secret"
+   SESSION_SECRET="paste the generated value"
+   ```
+
+4. Under **OAuth2 → Redirects**, add both exact callback URLs and save changes:
+
+   ```text
+   http://localhost:4321/auth/discord/callback
+   https://<production-origin>/auth/discord/callback
+   ```
+
+   Discord matches these exactly, including scheme and trailing slash. Do not
+   add preview deployment URLs.
+
+5. Authenticate Wrangler and upload the two values in `.dev.vars` as deployed
+   Worker runtime secrets:
+
+   ```sh
+   npx wrangler login
+   npx wrangler whoami
+   npx wrangler secret bulk .dev.vars
+   ```
+
+   The bulk command uploads every value in that file, creates one Worker
+   version, and deploys it immediately. These must be runtime secrets—not
+   Workers Builds secrets, which exist only while the project is building.
+
+6. Run `npm run dev`, then verify sign-in, the displayed Discord ID, denial, and
+   sign-out locally. Repeat the same checks on production.
+
+Discord setup reference: [OAuth2 documentation](https://docs.discord.com/developers/topics/oauth2).
+Cloudflare setup reference: [Workers secrets](https://developers.cloudflare.com/workers/configuration/secrets/).

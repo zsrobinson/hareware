@@ -1,8 +1,5 @@
 import { useAutoAnimate } from "@formkit/auto-animate/react";
-import {
-  TriangleAlertIcon,
-  InfoIcon,
-} from "lucide-react";
+import { TriangleAlertIcon, InfoIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLayoutState } from "~/lib/layout-state";
 import { useDebouncedEffect } from "../lib/use-debounced-effect";

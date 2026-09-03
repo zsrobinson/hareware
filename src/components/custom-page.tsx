@@ -1,10 +1,6 @@
 import { useState } from "react";
 import { FormItem, FormLabel } from "./options-form";
-import {
-  ChevronRightIcon,
-  FileIcon,
-  AlignCenterIcon,
-} from "lucide-react";
+import { ChevronRightIcon, FileIcon, AlignCenterIcon } from "lucide-react";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { GeneratePage } from "./generate-page";

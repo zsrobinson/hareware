@@ -10,8 +10,7 @@ export function CopyButton({ id }: { id: string }) {
       onClick={() => {
         console.log("HIIII");
         const input = document.getElementById(id) as
-          | HTMLInputElement
-          | undefined;
+          HTMLInputElement | undefined;
         input?.select();
         input?.setSelectionRange(0, 99999);
         navigator.clipboard.writeText(input?.value || "");

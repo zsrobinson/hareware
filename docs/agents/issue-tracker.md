@@ -26,6 +26,35 @@ Issue bodies therefore run straight from what to build into acceptance criteria.
 
 Naming another issue in prose stays welcome where it explains *why* two tickets relate. The graph records that they relate; it cannot record why.
 
+## Recording a design change
+
+A ticket's design changes while it is open. Where the change gets written is
+decided by who else needs to know, never by what is convenient at the time.
+
+- **Only this ticket is affected** — edit the **issue body**. The acceptance
+  criteria are the contract an agent reads via `gh issue view`; a correction
+  living only in a comment leaves the criteria stating something false. Change
+  the body, then comment with the reasoning. GitHub keeps the body's edit
+  history, so nothing is lost.
+- **Dependent tickets are affected** — write an **ADR** under `docs/adr/`, then
+  cite it from the body of every affected issue. `docs/agents/domain.md` already
+  requires every skill to read the relevant ADRs before exploring, which makes
+  `docs/adr/` the one surface downstream readers are guaranteed to reach. The
+  issue graph records *that* two tickets relate; it cannot carry a decision
+  between them.
+- **What a word means changed** — `CONTEXT.md`, same reasoning.
+
+**Not the pull request.** A PR records how something was built, not what was
+decided, and an agent picking up a dependent ticket reads that ticket's body and
+the ADRs — never a merged PR from a ticket upstream of it. A decision that
+exists only in a PR description is effectively deleted on merge. The PR
+*carries* the ADR, in the same commit as the code honouring it; it is not the
+place the decision lives.
+
+Name the dependent issue numbers in that PR's description. GitHub drops a
+cross-reference into each of their timelines, so a downstream ticket visibly
+gains "the design moved, here is where" without anyone tracking it by hand.
+
 ## Finding work
 
 `is:blocked` is dependency-aware in issue search, though GitHub's search-qualifier documentation omits it. The frontier — everything startable right now — is:

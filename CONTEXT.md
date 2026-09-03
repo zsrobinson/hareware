@@ -75,18 +75,20 @@ left off.
 
 ## Status
 
-How far an Article has moved through the writing process. One value at a time,
-and it only ever moves forward, except when an Article is bounced.
+How far an Article has moved through the writing process, plus — once it is
+**on WordPress** — its publication state. One value at a time, and it only ever
+moves forward, except when an Article is bounced.
 
 - **Backlog** — an idea, not yet approved to be written
 - **Approved** — a Section Editor has approved the idea
 - **Written** — a draft exists and has gone to the Section Editor
 - **Section Edited** — the Section Editor has approved the writing
 - **Managing Edited** — the Managing Editor has passed it for grammar and brand
+- **Scheduled**, **Published** — facts about the Article's WordPress Post,
+  mirrored in by a scheduled job rather than chosen by hand
 
-Being **scheduled** and being **published** are not Status values: they are facts
-about the Article's WordPress Post, and are read from WordPress rather than
-tracked by hand.
+The last two are never picked by a person; a human setting Status by hand only
+ever chooses among the first five.
 
 ## Image Status
 
@@ -104,11 +106,14 @@ The name printed on a published Article — which is not necessarily the name of
 the person who wrote it. A writer may publish under a pseudonym, and so may an
 image creator.
 
-An Article holds its own Byline as an optional override, alongside a relation to
-the real Member who wrote it. A pseudonym is usually chosen for what suits that
-particular piece rather than being a fixed identity a person always writes
-under, so it lives on the Article, not on the Member. Where the override is
-empty, the Byline is the Member's real name.
+An Article carries the Byline as text, always filled, plus a separate relation
+to the Member who actually wrote it — the relation may be empty or hold more
+than one Member, for co-Bylines. The text is not merely a pseudonym override:
+it is authoritative for what gets printed, kept as its own column rather than
+derived from the Member, so a published Byline stays frozen and the Articles
+table stays readable without resolving a relation per row. See ADR 0004. The
+same split applies to image credits, as Image Byline text and an Image Crew
+relation.
 
 WordPress has no idea about any of this: on the website a Byline is simply text
 inside the article body. Notion holds both the Byline and the real member behind
@@ -118,13 +123,15 @@ The real name behind a pseudonymous Byline never reaches WordPress.
 
 ## Member
 
-A person in the club, identified by their Discord account. Every person who
-writes or works social/eboard has a row, so an Article's real-author relation
-always has someone to point to.
+A person in the club, identified by their Discord account.
 
 Members carry the things the club needs to remember about a person: their real
-name and their Discord ID. What a Member is allowed to *do* is not recorded
-here — that is read live from their
-Discord roles (@Editor-in-Chief, @Managing Editor, @Section Editor, @Media
-Editor), so that a promotion in Discord takes effect without anyone updating a
-second list.
+name and the pseudonyms that are theirs, so the app can offer a dropdown when
+someone sets a Byline. What a Member is allowed to *do* is not recorded here —
+that is read live from their Discord roles (@Editor-in-Chief, @Managing Editor,
+@Section Editor, @Media Editor), so that a promotion in Discord takes effect
+without anyone updating a second list.
+
+Historical Articles are not backported to link a Member, and alumni get no stub
+row — Members is keyed by Discord user ID, which alumni can no longer supply.
+See ADR 0004.

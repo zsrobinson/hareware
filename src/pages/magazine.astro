@@ -1,13 +1,13 @@
 ---
 import {
   ChevronRightIcon,
-  ExclamationTriangleIcon,
+  TriangleAlertIcon,
   FileTextIcon,
   ImageIcon,
-  InfoCircledIcon,
-  TextAlignCenterIcon,
-  TextIcon,
-} from "@radix-ui/react-icons";
+  InfoIcon,
+  AlignCenterIcon,
+  TypeIcon,
+} from "lucide-react";
 import { FormItem, FormLabel } from "~/components/options-form";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -59,14 +59,14 @@ const { output, unprocessed } = getTaggedText(body);
     </form>
 
     <FormItem>
-      <TextIcon className="size-5 min-w-max" />
+      <TypeIcon className="size-5 min-w-max" />
       <FormLabel>Title</FormLabel>
       <Input type="text" value={title} id="title" readOnly />
       <CopyButton id="title" client:load />
     </FormItem>
 
     <FormItem>
-      <TextAlignCenterIcon className="size-5 min-w-max" />
+      <AlignCenterIcon className="size-5 min-w-max" />
       <FormLabel>Article Byline</FormLabel>
       <Input
         type="text"
@@ -78,7 +78,7 @@ const { output, unprocessed } = getTaggedText(body);
     </FormItem>
 
     <FormItem>
-      <TextAlignCenterIcon className="size-5 min-w-max" />
+      <AlignCenterIcon className="size-5 min-w-max" />
       <FormLabel>Image Byline</FormLabel>
       <Input
         type="text"
@@ -111,7 +111,7 @@ const { output, unprocessed } = getTaggedText(body);
     {
       unprocessed.size > 0 && (
         <div class="flex items-start gap-2 text-sm text-amber-600">
-          <ExclamationTriangleIcon className="inline size-5 min-w-max p-0.5" />
+          <TriangleAlertIcon className="inline size-5 min-w-max p-0.5" />
           <p>
             Some content uses special formatting and may not be accurately
             represented. (tag{unprocessed.size > 1 && "s"}:
@@ -133,7 +133,7 @@ const { output, unprocessed } = getTaggedText(body);
     }
 
     <div class="text-muted-foreground flex items-start gap-2 text-sm">
-      <InfoCircledIcon className="inline size-5 min-w-max p-0.5" />
+      <InfoIcon className="inline size-5 min-w-max p-0.5" />
       <p>
         To import into InDesign, go to “File → Place” and select the text file.
         Make sure to check that all content gets imported correctly!

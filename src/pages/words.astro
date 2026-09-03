@@ -4,10 +4,10 @@ import { Button } from "~/components/ui/button";
 import Root from "~/layouts/root.astro";
 import {
   ChevronRightIcon,
-  ExclamationTriangleIcon,
+  TriangleAlertIcon,
   Link2Icon,
   QuoteIcon,
-} from "@radix-ui/react-icons";
+} from "lucide-react";
 import { toArticleLink } from "~/lib/article-url";
 import { getWordCount } from "~/lib/get-word-count";
 import { scrapeArticle } from "~/lib/scrape-article";
@@ -77,7 +77,7 @@ if (articlesStr && !error) {
       {
         error && (
           <div class="ml-4 flex items-center gap-2 pt-2 text-sm font-medium text-red-500">
-            <ExclamationTriangleIcon className="mt-0.5" />
+            <TriangleAlertIcon className="mt-0.5" />
             <span>{error}</span>
           </div>
         )

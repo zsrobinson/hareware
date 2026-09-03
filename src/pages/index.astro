@@ -2,8 +2,8 @@
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
-  ExclamationTriangleIcon,
-} from "@radix-ui/react-icons";
+  TriangleAlertIcon,
+} from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Link } from "~/components/ui/link";
@@ -46,7 +46,7 @@ const articles = await getRecentArticles(page);
   {
     error && (
       <div class="ml-4 flex items-center gap-2 pt-2 text-sm font-medium text-red-500">
-        <ExclamationTriangleIcon className="mt-0.5" />
+        <TriangleAlertIcon className="mt-0.5" />
         <span>Please double check your link and try again</span>
       </div>
     )
@@ -91,7 +91,7 @@ const articles = await getRecentArticles(page);
       </>
     ) : (
       <div class="ml-4 flex items-center gap-2 text-sm font-medium text-red-500">
-        <ExclamationTriangleIcon className="mt-0.5" />
+        <TriangleAlertIcon className="mt-0.5" />
         <span>Cannot get recent articles</span>
       </div>
     )
@@ -126,7 +126,7 @@ const articles = await getRecentArticles(page);
   {
     magazineError && (
       <div class="ml-4 flex items-center gap-2 pt-2 text-sm font-medium text-red-500">
-        <ExclamationTriangleIcon className="mt-0.5" />
+        <TriangleAlertIcon className="mt-0.5" />
         <span>Please double check your link and try again</span>
       </div>
     )

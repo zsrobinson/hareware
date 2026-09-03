@@ -1,15 +1,15 @@
 import {
-  DimensionsIcon,
+  ProportionsIcon,
   ExternalLinkIcon,
   ImageIcon,
-  InfoCircledIcon,
-  OpacityIcon,
-  ReloadIcon,
-  SizeIcon,
-  StackIcon,
-  TextAlignCenterIcon,
-  TrackNextIcon,
-} from "@radix-ui/react-icons";
+  InfoIcon,
+  BlendIcon,
+  RefreshCwIcon,
+  ScalingIcon,
+  LayersIcon,
+  AlignCenterIcon,
+  SkipForwardIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { presets } from "~/lib/color-presets";
 import { useLayoutState } from "~/lib/layout-state";
@@ -25,6 +25,12 @@ import {
 } from "./ui/select";
 import { Slider } from "./ui/slider";
 import { Switch } from "./ui/switch";
+
+/* base ui's slider hands back a tuple when it has several thumbs and a bare
+   number when it has one. every slider here has one */
+function toSingle(value: number | readonly number[]) {
+  return typeof value === "number" ? value : value[0];
+}
 
 export function FormItem({ children }: { children: ReactNode }) {
   return <div className="flex h-9 items-center gap-2">{children}</div>;
@@ -45,12 +51,15 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
     <div className="max-w-[416px] grow">
       <div className="flex grow flex-col gap-2">
         <FormItem>
-          <StackIcon className="size-5 min-w-max" />
+          <LayersIcon className="size-5 min-w-max" />
           <FormLabel>Preset</FormLabel>
           <Select
             value={currentPreset}
             onValueChange={(value) => {
-              if (Object.keys(presets).includes(value)) {
+              if (
+                typeof value === "string" &&
+                Object.keys(presets).includes(value)
+              ) {
                 const preset = presets[value as keyof typeof presets];
                 state.setTextColor(preset.textColor);
                 state.setBgColor(preset.bgColor);
@@ -73,7 +82,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
         </FormItem>
 
         <FormItem>
-          <OpacityIcon className="size-5 min-w-max" />
+          <BlendIcon className="size-5 min-w-max" />
           <FormLabel>Text Color</FormLabel>
           <Input
             type="color"
@@ -83,7 +92,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
         </FormItem>
 
         <FormItem>
-          <OpacityIcon className="size-5 min-w-max" />
+          <BlendIcon className="size-5 min-w-max" />
           <FormLabel>Background Color</FormLabel>
           <Input
             type="color"
@@ -93,11 +102,11 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
         </FormItem>
 
         <FormItem>
-          <DimensionsIcon className="size-5 min-w-max" />
+          <ProportionsIcon className="size-5 min-w-max" />
           <FormLabel>Aspect Ratio</FormLabel>
           <Select
             value={state.ratio}
-            onValueChange={(value) => state.setRatio(value)}
+            onValueChange={(value) => value && state.setRatio(value)}
           >
             <SelectTrigger>
               <SelectValue />
@@ -116,7 +125,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
 
       <div className="flex flex-col gap-2">
         <FormItem>
-          <TextAlignCenterIcon className="size-5 min-w-max" />
+          <AlignCenterIcon className="size-5 min-w-max" />
           <FormLabel>Title Content</FormLabel>
           <Input
             type="text"
@@ -126,11 +135,11 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
         </FormItem>
 
         <FormItem>
-          <SizeIcon className="size-5 min-w-max" />
+          <ScalingIcon className="size-5 min-w-max" />
           <FormLabel>Title Size</FormLabel>
           <Slider
             value={[state.titleSize]}
-            onValueChange={(value) => state.setTitleSize(value.at(0)!)}
+            onValueChange={(value) => state.setTitleSize(toSingle(value))}
             min={16}
             max={48}
             step={1}
@@ -143,7 +152,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
 
       <div className="flex flex-col gap-2">
         <FormItem>
-          <TextAlignCenterIcon className="size-5 min-w-max" />
+          <AlignCenterIcon className="size-5 min-w-max" />
           <FormLabel>Article Byline</FormLabel>
           <Input
             type="text"
@@ -153,7 +162,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
         </FormItem>
 
         <FormItem>
-          <TextAlignCenterIcon className="size-5 min-w-max" />
+          <AlignCenterIcon className="size-5 min-w-max" />
           <FormLabel>Image Byline</FormLabel>
           <Input
             type="text"
@@ -163,11 +172,11 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
         </FormItem>
 
         <FormItem>
-          <SizeIcon className="size-5 min-w-max" />
+          <ScalingIcon className="size-5 min-w-max" />
           <FormLabel>Byline Size</FormLabel>
           <Slider
             value={[state.bylineSize]}
-            onValueChange={(value) => state.setBylineSize(value.at(0)!)}
+            onValueChange={(value) => state.setBylineSize(toSingle(value))}
             min={12}
             max={24}
             step={1}
@@ -185,7 +194,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
             className="w-full"
             onClick={() => state.reset()}
           >
-            <ReloadIcon className="mr-2" />
+            <RefreshCwIcon className="mr-2" />
             Reset Options
           </Button>
 
@@ -194,7 +203,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
             className="w-full"
             onClick={() => state.incParagraphShift()}
           >
-            <TrackNextIcon className="mr-2" />
+            <SkipForwardIcon className="mr-2" />
             Shift Paragraph
           </Button>
         </div>
@@ -205,19 +214,17 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
               variant="secondary"
               className="w-full"
               onClick={() => state.reset()}
-              asChild
+              render={<a href={articleLink} target="_blank" />}
             >
-              <a href={articleLink} target="_blank">
-                <ExternalLinkIcon className="mr-2" />
-                View Original Article
-              </a>
+              <ExternalLinkIcon className="mr-2" />
+              View Original Article
             </Button>
           </div>
         )}
       </div>
 
       <div className="text-muted-foreground my-4 flex items-center gap-2 text-sm leading-[1.1]">
-        <InfoCircledIcon className="size-5 min-w-max" />
+        <InfoIcon className="size-5 min-w-max" />
         <p>
           HTML tags are supported in the Title Content and Byline fields. If
           needed, try adding a "&lt;br&gt;" tag to manually trigger a line

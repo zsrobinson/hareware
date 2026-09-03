@@ -1,8 +1,8 @@
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import {
-  ExclamationTriangleIcon,
-  InfoCircledIcon,
-} from "@radix-ui/react-icons";
+  TriangleAlertIcon,
+  InfoIcon,
+} from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLayoutState } from "~/lib/layout-state";
 import { useDebouncedEffect } from "../lib/use-debounced-effect";
@@ -113,7 +113,7 @@ export function GeneratePage({
             <h2 className="text-xl font-semibold">Title Slide</h2>
             {isOverflowing && (
               <div className="flex items-center gap-2 text-sm font-medium text-red-500">
-                <ExclamationTriangleIcon className="mt-0.5" />
+                <TriangleAlertIcon className="mt-0.5" />
                 <span>Content may be overflowing</span>
               </div>
             )}
@@ -136,7 +136,7 @@ export function GeneratePage({
           </div>
 
           <div className="text-muted-foreground flex items-center justify-center gap-2 text-sm leading-[1.1]">
-            <InfoCircledIcon className="size-5 min-w-max" />
+            <InfoIcon className="size-5 min-w-max" />
             {state.renderImages ? (
               <p>Hold or right click the image to save.</p>
             ) : (
@@ -165,7 +165,7 @@ export function GeneratePage({
           </div>
 
           <div className="text-muted-foreground flex items-center justify-center gap-2 text-sm leading-[1.1]">
-            <InfoCircledIcon className="size-5 min-w-max" />
+            <InfoIcon className="size-5 min-w-max" />
             {state.renderImages ? (
               <p>Hold or right click the image to save.</p>
             ) : (

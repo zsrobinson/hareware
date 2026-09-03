@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "./ui/button";
-import { CheckIcon, CopyIcon } from "@radix-ui/react-icons";
+import { CheckIcon, CopyIcon } from "lucide-react";
 
 export function CopyButton({ id }: { id: string }) {
   const [copied, setCopied] = useState(false);

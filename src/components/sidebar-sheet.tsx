@@ -1,6 +1,6 @@
 import { PanelLeftIcon } from "lucide-react";
-import { useEffect, useState } from "react";
 import { NavGroup } from "~/components/nav-group";
+import { SidebarAccount } from "~/components/sidebar-account";
 import {
   Sheet,
   SheetContent,
@@ -9,6 +9,7 @@ import {
   SheetTrigger,
 } from "~/components/ui/sheet";
 import { editorialNav, toolsNav } from "~/lib/nav";
+import { useSignedIn } from "~/lib/use-session";
 
 /*
   the sidebar itself is static markup and simply hidden below `md`. this is the
@@ -23,21 +24,7 @@ export function SidebarSheet({
   pathname: string;
   signedIn: boolean;
 }) {
-  const [signedIn, setSignedIn] = useState(signedInFromServer);
-
-  useEffect(() => {
-    if (signedInFromServer) return; // the server already knew
-
-    let live = true;
-    fetch("/api/session.json")
-      .then((r) => (r.ok ? r.json() : { signedIn: false }))
-      .then((d) => live && setSignedIn(Boolean(d.signedIn)))
-      .catch(() => {});
-
-    return () => {
-      live = false;
-    };
-  }, [signedInFromServer]);
+  const signedIn = useSignedIn(signedInFromServer);
 
   return (
     <Sheet>
@@ -53,7 +40,7 @@ export function SidebarSheet({
           <SheetTitle className="text-sm">HareWare</SheetTitle>
         </SheetHeader>
 
-        <nav className="flex flex-col gap-2 p-3">
+        <nav className="flex flex-1 flex-col gap-2 overflow-y-auto p-3">
           {signedIn && (
             <>
               <NavGroup
@@ -66,6 +53,8 @@ export function SidebarSheet({
           )}
           <NavGroup items={toolsNav} pathname={pathname} label="Tools" />
         </nav>
+
+        <SidebarAccount signedIn={signedInFromServer} inSheet />
       </SheetContent>
     </Sheet>
   );

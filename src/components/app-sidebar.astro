@@ -1,5 +1,4 @@
 ---
-import { InfoIcon } from "lucide-react";
 import { EditorialNav } from "~/components/editorial-nav";
 import { SidebarAccount } from "~/components/sidebar-account";
 import { NavGroup } from "~/components/nav-group";
@@ -17,39 +16,30 @@ const { session, pathname, cached } = Astro.props;
 <aside
   class="bg-sidebar text-sidebar-foreground border-sidebar-border hidden h-full w-(--sidebar-width) shrink-0 flex-col border-r transition-[width] duration-200 group-data-[state=collapsed]/shell:w-(--sidebar-width-icon) md:flex"
 >
-  <div
-    class="flex shrink-0 items-center gap-2 p-3 group-data-[state=collapsed]/shell:justify-center"
+  <a
+    href="/"
+    aria-label="HareWare"
+    class="block shrink-0 px-4 py-3 group-data-[state=collapsed]/shell:px-3"
   >
-    <a href="/" class="min-w-0 flex-1" aria-label="HareWare">
-      {
-        /* the wordmark is 4:1, so at rail width it would be four pixels tall.
-          the collapsed sidebar wears the mark on its own instead */
-      }
-      <img
-        src="/hareware-banner.png"
-        alt="HareWare"
-        width="774"
-        height="191"
-        class="w-full group-data-[state=collapsed]/shell:hidden dark:grayscale dark:invert"
-      />
-      <img
-        src="/favicon.svg"
-        alt=""
-        width="20"
-        height="20"
-        class="mx-auto hidden group-data-[state=collapsed]/shell:block dark:invert"
-      />
-    </a>
-
-    <a
-      href="/about"
-      title="About HareWare"
-      class="text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground inline-flex size-7 shrink-0 items-center justify-center rounded-md transition-colors group-data-[state=collapsed]/shell:hidden"
-    >
-      <InfoIcon className="size-4" />
-      <span class="sr-only">About HareWare</span>
-    </a>
-  </div>
+    {
+      /* the wordmark is 4:1, so at rail width it would be four pixels tall.
+        the collapsed sidebar wears the mark on its own instead */
+    }
+    <img
+      src="/hareware-banner.png"
+      alt="HareWare"
+      width="774"
+      height="191"
+      class="w-full group-data-[state=collapsed]/shell:hidden dark:grayscale dark:invert"
+    />
+    <img
+      src="/favicon.svg"
+      alt=""
+      width="20"
+      height="20"
+      class="mx-auto hidden group-data-[state=collapsed]/shell:block dark:invert"
+    />
+  </a>
 
   <nav class="flex flex-1 flex-col gap-2 overflow-y-auto p-3 pt-1">
     {

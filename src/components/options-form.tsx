@@ -19,6 +19,7 @@ import { Label } from "./ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -66,17 +67,19 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
               }
             }}
           >
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="maroon">Maroon</SelectItem>
-              <SelectItem value="pink">Pink</SelectItem>
-              <SelectItem value="pinkOld">Pink (Old)</SelectItem>
-              <SelectItem value="white">White</SelectItem>
-              <SelectItem value="custom" disabled>
-                Custom
-              </SelectItem>
+              <SelectGroup>
+                <SelectItem value="maroon">Maroon</SelectItem>
+                <SelectItem value="pink">Pink</SelectItem>
+                <SelectItem value="pinkOld">Pink (Old)</SelectItem>
+                <SelectItem value="white">White</SelectItem>
+                <SelectItem value="custom" disabled>
+                  Custom
+                </SelectItem>
+              </SelectGroup>
             </SelectContent>
           </Select>
         </FormItem>
@@ -108,14 +111,16 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
             value={state.ratio}
             onValueChange={(value) => value && state.setRatio(value)}
           >
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="1/1">1:1</SelectItem>
-              <SelectItem value="4/5">4:5</SelectItem>
-              <SelectItem value="3/4">3:4</SelectItem>
-              <SelectItem value="9/16">9:16</SelectItem>
+              <SelectGroup>
+                <SelectItem value="1/1">1:1</SelectItem>
+                <SelectItem value="4/5">4:5</SelectItem>
+                <SelectItem value="3/4">3:4</SelectItem>
+                <SelectItem value="9/16">9:16</SelectItem>
+              </SelectGroup>
             </SelectContent>
           </Select>
         </FormItem>
@@ -188,7 +193,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
       <hr className="my-4" />
 
       <div className="flex flex-col gap-2">
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <Button
             variant="secondary"
             className="w-full"

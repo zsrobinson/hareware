@@ -1,5 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+
+/* base-nova's components style against custom variants defined here —
+   data-horizontal, data-open, data-checked and friends. without it their
+   utilities compile to nothing and things like the slider's track lose the
+   rule that gives them a height */
+@import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 
 /*

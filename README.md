@@ -1,6 +1,13 @@
-# Hareware: Instagram Post Generator
+# HareWare
 
-An automated tool to help [The Hare](https://theumdhare.com) staff easily create Instagram posts from article links.
+The in-house tooling for [The Hare](https://theumdhare.com): the editorial
+board's article tracker, and a set of tools that turn published articles into
+Instagram posts, InDesign copy and newsletter content. Everything renders inside
+one dashboard; the tools are open to anyone, and the article board needs a club
+Discord account.
+
+Shared vocabulary lives in [CONTEXT.md](CONTEXT.md) and the decisions behind the
+shape of it in [docs/adr](docs/adr).
 
 ## Development
 

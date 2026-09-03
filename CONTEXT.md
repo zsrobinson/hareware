@@ -35,6 +35,20 @@ authority on everything WordPress has no concept of.
 Interface language says "this article isn't on WordPress yet", never "phase one"
 or "unlinked".
 
+## Instagram Post
+
+The image or images the club puts on Instagram for an Article — the thing the
+post generator draws.
+
+A third meaning of "post", and the only one a club member reads in the
+interface. The interface always says **Instagram Post** in full where it could
+be mistaken for a **WordPress Post**, and never shortens it to "post" outside a
+screen that is already about Instagram.
+
+An Instagram Post is not a record anywhere. It is generated from an Article on
+demand, downloaded, and posted by hand, so nothing tracks one except the
+Article's own _Posted to Instagram_ property.
+
 ## Publish Date
 
 The single date an Article carries: the day it goes live on the website.
@@ -127,7 +141,7 @@ A person in the club, identified by their Discord account.
 
 Members carry the things the club needs to remember about a person: their real
 name and the pseudonyms that are theirs, so the app can offer a dropdown when
-someone sets a Byline. What a Member is allowed to *do* is not recorded here —
+someone sets a Byline. What a Member is allowed to _do_ is not recorded here —
 that is read live from their Discord roles (@Editor-in-Chief, @Managing Editor,
 @Section Editor, @Media Editor), so that a promotion in Discord takes effect
 without anyone updating a second list.

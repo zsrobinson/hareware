@@ -27,7 +27,7 @@ export const editorialNav: NavItem[] = [
 export const toolsNav: NavItem[] = [
   {
     href: "/generate",
-    label: "Post Generator",
+    label: "Instagram Posts",
     icon: ImageIcon,
     match: ["/generate", "/custom"],
   },

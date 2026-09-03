@@ -10,11 +10,11 @@ import { useEffect, useState } from "react";
   oauth redirect. everything else here stays.
 */
 let signedIn: boolean | null = null;
-let asked = false;
+let requested = false;
 
 const listeners = new Set<(value: boolean) => void>();
 
-function announce() {
+function publish() {
   for (const listener of listeners) listener(signedIn === true);
 }
 
@@ -22,12 +22,12 @@ function announce() {
    through before there is anything to sign in to */
 export function mockSignIn(value: boolean) {
   signedIn = value;
-  announce();
+  publish();
 }
 
-function ask() {
-  if (asked) return;
-  asked = true;
+function requestSession() {
+  if (requested) return;
+  requested = true;
 
   fetch("/api/session.json")
     .then((r) => (r.ok ? r.json() : { signedIn: false }))
@@ -43,13 +43,13 @@ export function useSignedIn(knownByServer = false) {
        nothing to ask for */
     if (knownByServer) {
       signedIn = true;
-      asked = true;
+      requested = true;
     }
 
     const listener = (next: boolean) => setValue(next);
     listeners.add(listener);
 
-    if (signedIn === null) ask();
+    if (signedIn === null) requestSession();
     else setValue(signedIn);
 
     return () => {

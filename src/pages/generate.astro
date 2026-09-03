@@ -61,7 +61,7 @@ const articles = post ? null : await getRecentArticles(page);
 const session = post ? getSession(Astro.request) : null;
 ---
 
-<Dashboard title="Post Generator" session={session} cached={post === null}>
+<Dashboard title="Instagram Posts" session={session} cached={post === null}>
   <SlideFonts slot="head" />
 
   {
@@ -93,7 +93,7 @@ const session = post ? getSession(Astro.request) : null;
             className="max-w-72 font-mono"
           />
           <Button type="submit">
-            Create Post
+            Create Instagram Post
             <ChevronRightIcon />
           </Button>
         </form>

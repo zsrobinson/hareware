@@ -40,8 +40,14 @@ if (import.meta.env.DEV && session) {
 
 /* shadcn's own cookie name and meaning: "true" is open. reading it server-side
    means data-state is already right in the first paint, so the sidebar never
-   snaps from one width to the other */
-const collapsed = Astro.cookies.get("sidebar_state")?.value === "false";
+   snaps from one width to the other.
+
+   a prerendered page is built long before there is a request to read it from —
+   asking anyway is what made astro warn about `Astro.request.headers` on
+   /custom. the script at the bottom reconciles those on the client instead */
+const collapsed = Astro.isPrerendered
+  ? false
+  : Astro.cookies.get("sidebar_state")?.value === "false";
 ---
 
 <html lang="en">

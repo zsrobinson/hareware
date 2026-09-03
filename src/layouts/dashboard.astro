@@ -19,6 +19,25 @@ type Props = {
 
 const { title, session = null, cached = false } = Astro.props;
 
+/*
+  the invariant the sidebar rests on: a response that renders who you are must
+  never be one a shared cache can hand to somebody else. adding an `s-maxage`
+  to a page that passes `session` would put one member's name in every other
+  member's sidebar, and it would show up as a support question months later
+  rather than as a failure here. so fail here
+*/
+if (import.meta.env.DEV && session) {
+  const cacheControl = Astro.response.headers.get("cache-control") ?? "";
+
+  if (/public|s-maxage/.test(cacheControl)) {
+    throw new Error(
+      `${Astro.url.pathname} renders a session but sets "cache-control: ${cacheControl}". ` +
+        "Either drop `session` and pass `cached` so the nav is revealed client-side, " +
+        "or make the response private.",
+    );
+  }
+}
+
 /* shadcn's own cookie name and meaning: "true" is open. reading it server-side
    means data-state is already right in the first paint, so the sidebar never
    snaps from one width to the other */
@@ -57,8 +76,10 @@ const collapsed = Astro.cookies.get("sidebar_state")?.value === "false";
       />
 
       <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* opaque, and outside the scroll container: the slide previews used
-            to show through this on the way past */}
+        {
+          /* opaque, and outside the scroll container: the slide previews used
+            to show through this on the way past */
+        }
         <header
           class="bg-background relative z-20 flex h-12 shrink-0 items-center gap-1 border-b px-3"
         >

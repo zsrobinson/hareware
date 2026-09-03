@@ -49,8 +49,10 @@ The club aims to put an Article on Instagram the same day it publishes.
 
 Who is responsible for posting to Instagram on a given day of the week.
 
-Set once per semester and changes rarely. Lives in Notion so that whoever runs
-social can edit it without going through a developer.
+Not a separate database: it is the **Social Media Day** property on Members, a
+multi-select of the days a Member covers. Set once per semester and changes
+rarely. Lives in Notion so that whoever runs social can edit it without going
+through a developer.
 
 ## Section
 
@@ -102,6 +104,12 @@ The name printed on a published Article — which is not necessarily the name of
 the person who wrote it. A writer may publish under a pseudonym, and so may an
 image creator.
 
+An Article holds its own Byline as an optional override, alongside a relation to
+the real Member who wrote it. A pseudonym is usually chosen for what suits that
+particular piece rather than being a fixed identity a person always writes
+under, so it lives on the Article, not on the Member. Where the override is
+empty, the Byline is the Member's real name.
+
 WordPress has no idea about any of this: on the website a Byline is simply text
 inside the article body. Notion holds both the Byline and the real member behind
 it.
@@ -110,11 +118,13 @@ The real name behind a pseudonymous Byline never reaches WordPress.
 
 ## Member
 
-A person in the club, identified by their Discord account.
+A person in the club, identified by their Discord account. Every person who
+writes or works social/eboard has a row, so an Article's real-author relation
+always has someone to point to.
 
 Members carry the things the club needs to remember about a person: their real
-name, the Byline they publish under, and which pseudonyms are theirs. What a
-Member is allowed to *do* is not recorded here — that is read live from their
+name and their Discord ID. What a Member is allowed to *do* is not recorded
+here — that is read live from their
 Discord roles (@Editor-in-Chief, @Managing Editor, @Section Editor, @Media
 Editor), so that a promotion in Discord takes effect without anyone updating a
 second list.

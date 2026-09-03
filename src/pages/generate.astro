@@ -1,49 +1,189 @@
 ---
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import { GeneratePage } from "~/components/generate-page";
 import SlideFonts from "~/components/slide-fonts.astro";
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Link } from "~/components/ui/link";
 import Dashboard from "~/layouts/dashboard.astro";
 import { getSession } from "~/lib/session";
 import { toArticleLink, toArticleSlug } from "../lib/article-url";
 import { SLIDE_IMAGE_WIDTH, toSizedImage } from "../lib/image-url";
+import { getRecentArticles } from "../lib/get-recent-articles";
 import { scrapeArticle } from "../lib/scrape-article";
 
 const param = Astro.url.searchParams.get("article") || "";
+const invalid = Astro.url.searchParams.get("error") !== null;
 
-/* check that we have a good article */
-const link = toArticleLink(param);
-if (!link) return Astro.redirect("/?error");
+/* the generator has two states: asking which article, and drawing slides for
+   one. /custom is the third way in, for writing that isn't published yet */
+let link: string | undefined;
+let post: Awaited<ReturnType<typeof scrapeArticle>> | null = null;
 
-/* tidy up the url when someone hands us a full permalink */
-const slug = toArticleSlug(link);
-if (param !== slug) return Astro.redirect(`/generate?article=${slug}`);
+if (param) {
+  /* check that we have a good article */
+  link = toArticleLink(param);
+  if (!link) return Astro.redirect("/generate?error");
 
-/* the article is read live so a title fixed mid-post shows up on the next
-   reload — say so out loud rather than leaving it to a cdn default */
-Astro.response.headers.set("cache-control", "private, no-store");
+  /* tidy up the url when someone hands us a full permalink */
+  const slug = toArticleSlug(link);
+  if (param !== slug) return Astro.redirect(`/generate?article=${slug}`);
 
-let post;
-try {
-  post = await scrapeArticle(link);
-} catch (e) {
-  return Astro.redirect("/?error");
+  try {
+    post = await scrapeArticle(link);
+  } catch (e) {
+    return Astro.redirect("/generate?error");
+  }
 }
 
-const { title, author, image, imageCredits, body } = post;
-const session = getSession(Astro.request);
+const pageParam = Number(Astro.url.searchParams.get("page") ?? "1");
+const page = isNaN(pageParam) || pageParam < 0 ? 1 : pageParam;
+
+/* the list of articles is not the article. worst case a just-published piece is
+   missing from it for half a minute, and its link still works if pasted in.
+   with an article in hand the export has to reflect it as it stands now, so
+   only the landing state is ever held by a cache — and because that one is
+   shared, its sidebar is the anonymous kind */
+if (post) {
+  Astro.response.headers.set("cache-control", "private, no-store");
+} else {
+  Astro.response.headers.set(
+    "cache-control",
+    "public, s-maxage=30, stale-while-revalidate=300",
+  );
+}
+
+const articles = post ? null : await getRecentArticles(page);
+const session = post ? getSession(Astro.request) : null;
 ---
 
-<Dashboard title="Post Generator" session={session}>
+<Dashboard title="Post Generator" session={session} cached={post === null}>
   <SlideFonts slot="head" />
 
-  <GeneratePage
-    defaultTitle={title}
-    defaultArticleByline={author ?? ""}
-    defaultImageByline={imageCredits ?? ""}
-    articleLink={link}
-    imageURI={toSizedImage(image, SLIDE_IMAGE_WIDTH)}
-    client:load
-  >
-    <!-- must render here, cannot pass Element[] as prop since it gets serialized -->
-    {body.map((para) => <Fragment set:html={para.outerHTML} />)}
-  </GeneratePage>
+  {
+    post ? (
+      <GeneratePage
+        defaultTitle={post.title}
+        defaultArticleByline={post.author ?? ""}
+        defaultImageByline={post.imageCredits ?? ""}
+        articleLink={link!}
+        imageURI={toSizedImage(post.image, SLIDE_IMAGE_WIDTH)}
+        client:load
+      >
+        {/* must render here, cannot pass Element[] as prop since it gets serialized */}
+        {post.body.map((para) => (
+          <Fragment set:html={para.outerHTML} />
+        ))}
+      </GeneratePage>
+    ) : (
+      <>
+        <h2 class="pb-2 font-semibold">
+          Paste an article link to get started:
+        </h2>
+
+        <form action="/generate" class="ml-4 flex gap-2">
+          <Input
+            type="text"
+            name="article"
+            placeholder="Article Link"
+            className="max-w-72 font-mono"
+          />
+          <Button type="submit">
+            Create Post
+            <ChevronRightIcon />
+          </Button>
+        </form>
+
+        {invalid && (
+          <div class="ml-4 flex items-center gap-2 pt-2 text-sm font-medium text-red-500">
+            <TriangleAlertIcon className="mt-0.5" />
+            <span>Please double check your link and try again</span>
+          </div>
+        )}
+
+        <h2 class="pt-8 pb-2 font-semibold">
+          Or, start from one of our recent articles:
+        </h2>
+
+        {articles ? (
+          <>
+            <ul class="ml-4 pb-2">
+              {articles.map((article) => (
+                <li class="flex pb-1">
+                  <span
+                    set:html={article.date}
+                    class="text-muted-foreground w-16 shrink-0 pr-4 text-nowrap"
+                  />
+                  <a
+                    class="decoration-muted-foreground hover:text-muted-foreground underline"
+                    href={"/generate?article=" + toArticleSlug(article.link)}
+                    set:html={article.title}
+                  />
+                </li>
+              ))}
+            </ul>
+
+            <div class="text-muted-foreground ml-4 flex max-w-fit gap-4 border-t pt-2">
+              {page > 1 && (
+                <a href={`/generate?page=${page - 1}`} data-keep-scroll>
+                  <ChevronLeftIcon className="inline mb-0.5" />
+                  <span class="underline">Previous</span>
+                </a>
+              )}
+              <p>Page {page}</p>
+              <a href={`/generate?page=${page + 1}`} data-keep-scroll>
+                <span class="underline">Next</span>
+                <ChevronRightIcon className="inline mb-0.5" />
+              </a>
+            </div>
+          </>
+        ) : (
+          <div class="ml-4 flex items-center gap-2 text-sm font-medium text-red-500">
+            <TriangleAlertIcon className="mt-0.5" />
+            <span>Cannot get recent articles</span>
+          </div>
+        )}
+
+        <h2 class="pt-8 pb-2 font-semibold">
+          Or, create a custom post for unpublished or draft articles:
+        </h2>
+
+        <Link
+          variant="secondary"
+          href="/custom"
+          className="ml-4"
+          data-astro-prefetch
+        >
+          Open Creator
+          <ChevronRightIcon />
+        </Link>
+      </>
+    )
+  }
 </Dashboard>
+
+<script>
+  /* paging through the list scrolls back to the top otherwise, which loses the
+     place you were reading from. the listeners live on document, so they
+     survive the swaps and only need registering once */
+  let keepScroll: number | null = null;
+
+  const content = () => document.getElementById("content");
+
+  document.addEventListener("astro:before-preparation", (event) => {
+    const source = (event as any).sourceElement as Element | undefined;
+    keepScroll = source?.closest("[data-keep-scroll]")
+      ? (content()?.scrollTop ?? null)
+      : null;
+  });
+
+  document.addEventListener("astro:after-swap", () => {
+    const el = content();
+    if (keepScroll !== null && el) el.scrollTop = keepScroll;
+    keepScroll = null;
+  });
+</script>

@@ -1,5 +1,6 @@
 import {
   FileTextIcon,
+  HouseIcon,
   ImageIcon,
   MailIcon,
   NewspaperIcon,
@@ -25,11 +26,12 @@ export const editorialNav: NavItem[] = [
 /* the public tools. these read wordpress and nothing else, so they stay
    reachable signed out, as they always have been */
 export const toolsNav: NavItem[] = [
+  { href: "/", label: "Home", icon: HouseIcon },
   {
-    href: "/",
+    href: "/generate",
     label: "Post Generator",
     icon: ImageIcon,
-    match: ["/", "/generate", "/custom"],
+    match: ["/generate", "/custom"],
   },
   { href: "/magazine", label: "InDesign Export", icon: FileTextIcon },
   { href: "/words", label: "Word Counter", icon: TypeIcon },

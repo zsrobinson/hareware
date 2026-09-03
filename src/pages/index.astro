@@ -1,129 +1,42 @@
 ---
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  TriangleAlertIcon,
-} from "lucide-react";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
+import { ExternalLinkIcon } from "lucide-react";
 import { Link } from "~/components/ui/link";
 import Dashboard from "~/layouts/dashboard.astro";
-import { toArticleSlug } from "../lib/article-url";
-import { getRecentArticles } from "../lib/get-recent-articles";
 
-const pageParam = Number(Astro.url.searchParams.get("page") ?? "1");
-const page = isNaN(pageParam) || pageParam < 0 ? 1 : pageParam;
-
-const error = Astro.url.searchParams.get("error") !== null;
-
-/* the list of articles is not the article. worst case a just-published piece is
-   missing from it for half a minute, and its link still works if pasted in */
-Astro.response.headers.set(
-  "cache-control",
-  "public, s-maxage=30, stale-while-revalidate=300",
-);
-
-const articles = await getRecentArticles(page);
+/* nothing here is per-request, so it is built once and served from assets */
+export const prerender = true;
 ---
 
-<Dashboard title="Post Generator" cached>
-  <h2 class="pb-2 font-semibold">Paste an article link to get started:</h2>
+<Dashboard title="Home" cached>
+  <div class="flex max-w-prose flex-col gap-4">
+    <h2 class="text-xl font-semibold">HareWare</h2>
 
-  <form action="/generate" class="ml-4 flex gap-2">
-    <Input
-      type="text"
-      name="article"
-      placeholder="Article Link"
-      className="max-w-72 font-mono"
-    />
-    <Button type="submit">
-      Create Post
-      <ChevronRightIcon />
-    </Button>
-  </form>
+    <p class="text-muted-foreground leading-relaxed">
+      The in-house tooling for <a
+        href="https://theumdhare.com"
+        target="_blank"
+        rel="noreferrer"
+        class="text-foreground underline">The Hare</a
+      >: the editorial board's article tracker, and a set of tools that turn
+      published articles into Instagram posts, InDesign copy and newsletter
+      content.
+    </p>
 
-  {
-    error && (
-      <div class="ml-4 flex items-center gap-2 pt-2 text-sm font-medium text-red-500">
-        <TriangleAlertIcon className="mt-0.5" />
-        <span>Please double check your link and try again</span>
-      </div>
-    )
-  }
+    <p class="text-muted-foreground leading-relaxed">
+      Everything under Tools is open to anyone. The article board needs a club
+      Discord account.
+    </p>
 
-  <h2 class="pt-8 pb-2 font-semibold">
-    Or, start from one of our recent articles:
-  </h2>
-
-  {
-    articles ? (
-      <>
-        <ul class="ml-4 pb-2">
-          {articles.map((article) => (
-            <li class="flex pb-1">
-              <span
-                set:html={article.date}
-                class="text-muted-foreground w-16 shrink-0 pr-4 text-nowrap"
-              />
-              <a
-                class="decoration-muted-foreground hover:text-muted-foreground underline"
-                href={"/generate?article=" + toArticleSlug(article.link)}
-                set:html={article.title}
-              />
-            </li>
-          ))}
-        </ul>
-
-        <div class="text-muted-foreground ml-4 flex max-w-fit gap-4 border-t pt-2">
-          {page > 1 && (
-            <a href={`/?page=${page - 1}`} data-keep-scroll>
-              <ChevronLeftIcon className="inline mb-0.5" />
-              <span class="underline">Previous</span>
-            </a>
-          )}
-          <p>Page {page}</p>
-          <a href={`/?page=${page + 1}`} data-keep-scroll>
-            <span class="underline">Next</span>
-            <ChevronRightIcon className="inline mb-0.5" />
-          </a>
-        </div>
-      </>
-    ) : (
-      <div class="ml-4 flex items-center gap-2 text-sm font-medium text-red-500">
-        <TriangleAlertIcon className="mt-0.5" />
-        <span>Cannot get recent articles</span>
-      </div>
-    )
-  }
-
-  <h2 class="pt-8 pb-2 font-semibold">
-    Or, create a custom post for unpublished or draft articles:
-  </h2>
-
-  <Link variant="secondary" href="/custom" className="ml-4" data-astro-prefetch>
-    Open Creator
-    <ChevronRightIcon />
-  </Link>
+    <div>
+      <Link
+        variant="secondary"
+        href="https://github.com/zsrobinson/hareware"
+        target="_blank"
+        rel="noreferrer"
+      >
+        View source on GitHub
+        <ExternalLinkIcon />
+      </Link>
+    </div>
+  </div>
 </Dashboard>
-
-<script>
-  /* paging through the list scrolls back to the top otherwise, which loses the
-     place you were reading from. the listeners live on document, so they
-     survive the swaps and only need registering once */
-  let keepScroll: number | null = null;
-
-  const content = () => document.getElementById("content");
-
-  document.addEventListener("astro:before-preparation", (event) => {
-    const source = (event as any).sourceElement as Element | undefined;
-    keepScroll = source?.closest("[data-keep-scroll]")
-      ? (content()?.scrollTop ?? null)
-      : null;
-  });
-
-  document.addEventListener("astro:after-swap", () => {
-    const el = content();
-    if (keepScroll !== null && el) el.scrollTop = keepScroll;
-    keepScroll = null;
-  });
-</script>

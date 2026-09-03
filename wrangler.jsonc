@@ -19,5 +19,9 @@
 
   "observability": { "enabled": true },
 
-  // main, assets and the build output are filled in by @astrojs/cloudflare
+  // what `npm create cloudflare -- --framework=astro` declares. the adapter
+  // would inject all three, but naming them keeps plain `wrangler` commands
+  // working against this file on their own
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "assets": { "directory": "./dist", "binding": "ASSETS" },
 }

@@ -1,19 +1,33 @@
-// see https://github.com/shadcn-ui/ui/issues/1979#issuecomment-2998073174
-
+import type { AnchorHTMLAttributes, ReactNode } from "react";
 import { Button } from "./button";
 
-type BaseButtonProps = Parameters<typeof Button>[0];
-type ButtonProps = Omit<BaseButtonProps, "asChild">;
+type ButtonProps = Omit<Parameters<typeof Button>[0], "render">;
+type AnchorProps = Pick<
+  AnchorHTMLAttributes<HTMLAnchorElement>,
+  "target" | "rel" | "download"
+>;
 
-interface LinkProps extends ButtonProps {
+interface LinkProps extends ButtonProps, AnchorProps {
   href: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
-export function Link({ href, children, ...props }: LinkProps) {
+/* base ui composes through `render` rather than radix's `asChild`, so a button
+   that is really a link hands it the anchor to render as */
+export function Link({
+  href,
+  target,
+  rel,
+  download,
+  children,
+  ...props
+}: LinkProps) {
   return (
-    <Button asChild {...props}>
-      <a href={href}>{children}</a>
+    <Button
+      render={<a href={href} target={target} rel={rel} download={download} />}
+      {...props}
+    >
+      {children}
     </Button>
   );
 }

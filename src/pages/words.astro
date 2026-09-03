@@ -1,13 +1,14 @@
 ---
 import { Textarea } from "~/components/ui/textarea";
 import { Button } from "~/components/ui/button";
-import Root from "~/layouts/root.astro";
+import Dashboard from "~/layouts/dashboard.astro";
+import { getSession } from "~/lib/session";
 import {
   ChevronRightIcon,
-  ExclamationTriangleIcon,
+  TriangleAlertIcon,
   Link2Icon,
   QuoteIcon,
-} from "@radix-ui/react-icons";
+} from "lucide-react";
 import { toArticleLink } from "~/lib/article-url";
 import { getWordCount } from "~/lib/get-word-count";
 import { scrapeArticle } from "~/lib/scrape-article";
@@ -56,9 +57,14 @@ if (articlesStr && !error) {
     }
   });
 }
+/* the sidebar this renders depends on who is asking, so the response is
+   theirs alone — the scraping below is per-request anyway */
+Astro.response.headers.set("cache-control", "private, no-store");
+
+const session = getSession(Astro.request);
 ---
 
-<Root title="Batch Word Counter">
+<Dashboard title="Word Counter" session={session}>
   <div class="flex max-w-120 flex-col gap-2">
     <FormItem>
       <Link2Icon className="size-5 min-w-max" />
@@ -77,7 +83,7 @@ if (articlesStr && !error) {
       {
         error && (
           <div class="ml-4 flex items-center gap-2 pt-2 text-sm font-medium text-red-500">
-            <ExclamationTriangleIcon className="mt-0.5" />
+            <TriangleAlertIcon className="mt-0.5" />
             <span>{error}</span>
           </div>
         )
@@ -101,4 +107,4 @@ if (articlesStr && !error) {
       )
     }
   </div>
-</Root>
+</Dashboard>

@@ -1,0 +1,68 @@
+---
+import { EditorialNav } from "~/components/editorial-nav";
+import { SidebarAccount } from "~/components/sidebar-account";
+import { NavGroup } from "~/components/nav-group";
+import { editorialNav, toolsNav } from "~/lib/nav";
+import type { Session } from "~/lib/session";
+
+type Props = { session: Session | null; pathname: string; cached: boolean };
+const { session, pathname, cached } = Astro.props;
+---
+
+{
+  /* static markup: no client: directive on NavGroup, so this whole sidebar
+    ships as html and the public tools keep costing no javascript */
+}
+<aside
+  class="bg-sidebar text-sidebar-foreground border-sidebar-border hidden h-full w-(--sidebar-width) shrink-0 flex-col border-r transition-[width] duration-200 group-data-[state=collapsed]/shell:w-(--sidebar-width-icon) md:flex"
+>
+  <a
+    href="/"
+    aria-label="HareWare"
+    class="block shrink-0 px-4 py-3 group-data-[state=collapsed]/shell:px-3"
+  >
+    {
+      /* the wordmark is 4:1, so at rail width it would be four pixels tall.
+        the collapsed sidebar wears the mark on its own instead */
+    }
+    <img
+      src="/hareware-banner.png"
+      alt="HareWare"
+      width="774"
+      height="191"
+      class="w-full group-data-[state=collapsed]/shell:hidden dark:grayscale dark:invert"
+    />
+    <img
+      src="/favicon.svg"
+      alt=""
+      width="20"
+      height="20"
+      class="mx-auto hidden group-data-[state=collapsed]/shell:block dark:invert"
+    />
+  </a>
+
+  <nav class="flex flex-1 flex-col gap-2 overflow-y-auto p-3 pt-1">
+    {
+      /* a private page knows the answer already and renders it here; a cached
+         one leaves it to the island so its html stays anonymous */
+      cached ? (
+        <EditorialNav client:idle />
+      ) : (
+        session && (
+          <>
+            <NavGroup
+              items={editorialNav}
+              pathname={pathname}
+              label="Editorial"
+            />
+            <hr class="border-sidebar-border my-2" />
+          </>
+        )
+      )
+    }
+
+    <NavGroup items={toolsNav} pathname={pathname} label="Tools" />
+  </nav>
+
+  <SidebarAccount client:idle signedIn={session !== null} />
+</aside>

@@ -1,10 +1,6 @@
 import { useState } from "react";
 import { FormItem, FormLabel } from "./options-form";
-import {
-  ChevronRightIcon,
-  FileIcon,
-  TextAlignCenterIcon,
-} from "@radix-ui/react-icons";
+import { ChevronRightIcon, FileIcon, AlignCenterIcon } from "lucide-react";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { GeneratePage } from "./generate-page";
@@ -54,7 +50,7 @@ export function CustomPage() {
         <h2 className="text-xl font-semibold">Custom Article</h2>
 
         <FormItem>
-          <TextAlignCenterIcon className="size-5 min-w-max" />
+          <AlignCenterIcon className="size-5 min-w-max" />
           <FormLabel>Title Content</FormLabel>
           <Input
             type="text"
@@ -64,7 +60,7 @@ export function CustomPage() {
         </FormItem>
 
         <FormItem>
-          <TextAlignCenterIcon className="size-5 min-w-max" />
+          <AlignCenterIcon className="size-5 min-w-max" />
           <FormLabel>Article Byline</FormLabel>
           <Input
             type="text"
@@ -74,7 +70,7 @@ export function CustomPage() {
         </FormItem>
 
         <FormItem>
-          <TextAlignCenterIcon className="size-5 min-w-max" />
+          <AlignCenterIcon className="size-5 min-w-max" />
           <FormLabel>Image Byline</FormLabel>
           <Input
             type="text"

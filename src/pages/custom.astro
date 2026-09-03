@@ -1,11 +1,14 @@
 ---
-import Root from "../layouts/root.astro";
+import SlideFonts from "~/components/slide-fonts.astro";
+import Dashboard from "~/layouts/dashboard.astro";
 import { CustomPage } from "../components/custom-page";
 
 /* nothing here is per-request — the whole page is one client island */
 export const prerender = true;
 ---
 
-<Root preloadSlideFonts>
+<Dashboard title="Custom Instagram Post" cached>
+  <SlideFonts slot="head" />
+
   <CustomPage client:load />
-</Root>
+</Dashboard>

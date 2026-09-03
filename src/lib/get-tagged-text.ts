@@ -1,4 +1,4 @@
-export function getTaggedText(content: Element[]) {
+export function getTaggedText(body: Element[]) {
   let isBolded = false;
   let isItalicized = false;
   let output = "";
@@ -34,12 +34,6 @@ export function getTaggedText(content: Element[]) {
     }
   }
 
-  const trimmed = content.filter(
-    (el) =>
-      !el.innerHTML.includes("Article by:") &&
-      !el.innerHTML.includes("Image Credits:"),
-  );
-
   const header = `<ASCII-MAC>
 <Version:21.2><FeatureSet:InDesign-Roman><ColorTable:=<Black:COLOR:CMYK:Process:0,0,0,1>>
 `;
@@ -47,7 +41,7 @@ export function getTaggedText(content: Element[]) {
     " <cLigatures:0><cOTFContAlt:0><0x25C6><cLigatures:><cOTFContAlt:>";
 
   output += header; // add file header for indesign tagged text
-  trimmed.map(processEl); // process and add all the article content
+  body.map(processEl); // process and add all the article content
   output = output.slice(0, -1); // remove last newline character
   output += footer; // add diamond symbol at the end
 

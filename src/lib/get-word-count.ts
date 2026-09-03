@@ -1,13 +1,10 @@
-import { scrapeArticle } from "./scrape-article";
-
-export async function getWordCount(article: string) {
-  const { content } = await scrapeArticle(article);
-  const words = content
-    .filter(
-      (el) =>
-        !el.textContent.includes("Article by:") &&
-        !el.textContent.includes("Image Credits:"),
-    )
+/**
+ * the number of words in an article
+ * @param body the body elements from `scrapeArticle`, already trimmed of the
+ * byline and image credits
+ */
+export function getWordCount(body: Element[]) {
+  const words = body
     .map((el) => el.textContent)
     .join(" ")
     .split(" ")

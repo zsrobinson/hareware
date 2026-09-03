@@ -31,15 +31,15 @@ if (param !== slug) return Astro.redirect(`/magazine?article=${slug}`);
 /* same as /generate: the export has to reflect the article as it stands now */
 Astro.response.headers.set("cache-control", "private, no-store");
 
-let article;
+let post;
 try {
-  article = await scrapeArticle(link);
+  post = await scrapeArticle(link);
 } catch (e) {
   return Astro.redirect("/?magazine-error");
 }
 
-const { title, author, image, imageCredits, section, date, content } = article;
-const { output, unprocessed } = getTaggedText(content);
+const { title, author, image, imageCredits, section, date, body } = post;
+const { output, unprocessed } = getTaggedText(body);
 ---
 
 <Root title="InDesign Article Exporter">

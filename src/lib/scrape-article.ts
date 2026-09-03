@@ -31,7 +31,8 @@ const MAX_RETRY_WAIT = 1500;
 
 type Term = { name: string; taxonomy: string };
 
-type Post = {
+/** a post as the wordpress rest api returns it */
+type WordPressPost = {
   title: { rendered: string };
   content: { rendered: string };
   date: string;
@@ -47,22 +48,22 @@ class Unavailable extends Error {}
 
 /**
  * scrapes the article content from wordpress
- * @param article the full link, including schema and domain
+ * @param link the full link, including schema and domain
  */
-export async function scrapeArticle(article: string) {
+export async function scrapeArticle(link: string) {
   try {
-    return fromPost(await fetchPost(toArticleSlug(article)));
+    return fromPost(await fetchPost(toArticleSlug(link)));
   } catch (e) {
     if (!(e instanceof Unavailable)) throw e;
 
     // the api is throttled long before the rendered pages are, so the slow
     // route is still a better answer than no article
-    return fromRenderedPage(toArticleLink(article) ?? article);
+    return fromRenderedPage(toArticleLink(link) ?? link);
   }
 }
 
 /** the fields we need, off a rest api response */
-function fromPost(post: Post) {
+function fromPost(post: WordPressPost) {
   // content.rendered is the markup that lands inside .entry-content on the
   // page, so wrapping it lets one set of selectors serve both sources
   const document = parseHTML(
@@ -112,6 +113,13 @@ async function fromRenderedPage(link: string) {
   };
 }
 
+/** wordpress labels the image credits this way whether or not it names anyone */
+function hasCreditsLabel(el: Element): boolean {
+  return (
+    el.querySelector("em")?.textContent?.includes("Image Credits:") ?? false
+  );
+}
+
 /** the pieces that live inside .entry-content, whichever way we got there */
 function readEntryContent(document: Document) {
   // linkedom splits text at entity boundaries (`a&nbsp;b` becomes three text
@@ -128,23 +136,39 @@ function readEntryContent(document: Document) {
       }
     });
 
-  const author = document
-    .querySelector(".entry-content p:first-of-type")
-    ?.textContent?.trim()
-    .split(": ")[1];
+  const bylineEl = document.querySelector(".entry-content p:first-of-type");
+  const creditsEl = document.querySelector(".entry-content p:last-of-type");
 
-  const imageCredits = document
-    .querySelector(".entry-content p:last-of-type em")
+  const author = bylineEl?.textContent?.trim().split(": ")[1];
+  const imageCredits = creditsEl
+    ?.querySelector("em")
     ?.innerHTML.trim()
     .split(": ")[1];
 
-  const content = [
+  const elements = [
     ...document.querySelectorAll(
       ".entry-content p, .entry-content h2, .entry-content h3, .entry-content ol, .entry-content ul",
     ),
   ].filter((el) => el.innerHTML !== "");
 
-  return { author, imageCredits, content };
+  /* the byline and the image credits sit in the body as ordinary paragraphs,
+     so the pass that reads them out is the one that takes them off. leaving
+     them in left every caller to re-derive the same trim, and they did — three
+     different ways, one of which missed the credits entirely.
+
+     the two are identified differently because the archive writes them
+     differently. bylines carry no consistent label ("Article by:", "Article
+     By:", "Puzzle by:", "Activity by:", "Credits:"), so the opening paragraph
+     counts as the byline whenever a name could be read off it at all. image
+     credits are labelled the same way every time, and matching the label
+     rather than the parsed name also catches the ones that credit nobody */
+  const body = elements.filter(
+    (el) =>
+      !(el === bylineEl && author !== undefined) &&
+      !(el === creditsEl && hasCreditsLabel(el)),
+  );
+
+  return { author, imageCredits, body };
 }
 
 /**
@@ -154,7 +178,7 @@ function readEntryContent(document: Document) {
  * theme chrome around the same content the api returns in about 10 KB, and a
  * bare slug permalink 301s to its dated form on the way in, which the api skips
  */
-async function fetchPost(slug: string): Promise<Post> {
+async function fetchPost(slug: string): Promise<WordPressPost> {
   const params = new URLSearchParams({
     slug,
     _embed: "wp:term",
@@ -186,8 +210,8 @@ async function fetchPost(slug: string): Promise<Post> {
 
     if (!res.ok) throw new Error(`wordpress returned ${res.status} for ${slug}`);
 
-    const [post] = (await res.json()) as Post[];
-    if (!post) throw new Error(`no published article matches ${slug}`);
+    const [post] = (await res.json()) as WordPressPost[];
+    if (!post) throw new Error(`no published post matches ${slug}`);
 
     return post;
   }

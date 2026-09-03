@@ -10,6 +10,7 @@ import {
 } from "@radix-ui/react-icons";
 import { toArticleLink } from "~/lib/article-url";
 import { getWordCount } from "~/lib/get-word-count";
+import { scrapeArticle } from "~/lib/scrape-article";
 import { mapLimit } from "~/lib/map-limit";
 import { FormItem, FormLabel } from "~/components/options-form";
 
@@ -48,7 +49,8 @@ if (articlesStr && !error) {
   counts = await mapLimit(links as string[], 3, async (link) => {
     // one bad slug in ten shouldn't take the whole page down with it
     try {
-      return await getWordCount(link);
+      const { body } = await scrapeArticle(link);
+      return getWordCount(body);
     } catch {
       return null;
     }

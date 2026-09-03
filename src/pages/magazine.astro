@@ -12,7 +12,8 @@ import { FormItem, FormLabel } from "~/components/options-form";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { CopyButton } from "../components/copy-button";
-import Root from "../layouts/root.astro";
+import Dashboard from "~/layouts/dashboard.astro";
+import { getSession } from "~/lib/session";
 import { toArticleLink, toArticleSlug } from "../lib/article-url";
 import { PREVIEW_IMAGE_WIDTH, toSizedImage } from "../lib/image-url";
 import { scrapeArticle } from "../lib/scrape-article";
@@ -40,9 +41,10 @@ try {
 
 const { title, author, image, imageCredits, section, date, body } = post;
 const { output, unprocessed } = getTaggedText(body);
+const session = getSession(Astro.request);
 ---
 
-<Root title="InDesign Article Exporter">
+<Dashboard title="InDesign Export" session={session}>
   <div class="flex max-w-120 flex-col gap-2">
     <form action="/magazine" class="mb-4 flex gap-2">
       <Input
@@ -161,4 +163,4 @@ const { output, unprocessed } = getTaggedText(body);
       });
     });
   </script>
-</Root>
+</Dashboard>

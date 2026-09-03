@@ -1,6 +1,8 @@
 ---
 import { GeneratePage } from "~/components/generate-page";
-import Root from "../layouts/root.astro";
+import SlideFonts from "~/components/slide-fonts.astro";
+import Dashboard from "~/layouts/dashboard.astro";
+import { getSession } from "~/lib/session";
 import { toArticleLink, toArticleSlug } from "../lib/article-url";
 import { SLIDE_IMAGE_WIDTH, toSizedImage } from "../lib/image-url";
 import { scrapeArticle } from "../lib/scrape-article";
@@ -27,9 +29,12 @@ try {
 }
 
 const { title, author, image, imageCredits, body } = post;
+const session = getSession(Astro.request);
 ---
 
-<Root preloadSlideFonts>
+<Dashboard title="Post Generator" session={session}>
+  <SlideFonts slot="head" />
+
   <GeneratePage
     defaultTitle={title}
     defaultArticleByline={author ?? ""}
@@ -41,4 +46,4 @@ const { title, author, image, imageCredits, body } = post;
     <!-- must render here, cannot pass Element[] as prop since it gets serialized -->
     {body.map((para) => <Fragment set:html={para.outerHTML} />)}
   </GeneratePage>
-</Root>
+</Dashboard>

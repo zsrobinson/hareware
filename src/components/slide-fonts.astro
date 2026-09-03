@@ -1,0 +1,14 @@
+---
+/* the two faces a slide paints with. only the pages that draw slides ask for
+   these — everywhere else they would be 162 KB nobody looks at */
+const slideFonts = [
+  "/SourceSerif4Display-Semibold.ttf.woff2",
+  "/SourceSerif4-Regular.ttf.woff2",
+];
+---
+
+{
+  slideFonts.map((href) => (
+    <link rel="preload" as="font" type="font/woff2" href={href} crossorigin />
+  ))
+}

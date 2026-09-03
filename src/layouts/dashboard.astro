@@ -33,6 +33,12 @@ const collapsed = Astro.cookies.get("sidebar_state")?.value === "false";
     <meta name="generator" content={Astro.generator} />
     <title>HareWare: {title}</title>
     <ClientRouter />
+
+    {
+      /* pages that need something of their own in the head — the slide fonts,
+        so far — put it here rather than the shell knowing about them */
+    }
+    <slot name="head" />
   </head>
 
   <body class="font-sans">
@@ -88,6 +94,22 @@ const collapsed = Astro.cookies.get("sidebar_state")?.value === "false";
       /* the listener lives on document so it survives ClientRouter's swaps,
          and the flag keeps a re-executed module from binding it twice */
       const KEY = "__hwSidebarToggle";
+
+      /* /custom is prerendered, so its html is built long before there is a
+         cookie to read and always says expanded. reconciling here keeps the
+         width from snapping back when you navigate onto it */
+      function sync() {
+        const shell = document.getElementById("shell");
+        if (!shell) return;
+
+        const open = !/(?:^|;\s*)sidebar_state=false(?:;|$)/.test(
+          document.cookie,
+        );
+        shell.dataset.state = open ? "expanded" : "collapsed";
+      }
+
+      sync();
+      document.addEventListener("astro:page-load", sync);
 
       if (!(KEY in window)) {
         Object.assign(window, { [KEY]: true });

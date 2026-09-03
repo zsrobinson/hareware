@@ -20,8 +20,8 @@ Two properties per credit, not one:
 
 | Property | Type | |
 | --- | --- | --- |
-| Byline | text | the printed name — **always filled** |
-| Writer | relation → Members | who that actually was; may be empty or multiple |
+| Author Byline | text | the printed name — **always filled** |
+| Author | relation → Members | who that actually was; may be empty or multiple |
 | Image Byline | text | the printed image credit |
 | Image Crew | relation → Members | may be empty or multiple |
 

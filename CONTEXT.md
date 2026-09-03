@@ -75,19 +75,20 @@ left off.
 
 ## Status
 
-How far an Article has moved through the writing process. One value at a time,
-and it only ever moves forward, except when an Article is bounced.
+How far an Article has moved through the writing process, plus — once it is
+**on WordPress** — its publication state. One value at a time, and it only ever
+moves forward, except when an Article is bounced.
 
 - **Backlog** — an idea, not yet approved to be written
 - **Approved** — a Section Editor has approved the idea
 - **Written** — a draft exists and has gone to the Section Editor
 - **Section Edited** — the Section Editor has approved the writing
 - **Managing Edited** — the Managing Editor has passed it for grammar and brand
+- **Scheduled**, **Published** — facts about the Article's WordPress Post,
+  mirrored in by a scheduled job rather than chosen by hand
 
-Being **scheduled** and being **published** are not Status values: they are facts
-about the Article's WordPress Post, and are read from WordPress rather than
-tracked by hand. Notion shows them anyway, as a mirrored copy nobody edits — see
-ADR 0005.
+The last two are never picked by a person; a human setting Status by hand only
+ever chooses among the first five.
 
 ## Image Status
 

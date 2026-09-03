@@ -56,6 +56,16 @@ const session = getSession(Astro.request);
 
 <Dashboard title="InDesign Export" session={session}>
   <div class="flex max-w-120 flex-col gap-2">
+    {
+      /* the landing state is otherwise a field floating on its own, with
+         nothing saying what it wants or what it will do with it */
+      !post && (
+        <h2 class="pb-2 font-semibold">
+          Paste an article link to export its content for InDesign:
+        </h2>
+      )
+    }
+
     <form action="/magazine" class="mb-4 flex gap-2">
       <Input
         type="text"

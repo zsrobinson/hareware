@@ -10,8 +10,18 @@ const message = () => ({
     {
       type: 1,
       components: [
-        { type: 2, style: 1, label: "Mark as Posted", custom_id: postedId("first") },
-        { type: 2, style: 5, label: "Open Post Generator", url: "https://x.test/1" },
+        {
+          type: 2,
+          style: 1,
+          label: "Mark as Posted",
+          custom_id: postedId("first"),
+        },
+        {
+          type: 2,
+          style: 5,
+          label: "Open Post Generator",
+          url: "https://x.test/1",
+        },
       ],
     },
     { type: 14, spacing: 1, divider: false },
@@ -19,7 +29,12 @@ const message = () => ({
     {
       type: 1,
       components: [
-        { type: 2, style: 1, label: "Mark as Posted", custom_id: postedId("second") },
+        {
+          type: 2,
+          style: 1,
+          label: "Mark as Posted",
+          custom_id: postedId("second"),
+        },
       ],
     },
   ],
@@ -48,9 +63,29 @@ test("marks the pressed button posted, crediting whoever pressed it", () => {
   expect(button.disabled).toBe(true);
 });
 
-test("spends the pressed button so it cannot be pressed again", () => {
+/*
+  an interactive button is invalid without a custom_id, and discord rejects the
+  whole response rather than the one component — which reaches the person who
+  pressed it as "HareWare didn't respond in time". `disabled` is what stops a
+  second press; removing the id only breaks the reply
+*/
+test("disables the pressed button but keeps its custom_id", () => {
   const reply = handleInteraction(press(postedId("first")))!;
-  expect(reply.data!.components[1].components![0].custom_id).toBeUndefined();
+  const button = reply.data!.components[1].components![0];
+
+  expect(button.disabled).toBe(true);
+  expect(button.custom_id).toBe(postedId("first"));
+});
+
+test("every interactive button in the reply still has a custom_id", () => {
+  const reply = handleInteraction(press(postedId("first")))!;
+
+  for (const row of reply.data!.components) {
+    for (const child of row.components ?? []) {
+      const isLink = child.style === 5;
+      expect(isLink || typeof child.custom_id === "string").toBe(true);
+    }
+  }
 });
 
 test("leaves the other article's button alone", () => {

@@ -84,8 +84,12 @@ function who(interaction: Interaction): string {
  * the same components with one button spent.
  *
  * only the button whose custom_id matches changes, so a message listing five
- * articles keeps the other four pressable. the id has to go: a disabled button
- * still round-trips it, and leaving it invites a second press being handled
+ * articles keeps the other four pressable.
+ *
+ * the custom_id stays. an interactive button — anything but a link — is invalid
+ * without one, and discord rejects the entire response rather than the single
+ * component, which surfaces to whoever pressed it as "HareWare didn't respond
+ * in time". `disabled` is what stops a second press
  */
 function markPosted(
   components: Component[],
@@ -100,9 +104,8 @@ function markPosted(
       components: component.components.map((child) => {
         if (child.type !== BUTTON || child.custom_id !== id) return child;
 
-        const { custom_id, ...rest } = child;
         return {
-          ...rest,
+          ...child,
           style: SUCCESS_STYLE,
           label: `Posted by ${name}`.slice(0, MAX_LABEL),
           disabled: true,

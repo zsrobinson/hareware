@@ -169,61 +169,18 @@ real.
 5. **WordPress.** Nothing. The social reminder reads the public feed and needs
    no account, token or plugin.
 
-## Recreating the Discord webhooks
+## Moving a reminder to another channel
 
-The reminders post through webhooks **the application owns**. This is not a
-preference: only an application-owned webhook may carry an interactive
-component, so a webhook created by hand in Discord's UI can post the reminders
-but silently costs you the **Not posted / Posted by** button — Discord answers
-`400` to the whole message rather than dropping just the button.
+Both reminders post **as the bot**, so a channel is not a credential: the ids
+are constants in `src/lib/reminders/config.ts` and moving one is a one-line
+pull request. The bot needs **View Channel** and **Send Messages** in the new
+channel.
 
-`scripts/discord-webhooks.mjs` does all of it. It reads `DISCORD_BOT_TOKEN`
-from `.dev.vars`.
+This is why there are no webhooks. A webhook would make the message author a
+dead end — webhooks are not users, so clicking the name shows no profile — need
+its own avatar rather than the one set in the developer portal, and turn every
+channel into a URL that is a credential to create, store and rotate.
 
-```sh
-node scripts/discord-webhooks.mjs list              # what exists, and where
-node scripts/discord-webhooks.mjs create <channel>  # make one, prints its url
-node scripts/discord-webhooks.mjs avatar            # (re)apply the bot avatar
-```
-
-You need this when a reminder moves channel, when a webhook is deleted from the
-server, or when the avatar changes.
-
-### Moving a reminder to another channel
-
-1. Give the `HareWare` bot **View Channel** and **Manage Webhooks** in the new
-   channel. A `403` straight afterwards usually means Discord has not
-   propagated the change yet rather than that the permission is wrong — wait a
-   moment and try again.
-2. `node scripts/discord-webhooks.mjs create <channel id>`.
-3. Put the URL it prints into the matching secret with
-   `npx wrangler versions secret put DISCORD_SOCIAL_WEBHOOK_URL` (or
-   `DISCORD_BOARD_WEBHOOK_URL`). Plain `wrangler secret put` refuses unless the
-   latest version happens to be the deployed one.
-4. Delete the old webhook in Discord, so nothing can post to the old channel.
-
-### The avatar
-
-Messages appear under the **webhook's** name and avatar, not the application's
-— the avatar set in the developer portal never reaches them. A webhook created
-without one shows Discord's default. `scripts/discord-webhooks.mjs avatar`
-applies `public/bot-logo.jpg` to every webhook the application owns, and is
-what to run after changing that file.
-
-### Reading a webhook's url back
-
-The token is part of the webhook object, so a URL never has to be recorded —
-only its id, which `list` prints:
-
-```sh
-curl -H "Authorization: Bot $DISCORD_BOT_TOKEN" \
-  "https://discord.com/api/v10/webhooks/<webhook id>"
-```
-
-### One trap worth knowing
-
-**Discord rejects requests carrying the default `User-Agent` of some HTTP
-clients** — Python's `urllib` among them — with a `403` that reads exactly like
-a permissions failure. `curl`, `fetch` and the script above are fine. If a call
-fails with `403` while the same call from `curl` succeeds, this is why, and no
-amount of adjusting channel permissions will fix it.
+Set `REMINDERS_TEST_CHANNEL` in `.dev.vars` while working on what the reminders
+say. Without it a local run posts to the club's real channels, because the ids
+are compiled in rather than supplied per environment.

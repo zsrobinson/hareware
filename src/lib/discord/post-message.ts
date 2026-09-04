@@ -1,8 +1,10 @@
 /*
-  posting to discord through a channel webhook url, which is the whole of our
-  discord integration: no application, no bot token, no oauth. the url is the
-  credential and it can do exactly one thing — post into the one channel it was
-  made for.
+  posting to discord as the bot itself.
+
+  messages come from the application's own user, so clicking the name shows a
+  real profile and the avatar is the one set in the developer portal. the
+  alternative — a webhook per channel — makes the author a dead end, needs its
+  own avatar, and turns every channel into a url that is a credential.
 
   messages are built with components v2, where the layout *is* the message:
   `content` and `embeds` are unavailable once the flag is set, and text,
@@ -23,17 +25,10 @@ const LINK_STYLE = 5;
 /** discord's button styles, of the four that are not links */
 const STYLES = { primary: 1, secondary: 2, success: 3, danger: 4 } as const;
 
-/** a url button. it fires no interaction, so any webhook may send one */
+/** a url button. it fires no interaction */
 export type LinkButton = { label: string; url: string };
 
-/**
- * a button that calls us back.
- *
- * only an *application-owned* webhook may send one — discord answers 400 for
- * anything else, which is what the reminders hit before the bot created these
- * webhooks itself. the id comes back on the interaction, and is how the handler
- * knows which button was pressed
- */
+/** a button that calls our interactions endpoint back */
 export type ActionButton = {
   label: string;
   id: string;
@@ -114,24 +109,23 @@ function render(block: Block) {
   }
 }
 
-export async function postToWebhook(
-  webhookUrl: string,
+export async function postMessage(
+  token: string,
+  channelId: string,
   message: DiscordMessage,
-  options: { dryRun?: boolean; silent?: boolean } = {},
+  options: { dryRun?: boolean; silent?: boolean; testChannelId?: string } = {},
 ) {
-  const url = new URL(webhookUrl);
-  // without this a webhook that is not application-owned sends no components
-  url.searchParams.set("with_components", "true");
-  // ask for the created message back, so the check below has something to read
-  url.searchParams.set("wait", "true");
-
-  const components = (
-    options.silent ? message.blocks.map(defuse) : message.blocks
-  ).map(render);
+  /*
+    the channels are constants, so without this every local run would post to
+    the club's real ones. REMINDERS_TEST_CHANNEL redirects both reminders to
+    one channel and belongs in .dev.vars
+  */
+  const channel = options.testChannelId || channelId;
+  const blocks = options.silent ? message.blocks.map(defuse) : message.blocks;
 
   const body = {
     flags: IS_COMPONENTS_V2,
-    components,
+    components: blocks.map(render),
     /*
       never inherit discord's default, which lets a message ping @everyone.
       naming the roles explicitly with an empty `parse` means this message can
@@ -139,8 +133,6 @@ export async function postToWebhook(
     */
     allowed_mentions: {
       parse: [] as string[],
-      // kept correct for the mentions we do write, though it is `defuse`
-      // above that actually makes a silent run silent
       roles: options.silent ? [] : (message.mentionRoleIds ?? []),
     },
   };
@@ -151,32 +143,26 @@ export async function postToWebhook(
     return;
   }
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const response = await fetch(
+    `https://discord.com/api/v10/channels/${channel}/messages`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bot ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+  );
 
+  /*
+    discord refuses a message it cannot render rather than posting a broken
+    one — an interactive button missing its custom_id takes the whole message
+    down with it — so there is nothing to check afterwards, only to report
+  */
   if (!response.ok) {
     throw new DiscordPostError(
       `discord returned ${response.status}: ${await response.text()}`,
-    );
-  }
-
-  /*
-    discord drops components it will not render and still answers as though it
-    posted them, so a button that never appeared looks exactly like one that
-    did. `wait=true` hands back the message as stored — if fewer blocks came
-    back than we sent, say so, because nothing else ever will.
-
-    an *interactive* button is the likelier trip-wire, and that one is refused
-    outright with a 400 above: only an application may send those
-  */
-  const created = (await response.json()) as { components?: unknown[] };
-  if ((created.components?.length ?? 0) < components.length) {
-    console.error(
-      `[discord] posted, but ${components.length - (created.components?.length ?? 0)} ` +
-        "of its blocks were dropped",
     );
   }
 }

@@ -1,6 +1,6 @@
 import {
   buttons,
-  postToWebhook,
+  postMessage,
   separator,
   text,
   type Block,
@@ -9,7 +9,7 @@ import { easternNow, type EasternNow } from "~/lib/eastern";
 import { postedId } from "~/lib/discord/interactions";
 import { toArticleSlug } from "~/lib/article-url";
 import { getRecentArticles } from "~/lib/get-recent-articles";
-import { HAREWARE_ORIGIN, SOCIAL_ROLE_IDS } from "./config";
+import { HAREWARE_ORIGIN, SOCIAL_CHANNEL_ID, SOCIAL_ROLE_IDS } from "./config";
 
 /*
   each article gets its own line and its own row of buttons, so the whole
@@ -26,7 +26,7 @@ export async function sendSocialPing(
   // 0006's "setup outside the repo"
   const roleId = SOCIAL_ROLE_IDS[eastern.weekday];
   const missing = [
-    !env.DISCORD_SOCIAL_WEBHOOK_URL && "DISCORD_SOCIAL_WEBHOOK_URL",
+    !env.DISCORD_BOT_TOKEN && "DISCORD_BOT_TOKEN",
     !roleId && `SOCIAL_ROLE_IDS.${eastern.weekday}`,
   ].filter(Boolean);
   if (missing.length > 0) return `social ping unset: ${missing.join(", ")}`;
@@ -77,12 +77,14 @@ export async function sendSocialPing(
     ),
   ]);
 
-  await postToWebhook(
-    env.DISCORD_SOCIAL_WEBHOOK_URL!,
+  await postMessage(
+    env.DISCORD_BOT_TOKEN!,
+    SOCIAL_CHANNEL_ID,
     { blocks, mentionRoleIds: [roleId!] },
     {
       dryRun: Boolean(env.REMINDERS_DRY_RUN),
       silent: Boolean(env.REMINDERS_NO_PING),
+      testChannelId: env.REMINDERS_TEST_CHANNEL,
     },
   );
 

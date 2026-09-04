@@ -34,6 +34,15 @@ export const ROLE_NAMES: Record<string, string> = {
   "1545245632996966493": "Weekend Poster",
 };
 
+/**
+ * where each reminder posts.
+ *
+ * ids rather than webhook urls: the bot posts as itself, so a channel is not a
+ * credential and belongs here with the rest of the settings that are not secret
+ */
+export const SOCIAL_CHANNEL_ID = "1155994296219091014"; // #instagram-posting
+export const BOARD_CHANNEL_ID = "670351492107993118"; // #editorial-board
+
 /** @Weekend Poster covers both saturday and sunday, so two days share it */
 const WEEKEND_POSTER = "1545245632996966493";
 

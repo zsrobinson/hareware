@@ -1,6 +1,7 @@
 import { easternNow, easternTime, type EasternNow } from "~/lib/eastern";
-import { buttons, postToWebhook, text } from "~/lib/discord/post-message";
+import { buttons, postMessage, text } from "~/lib/discord/post-message";
 import {
+  BOARD_CHANNEL_ID,
   MEETING_DATE_PROPERTY,
   MEETING_MENTION_ROLE_ID,
   MEETING_TITLE_PREFIX,
@@ -33,7 +34,7 @@ export async function sendMeetingReminder(
   // 0006's "setup outside the repo"
   const missing = [
     !env.NOTION_TOKEN && "NOTION_TOKEN",
-    !env.DISCORD_BOARD_WEBHOOK_URL && "DISCORD_BOARD_WEBHOOK_URL",
+    !env.DISCORD_BOT_TOKEN && "DISCORD_BOT_TOKEN",
     !MEETINGS_DATABASE_ID && "MEETINGS_DATABASE_ID",
   ].filter(Boolean);
   if (missing.length > 0)
@@ -49,8 +50,9 @@ export async function sendMeetingReminder(
 
   const title = readTitle(page);
 
-  await postToWebhook(
-    env.DISCORD_BOARD_WEBHOOK_URL!,
+  await postMessage(
+    env.DISCORD_BOT_TOKEN!,
+    BOARD_CHANNEL_ID,
     {
       blocks: [
         text(meetingLine(page, property)),
@@ -61,6 +63,7 @@ export async function sendMeetingReminder(
     {
       dryRun: Boolean(env.REMINDERS_DRY_RUN),
       silent: Boolean(env.REMINDERS_NO_PING),
+      testChannelId: env.REMINDERS_TEST_CHANNEL,
     },
   );
 

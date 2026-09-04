@@ -59,9 +59,10 @@ request to us, and it is the only record of who marked what. Recording it costs
 one insert on a path that runs anyway.
 
 **`DISCORD_BOT_TOKEN` becomes a runtime secret**, reversing what ADR 0006 and
-the README say. Asking Discord whether someone holds a role needs it on every
+the README said. Asking Discord whether someone holds a role needs it on every
 request, so the bot must stay in the server permanently rather than only for
-the setup it was originally invited for.
+the setup it was originally invited for. The reminders reached the same
+conclusion first, by moving from webhooks to posting as the bot.
 
 **Per-request role checking costs a Discord call per page view.** It was chosen
 over caching the role in the session anyway: a role removed in Discord takes

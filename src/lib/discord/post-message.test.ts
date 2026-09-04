@@ -1,14 +1,13 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { buttons, postToWebhook, separator, text } from "./post-message";
+import { buttons, postMessage, separator, text } from "./post-message";
 
-const WEBHOOK = "https://discord.com/api/webhooks/1/abc";
+const TOKEN = "bot-token";
+const CHANNEL = "1155994296219091014";
 
-function mockDiscord(stored: unknown[] = [], ok = true) {
+function mockDiscord(_stored: unknown[] = [], ok = true) {
   const fetchMock = vi.fn(
     async (_input: string | URL, _init?: RequestInit) =>
-      new Response(JSON.stringify({ components: stored }), {
-        status: ok ? 200 : 400,
-      }),
+      new Response("{}", { status: ok ? 200 : 400 }),
   );
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
@@ -22,7 +21,7 @@ afterEach(() => vi.unstubAllGlobals());
 test("sends components v2 and renders each block", async () => {
   const fetchMock = mockDiscord([{}, {}, {}]);
 
-  await postToWebhook(WEBHOOK, {
+  await postMessage(TOKEN, CHANNEL, {
     blocks: [
       text("hello"),
       buttons({ label: "Go", url: "https://example.com" }),
@@ -44,19 +43,22 @@ test("sends components v2 and renders each block", async () => {
   ]);
 });
 
-test("a webhook that is not application-owned needs with_components", async () => {
-  const fetchMock = mockDiscord([{}]);
-  await postToWebhook(WEBHOOK, { blocks: [text("hi")] });
+test("posts to the channel as the bot", async () => {
+  const fetchMock = mockDiscord();
+  await postMessage(TOKEN, CHANNEL, { blocks: [text("hi")] });
 
-  const url = new URL(fetchMock.mock.calls[0]![0] as string | URL);
-  expect(url.searchParams.get("with_components")).toBe("true");
-  // wait=true is what makes the dropped-block check below possible at all
-  expect(url.searchParams.get("wait")).toBe("true");
+  const [url, init] = fetchMock.mock.calls[0]!;
+  expect(String(url)).toBe(
+    `https://discord.com/api/v10/channels/${CHANNEL}/messages`,
+  );
+  expect((init!.headers as Record<string, string>).authorization).toBe(
+    `Bot ${TOKEN}`,
+  );
 });
 
 test("only the named roles may be pinged, never @everyone", async () => {
   const fetchMock = mockDiscord([{}]);
-  await postToWebhook(WEBHOOK, {
+  await postMessage(TOKEN, CHANNEL, {
     blocks: [text("<@&123> @everyone")],
     mentionRoleIds: ["123"],
   });
@@ -69,36 +71,11 @@ test("only the named roles may be pinged, never @everyone", async () => {
 
 test("mentions nothing when no roles are named", async () => {
   const fetchMock = mockDiscord([{}]);
-  await postToWebhook(WEBHOOK, { blocks: [text("<@&123>")] });
+  await postMessage(TOKEN, CHANNEL, { blocks: [text("<@&123>")] });
   expect(sentBody(fetchMock).allowed_mentions).toEqual({
     parse: [],
     roles: [],
   });
-});
-
-test("says so when discord drops blocks it will not render", async () => {
-  // discord answers 200 having stored fewer components than we sent
-  mockDiscord([{}]);
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
-
-  await postToWebhook(WEBHOOK, {
-    blocks: [text("one"), buttons({ label: "Go", url: "https://example.com" })],
-  });
-
-  expect(error).toHaveBeenCalledWith(expect.stringContaining("dropped"));
-  error.mockRestore();
-});
-
-test("stays quiet when everything survived", async () => {
-  mockDiscord([{}, {}]);
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
-
-  await postToWebhook(WEBHOOK, {
-    blocks: [text("one"), buttons({ label: "Go", url: "https://example.com" })],
-  });
-
-  expect(error).not.toHaveBeenCalled();
-  error.mockRestore();
 });
 
 /*
@@ -110,8 +87,9 @@ test("stays quiet when everything survived", async () => {
 test("silent writes no mention markup at all", async () => {
   const fetchMock = mockDiscord([{}]);
 
-  await postToWebhook(
-    WEBHOOK,
+  await postMessage(
+    TOKEN,
+    CHANNEL,
     {
       blocks: [text("<@&669611068938780673> **Meeting Tonight**")],
       mentionRoleIds: ["669611068938780673"],
@@ -127,8 +105,9 @@ test("silent writes no mention markup at all", async () => {
 test("silent leaves an unknown role id recognisable rather than blank", async () => {
   const fetchMock = mockDiscord([{}]);
 
-  await postToWebhook(
-    WEBHOOK,
+  await postMessage(
+    TOKEN,
+    CHANNEL,
     { blocks: [text("<@&999> hello")] },
     { silent: true },
   );
@@ -139,8 +118,9 @@ test("silent leaves an unknown role id recognisable rather than blank", async ()
 test("silent defuses every mention in a message, not just the first", async () => {
   const fetchMock = mockDiscord([{}, {}]);
 
-  await postToWebhook(
-    WEBHOOK,
+  await postMessage(
+    TOKEN,
+    CHANNEL,
     {
       blocks: [
         text("<@&669611068938780673> one"),
@@ -158,7 +138,7 @@ test("silent defuses every mention in a message, not just the first", async () =
 test("a normal send keeps the mention markup", async () => {
   const fetchMock = mockDiscord([{}]);
 
-  await postToWebhook(WEBHOOK, {
+  await postMessage(TOKEN, CHANNEL, {
     blocks: [text("<@&669611068938780673> meeting today")],
     mentionRoleIds: ["669611068938780673"],
   });
@@ -170,16 +150,39 @@ test("a normal send keeps the mention markup", async () => {
 
 test("throws when discord refuses the message", async () => {
   mockDiscord([], false);
-  await expect(postToWebhook(WEBHOOK, { blocks: [text("x")] })).rejects.toThrow(
-    /discord returned 400/,
-  );
+  await expect(
+    postMessage(TOKEN, CHANNEL, { blocks: [text("x")] }),
+  ).rejects.toThrow(/discord returned 400/);
 });
 
 test("a dry run sends nothing", async () => {
   const fetchMock = mockDiscord();
   vi.spyOn(console, "log").mockImplementation(() => {});
 
-  await postToWebhook(WEBHOOK, { blocks: [text("x")] }, { dryRun: true });
+  await postMessage(TOKEN, CHANNEL, { blocks: [text("x")] }, { dryRun: true });
 
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+/*
+  the channels are constants now, so without this a local run would post to the
+  club's real ones rather than a test channel
+*/
+test("REMINDERS_TEST_CHANNEL redirects the message", async () => {
+  const fetchMock = mockDiscord();
+
+  await postMessage(
+    TOKEN,
+    CHANNEL,
+    { blocks: [text("hi")] },
+    { testChannelId: "1029929430652555364" },
+  );
+
+  expect(String(fetchMock.mock.calls[0]![0])).toContain("1029929430652555364");
+});
+
+test("posts to the real channel when no redirect is set", async () => {
+  const fetchMock = mockDiscord();
+  await postMessage(TOKEN, CHANNEL, { blocks: [text("hi")] });
+  expect(String(fetchMock.mock.calls[0]![0])).toContain(CHANNEL);
 });

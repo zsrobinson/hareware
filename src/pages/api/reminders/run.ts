@@ -79,7 +79,12 @@ export const POST: APIRoute = async ({ request }) => {
     ...(query.get("silent") ? { REMINDERS_NO_PING: "1" } : {}),
   };
 
-  const report = await runReminders(options, easternNow(new Date()), which);
+  const report = await runReminders(
+    options,
+    easternNow(new Date()),
+    which,
+    "manual",
+  );
 
   return new Response(JSON.stringify(report, null, 2), {
     headers: {

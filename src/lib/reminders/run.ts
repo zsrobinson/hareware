@@ -1,4 +1,5 @@
 import { easternNow, type EasternNow } from "~/lib/eastern";
+import { prunePayloads, record } from "~/lib/log";
 import { REMINDER_HOUR } from "./config";
 import { sendMeetingReminder } from "./meeting";
 import { sendSocialPing } from "./social";
@@ -16,7 +17,14 @@ export async function runScheduled(controller: ScheduledController, env: Env) {
   if (eastern.hour !== REMINDER_HOUR && !env.REMINDERS_IGNORE_HOUR) return;
 
   try {
-    await runReminders(env, eastern, { meeting: true, social: true });
+    await runReminders(env, eastern, { meeting: true, social: true }, "cron");
+
+    /*
+      the sensitive half of the log ages out on the same schedule that fills
+      it, so there is no second job to remember
+    */
+    const pruned = await prunePayloads(env.DB);
+    if (pruned > 0) console.log(`[log] pruned ${pruned} payload(s)`);
   } catch (error) {
     /*
       this runs inside `ctx.waitUntil`, where a rejection is reported as an
@@ -38,6 +46,7 @@ export async function runReminders(
   env: Env,
   eastern: EasternNow,
   which: Which,
+  source: "cron" | "manual" = "manual",
 ): Promise<Record<string, string>> {
   /*
     both run even if the other throws. they share nothing, and a notion outage
@@ -53,6 +62,8 @@ export async function runReminders(
   for (const [index, result] of results.entries()) {
     const name = index === 0 ? "meeting-reminder" : "social-ping";
 
+    const asked = index === 0 ? which.meeting : which.social;
+
     if (result.status === "fulfilled") {
       report[name] = result.value;
       console.log(`[${name}] ${result.value}`);
@@ -60,6 +71,16 @@ export async function runReminders(
       report[name] = `failed: ${result.reason}`;
       // surfaced in workers logs; #34 turns this into a discord alert
       console.error(`[${name}] failed`, result.reason);
+    }
+
+    // a reminder nobody asked for is not an invocation worth a row
+    if (asked) {
+      await record(env.DB, {
+        source,
+        action: name as "meeting-reminder" | "social-ping",
+        outcome: result.status === "fulfilled" ? "ok" : "failed",
+        summary: report[name]!,
+      });
     }
   }
 

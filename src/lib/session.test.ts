@@ -5,6 +5,7 @@ import {
   createSessionCookie,
   getSession,
 } from "./session";
+import { seal, unseal } from "./sealed-value";
 
 const SECRET = "s".repeat(32);
 
@@ -72,4 +73,22 @@ test("rejects a session past its expiry", async () => {
 
 test("clearing sets an immediate expiry", () => {
   expect(clearSessionCookie()).toContain("Max-Age=0");
+});
+
+test("a state cookie cannot be replayed as a session", async () => {
+  /*
+    `GET /auth/discord?returnTo=…` signs an attacker's string for them, without
+    authentication. The two payloads happen not to be interchangeable today
+    because each reader needs a field the other lacks — but that is a property
+    of the current field names, not of the design. Deriving the key from the
+    purpose means one added field with an unlucky name cannot turn sign-in into
+    a session-forgery oracle.
+  */
+  const forged = await seal(
+    JSON.stringify({ discordUserId: "1", expiresAt: Date.now() + 60_000 }),
+    SECRET,
+    "oauth-state",
+  );
+
+  expect(await unseal(forged, SECRET, "session")).toBeNull();
 });

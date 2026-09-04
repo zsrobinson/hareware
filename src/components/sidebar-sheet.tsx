@@ -9,8 +9,7 @@ import {
   SheetTrigger,
 } from "~/components/ui/sheet";
 import { adminNav, toolsNav } from "~/lib/nav";
-import type { Profile } from "~/lib/member";
-import type { Session } from "~/lib/session";
+import type { ViewerState } from "~/lib/admin";
 import { useAdmin } from "~/lib/use-session";
 
 /*
@@ -22,15 +21,13 @@ import { useAdmin } from "~/lib/use-session";
 export function SidebarSheet({
   pathname,
   returnTo,
-  session: sessionFromServer,
-  profile = null,
+  viewer,
 }: {
   pathname: string;
   returnTo: string;
-  session: Session | null;
-  profile?: Profile | null;
+  viewer?: ViewerState | null;
 }) {
-  const admin = useAdmin();
+  const admin = useAdmin(viewer);
 
   return (
     <Sheet>
@@ -60,12 +57,7 @@ export function SidebarSheet({
           )}
         </nav>
 
-        <SidebarAccount
-          session={sessionFromServer}
-          profile={profile}
-          returnTo={returnTo}
-          inSheet
-        />
+        <SidebarAccount viewer={viewer} returnTo={returnTo} inSheet />
       </SheetContent>
     </Sheet>
   );

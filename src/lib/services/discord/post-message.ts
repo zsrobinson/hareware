@@ -64,6 +64,9 @@ const ROLE_MENTION = /<@&(\d+)>/g;
 /** `@everyone` and `@here`, which need no id and ping the most people */
 const BROADCAST = /@(everyone|here)/gi;
 
+/** `](` — the join that turns bracketed text into a link with a hidden target */
+const MASKED_LINK = /\]\(/g;
+
 /** any of discord's `<...>` references: user, role or channel */
 const REFERENCE = /<(@[!&]?|#)(\d+)>/g;
 
@@ -87,9 +90,18 @@ const BREAK = "\u200b";
  * the result renders identically. only the parser can tell the difference
  */
 export function inert(value: string) {
-  return value
-    .replace(BROADCAST, `@${BREAK}$1`)
-    .replace(REFERENCE, `<${BREAK}$1$2>`);
+  return (
+    value
+      .replace(BROADCAST, `@${BREAK}$1`)
+      .replace(REFERENCE, `<${BREAK}$1$2>`)
+      /*
+        a masked link renders in a text display, so a headline reading
+        `[click here](https://elsewhere)` becomes a clickable link posted by the
+        club's own bot — which is more convincing than anything an attacker
+        could send themselves. breaking the bracket-paren join is enough
+      */
+      .replace(MASKED_LINK, `](${BREAK}`)
+  );
 }
 
 /**

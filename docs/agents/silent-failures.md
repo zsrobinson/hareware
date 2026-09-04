@@ -87,3 +87,69 @@ would post without posting it, and `?silent=1` posts without notifying. Neither
 `REMINDERS_DRY_RUN` nor `REMINDERS_NO_PING` is set in production, deliberately,
 so that the real 8am run works — which means an unqualified manual trigger is a
 real post to a real channel.
+
+---
+
+# The shapes they take in our own code
+
+The entries above are other people's systems. These are ours, and every bug
+this project has had is one of two shapes. Both type check. Both return `200`.
+
+## Two representations of one fact, allowed to disagree
+
+Whenever a fact is written down twice, the two copies eventually differ, and
+nothing announces it. Every one of these shipped:
+
+- Three module globals and one shared "already asked" flag — the sidebar showed
+  a raw Discord id, on three pages, for as long as the session lasted.
+- `session` and `profile` as separate props — a page could pass half an answer,
+  and two of them did.
+- A registry that described the automations while the runner kept its own array
+  — each one's name came from its **array position**, so reordering two lines
+  would have relabelled every log row.
+- `validate(input)` returning `normalize(input)` — the open redirect. The check
+  and the emitted value were different strings.
+- A scrubber walking _elements_ while browsers parse _nodes_ — comments were
+  never inspected, so it approved markup it had not examined.
+- `scrub` dropping `<meta>` while the caller read `og:image` out of one — the
+  featured image was silently always missing.
+- `env.d.ts` describing a flag as doing the thing the codebase had already
+  proved it does not do.
+
+**The fix is always the same: make it impossible to hold half.** One prop
+carrying the whole viewer. The function living on the registry entry. Checking
+the string you are about to emit rather than the one you received.
+
+## Absence encoded as a falsy value
+
+`undefined`, `null`, `""`, `0` and `NaN` all mean "nothing" — so a value that is
+legitimately empty becomes indistinguishable from one that failed to arrive:
+
+- `undefined` meaning both "not asked yet" and "asked, and nobody is signed in",
+  which let seeding cancel the fetch that would have completed the answer.
+- An empty `<channel></channel>` parsing to `""`, so a genuinely quiet day
+  reported a WordPress failure.
+- A missing `x-wp-total` making an offset `NaN`, which went into a URL.
+- Four outcomes flattened into `ok`, so a week of rate limiting wrote seven
+  green rows in the log that exists to tell a quiet morning from a broken one.
+
+**Make absence a state.** `{ status: "unknown" } | { status: "resolved", … }`
+costs three lines. `ok | skipped | misconfigured | failed` costs a type.
+
+# The test that catches them
+
+A helper can be perfectly tested while nothing checks that anything calls it.
+Deleting `inert()` from the social ping left all 126 tests passing — the fix was
+covered, the wiring was not.
+
+> **A fix is not tested until deleting the fix fails a test.**
+
+Check it the direct way: remove the fix, watch the suite go red, put it back.
+That is thirty seconds, and it is the difference between a test that describes
+the fix and one that defends it.
+
+Two places this bites hardest here. **Mocking the boundary you are testing** —
+mocking `postMessage` wholesale means nothing asserts what the message
+contained. And **the D1 path**, where `record()` returns early on a missing
+binding, so a test passing `{} as Env` walks up to the interesting part and
+stops. Mock `~/lib/log` and assert the row instead.

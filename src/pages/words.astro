@@ -2,8 +2,7 @@
 import { Textarea } from "~/components/ui/textarea";
 import { Button } from "~/components/ui/button";
 import Dashboard from "~/layouts/dashboard.astro";
-import { getSessionSecret } from "~/lib/auth-config";
-import { getSession } from "~/lib/session";
+import { viewer, viewerState } from "~/lib/admin";
 import {
   ChevronRightIcon,
   TriangleAlertIcon,
@@ -19,7 +18,6 @@ import { FormItem, FormLabel } from "~/components/options-form";
 function redirectError(error: string) {
   const params = Astro.url.searchParams;
   params.set("error", error);
-  console.log(params);
   return Astro.redirect("/words?" + params);
 }
 
@@ -62,10 +60,10 @@ if (articlesStr && !error) {
    theirs alone — the scraping below is per-request anyway */
 Astro.response.headers.set("cache-control", "private, no-store");
 
-const session = await getSession(Astro.request, getSessionSecret());
+const who = viewerState(await viewer(Astro.request));
 ---
 
-<Dashboard title="Word Counter" session={session}>
+<Dashboard title="Word Counter" viewer={who}>
   <div class="flex max-w-120 flex-col gap-2">
     <FormItem>
       <Link2Icon className="size-5 min-w-max" />

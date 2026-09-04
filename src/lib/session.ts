@@ -38,7 +38,7 @@ export async function createSessionCookie(session: Session, secret: string) {
     expiresAt: Date.now() + LIFETIME_SECONDS * 1000,
   };
 
-  const value = await seal(JSON.stringify(payload), secret);
+  const value = await seal(JSON.stringify(payload), secret, "session");
 
   /*
     Max-Age makes the browser drop it, and `expiresAt` inside the signature is
@@ -55,7 +55,7 @@ export async function getSession(
   if (!value || !secret) return null;
 
   try {
-    const payload = await unseal(value, secret);
+    const payload = await unseal(value, secret, "session");
     if (!payload) return null;
 
     const session = JSON.parse(payload) as Partial<SealedSession>;

@@ -214,3 +214,12 @@ test("changes only what the parser sees, not what a reader sees", () => {
   // the break is a zero-width space, so the line still reads the same
   expect(inert("@everyone").replace(/\u200b/g, "")).toBe("@everyone");
 });
+
+test("a headline cannot become a clickable link", () => {
+  // a masked link posted by the club's own bot is more convincing than
+  // anything an attacker could send from their own account
+  const out = inert("[Read the story](https://elsewhere.example)");
+
+  expect(out).not.toContain("](https");
+  expect(out).toContain("Read the story");
+});

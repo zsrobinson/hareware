@@ -61,7 +61,7 @@ generated file is not a declaration you can rely on.
 Pushes deploy through Cloudflare Workers Builds. `npm run deploy` publishes from
 a terminal when you need it.
 
-## Reminders
+## Automations
 
 A Cloudflare Cron Trigger runs `scheduled()` in `src/worker.ts` every hour. The
 reminders decide for themselves whether a given tick is their hour, because
@@ -207,42 +207,35 @@ real.
 5. **WordPress.** Nothing. The social reminder reads the public feed and needs
    no account, token or plugin.
 
-## Moving a reminder to another channel
+## Moving an automation to another channel
 
 Both reminders post **as the bot**, so a channel is not a credential: the ids
 are constants in `src/lib/automations/config.ts` and moving one is a one-line
 pull request. The bot needs **View Channel** and **Send Messages** in the new
 channel.
 
-## Why a ping renders but does not notify
+## Making the bot able to ping
 
-A role mention can look right and reach nobody. Discord draws `<@&id>` as a pill
-whether or not the mention was allowed, and only highlights it for the people it
-actually notified — so a reminder that mentions `@Editorial Board` in grey has
-been posted, rendered, and silently dropped on the way to everyone in it.
+A role mention can render perfectly and reach nobody — the trap, and how to
+recognise it, is in
+[docs/agents/silent-failures.md](docs/agents/silent-failures.md). What setup
+needs is the choice between the two ways a role becomes pingable:
 
-There are two ways a role becomes pingable, and the bot needs one of them:
+- mark the role **Mentionable**, which also lets every member ping it, or
+- give the **HareWare** role **Mention @everyone, @here, and All Roles**, which
+  lets the bot ping a role nobody else can.
 
-- the role is **Mentionable** in its Discord settings, which also lets every
-  member ping it, or
-- the **HareWare** role holds **Mention @everyone, @here, and All Roles**, which
-  lets the bot ping a role that nobody else can.
+Use the second. It keeps `@Editorial Board` unpingable by hand, which is what a
+duty role should be.
 
-The second is the one to use. It keeps `@Editorial Board` unpingable by hand,
-which is what a duty role should be, and `allowed_mentions` in
-`src/lib/services/discord/post-message.ts` still names the single role each message may
-mention, so the permission is broad but the message is not.
+That permission is broad, so the narrowing happens in the message rather than in
+Discord: `inert()` in `src/lib/services/discord/post-message.ts` strips mention
+markup out of every headline and Notion field before it goes near a message, so
+the only mention that survives is the one we wrote. `allowed_mentions` is set
+too, but it is not the control — it does not gate a mention inside a Components
+V2 text display, which is the whole reason `inert()` exists.
 
-This bites bots only. The reminders posted through webhooks at first, and a
-webhook pings any role listed in `allowed_mentions` without needing the
-permission at all — so the pings worked before the switch to posting as the bot
-and stopped afterwards, with nothing in the code changing to explain it.
-
-This is why there are no webhooks. A webhook would make the message author a
-dead end — webhooks are not users, so clicking the name shows no profile — need
-its own avatar rather than the one set in the developer portal, and turn every
-channel into a URL that is a credential to create, store and rotate.
-
-Set `REMINDERS_TEST_CHANNEL` in `.dev.vars` while working on what the reminders
-say. Without it a local run posts to the club's real channels, because the ids
-are compiled in rather than supplied per environment.
+This is also why there are no webhooks. A webhook would make the message author
+a dead end — webhooks are not users, so clicking the name shows no profile —
+need its own avatar rather than the one set in the developer portal, and turn
+every channel into a URL that is a credential to create, store and rotate.

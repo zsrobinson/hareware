@@ -1,74 +1,74 @@
 import { useEffect, useSyncExternalStore } from "react";
-import type { Profile } from "./member";
-import type { Session } from "./session";
+import type { ViewerState } from "./admin";
 
 /*
-  who is signed in, shared by the two islands that care: the editorial nav at
-  the top of the sidebar and the account panel at the bottom. they would
-  otherwise each ask /api/session.json and could disagree.
+  who is looking, shared by the islands that care: the editorial nav, the mobile
+  drawer, and the account panel. they would otherwise each ask
+  /api/session.json and could disagree.
 
-  cached pages start without an answer; private pages seed this from their
-  server-verified session. the fetch remains the one client-side source.
+  one snapshot with three states, not three module variables with a shared
+  boolean. the old shape published `session` from a page that had one while
+  leaving `admin` and `profile` at their defaults, and set the "already asked"
+  flag on the way past — so a member on a page that passed only a session saw
+  their own id where their name belongs, and kept seeing it after navigating
+  away, because the flag outlives the page under client-side routing.
+
+  "not asked yet" has to be a state of its own. it is what tells the fetch to
+  run, and conflating it with "asked, and the answer was nobody" is what made
+  seeding silently cancel the request that would have filled in the rest.
 */
-let session: Session | null | undefined;
-/* what to call them, read live by the api route rather than kept anywhere */
-let profile: Profile | null = null;
-/* whether that member may see the admin tools. the same answer, from the same
-   request, so the two cannot disagree */
-let admin = false;
-let requested = false;
+
+const SIGNED_OUT: ViewerState = { session: null, profile: null, admin: false };
+
+type Snapshot =
+  { status: "unknown" } | { status: "resolved"; viewer: ViewerState };
+
+let snapshot: Snapshot = { status: "unknown" };
+let inFlight = false;
 
 const listeners = new Set<() => void>();
 
-function publish(
-  value: Session | null,
-  isAdmin = false,
-  who: Profile | null = null,
-) {
-  session = value;
-  admin = isAdmin;
-  profile = who;
+function publish(viewer: ViewerState) {
+  snapshot = { status: "resolved", viewer };
   for (const listener of listeners) listener();
 }
 
-function requestSession() {
-  if (requested) return;
-  requested = true;
+/** a nullable string off the wire, kept only when it is a non-empty one */
+const str = (value: unknown) =>
+  typeof value === "string" && value ? value : undefined;
 
-  fetch("/api/session.json")
-    // json() is typed unknown under the workers types, so narrow it here
-    .then((r) => (r.ok ? r.json() : { signedIn: false }))
-    .then(
-      (body) =>
-        body as {
-          signedIn?: unknown;
-          discordUserId?: unknown;
-          profile?: unknown;
-          admin?: unknown;
-        },
-    )
-    .then((data) =>
-      publish(
-        data.signedIn === true && typeof data.discordUserId === "string"
-          ? { discordUserId: data.discordUserId }
-          : null,
-        data.admin === true,
-        readProfile(data.profile),
-      ),
-    )
-    .catch(() => publish(null));
-}
-
-/** discord's answer off the wire, kept only if it is the shape we asked for */
-function readProfile(value: unknown): Profile | null {
+/** discord's answer, kept only if it is the shape we asked for */
+function readProfile(value: unknown): ViewerState["profile"] {
   if (!value || typeof value !== "object") return null;
 
   const who = value as Record<string, unknown>;
   const strings = ["displayName", "username", "avatarUrl"] as const;
 
   return strings.every((key) => typeof who[key] === "string")
-    ? (who as Profile)
+    ? (who as ViewerState["profile"])
     : null;
+}
+
+function requestViewer() {
+  if (inFlight || snapshot.status === "resolved") return;
+  inFlight = true;
+
+  fetch("/api/session.json")
+    // json() is typed unknown under the workers types, so narrow it here
+    .then((r) => (r.ok ? r.json() : {}))
+    .then((body) => body as Record<string, unknown>)
+    .then((data) =>
+      publish(
+        data.signedIn === true && str(data.discordUserId)
+          ? {
+              session: { discordUserId: data.discordUserId as string },
+              profile: readProfile(data.profile),
+              admin: data.admin === true,
+            }
+          : SIGNED_OUT,
+      ),
+    )
+    .catch(() => publish(SIGNED_OUT));
 }
 
 /** react's contract for the store above: subscribe, and read */
@@ -77,34 +77,38 @@ function subscribe(onChange: () => void) {
   return () => listeners.delete(onChange);
 }
 
-export function useSession(knownByServer: Session | null = null) {
-  /*
-    this is a store outside react — module-level, shared by the islands, and
-    written by a fetch none of them own. `useSyncExternalStore` is what that
-    is for: it reads through on every render rather than copying into state
-    and pushing an update from an effect, which is a second render for a value
-    that was already known
-  */
+/**
+ * everything the nav knows about whoever is looking.
+ *
+ * a page the cdn does not cache resolves this server-side and passes it in —
+ * that answer is used directly and nothing is fetched. a cached page passes
+ * nothing and gets it from /api/session.json, which makes the same lookup
+ * `viewer()` makes. either way there is one answer, so the sidebar and the
+ * drawer cannot disagree
+ */
+export function useViewer(knownByServer?: ViewerState | null): ViewerState {
   const value = useSyncExternalStore(
     subscribe,
-    () => (session === undefined ? null : session),
+    () => (snapshot.status === "resolved" ? snapshot.viewer : SIGNED_OUT),
     /* the server has no store to read, and renders signed-out either way */
-    () => null,
+    () => SIGNED_OUT,
   );
 
   useEffect(() => {
-    /* a page the cdn does not cache already rendered the answer, so there is
-       nothing to ask for */
-    if (knownByServer) {
-      publish(knownByServer, admin, profile);
-      requested = true;
-      return;
-    }
-
-    if (session === undefined) requestSession();
+    /*
+      only a page that passed nothing asks. a seeded page does NOT mark the
+      store resolved — its answer belongs to that page, and writing it into a
+      module that survives navigation is how a stale one followed the member
+      around
+    */
+    if (knownByServer === undefined) requestViewer();
   }, [knownByServer]);
 
   return knownByServer ?? value;
+}
+
+export function useSession(knownByServer?: ViewerState | null) {
+  return useViewer(knownByServer).session;
 }
 
 /**
@@ -114,19 +118,11 @@ export function useSession(knownByServer: Session | null = null) {
  * so a stale answer here shows a link that answers 404 rather than letting
  * anybody in
  */
-export function useAdmin() {
-  const value = useSession();
-  return value !== null && admin;
+export function useAdmin(knownByServer?: ViewerState | null) {
+  return useViewer(knownByServer).admin;
 }
 
-/**
- * what to call the signed-in member, once it has arrived.
- *
- * a page that already looked them up server-side passes it in and this returns
- * it unchanged; a cached page gets it from the same request that answers who is
- * signed in. null until then, which the ui draws as the plain discord mark
- */
-export function useProfile(knownByServer: Profile | null = null) {
-  const value = useSession();
-  return knownByServer ?? (value ? profile : null);
+/** what to call the signed-in member, once it has arrived */
+export function useProfile(knownByServer?: ViewerState | null) {
+  return useViewer(knownByServer).profile;
 }

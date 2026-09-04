@@ -6,7 +6,7 @@ import { Button } from "~/components/ui/button";
 import type { Row } from "~/lib/log";
 
 /** the row as it crosses to the client: json has no Date and needs none */
-export type LogRow = Omit<Row, "payload"> & { payload: unknown };
+export type LogRow = Row;
 
 const when = (at: number) =>
   new Date(at * 1000).toLocaleString("en-US", {

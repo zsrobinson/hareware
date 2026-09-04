@@ -23,12 +23,6 @@ export const invocations = sqliteTable(
     summary: text("summary").notNull(),
     /** the discord user behind it, where a person was */
     actor: text("actor"),
-    /**
-     * whatever is worth keeping to debug this later. carries the
-     * byline-to-member mapping in some cases, so it is pruned after thirty days
-     * rather than kept — see ADR 0007
-     */
-    payload: text("payload", { mode: "json" }),
   },
   // the log page reads newest-first, and the prune job reads oldest-first
   (table) => [index("invocations_at").on(table.at)],

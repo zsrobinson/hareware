@@ -1,5 +1,5 @@
 import { easternNow, type EasternNow } from "~/lib/eastern";
-import { prunePayloads, record } from "~/lib/log";
+import { record } from "~/lib/log";
 import { REMINDER_HOUR } from "./config";
 import { sendMeetingReminder } from "./meeting";
 import { sendSocialPing } from "./social";
@@ -18,13 +18,6 @@ export async function runScheduled(controller: ScheduledController, env: Env) {
 
   try {
     await runReminders(env, eastern, { meeting: true, social: true }, "cron");
-
-    /*
-      the sensitive half of the log ages out on the same schedule that fills
-      it, so there is no second job to remember
-    */
-    const pruned = await prunePayloads(env.DB);
-    if (pruned > 0) console.log(`[log] pruned ${pruned} payload(s)`);
   } catch (error) {
     /*
       this runs inside `ctx.waitUntil`, where a rejection is reported as an

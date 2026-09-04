@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import Dashboard from "~/layouts/dashboard.astro";
 import { InvocationLog } from "~/components/invocation-log";
 import { notFound, viewer } from "~/lib/admin";
-import { PAYLOAD_DAYS, recent } from "~/lib/log";
+import { recent } from "~/lib/log";
 
 /* one lookup answers both whether they may be here and what to call them, so
    the sidebar costs no second request to discord */
@@ -27,8 +27,7 @@ const rows = env.DB ? await recent(env.DB, 500) : [];
   <div class="space-y-4">
     <p class="text-muted-foreground text-sm">
       Everything HareWare has done. A quiet morning shows a row saying nothing
-      published, which is how it is told apart from a broken one. Details are
-      kept for {PAYLOAD_DAYS} days; the summaries stay.
+      published, which is how it is told apart from a broken one.
     </p>
 
     <InvocationLog rows={rows} client:load />

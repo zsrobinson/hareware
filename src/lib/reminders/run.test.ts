@@ -10,6 +10,13 @@ vi.mock("./social", () => ({
   sendSocialPing: (...a: unknown[]) => social(...(a as [])),
 }));
 
+const reportFailure = vi.fn<(...args: unknown[]) => Promise<void>>(
+  async () => undefined,
+);
+vi.mock("./alert", () => ({
+  reportFailure: (...a: unknown[]) => reportFailure(...(a as [])),
+}));
+
 const { runScheduled, runReminders } = await import("./run");
 
 /** 12:00 utc is 8am eastern in summer; 13:00 utc is 9am */
@@ -25,6 +32,7 @@ const eastern = { date: "2026-09-03", hour: 8, weekday: "Thursday" };
 afterEach(() => {
   meeting.mockClear();
   social.mockClear();
+  reportFailure.mockClear();
   vi.restoreAllMocks();
 });
 
@@ -100,4 +108,67 @@ test("runReminders reports a failure rather than throwing", async () => {
 
   expect(report["social-ping"]).toContain("failed");
   expect(report["meeting-reminder"]).toBe("meeting ran");
+});
+
+test("reports a failed cron run, naming the reminder and the reason", async () => {
+  meeting.mockRejectedValueOnce(new Error("notion returned 502"));
+  vi.spyOn(console, "error").mockImplementation(() => {});
+
+  await runReminders(
+    {} as Env,
+    eastern,
+    { meeting: true, social: true },
+    "cron",
+  );
+
+  expect(reportFailure).toHaveBeenCalledOnce();
+  const [, action, summary] = reportFailure.mock.calls[0] as [
+    Env,
+    string,
+    string,
+  ];
+  expect(action).toBe("meeting-reminder");
+  expect(summary).toContain("notion returned 502");
+});
+
+test("says nothing about a cron run that worked", async () => {
+  await runReminders(
+    {} as Env,
+    eastern,
+    { meeting: true, social: true },
+    "cron",
+  );
+
+  expect(reportFailure).not.toHaveBeenCalled();
+});
+
+test("leaves a failed manual run to whoever triggered it", async () => {
+  meeting.mockRejectedValueOnce(new Error("boom"));
+  vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const report = await runReminders(
+    {} as Env,
+    eastern,
+    { meeting: true, social: true },
+    "manual",
+  );
+
+  // the response already tells them, so a channel post would say it twice
+  expect(reportFailure).not.toHaveBeenCalled();
+  expect(report["meeting-reminder"]).toContain("boom");
+});
+
+test("reports each reminder that failed, independently", async () => {
+  meeting.mockRejectedValueOnce(new Error("notion down"));
+  social.mockRejectedValueOnce(new Error("wordpress down"));
+  vi.spyOn(console, "error").mockImplementation(() => {});
+
+  await runReminders(
+    {} as Env,
+    eastern,
+    { meeting: true, social: true },
+    "cron",
+  );
+
+  expect(reportFailure).toHaveBeenCalledTimes(2);
 });

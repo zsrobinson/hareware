@@ -43,6 +43,16 @@ export const ROLE_NAMES: Record<string, string> = {
 export const SOCIAL_CHANNEL_ID = "1155994296219091014"; // #instagram-posting
 export const BOARD_CHANNEL_ID = "670351492107993118"; // #editorial-board
 
+/**
+ * where a failed run is reported.
+ *
+ * deliberately not a channel the club reads. a reminder that did not go out is
+ * an operational fact, and putting it beside the reminders themselves would
+ * train everyone to scroll past both — this is the channel that already carries
+ * bot noise, and the one to look in when a morning was quiet
+ */
+export const ALERT_CHANNEL_ID = "1029929430652555364"; // #carl-bot
+
 /** @Weekend Poster covers both saturday and sunday, so two days share it */
 const WEEKEND_POSTER = "1545245632996966493";
 

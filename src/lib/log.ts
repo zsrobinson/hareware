@@ -9,7 +9,7 @@
 */
 
 import { drizzle } from "drizzle-orm/d1";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { invocations, type Invocation, type Row } from "./db/schema";
 
 export type { Invocation, Row };
@@ -44,4 +44,33 @@ export function recent(db: D1Database, limit = 100): Promise<Row[]> {
     .from(invocations)
     .orderBy(desc(invocations.at))
     .limit(limit);
+}
+
+/**
+ * how the last recorded run of an action ended, or null if there is no record.
+ *
+ * used to tell a new failure from a continuing one. null means "nothing to
+ * compare against" — no database, no history, or a read that failed — and the
+ * caller treats all three as "this is news", because a missing log is a reason
+ * to say more rather than less
+ */
+export async function lastOutcome(
+  db: D1Database | undefined,
+  action: Row["action"],
+): Promise<Row["outcome"] | null> {
+  if (!db) return null;
+
+  try {
+    const [row] = await drizzle(db)
+      .select({ outcome: invocations.outcome })
+      .from(invocations)
+      .where(eq(invocations.action, action))
+      .orderBy(desc(invocations.at))
+      .limit(1);
+
+    return row?.outcome ?? null;
+  } catch (error) {
+    console.error("[log] could not read the last outcome", error);
+    return null;
+  }
 }

@@ -1,5 +1,6 @@
 import { easternNow, type EasternNow } from "~/lib/eastern";
-import { record } from "~/lib/log";
+import { record, type Row } from "~/lib/log";
+import { reportFailure } from "./alert";
 import { REMINDER_HOUR } from "./config";
 import { sendMeetingReminder } from "./meeting";
 import { sendSocialPing } from "./social";
@@ -68,9 +69,18 @@ export async function runReminders(
 
     // a reminder nobody asked for is not an invocation worth a row
     if (asked) {
+      /*
+        before the row is written, so it compares against the run before this
+        one. only the cron reports: a reminder fired by hand has somebody
+        reading the response it returns, and telling them twice is noise
+      */
+      if (result.status === "rejected" && source === "cron") {
+        await reportFailure(env, name as Row["action"], report[name]!);
+      }
+
       await record(env.DB, {
         source,
-        action: name as "meeting-reminder" | "social-ping",
+        action: name as Row["action"],
         outcome: result.status === "fulfilled" ? "ok" : "failed",
         summary: report[name]!,
       });

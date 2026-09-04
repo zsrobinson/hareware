@@ -41,6 +41,16 @@ npm run build
 npx wrangler versions upload   # uploads a version, prints a preview url
 ```
 
+## Worker types
+
+`worker-configuration.d.ts` is generated from `wrangler.jsonc` and **committed**.
+It used to be generated during the build, which made every build depend on
+running `wrangler` first — and that is where the build broke. Committing it
+means a clone typechecks with nothing but `npm ci`.
+
+Run `npm run types` after changing a binding in `wrangler.jsonc`, and commit
+what it writes.
+
 ## Deployment
 
 Pushes deploy through Cloudflare Workers Builds. `npm run deploy` publishes from

@@ -5,9 +5,8 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "postinstall": "wrangler types",
-    "prebuild": "wrangler types",
     "build": "astro check && astro build",
+    "types": "wrangler types",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",

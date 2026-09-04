@@ -1,11 +1,10 @@
 import { env } from "cloudflare:workers";
-import { DISCORD_APPLICATION_ID } from "./discord/config";
+import { DISCORD_OAUTH_CLIENT_ID } from "./discord/config";
 import type { AuthConfig } from "./auth";
 
 export function getAuthConfig(): AuthConfig | null {
-  // the oauth client id and the application id are the same value, and it is
-  // already a constant — a second copy in the environment could only disagree
-  const clientId = DISCORD_APPLICATION_ID;
+  // not the bot's application id: sign-in belongs to a separate one
+  const clientId = DISCORD_OAUTH_CLIENT_ID;
   const clientSecret = env.DISCORD_CLIENT_SECRET?.trim() ?? "";
   const sessionSecret = env.SESSION_SECRET?.trim() ?? "";
 

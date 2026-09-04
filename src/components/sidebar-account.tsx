@@ -107,7 +107,12 @@ export function SidebarAccount({
   );
 
   if (!session) {
-    const signInHref = `/sign-in?${new URLSearchParams({ returnTo })}`;
+    /*
+      straight to discord rather than by way of a page whose only content is
+      the same button again. /sign-in still exists for the errors the callback
+      redirects to, which do need somewhere to say what went wrong
+    */
+    const signInHref = `/auth/discord?${new URLSearchParams({ returnTo })}`;
 
     return (
       <div className={row}>

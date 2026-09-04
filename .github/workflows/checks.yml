@@ -1,16 +1,39 @@
 name: Checks
 
-# what a person is expected to run before pushing, run by something that
-# cannot forget. deploys stay with Workers Builds; this only says whether the
-# code is sound
+# What this is for, and what it deliberately is not.
+#
+# Cloudflare Workers Builds deploys. It runs `npm run build`, so a change that
+# does not compile never reaches production whether or not this file exists —
+# and duplicating that here bought nothing but a second copy of the same
+# failure, several minutes later.
+#
+# What Workers Builds does NOT run is the test suite, the formatter, or the
+# type checker on files the bundle never reaches — the tests themselves, most
+# of all. Those ran nowhere but somebody's laptop, which is to say they ran
+# whenever that person remembered. That is the whole job of this workflow.
+#
+# It also runs on the pull request, before the merge, rather than on the push
+# after it. A red check on a branch is a conversation; a red deploy on `main`
+# is an incident.
 on:
   pull_request:
   push:
     branches: [main]
 
+# a second push supersedes the first: nobody needs the result for a commit
+# that has already been replaced
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   checks:
+    name: Tests, types and formatting
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v5
 
@@ -19,17 +42,21 @@ jobs:
           node-version: 24
           cache: npm
 
-      # `npm ci` fails outright when package.json and the lockfile disagree,
-      # which is worth catching on its own
-      - run: npm ci
+      # `npm ci` installs from the lockfile alone and fails outright when it
+      # and package.json disagree, which is worth catching on its own
+      - name: Install
+        run: npm ci
 
-      # `npm run build` is `astro check && astro build`, so this typechecks
-      # every file including the tests. its prebuild regenerates the worker
-      # types, which are gitignored and must therefore build from nothing
-      - run: npm run build
+      # the type checker, and the closest thing to a linter here: it reads the
+      # .astro files and the tests too, neither of which the bundler type
+      # checks on its way past
+      - name: Type check
+        run: npx astro check
 
-      - run: npm test
+      - name: Tests
+        run: npm test
 
       # formatting is settled by a tool, so a diff over it is noise nobody
       # should be reading in review
-      - run: npx prettier --check .
+      - name: Formatting
+        run: npx prettier --check .

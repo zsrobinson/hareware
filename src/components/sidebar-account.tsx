@@ -1,12 +1,13 @@
-import { EllipsisVerticalIcon, LogOutIcon } from "lucide-react";
+import { EllipsisVerticalIcon, LogOutIcon, TagIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
+import type { Profile } from "~/lib/member";
 import type { Session } from "~/lib/session";
-import { useSession } from "~/lib/use-session";
+import { useProfile, useSession } from "~/lib/use-session";
 import { cn } from "~/lib/utils";
 
 /* lucide carries no brand marks */
@@ -35,6 +36,21 @@ function GitHubMark({ className }: { className?: string }) {
     </svg>
   );
 }
+
+const REPO = "https://github.com/zsrobinson/hareware";
+
+/*
+  where the version points. `git describe` writes a tag as its own name and
+  anything past one as `<tag>-<n>-g<hash>`, so take the hash when there is one
+  and treat the rest as a tag — either is a path github resolves
+*/
+const described = __APP_VERSION__.replace(/-dirty$/, "");
+const commit = /-g([0-9a-f]+)$/.exec(described)?.[1];
+const versionHref = commit
+  ? `${REPO}/commit/${commit}`
+  : described.startsWith("v")
+    ? `${REPO}/releases/tag/${described}`
+    : `${REPO}/commit/${described}`;
 
 /* the same menu either side of signing in, so the one thing in it stays
    reachable whether or not anyone is signed in yet */
@@ -78,6 +94,20 @@ function AccountMenu({
           <GitHubMark className="size-4" />
           View source on GitHub
         </DropdownMenuItem>
+
+        {/*
+          what is actually deployed. a bug report that names a version is worth
+          more than one that says "just now", and this is the only place a
+          member could find that out. it links to the commit or tag it names, so
+          the next question after "which version" is one click away
+        */}
+        <DropdownMenuItem
+          render={<a href={versionHref} target="_blank" rel="noreferrer" />}
+          className="text-muted-foreground text-xs"
+        >
+          <TagIcon className="size-3.5" />
+          <span className="font-mono">{__APP_VERSION__}</span>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -89,14 +119,17 @@ function AccountMenu({
 */
 export function SidebarAccount({
   session: knownByServer = null,
+  profile: profileFromServer = null,
   returnTo,
   inSheet = false,
 }: {
   session?: Session | null;
+  profile?: Profile | null;
   returnTo: string;
   inSheet?: boolean;
 }) {
   const session = useSession(knownByServer);
+  const profile = useProfile(profileFromServer);
 
   /* the sheet is only ever open at full width, so it never collapses. the rail
      has no room for a row, so the menu sits under what it belongs to */
@@ -132,18 +165,35 @@ export function SidebarAccount({
     );
   }
 
+  /*
+    the profile arrives a moment after the session on a cached page, and never
+    at all if discord is unreachable, so both lines fall back rather than
+    rendering an empty row
+  */
   return (
     <div className={row}>
-      <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#5865F2] text-white">
-        <DiscordMark className="size-3.5" />
-      </div>
+      {profile ? (
+        <img
+          src={profile.avatarUrl}
+          alt=""
+          width={28}
+          height={28}
+          className="size-7 shrink-0 rounded-full object-cover"
+          /* discord's cdn needs no credentials and should not be sent any */
+          referrerPolicy="no-referrer"
+        />
+      ) : (
+        <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#5865F2] text-white">
+          <DiscordMark className="size-3.5" />
+        </div>
+      )}
 
       <div className={cn("min-w-0 flex-1 leading-tight", railHidden)}>
         <div className="truncate text-sm font-medium">
-          Signed in with Discord
+          {profile?.displayName ?? "Signed in with Discord"}
         </div>
         <div className="text-sidebar-foreground/50 truncate text-xs">
-          ID {session.discordUserId}
+          {profile ? `@${profile.username}` : `ID ${session.discordUserId}`}
         </div>
       </div>
 

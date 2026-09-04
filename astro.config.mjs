@@ -4,6 +4,27 @@ import react from "@astrojs/react";
 import cloudflare from "@astrojs/cloudflare";
 
 import tailwindcss from "@tailwindcss/vite";
+import { execFileSync } from "node:child_process";
+
+/**
+ * what is deployed, as a string a person can act on.
+ *
+ * `git describe` gives the nearest tag plus how far past it we are, falling
+ * back to a bare short hash before the first tag exists. the build runs in a
+ * real clone on Workers Builds, so this works there too — and if it ever does
+ * not, the env var Workers CI sets is the backstop and "unknown" is the floor.
+ * a version nobody can read is worse than one that admits it does not know
+ */
+function version() {
+  try {
+    return execFileSync("git", ["describe", "--tags", "--always", "--dirty"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return process.env.WORKERS_CI_COMMIT_SHA?.slice(0, 7) ?? "unknown";
+  }
+}
 
 // https://astro.build/config
 export default defineConfig({
@@ -30,6 +51,10 @@ export default defineConfig({
 
   vite: {
     plugins: [tailwindcss()],
+
+    /* baked in at build time: there is no git repository at runtime, and the
+       worker has no way to ask what it was built from */
+    define: { __APP_VERSION__: JSON.stringify(version()) },
 
     /*
       both of these are pulled in by astro at request time rather than at boot,

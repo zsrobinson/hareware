@@ -76,7 +76,7 @@ async function readOAuthState(
   if (!value) return null;
 
   try {
-    const payload = await unseal(value, secret);
+    const payload = await unseal(value, secret, "oauth-state");
     if (!payload) return null;
 
     const state = JSON.parse(payload) as Partial<OAuthState>;
@@ -146,6 +146,7 @@ async function oauthStateCookie(
       expiresAt: Date.now() + STATE_LIFETIME_SECONDS * 1000,
     }),
     secret,
+    "oauth-state",
   );
 
   return `${AUTH_STATE_COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${STATE_LIFETIME_SECONDS}`;

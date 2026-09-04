@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import type { Profile } from "./member";
 import type { Session } from "./session";
 
@@ -18,7 +18,7 @@ let profile: Profile | null = null;
 let admin = false;
 let requested = false;
 
-const listeners = new Set<(value: Session | null) => void>();
+const listeners = new Set<() => void>();
 
 function publish(
   value: Session | null,
@@ -28,7 +28,7 @@ function publish(
   session = value;
   admin = isAdmin;
   profile = who;
-  for (const listener of listeners) listener(value);
+  for (const listener of listeners) listener();
 }
 
 function requestSession() {
@@ -71,31 +71,40 @@ function readProfile(value: unknown): Profile | null {
     : null;
 }
 
+/** react's contract for the store above: subscribe, and read */
+function subscribe(onChange: () => void) {
+  listeners.add(onChange);
+  return () => listeners.delete(onChange);
+}
+
 export function useSession(knownByServer: Session | null = null) {
-  const [value, setValue] = useState<Session | null>(
-    knownByServer ?? session ?? null,
+  /*
+    this is a store outside react — module-level, shared by the islands, and
+    written by a fetch none of them own. `useSyncExternalStore` is what that
+    is for: it reads through on every render rather than copying into state
+    and pushing an update from an effect, which is a second render for a value
+    that was already known
+  */
+  const value = useSyncExternalStore(
+    subscribe,
+    () => (session === undefined ? null : session),
+    /* the server has no store to read, and renders signed-out either way */
+    () => null,
   );
 
   useEffect(() => {
     /* a page the cdn does not cache already rendered the answer, so there is
        nothing to ask for */
     if (knownByServer) {
-      session = knownByServer;
+      publish(knownByServer, admin, profile);
       requested = true;
+      return;
     }
 
-    const listener = (next: Session | null) => setValue(next);
-    listeners.add(listener);
-
     if (session === undefined) requestSession();
-    else setValue(session);
-
-    return () => {
-      listeners.delete(listener);
-    };
   }, [knownByServer]);
 
-  return value;
+  return knownByServer ?? value;
 }
 
 /**

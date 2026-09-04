@@ -14,7 +14,12 @@ import { runScheduled } from "~/lib/reminders/run";
 export default {
   fetch: handle,
 
-  async scheduled(controller, env, ctx) {
+  /*
+    not async: `waitUntil` is what keeps the isolate alive for the run, and
+    awaiting here as well would only make the tick wait on work cloudflare is
+    already tracking
+  */
+  scheduled(controller, env, ctx) {
     ctx.waitUntil(runScheduled(controller, env));
   },
 } satisfies ExportedHandler<Env>;

@@ -2,7 +2,7 @@ export function getTaggedText(body: Element[]) {
   let isBolded = false;
   let isItalicized = false;
   let output = "";
-  let unprocessed = new Set<string>();
+  const unprocessed = new Set<string>();
 
   function processEl(el: Element | ChildNode) {
     if (el.nodeName === "#text") {

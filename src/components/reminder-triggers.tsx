@@ -51,6 +51,8 @@ export function ReminderTriggers({
   const [said, setSaid] = useState<Record<string, string>>({});
   const [confirming, setConfirming] = useState<ReminderDefinition | null>(null);
 
+  /* handles its own failure into `said`, so callers have nothing to catch —
+     `void` at each call site is what says that out loud */
   async function fire(reminder: ReminderDefinition, mode: Mode) {
     setBusy(`${reminder.id}:${mode}`);
     try {
@@ -99,7 +101,7 @@ export function ReminderTriggers({
                 size="sm"
                 variant="outline"
                 disabled={busy !== null}
-                onClick={() => fire(reminder, "dry")}
+                onClick={() => void fire(reminder, "dry")}
               >
                 {busy === `${reminder.id}:dry` ? "Running…" : "Dry run"}
               </Button>
@@ -107,7 +109,7 @@ export function ReminderTriggers({
                 size="sm"
                 variant="outline"
                 disabled={busy !== null}
-                onClick={() => fire(reminder, "silent")}
+                onClick={() => void fire(reminder, "silent")}
               >
                 {busy === `${reminder.id}:silent` ? "Running…" : "Pingless"}
               </Button>

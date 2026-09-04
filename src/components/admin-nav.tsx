@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { NavGroup } from "~/components/nav-group";
 import { adminNav } from "~/lib/nav";
 import { useAdmin } from "~/lib/use-session";
@@ -14,9 +14,17 @@ import { useAdmin } from "~/lib/use-session";
 */
 export function AdminNav() {
   const admin = useAdmin();
-  const [pathname, setPathname] = useState("");
-
-  useEffect(() => setPathname(window.location.pathname), []);
+  /*
+    the url is a value outside react, and the server has none. reading it
+    through `useSyncExternalStore` gives the empty string during hydration and
+    the real path immediately after, without an effect writing state to say so.
+    nothing here subscribes: within one island the path does not change under us
+  */
+  const pathname = useSyncExternalStore(
+    () => () => undefined,
+    () => window.location.pathname,
+    () => "",
+  );
 
   if (!admin) return null;
 

@@ -49,7 +49,12 @@ export function GeneratePage({
 
       let cancelled = false;
 
-      (async () => {
+      /*
+        an effect cannot be async, so the work is an immediately-called one.
+        `void` says the effect deliberately does not wait, and the catch is
+        what keeps a failed render from being a silent unhandled rejection
+      */
+      void (async () => {
         const { domToPng } = await import("modern-screenshot");
         if (cancelled) return;
 
@@ -69,7 +74,9 @@ export function GeneratePage({
         if (titleSlideImgRef.current) titleSlideImgRef.current.src = titleURI;
         if (contentSlideImgRef.current)
           contentSlideImgRef.current.src = contentURI;
-      })();
+      })().catch((error: unknown) => {
+        console.error("could not render the slides", error);
+      });
 
       // a newer layout supersedes whatever this run was about to paint
       return () => {
@@ -89,6 +96,12 @@ export function GeneratePage({
     state.setImageByline(defaultImageByline);
 
     return () => useLayoutState.getState().clearArticle();
+    /*
+      mount and unmount only, deliberately. these props are the article this
+      island was rendered for — reacting to them would fight the store, which
+      is where the member's own edits live once they start typing
+    */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // on layout change, check if title slide is overflowing

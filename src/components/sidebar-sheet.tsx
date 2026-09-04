@@ -11,7 +11,7 @@ import {
 import { adminNav, toolsNav } from "~/lib/nav";
 import type { Profile } from "~/lib/member";
 import type { Session } from "~/lib/session";
-import { useAdmin, useSession } from "~/lib/use-session";
+import { useAdmin } from "~/lib/use-session";
 
 /*
   the sidebar itself is static markup and simply hidden below `md`. this is the
@@ -30,7 +30,6 @@ export function SidebarSheet({
   session: Session | null;
   profile?: Profile | null;
 }) {
-  const session = useSession(sessionFromServer);
   const admin = useAdmin();
 
   return (

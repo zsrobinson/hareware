@@ -8,7 +8,7 @@
 */
 
 import { lastOutcome, type Row } from "~/lib/log";
-import { postMessage, text } from "~/lib/discord/post-message";
+import { postMessage, text } from "~/lib/services/discord/post-message";
 import { ALERT_CHANNEL_ID, HAREWARE_ORIGIN } from "./config";
 
 /** the friendly name for each action, for a line a person reads at 8am */

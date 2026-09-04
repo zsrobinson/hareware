@@ -1,6 +1,6 @@
 import {
   ActivityIcon,
-  BellIcon,
+  ZapIcon,
   FileTextIcon,
   ImageIcon,
   MailIcon,
@@ -34,7 +34,7 @@ export const toolsNav: NavItem[] = [
 /* the admin tools. only a signed-in member holding @Editorial Board sees
    these, and the pages check that themselves rather than trusting the nav */
 export const adminNav: NavItem[] = [
-  { href: "/admin/reminders", label: "Reminders", icon: BellIcon },
+  { href: "/admin/automations", label: "Automations", icon: ZapIcon },
   { href: "/admin/log", label: "Invocation Log", icon: ActivityIcon },
 ];
 

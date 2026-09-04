@@ -85,13 +85,13 @@ Set them with `npx wrangler versions secret put <NAME>`. Plain
 `wrangler secret put` refuses unless the latest version happens to be the
 deployed one, which it usually is not.
 
-| Secret                     | What it is                                                        |
-| -------------------------- | ----------------------------------------------------------------- |
-| `DISCORD_BOT_TOKEN`        | Sends every reminder, and reads the roles the admin pages gate on |
-| `NOTION_TOKEN`             | Notion integration token, read access to Meetings only            |
-| `SESSION_SECRET`           | Signs the session and OAuth-state cookies. `openssl rand -hex 32` |
-| `DISCORD_CLIENT_SECRET`    | The OAuth client secret, exchanged once per sign-in               |
-| `REMINDERS_TRIGGER_SECRET` | Guards `POST /api/reminders/run`. Unset, that route answers `404` |
+| Secret                     | What it is                                                          |
+| -------------------------- | ------------------------------------------------------------------- |
+| `DISCORD_BOT_TOKEN`        | Sends every reminder, and reads the roles the admin pages gate on   |
+| `NOTION_TOKEN`             | Notion integration token, read access to Meetings only              |
+| `SESSION_SECRET`           | Signs the session and OAuth-state cookies. `openssl rand -hex 32`   |
+| `DISCORD_CLIENT_SECRET`    | The OAuth client secret, exchanged once per sign-in                 |
+| `REMINDERS_TRIGGER_SECRET` | Guards `POST /api/automations/run`. Unset, that route answers `404` |
 
 `DISCORD_BOT_TOKEN` is the one nothing works without: both reminders post as the
 bot, and the admin pages ask Discord for the caller's roles on every request.
@@ -115,7 +115,7 @@ the manual trigger below instead — it runs once and leaves nothing behind.
 
 #### Firing a reminder by hand
 
-`POST /api/reminders/run` runs the reminders immediately, so one can be seen
+`POST /api/automations/run` runs the reminders immediately, so one can be seen
 without waiting for 8am. It takes the same path the cron takes, so there is no
 second implementation to drift.
 
@@ -123,7 +123,7 @@ second implementation to drift.
 curl -X POST \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $REMINDERS_TRIGGER_SECRET" \
-  "https://hareware.zsrobinson.com/api/reminders/run"
+  "https://hareware.zsrobinson.com/api/automations/run"
 ```
 
 The content type is not optional. Astro rejects a cross-site `POST` that looks

@@ -12,10 +12,16 @@ import { Link } from "~/components/ui/link";
 import Dashboard from "~/layouts/dashboard.astro";
 import { getSessionSecret } from "~/lib/auth-config";
 import { getSession } from "~/lib/session";
-import { toArticleLink, toArticleSlug } from "../lib/article-url";
-import { SLIDE_IMAGE_WIDTH, toSizedImage } from "../lib/image-url";
-import { getRecentArticles } from "../lib/get-recent-articles";
-import { scrapeArticle } from "../lib/scrape-article";
+import {
+  toArticleLink,
+  toArticleSlug,
+} from "~/lib/services/wordpress/article-url";
+import {
+  SLIDE_IMAGE_WIDTH,
+  toSizedImage,
+} from "~/lib/services/wordpress/image-url";
+import { getRecentArticles } from "~/lib/services/wordpress/get-recent-articles";
+import { scrapeArticle } from "~/lib/services/wordpress/scrape-article";
 
 const param = Astro.url.searchParams.get("article") || "";
 const invalid = Astro.url.searchParams.get("error") !== null;

@@ -1,5 +1,5 @@
 import { parseHTML } from "linkedom";
-import { scrub } from "~/lib/scrub-html";
+import { scrub } from "~/lib/services/wordpress/scrub-html";
 import { ORIGIN, toArticleLink, toArticleSlug } from "./article-url";
 
 /**
@@ -80,7 +80,7 @@ function fromPost(post: WordPressPost) {
   // content.rendered is the markup that lands inside .entry-content on the
   // page, so wrapping it lets one set of selectors serve both sources
   /* wordpress decides this markup, so it is scrubbed before anything reads it
-     — see ~/lib/scrub-html for what that is defending against */
+     — see ~/lib/services/wordpress/scrub-html for what that is defending against */
   const document = scrub(
     parseHTML(`<div class="entry-content">${post.content.rendered}</div>`)
       .document,

@@ -10,25 +10,26 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import {
+  channelLabel,
   hourLabel,
-  type ReminderDefinition,
-  type ReminderId,
-} from "~/lib/reminders/registry";
+  type Automation,
+  type AutomationId,
+} from "~/lib/automations/registry";
 
 type Report = Record<string, string>;
 type Mode = "dry" | "silent" | "live";
 
 /*
-  the same endpoint a terminal uses, so a reminder fired here takes exactly the
+  the same endpoint a terminal uses, so an automation fired here takes exactly the
   path it takes in the morning. the three modes are the three ways it is safe,
   or not, to run one: report only, post without pinging, and the real thing
 */
-async function run(id: ReminderId, mode: Mode): Promise<Report> {
+async function run(id: AutomationId, mode: Mode): Promise<Report> {
   const query = new URLSearchParams({ only: id });
   if (mode === "dry") query.set("dry", "1");
   if (mode === "silent") query.set("silent", "1");
 
-  const response = await fetch(`/api/reminders/run?${query}`, {
+  const response = await fetch(`/api/automations/run?${query}`, {
     method: "POST",
     // astro refuses a cross-site POST that looks like a form submission, and
     // one carrying no content type counts as one
@@ -42,27 +43,27 @@ async function run(id: ReminderId, mode: Mode): Promise<Report> {
   return response.json() as Promise<Report>;
 }
 
-export function ReminderTriggers({
-  reminders,
+export function AutomationTriggers({
+  automations,
 }: {
-  reminders: ReminderDefinition[];
+  automations: Automation[];
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [said, setSaid] = useState<Record<string, string>>({});
-  const [confirming, setConfirming] = useState<ReminderDefinition | null>(null);
+  const [confirming, setConfirming] = useState<Automation | null>(null);
 
   /* handles its own failure into `said`, so callers have nothing to catch —
      `void` at each call site is what says that out loud */
-  async function fire(reminder: ReminderDefinition, mode: Mode) {
-    setBusy(`${reminder.id}:${mode}`);
+  async function fire(automation: Automation, mode: Mode) {
+    setBusy(`${automation.id}:${mode}`);
     try {
-      const report = await run(reminder.id, mode);
+      const report = await run(automation.id, mode);
       const line = Object.values(report).find((v) => v !== "not requested");
-      setSaid((prev) => ({ ...prev, [reminder.id]: line ?? "done" }));
+      setSaid((prev) => ({ ...prev, [automation.id]: line ?? "done" }));
     } catch (thrown) {
       setSaid((prev) => ({
         ...prev,
-        [reminder.id]:
+        [automation.id]:
           thrown instanceof Error ? thrown.message : String(thrown),
       }));
     } finally {
@@ -73,25 +74,27 @@ export function ReminderTriggers({
   return (
     <>
       <div className="divide-y rounded-lg border">
-        {reminders.map((reminder) => (
+        {automations.map((automation) => (
           <div
-            key={reminder.id}
+            key={automation.id}
             className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between"
           >
             <div className="min-w-0 space-y-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="font-medium">{reminder.name}</h2>
+                <h2 className="font-medium">{automation.name}</h2>
                 <Badge variant="secondary">
-                  {hourLabel(reminder.hour)} Eastern
+                  {hourLabel(automation.hour)} Eastern
                 </Badge>
-                <Badge variant="outline">{reminder.channel}</Badge>
+                <Badge variant="outline">
+                  {channelLabel(automation.channelId)}
+                </Badge>
               </div>
               <p className="text-muted-foreground text-sm">
-                {reminder.description}
+                {automation.description}
               </p>
-              {said[reminder.id] && (
+              {said[automation.id] && (
                 <p className="text-foreground pt-1 text-sm">
-                  {said[reminder.id]}
+                  {said[automation.id]}
                 </p>
               )}
             </div>
@@ -101,23 +104,23 @@ export function ReminderTriggers({
                 size="sm"
                 variant="outline"
                 disabled={busy !== null}
-                onClick={() => void fire(reminder, "dry")}
+                onClick={() => void fire(automation, "dry")}
               >
-                {busy === `${reminder.id}:dry` ? "Running…" : "Dry run"}
+                {busy === `${automation.id}:dry` ? "Running…" : "Dry run"}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 disabled={busy !== null}
-                onClick={() => void fire(reminder, "silent")}
+                onClick={() => void fire(automation, "silent")}
               >
-                {busy === `${reminder.id}:silent` ? "Running…" : "Pingless"}
+                {busy === `${automation.id}:silent` ? "Running…" : "Pingless"}
               </Button>
               <Button
                 size="sm"
                 variant="destructive"
                 disabled={busy !== null}
-                onClick={() => setConfirming(reminder)}
+                onClick={() => setConfirming(automation)}
               >
                 Run for real
               </Button>
@@ -133,11 +136,14 @@ export function ReminderTriggers({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Run the {confirming?.name} reminder?</DialogTitle>
+            <DialogTitle>Run the {confirming?.name} automation?</DialogTitle>
             <DialogDescription>
-              This posts to <strong>{confirming?.channel}</strong> and pings the
-              role, exactly as it would in the morning. Everyone in the channel
-              sees it.
+              This posts to{" "}
+              <strong>
+                {confirming && channelLabel(confirming.channelId)}
+              </strong>{" "}
+              and pings the role, exactly as it would in the morning. Everyone
+              in the channel sees it.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -147,9 +153,9 @@ export function ReminderTriggers({
             <Button
               variant="destructive"
               onClick={() => {
-                const reminder = confirming!;
+                const automation = confirming!;
                 setConfirming(null);
-                void fire(reminder, "live");
+                void fire(automation, "live");
               }}
             >
               Post it

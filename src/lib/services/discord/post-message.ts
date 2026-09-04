@@ -11,7 +11,7 @@
   buttons and dividers are all components instead
 */
 
-import { ROLE_NAMES } from "~/lib/reminders/config";
+import { ROLE_NAMES } from "~/lib/automations/config";
 
 const IS_COMPONENTS_V2 = 1 << 15;
 

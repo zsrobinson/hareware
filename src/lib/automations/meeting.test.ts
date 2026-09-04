@@ -57,7 +57,7 @@ test("posts for an editorial board meeting dated today", async () => {
 
   const result = await sendMeetingReminder(env, today);
 
-  expect(result).toContain("posted meeting reminder");
+  expect(result.summary).toContain("posted meeting reminder");
   expect(discord).toHaveBeenCalledOnce();
   expect(discord.mock.calls[0]![0].components[0].content).toContain(
     "**Meeting Tonight**",
@@ -69,7 +69,9 @@ test("ignores a general body meeting on the same day", async () => {
     meeting("General Body Meeting 2026-09-08", "2026-09-08"),
   ]);
 
-  expect(await sendMeetingReminder(env, today)).toContain("no Editorial Board");
+  expect((await sendMeetingReminder(env, today)).summary).toContain(
+    "no Editorial Board",
+  );
   expect(discord).not.toHaveBeenCalled();
 });
 
@@ -78,7 +80,9 @@ test("ignores a magazine design session", async () => {
     meeting("Magazine Design Session", "2026-09-08"),
   ]);
 
-  expect(await sendMeetingReminder(env, today)).toContain("no Editorial Board");
+  expect((await sendMeetingReminder(env, today)).summary).toContain(
+    "no Editorial Board",
+  );
   expect(discord).not.toHaveBeenCalled();
 });
 
@@ -87,7 +91,7 @@ test("tolerates the trailing spaces real titles carry", async () => {
     meeting("Editorial Board Meeting 2026-09-08 ", "2026-09-08"),
   ]);
 
-  expect(await sendMeetingReminder(env, today)).toContain("posted");
+  expect((await sendMeetingReminder(env, today)).summary).toContain("posted");
   expect(discord).toHaveBeenCalledOnce();
 });
 
@@ -100,7 +104,7 @@ test("matches an 8pm eastern meeting, which is tomorrow in utc", async () => {
     meeting("Editorial Board Meeting", "2026-09-08T20:00:00.000-04:00"),
   ]);
 
-  expect(await sendMeetingReminder(env, today)).toContain("posted");
+  expect((await sendMeetingReminder(env, today)).summary).toContain("posted");
   expect(discord.mock.calls[0]![0].components[0].content).toContain("at 8pm");
 });
 
@@ -109,7 +113,9 @@ test("ignores a meeting that belongs to another day", async () => {
     meeting("Editorial Board Meeting", "2026-09-09T20:00:00.000-04:00"),
   ]);
 
-  expect(await sendMeetingReminder(env, today)).toContain("no Editorial Board");
+  expect((await sendMeetingReminder(env, today)).summary).toContain(
+    "no Editorial Board",
+  );
   expect(discord).not.toHaveBeenCalled();
 });
 
@@ -158,7 +164,7 @@ test("says what is unset rather than throwing", async () => {
 
   const result = await sendMeetingReminder({} as Env, today);
 
-  expect(result).toContain("NOTION_TOKEN");
+  expect(result.summary).toContain("NOTION_TOKEN");
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
@@ -173,6 +179,6 @@ test("a dry run says it would post, rather than that it did", async () => {
     today,
   );
 
-  expect(result).toContain("would post");
+  expect(result.summary).toContain("would post");
   expect(discord).not.toHaveBeenCalled();
 });

@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { GUILD_ID } from "./discord/config";
+import { GUILD_ID } from "./services/discord/config";
 
 const workers = vi.hoisted(() => ({ env: {} as Record<string, string> }));
 vi.mock("cloudflare:workers", () => workers);

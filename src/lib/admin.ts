@@ -11,7 +11,7 @@
 */
 
 import { getSessionSecret } from "./auth-config";
-import { EDITORIAL_BOARD_ROLE_ID } from "./discord/config";
+import { EDITORIAL_BOARD_ROLE_ID } from "./services/discord/config";
 import { guildMember, type Profile } from "./member";
 import { getSession, type Session } from "./session";
 

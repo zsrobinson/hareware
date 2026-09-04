@@ -16,7 +16,7 @@
  *
  * Settings that are not secret — the duty roster's role ids, the Meetings
  * database id, the reminder hour, HareWare's own origin — are constants in
- * `~/lib/reminders/config`, not variables. They change about once a year and a
+ * `~/lib/automations/config`, not variables. They change about once a year and a
  * one-line pull request is a cheaper way to change them than a store nobody
  * remembers exists.
  */
@@ -39,7 +39,7 @@ interface HareWareEnv {
   NOTION_TOKEN?: string;
 
   /**
-   * Guards `POST /api/reminders/run`, which fires the reminders by hand so one
+   * Guards `POST /api/automations/run`, which fires the reminders by hand so one
    * can be seen without waiting for 8am. Sent as `Authorization: Bearer …`.
    *
    * Unlike the switches below this one belongs in production, and is safe
@@ -63,7 +63,7 @@ interface HareWareEnv {
   /**
    * The Discord application's OAuth client secret, used once per sign-in to
    * exchange the code for an access token. The client *id* is not secret and
-   * is a constant in `~/lib/discord/config`.
+   * is a constant in `~/lib/services/discord/config`.
    */
   DISCORD_CLIENT_SECRET?: string;
 
@@ -72,7 +72,7 @@ interface HareWareEnv {
    * sends every message.
    *
    * The channels themselves are not secret and are constants in
-   * `~/lib/reminders/config`, so moving a reminder is a one-line change rather
+   * `~/lib/automations/config`, so moving a reminder is a one-line change rather
    * than a credential to rotate.
    */
   DISCORD_BOT_TOKEN?: string;
@@ -86,10 +86,16 @@ interface HareWareEnv {
   REMINDERS_DRY_RUN?: string;
 
   /**
-   * Post as normal but notify nobody: empties `allowed_mentions` and nothing
-   * else, so `<@&…>` still renders and the message looks exactly as the real
-   * one will. Better than clearing a role id, which changes the message and is
-   * easy to forget to put back.
+   * Post as normal but notify nobody.
+   *
+   * It writes the role's *name* in place of the mention, because
+   * `allowed_mentions` does not gate a mention inside a Components V2 text
+   * display — an empty `roles` array notifies exactly as though the field were
+   * absent. `defuse()` in services/discord/post-message.ts is that rewrite, and
+   * `docs/agents/silent-failures.md` is why it has to exist.
+   *
+   * Better than clearing a role id, which changes the message and is easy to
+   * forget to put back.
    */
   REMINDERS_NO_PING?: string;
 

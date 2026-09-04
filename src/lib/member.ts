@@ -10,7 +10,7 @@
 */
 
 import { env } from "cloudflare:workers";
-import { GUILD_ID } from "./discord/config";
+import { GUILD_ID } from "./services/discord/config";
 
 /** what the ui draws. never what it decides anything from */
 export type Profile = {

@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { EDITORIAL_BOARD_ROLE_ID } from "./discord/config";
+import { EDITORIAL_BOARD_ROLE_ID } from "./services/discord/config";
 import { createSessionCookie } from "./session";
 
 const workers = vi.hoisted(() => ({ env: {} as Record<string, string> }));

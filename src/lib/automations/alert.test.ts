@@ -12,7 +12,7 @@ const postMessage = vi.fn<(...args: unknown[]) => Promise<void>>(
 vi.mock("~/lib/log", () => ({
   lastOutcome: (...a: unknown[]) => lastOutcome(...(a as [])),
 }));
-vi.mock("~/lib/discord/post-message", async (importOriginal) => ({
+vi.mock("~/lib/services/discord/post-message", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   postMessage: (...a: unknown[]) => postMessage(...(a as [])),
 }));

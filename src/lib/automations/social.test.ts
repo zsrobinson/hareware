@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { sendSocialPing } from "./social";
 import { SOCIAL_ROLE_IDS } from "./config";
-import { postedId } from "~/lib/discord/interactions";
+import { postedId } from "~/lib/services/discord/interactions";
 
 const env = { DISCORD_BOT_TOKEN: "bot-token" } as unknown as Env;
 
@@ -46,7 +46,7 @@ test("pings the day's role with what published today", async () => {
   );
 
   const result = await sendSocialPing(env, today);
-  expect(result).toContain("posted 1 article");
+  expect(result.summary).toContain("posted 1 article");
 
   const body = discord.mock.calls[0]![0];
   expect(body.components[0].content).toContain(
@@ -95,7 +95,9 @@ test("posts nothing on a day with no articles", async () => {
     item("Yesterday's piece", "Tue, 02 Sep 2026 10:00:00 +0000", "old"),
   );
 
-  expect(await sendSocialPing(env, today)).toContain("no articles published");
+  expect((await sendSocialPing(env, today)).summary).toContain(
+    "no articles published",
+  );
   expect(discord).not.toHaveBeenCalled();
 });
 
@@ -109,7 +111,9 @@ test("counts an evening article as today in eastern, not utc", async () => {
     item("Late piece", "Fri, 04 Sep 2026 00:30:00 +0000", "late"),
   );
 
-  expect(await sendSocialPing(env, today)).toContain("posted 1 article");
+  expect((await sendSocialPing(env, today)).summary).toContain(
+    "posted 1 article",
+  );
   expect(discord).toHaveBeenCalledOnce();
 });
 
@@ -134,6 +138,48 @@ test("says what is unset rather than throwing", async () => {
 
   const result = await sendSocialPing({} as Env, today);
 
-  expect(result).toContain("DISCORD_BOT_TOKEN");
+  expect(result.summary).toContain("DISCORD_BOT_TOKEN");
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+/*
+  the outcome, not just the words. these used to be recorded as `ok` alike,
+  which reproduced in the log the exact problem ADR 0007 was written to solve:
+  a quiet morning and a broken one looking identical.
+*/
+test("an unreadable feed is a failure, not a quiet day", async () => {
+  // wordpress throttling answers with html, which parses to no <rss>
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response("<html>429</html>")),
+  );
+
+  const result = await sendSocialPing(env, today);
+
+  expect(result.outcome).toBe("failed");
+  expect(result.summary).toContain("wordpress");
+});
+
+test("a day with nothing published is skipped, not failed", async () => {
+  mockFeed("");
+
+  const result = await sendSocialPing(env, today);
+
+  expect(result.outcome).toBe("skipped");
+  expect(result.summary).toContain("no articles");
+});
+
+test("a missing role id is misconfigured, not ok", async () => {
+  mockFeed("");
+
+  // no SOCIAL_ROLE_IDS entry for a day that does not exist
+  const result = await sendSocialPing(env, { ...today, weekday: "Caturday" });
+
+  expect(result.outcome).toBe("misconfigured");
+});
+
+test("a posted ping is ok", async () => {
+  mockFeed(item("A story", "Thu, 03 Sep 2026 14:00:00 +0000", "a-story"));
+
+  expect((await sendSocialPing(env, today)).outcome).toBe("ok");
 });

@@ -15,7 +15,7 @@ const SECRET = "a".repeat(64);
 const call = (env: Record<string, string>, auth?: string, query = "") => {
   Object.assign(workers.env, env);
   return (POST as (c: unknown) => Promise<Response>)({
-    request: new Request(`https://hareware.test/api/reminders/run${query}`, {
+    request: new Request(`https://hareware.test/api/automations/run${query}`, {
       method: "POST",
       headers: auth ? { authorization: auth } : {},
     }),

@@ -82,7 +82,7 @@ for real. Messages can be deleted; the pings they send cannot be taken back.
 
 Set `REMINDERS_TEST_CHANNEL` in `.dev.vars` before running anything that posts.
 
-Against production, `POST /api/reminders/run?dry=1` reports what each reminder
+Against production, `POST /api/automations/run?dry=1` reports what each reminder
 would post without posting it, and `?silent=1` posts without notifying. Neither
 `REMINDERS_DRY_RUN` nor `REMINDERS_NO_PING` is set in production, deliberately,
 so that the real 8am run works — which means an unqualified manual trigger is a

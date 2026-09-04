@@ -20,6 +20,10 @@ export async function getRecentArticles(
     const res = await fetch(
       page > 1 ? `${ORIGIN}/feed/?paged=${page}` : `${ORIGIN}/feed/`,
     );
+    /* a throttled or erroring wordpress still returns a body, and parsing it
+       would look like an empty feed rather than a refusal */
+    if (!res.ok) return undefined;
+
     const text = await res.text();
 
     const parser = new XMLParser();
@@ -38,8 +42,21 @@ export async function getRecentArticles(
       when the feed carries a single <item>, and mapping over that throws into
       the catch below — turning a thin feed into "no articles at all"
     */
-    const items = data.rss?.channel?.item;
-    if (!items) return undefined;
+    /*
+      an empty feed and an unreadable one are different answers, and collapsing
+      them means a working-but-quiet day gets logged as a wordpress failure.
+      a throttled request answers with html, which parses to no <rss> at all —
+      that is the unreadable case. a <channel> with no <item> is simply empty
+    */
+    /*
+      the presence of <rss> is what says this is a feed at all. an empty
+      <channel></channel> parses to the empty string, so testing it for
+      truthiness reported a working-but-quiet day as a wordpress failure
+    */
+    if (data.rss === undefined) return undefined;
+
+    const items = data.rss.channel?.item;
+    if (!items) return [];
 
     return (Array.isArray(items) ? items : [items]).map((item) => ({
       title: item.title,

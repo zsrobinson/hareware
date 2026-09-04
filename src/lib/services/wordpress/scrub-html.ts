@@ -8,7 +8,7 @@
   a compromised one could publish.
 
   the session cookie is HttpOnly, so script here cannot read it. it can do
-  something worse: issue a same-origin `POST /api/reminders/run` with the
+  something worse: issue a same-origin `POST /api/automations/run` with the
   reader's cookies attached, and if that reader holds @Editorial Board it fires
   real reminders into the club's channels. astro's cross-origin check does not
   apply to a request from our own page. so the CMS is a trust boundary, and

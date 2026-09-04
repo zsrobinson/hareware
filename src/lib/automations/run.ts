@@ -1,5 +1,8 @@
 import { easternNow, type EasternNow } from "~/lib/eastern";
 import { record } from "~/lib/log";
+import { refreshChoices } from "~/lib/articles/choices";
+import { refreshFromNotion } from "~/lib/articles/refresh";
+import { rebuild } from "~/lib/articles/sync";
 import { reportFailure } from "./alert";
 import {
   AUTOMATIONS,
@@ -21,6 +24,14 @@ export const ALL: Which = new Set(AUTOMATIONS.map((a) => a.id));
  */
 export async function runScheduled(controller: ScheduledController, env: Env) {
   const eastern = easternNow(new Date(controller.scheduledTime));
+
+  /*
+    every tick, not only at REMINDER_HOUR: this is what makes the article index
+    right. notion delivers webhooks at-most-once and out of order, so the
+    rebuild is not a backstop for a rare failure — it is the only thing that
+    guarantees the picker eventually matches notion. see ADR 0009
+  */
+  await syncWithNotion(env);
 
   /*
     each automation carries its own hour, so a second one at a different time
@@ -132,4 +143,38 @@ async function recordRun(
     summary: result.summary,
     actor,
   });
+}
+
+/**
+ * the article index, the picker options, and the command surface.
+ *
+ * a row is written only when something went wrong. a healthy sync happens
+ * twenty-four times a day, and logging each one would bury the two reminders
+ * the log exists to make legible — while a silent failure here is exactly what
+ * ADR 0007 says must never look like nothing happened
+ */
+async function syncWithNotion(env: Env) {
+  try {
+    const result = await refreshFromNotion(env, { rebuild, refreshChoices });
+
+    if (result.outcome === "ok" || result.outcome === "skipped") return;
+
+    await record(env.DB, {
+      source: "cron",
+      action: "notion-sync",
+      outcome: result.outcome,
+      summary: result.summary,
+    });
+  } catch (error) {
+    /* this runs before the reminders and must never stop them: a stale picker
+       is a better morning than a stale picker and no meeting reminder */
+    console.error("[articles] sync failed", error);
+
+    await record(env.DB, {
+      source: "cron",
+      action: "notion-sync",
+      outcome: "failed",
+      summary: `sync threw: ${String(error)}`,
+    });
+  }
 }

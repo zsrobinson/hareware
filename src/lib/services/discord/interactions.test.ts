@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { handleInteraction, postedId } from "./interactions";
+import { deferEphemeral, handleInteraction, postedId } from "./interactions";
+import { EDITORIAL_BOARD_ROLE_ID } from "./config";
 
 const IS_COMPONENTS_V2 = 1 << 15;
 
@@ -155,10 +156,99 @@ test("ignores a component it did not put there", () => {
   expect(handleInteraction(press("something_else"))).toBeUndefined();
 });
 
+/* 4 is APPLICATION_COMMAND_AUTOCOMPLETE, which nothing here registers yet */
 test("ignores an interaction type it does not handle", () => {
-  expect(handleInteraction({ type: 2 })).toBeUndefined();
+  expect(handleInteraction({ type: 4 })).toBeUndefined();
 });
 
 test("a custom_id stays inside discord's 100 character limit", () => {
   expect(postedId("a".repeat(200)).length).toBe(100);
+});
+
+/* ---- slash commands ----------------------------------------------------- */
+
+const EPHEMERAL = 64;
+
+const command = (
+  subcommand: string,
+  roles: string[] = [EDITORIAL_BOARD_ROLE_ID],
+) => ({
+  type: 2,
+  data: { name: "article", options: [{ name: subcommand }] },
+  member: {
+    roles,
+    user: { username: "zsrobinson", global_name: "Zachary" },
+  },
+});
+
+test("/article ping answers inline, crediting whoever ran it", () => {
+  const reply = handleInteraction(command("ping"))!;
+
+  expect(reply.type).toBe(4);
+  expect(JSON.stringify(reply.data!.components)).toContain("Zachary");
+});
+
+/*
+  ADR 0009: the editor sees the result, the channel sees nothing. and both
+  flags together — the ephemeral bit alone with a components body is a response
+  discord refuses outright
+*/
+test("a command reply is ephemeral, and says so in components v2", () => {
+  const reply = handleInteraction(command("ping"))!;
+
+  expect(reply.data!.flags).toBe(EPHEMERAL | IS_COMPONENTS_V2);
+});
+
+/*
+  the registration hides the command with default_member_permissions "0", but
+  that override is editable by any admin under Integrations — so it is a
+  default, and this is the access check
+*/
+test("refuses somebody without the editorial board role", () => {
+  const reply = handleInteraction(command("ping", ["some-other-role"]))!;
+
+  expect(JSON.stringify(reply.data!.components)).not.toContain("listening");
+  expect(JSON.stringify(reply.data!.components)).toContain("Editorial Board");
+  expect(reply.data!.flags).toBe(EPHEMERAL | IS_COMPONENTS_V2);
+});
+
+/* absent roles is not an empty role list: a DM carries no member at all */
+test("refuses a command with no member on it", () => {
+  const reply = handleInteraction({
+    type: 2,
+    data: { name: "article", options: [{ name: "ping" }] },
+    user: { username: "zsrobinson", global_name: "Zachary" },
+  })!;
+
+  expect(JSON.stringify(reply.data!.components)).toContain("Editorial Board");
+});
+
+/*
+  discord shows an unanswered command as "HareWare didn't respond in time",
+  which reads as a broken bot rather than a command that no longer exists
+*/
+test("answers a subcommand it does not know rather than going quiet", () => {
+  const reply = handleInteraction(command("nonexistent"))!;
+
+  expect(reply.type).toBe(4);
+  expect(JSON.stringify(reply.data!.components)).toContain("does not know");
+});
+
+test("answers /article with no subcommand at all", () => {
+  const reply = handleInteraction({
+    type: 2,
+    data: { name: "article" },
+    member: { roles: [EDITORIAL_BOARD_ROLE_ID], user: { username: "z" } },
+  })!;
+
+  expect(reply.type).toBe(4);
+});
+
+/*
+  the seam every write path leaves through: a notion read plus a PATCH will not
+  fit inside discord's three seconds. no components on a deferred ack, so the
+  plain ephemeral flag rather than the v2 pair
+*/
+test("a deferred acknowledgement is ephemeral and carries no body", () => {
+  expect(deferEphemeral()).toEqual({ type: 5, data: { flags: EPHEMERAL } });
 });

@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
 import {
+  avatarUrl,
   SESSION_COOKIE,
   clearSessionCookie,
   createSessionCookie,
@@ -18,7 +19,7 @@ const cookieFrom = (header: string) => header.split(";")[0]!;
 
 test("round-trips a signed session", async () => {
   const header = await createSessionCookie({ discordUserId: "123" }, SECRET);
-  expect(await withCookie(cookieFrom(header))).toEqual({
+  expect(await withCookie(cookieFrom(header))).toMatchObject({
     discordUserId: "123",
   });
 });
@@ -72,4 +73,48 @@ test("rejects a session past its expiry", async () => {
 
 test("clearing sets an immediate expiry", () => {
   expect(clearSessionCookie()).toContain("Max-Age=0");
+});
+
+test("carries the member's name and avatar through the cookie", async () => {
+  const header = await createSessionCookie(
+    {
+      discordUserId: "123",
+      displayName: "Zach",
+      username: "zsrobinson",
+      avatar: "abc",
+    },
+    SECRET,
+  );
+
+  expect(await withCookie(cookieFrom(header))).toEqual({
+    discordUserId: "123",
+    displayName: "Zach",
+    username: "zsrobinson",
+    avatar: "abc",
+  });
+});
+
+test("accepts a session signed before it carried a name", async () => {
+  const header = await createSessionCookie({ discordUserId: "123" }, SECRET);
+
+  expect(await withCookie(cookieFrom(header))).toMatchObject({
+    discordUserId: "123",
+    displayName: undefined,
+    avatar: null,
+  });
+});
+
+test("builds an avatar url, and a discord default without one", () => {
+  expect(avatarUrl({ discordUserId: "123", avatar: "abc" })).toContain(
+    "/avatars/123/abc.png",
+  );
+
+  // an animated hash is only served as a gif
+  expect(avatarUrl({ discordUserId: "123", avatar: "a_abc" })).toContain(
+    ".gif",
+  );
+
+  expect(avatarUrl({ discordUserId: "123", avatar: null })).toMatch(
+    /embed\/avatars\/[0-5]\.png$/,
+  );
 });

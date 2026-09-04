@@ -1,7 +1,7 @@
 ---
 import Dashboard from "~/layouts/dashboard.astro";
 import { getAuthConfig, getSessionSecret } from "~/lib/auth-config";
-import { getSession } from "~/lib/session";
+import { avatarUrl, getSession } from "~/lib/session";
 
 Astro.response.headers.set("cache-control", "private, no-store");
 
@@ -54,10 +54,28 @@ const error = !config
       {
         session ? (
           <div class="mt-6 rounded-lg border p-4">
-            <p class="text-sm font-medium">Signed in with Discord</p>
-            <p class="text-muted-foreground mt-1 font-mono text-xs">
-              ID {session.discordUserId}
-            </p>
+            <div class="flex items-center gap-3">
+              {session.displayName ? (
+                <img
+                  src={avatarUrl(session, 128)}
+                  alt=""
+                  width={40}
+                  height={40}
+                  class="size-10 shrink-0 rounded-full object-cover"
+                  referrerpolicy="no-referrer"
+                />
+              ) : null}
+              <div class="min-w-0">
+                <p class="truncate text-sm font-medium">
+                  {session.displayName ?? "Signed in with Discord"}
+                </p>
+                <p class="text-muted-foreground mt-0.5 truncate font-mono text-xs">
+                  {session.username
+                    ? `@${session.username}`
+                    : `ID ${session.discordUserId}`}
+                </p>
+              </div>
+            </div>
             <a
               href="/generate"
               class="bg-primary text-primary-foreground hover:bg-primary/80 mt-4 inline-flex h-9 items-center rounded-lg px-3 text-sm font-medium transition-colors"

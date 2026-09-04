@@ -8,6 +8,15 @@ export type AuthConfig = {
   sessionSecret: string;
 };
 
+/** the parts of discord's user object the ui draws */
+export type DiscordUser = {
+  id: string;
+  username: string;
+  /** discord's newer display name; unset on accounts that never picked one */
+  globalName?: string;
+  avatar: string | null;
+};
+
 export type DiscordOAuth = {
   exchangeCode(input: {
     code: string;
@@ -15,7 +24,7 @@ export type DiscordOAuth = {
     clientId: string;
     clientSecret: string;
   }): Promise<string>;
-  getCurrentUser(accessToken: string): Promise<{ id: string }>;
+  getCurrentUser(accessToken: string): Promise<DiscordUser>;
 };
 
 export function createDiscordOAuth(fetcher: typeof fetch): DiscordOAuth {
@@ -48,13 +57,30 @@ export function createDiscordOAuth(fetcher: typeof fetch): DiscordOAuth {
       const response = await fetcher("https://discord.com/api/v10/users/@me", {
         headers: { authorization: `Bearer ${accessToken}` },
       });
-      const body = (await response.json()) as { id?: unknown };
+      const body = (await response.json()) as {
+        id?: unknown;
+        username?: unknown;
+        global_name?: unknown;
+        avatar?: unknown;
+      };
 
       if (!response.ok || typeof body.id !== "string" || !body.id) {
         throw new Error(`Discord identity lookup failed (${response.status})`);
       }
 
-      return { id: body.id };
+      /*
+        only the id is required. the rest is decoration, so a discord that
+        changes the shape of these costs a name in the sidebar, not a sign-in
+      */
+      return {
+        id: body.id,
+        username: typeof body.username === "string" ? body.username : "",
+        globalName:
+          typeof body.global_name === "string" && body.global_name
+            ? body.global_name
+            : undefined,
+        avatar: typeof body.avatar === "string" ? body.avatar : null,
+      };
     },
   };
 }
@@ -210,7 +236,12 @@ export async function completeDiscordSignIn(
     return redirect(safeReturnTo(storedState.returnTo), [
       clearOAuthStateCookie(),
       await createSessionCookie(
-        { discordUserId: user.id },
+        {
+          discordUserId: user.id,
+          displayName: user.globalName ?? (user.username || undefined),
+          username: user.username || undefined,
+          avatar: user.avatar,
+        },
         config.sessionSecret,
       ),
     ]);

@@ -9,6 +9,10 @@ import type { Session } from "./session";
   cached pages start without an answer; private pages seed this from their
   server-verified session. the fetch remains the one client-side source.
 */
+/** a nullable string off the wire, kept only when it is one */
+const str = (value: unknown) =>
+  typeof value === "string" && value ? value : undefined;
+
 let session: Session | null | undefined;
 /* whether that member may see the admin tools. the same answer, from the same
    request, so the two cannot disagree */
@@ -35,13 +39,21 @@ function requestSession() {
         body as {
           signedIn?: unknown;
           discordUserId?: unknown;
+          displayName?: unknown;
+          username?: unknown;
+          avatar?: unknown;
           admin?: unknown;
         },
     )
     .then((data) =>
       publish(
         data.signedIn === true && typeof data.discordUserId === "string"
-          ? { discordUserId: data.discordUserId }
+          ? {
+              discordUserId: data.discordUserId,
+              displayName: str(data.displayName),
+              username: str(data.username),
+              avatar: str(data.avatar) ?? null,
+            }
           : null,
         data.admin === true,
       ),

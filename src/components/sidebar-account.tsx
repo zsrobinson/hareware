@@ -5,7 +5,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
-import type { Session } from "~/lib/session";
+import { avatarUrl, type Session } from "~/lib/session";
 import { useSession } from "~/lib/use-session";
 import { cn } from "~/lib/utils";
 
@@ -132,18 +132,37 @@ export function SidebarAccount({
     );
   }
 
+  /*
+    a session signed before the cookie carried a name still has none, so both
+    lines fall back rather than rendering an empty row
+  */
+  const name = session.displayName ?? "Signed in with Discord";
+  const handle = session.username
+    ? `@${session.username}`
+    : `ID ${session.discordUserId}`;
+
   return (
     <div className={row}>
-      <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#5865F2] text-white">
-        <DiscordMark className="size-3.5" />
-      </div>
+      {session.displayName ? (
+        <img
+          src={avatarUrl(session)}
+          alt=""
+          width={28}
+          height={28}
+          className="size-7 shrink-0 rounded-full object-cover"
+          /* discord's cdn needs no credentials and should not be sent any */
+          referrerPolicy="no-referrer"
+        />
+      ) : (
+        <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#5865F2] text-white">
+          <DiscordMark className="size-3.5" />
+        </div>
+      )}
 
       <div className={cn("min-w-0 flex-1 leading-tight", railHidden)}>
-        <div className="truncate text-sm font-medium">
-          Signed in with Discord
-        </div>
+        <div className="truncate text-sm font-medium">{name}</div>
         <div className="text-sidebar-foreground/50 truncate text-xs">
-          ID {session.discordUserId}
+          {handle}
         </div>
       </div>
 

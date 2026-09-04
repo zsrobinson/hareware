@@ -9,7 +9,8 @@ import {
   SheetTrigger,
 } from "~/components/ui/sheet";
 import { editorialNav, toolsNav } from "~/lib/nav";
-import { useSignedIn } from "~/lib/use-session";
+import type { Session } from "~/lib/session";
+import { useSession } from "~/lib/use-session";
 
 /*
   the sidebar itself is static markup and simply hidden below `md`. this is the
@@ -19,12 +20,14 @@ import { useSignedIn } from "~/lib/use-session";
 */
 export function SidebarSheet({
   pathname,
-  signedIn: signedInFromServer,
+  returnTo,
+  session: sessionFromServer,
 }: {
   pathname: string;
-  signedIn: boolean;
+  returnTo: string;
+  session: Session | null;
 }) {
-  const signedIn = useSignedIn(signedInFromServer);
+  const session = useSession(sessionFromServer);
 
   return (
     <Sheet>
@@ -41,7 +44,7 @@ export function SidebarSheet({
         </SheetHeader>
 
         <nav className="flex flex-1 flex-col gap-2 overflow-y-auto p-3">
-          {signedIn && (
+          {session && (
             <>
               <NavGroup
                 items={editorialNav}
@@ -54,7 +57,11 @@ export function SidebarSheet({
           <NavGroup items={toolsNav} pathname={pathname} label="Tools" />
         </nav>
 
-        <SidebarAccount signedIn={signedInFromServer} inSheet />
+        <SidebarAccount
+          session={sessionFromServer}
+          returnTo={returnTo}
+          inSheet
+        />
       </SheetContent>
     </Sheet>
   );

@@ -13,6 +13,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { CopyButton } from "../components/copy-button";
 import Dashboard from "~/layouts/dashboard.astro";
+import { getSessionSecret } from "~/lib/auth-config";
 import { getSession } from "~/lib/session";
 import { toArticleLink, toArticleSlug } from "../lib/article-url";
 import { PREVIEW_IMAGE_WIDTH, toSizedImage } from "../lib/image-url";
@@ -51,7 +52,7 @@ const { title, author, image, imageCredits, section, date, body } = post ?? {};
 const { output, unprocessed } = body
   ? getTaggedText(body)
   : { output: "", unprocessed: new Set<string>() };
-const session = getSession(Astro.request);
+const session = await getSession(Astro.request, getSessionSecret());
 ---
 
 <Dashboard title="InDesign Export" session={session}>

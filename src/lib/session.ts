@@ -1,25 +1,39 @@
+import { requestCookie } from "./request-cookie";
+import { seal, unseal } from "./sealed-value";
+
 export type Session = {
   /* the key everything else hangs off, per CONTEXT.md's Member */
   discordUserId: string;
 };
 
-const DEV_COOKIE = "hw-dev-session";
+export const SESSION_COOKIE = "__Host-hareware-session";
 
-/*
-  the one place that answers "who is this". #19 fills it in with the discord
-  oauth session; until then it says nobody, so the shell renders signed out.
+export async function createSessionCookie(session: Session, secret: string) {
+  const value = await seal(JSON.stringify(session), secret);
+  return `${SESSION_COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax`;
+}
 
-  in dev, `document.cookie = "hw-dev-session=1"` reloads as a signed-in member,
-  which is the only way to look at the editorial half of the sidebar before
-  there is anything to sign in to
-*/
-export function getSession(request: Request): Session | null {
-  if (import.meta.env.DEV) {
-    const cookies = request.headers.get("cookie") ?? "";
-    if (cookies.split(";").some((c) => c.trim().startsWith(`${DEV_COOKIE}=`))) {
-      return { discordUserId: "dev" };
-    }
+export async function getSession(
+  request: Request,
+  secret: string,
+): Promise<Session | null> {
+  const value = requestCookie(request, SESSION_COOKIE);
+  if (!value || !secret) return null;
+
+  try {
+    const payload = await unseal(value, secret);
+    if (!payload) return null;
+
+    const session = JSON.parse(payload) as Partial<Session>;
+
+    return typeof session.discordUserId === "string" && session.discordUserId
+      ? { discordUserId: session.discordUserId }
+      : null;
+  } catch {
+    return null;
   }
+}
 
-  return null;
+export function clearSessionCookie() {
+  return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 }

@@ -1,11 +1,12 @@
-import { EllipsisVerticalIcon } from "lucide-react";
+import { EllipsisVerticalIcon, LogOutIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
-import { mockSignIn, useSignedIn } from "~/lib/use-session";
+import type { Session } from "~/lib/session";
+import { useSession } from "~/lib/use-session";
 import { cn } from "~/lib/utils";
 
 /* lucide carries no brand marks */
@@ -37,7 +38,13 @@ function GitHubMark({ className }: { className?: string }) {
 
 /* the same menu either side of signing in, so the one thing in it stays
    reachable whether or not anyone is signed in yet */
-function AccountMenu() {
+function AccountMenu({
+  signedIn,
+  returnTo,
+}: {
+  signedIn: boolean;
+  returnTo: string;
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -49,6 +56,16 @@ function AccountMenu() {
       </DropdownMenuTrigger>
 
       <DropdownMenuContent side="top" align="end" className="min-w-48">
+        {signedIn ? (
+          <form method="post" action="/auth/logout" data-astro-reload>
+            <input type="hidden" name="returnTo" value={returnTo} />
+            <DropdownMenuItem render={<button type="submit" />}>
+              <LogOutIcon className="size-4" />
+              Sign out
+            </DropdownMenuItem>
+          </form>
+        ) : null}
+
         <DropdownMenuItem
           render={
             <a
@@ -67,19 +84,19 @@ function AccountMenu() {
 }
 
 /*
-  the bottom of the sidebar. mocked: signing in swaps to an example member
-  rather than going anywhere, so the signed-in shell can be looked at and the
-  editorial nav above reacts with it. #19 makes the button an oauth redirect
-  and the member real.
+  the bottom of the sidebar. private pages seed the verified session, while
+  cached pages let the shared client hook fill it in without personalising html.
 */
 export function SidebarAccount({
-  signedIn: knownByServer = false,
+  session: knownByServer = null,
+  returnTo,
   inSheet = false,
 }: {
-  signedIn?: boolean;
+  session?: Session | null;
+  returnTo: string;
   inSheet?: boolean;
 }) {
-  const signedIn = useSignedIn(knownByServer);
+  const session = useSession(knownByServer);
 
   /* the sheet is only ever open at full width, so it never collapses. the rail
      has no room for a row, so the menu sits under what it belongs to */
@@ -89,12 +106,13 @@ export function SidebarAccount({
     !inSheet && "group-data-[state=collapsed]/shell:flex-col",
   );
 
-  if (!signedIn) {
+  if (!session) {
+    const signInHref = `/sign-in?${new URLSearchParams({ returnTo })}`;
+
     return (
       <div className={row}>
-        <button
-          type="button"
-          onClick={() => mockSignIn(true)}
+        <a
+          href={signInHref}
           title="Sign in with Discord"
           className="flex h-9 min-w-0 flex-1 items-center justify-center gap-2 self-stretch rounded-md bg-[#5865F2] text-sm font-medium text-white transition-colors hover:bg-[#4752c4]"
         >
@@ -102,27 +120,29 @@ export function SidebarAccount({
           <span className={cn("truncate", railHidden)}>
             Sign in with Discord
           </span>
-        </button>
+        </a>
 
-        <AccountMenu />
+        <AccountMenu signedIn={false} returnTo={returnTo} />
       </div>
     );
   }
 
   return (
     <div className={row}>
-      <div className="bg-sidebar-accent text-sidebar-accent-foreground flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-medium">
-        EM
+      <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#5865F2] text-white">
+        <DiscordMark className="size-3.5" />
       </div>
 
       <div className={cn("min-w-0 flex-1 leading-tight", railHidden)}>
-        <div className="truncate text-sm font-medium">Example Member</div>
+        <div className="truncate text-sm font-medium">
+          Signed in with Discord
+        </div>
         <div className="text-sidebar-foreground/50 truncate text-xs">
-          Section Editor
+          ID {session.discordUserId}
         </div>
       </div>
 
-      <AccountMenu />
+      <AccountMenu signedIn returnTo={returnTo} />
     </div>
   );
 }

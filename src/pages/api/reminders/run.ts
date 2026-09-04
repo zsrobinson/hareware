@@ -46,12 +46,14 @@ export const POST: APIRoute = async ({ request }) => {
     return new Response("unauthorized", { status: 401 });
   }
 
+  const query = new URL(request.url).searchParams;
+
   /*
     `?only=meeting` or `?only=social` to fire one; both by default. the reminders
     themselves decide there is nothing to say on a quiet day, so firing both is
     safe
   */
-  const only = new URL(request.url).searchParams.get("only");
+  const only = query.get("only");
   if (only && only !== "meeting" && only !== "social") {
     return new Response(`unknown reminder: ${only}`, { status: 400 });
   }
@@ -61,7 +63,23 @@ export const POST: APIRoute = async ({ request }) => {
     social: only !== "meeting",
   };
 
-  const report = await runReminders(env, easternNow(new Date()), which);
+  /*
+    `?dry=1` reports what each reminder would post without posting it, and
+    `?silent=1` posts without notifying anyone. production carries neither
+    switch as a secret — deliberately, so a real 8am run pings properly — which
+    left no way to exercise this against the real channels without pinging the
+    editorial board. these are that way.
+
+    a query parameter beats an environment variable for this: it applies to one
+    request rather than standing until somebody remembers to remove it
+  */
+  const options: Env = {
+    ...env,
+    ...(query.get("dry") ? { REMINDERS_DRY_RUN: "1" } : {}),
+    ...(query.get("silent") ? { REMINDERS_NO_PING: "1" } : {}),
+  };
+
+  const report = await runReminders(options, easternNow(new Date()), which);
 
   return new Response(JSON.stringify(report, null, 2), {
     headers: {

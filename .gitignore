@@ -26,6 +26,12 @@ pnpm-debug.log*
 # wrangler
 .wrangler/
 
+# generated from wrangler.jsonc by the postinstall hook. 590KB of runtime type
+# declarations that nobody edits and every wrangler bump rewrites — checked in,
+# it is the largest file in the repository and the noisiest diff in every
+# dependency update
+worker-configuration.d.ts
+
 # local worker secrets
 .dev.vars
 .dev.vars.*

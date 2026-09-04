@@ -6,6 +6,7 @@
   },
   "version": "0.0.1",
   "scripts": {
+    "postinstall": "wrangler types",
     "dev": "astro dev",
     "start": "astro dev",
     "build": "astro check && astro build",

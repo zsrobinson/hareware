@@ -51,6 +51,23 @@ interface HareWareEnv {
   REMINDERS_TRIGGER_SECRET?: string;
 
   /**
+   * Signs the session cookie and the OAuth state cookie, and nothing else.
+   *
+   * Rotating it signs everybody out, which is the only way to revoke a session
+   * — see `~/lib/session` for why there is no store to delete from.
+   *
+   * Generate with `openssl rand -hex 32`.
+   */
+  SESSION_SECRET?: string;
+
+  /**
+   * The Discord application's OAuth client secret, used once per sign-in to
+   * exchange the code for an access token. The client *id* is not secret and
+   * is a constant in `~/lib/discord/config`.
+   */
+  DISCORD_CLIENT_SECRET?: string;
+
+  /**
    * The Discord bot token. Both reminders post as the bot, so this is what
    * sends every message.
    *

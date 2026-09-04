@@ -64,7 +64,10 @@ export async function sendMeetingReminder(
     },
   );
 
-  return `posted meeting reminder for "${title}"`;
+  // a dry run posts nothing, and saying "posted" made a message that never
+  // went out indistinguishable from one that did
+  const verb = env.REMINDERS_DRY_RUN ? "would post" : "posted";
+  return `${verb} meeting reminder for "${title}"`;
 }
 
 /** every notion request wants the same headers, and none may echo the token */

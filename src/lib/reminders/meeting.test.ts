@@ -161,3 +161,18 @@ test("says what is unset rather than throwing", async () => {
   expect(result).toContain("NOTION_TOKEN");
   expect(fetchMock).not.toHaveBeenCalled();
 });
+
+test("a dry run says it would post, rather than that it did", async () => {
+  const discord = mockNotion([
+    meeting("Editorial Board Meeting", "2026-09-08"),
+  ]);
+  vi.spyOn(console, "log").mockImplementation(() => {});
+
+  const result = await sendMeetingReminder(
+    { ...env, REMINDERS_DRY_RUN: "1" },
+    today,
+  );
+
+  expect(result).toContain("would post");
+  expect(discord).not.toHaveBeenCalled();
+});

@@ -58,7 +58,10 @@ export async function sendMeetingReminder(
       ],
       mentionRoleIds: MEETING_MENTION_ROLE_ID ? [MEETING_MENTION_ROLE_ID] : [],
     },
-    { dryRun: Boolean(env.REMINDERS_DRY_RUN) },
+    {
+      dryRun: Boolean(env.REMINDERS_DRY_RUN),
+      silent: Boolean(env.REMINDERS_NO_PING),
+    },
   );
 
   return `posted meeting reminder for "${title}"`;

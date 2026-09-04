@@ -23,7 +23,9 @@ describe("easternNow", () => {
   });
 
   test("a late utc instant belongs to the previous eastern day", () => {
-    expect(easternNow(new Date("2026-09-04T03:30:00Z")).date).toBe("2026-09-03");
+    expect(easternNow(new Date("2026-09-04T03:30:00Z")).date).toBe(
+      "2026-09-03",
+    );
   });
 
   /*

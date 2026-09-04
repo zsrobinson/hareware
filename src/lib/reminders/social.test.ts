@@ -39,7 +39,11 @@ afterEach(() => vi.unstubAllGlobals());
 
 test("pings the day's role with what published today", async () => {
   const discord = mockFeed(
-    item("Looney's line wraps around Earth", "Wed, 03 Sep 2026 10:00:00 +0000", "looneys"),
+    item(
+      "Looney's line wraps around Earth",
+      "Wed, 03 Sep 2026 10:00:00 +0000",
+      "looneys",
+    ),
   );
 
   const result = await sendSocialPing(env, today);
@@ -49,7 +53,9 @@ test("pings the day's role with what published today", async () => {
   expect(body.components[0].content).toContain(
     `<@&${SOCIAL_ROLE_IDS.Thursday}>`,
   );
-  expect(body.components[0].content).toContain("**Looney's line wraps around Earth**");
+  expect(body.components[0].content).toContain(
+    "**Looney's line wraps around Earth**",
+  );
   expect(body.allowed_mentions.roles).toEqual([SOCIAL_ROLE_IDS.Thursday]);
 });
 

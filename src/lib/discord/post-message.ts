@@ -63,7 +63,7 @@ function render(block: Block) {
 export async function postToWebhook(
   webhookUrl: string,
   message: DiscordMessage,
-  options: { dryRun?: boolean } = {},
+  options: { dryRun?: boolean; silent?: boolean } = {},
 ) {
   const url = new URL(webhookUrl);
   // without this a webhook that is not application-owned sends no components
@@ -83,7 +83,12 @@ export async function postToWebhook(
     */
     allowed_mentions: {
       parse: [] as string[],
-      roles: message.mentionRoleIds ?? [],
+      /*
+        `silent` empties this and nothing else. discord still renders `<@&id>`
+        as the role's name either way — what the list controls is whether
+        anyone is notified, so a silent run looks identical and pings nobody
+      */
+      roles: options.silent ? [] : (message.mentionRoleIds ?? []),
     },
   };
 

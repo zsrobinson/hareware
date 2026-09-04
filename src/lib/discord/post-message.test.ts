@@ -101,6 +101,21 @@ test("stays quiet when everything survived", async () => {
   error.mockRestore();
 });
 
+test("silent keeps the mention visible but notifies nobody", async () => {
+  const fetchMock = mockDiscord([{}]);
+
+  await postToWebhook(
+    WEBHOOK,
+    { blocks: [text("<@&123> meeting today")], mentionRoleIds: ["123"] },
+    { silent: true },
+  );
+
+  const body = sentBody(fetchMock);
+  // the text is untouched, so the message looks exactly as it will in the end
+  expect(body.components[0].content).toContain("<@&123>");
+  expect(body.allowed_mentions.roles).toEqual([]);
+});
+
 test("throws when discord refuses the message", async () => {
   mockDiscord([], false);
   await expect(postToWebhook(WEBHOOK, { blocks: [text("x")] })).rejects.toThrow(

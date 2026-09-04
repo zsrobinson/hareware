@@ -69,7 +69,10 @@ export async function sendSocialPing(
   await postToWebhook(
     env.DISCORD_SOCIAL_WEBHOOK_URL!,
     { blocks, mentionRoleIds: [roleId!] },
-    { dryRun: Boolean(env.REMINDERS_DRY_RUN) },
+    {
+      dryRun: Boolean(env.REMINDERS_DRY_RUN),
+      silent: Boolean(env.REMINDERS_NO_PING),
+    },
   );
 
   return `posted ${posted.length} article(s) for ${eastern.date}`;

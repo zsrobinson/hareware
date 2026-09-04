@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { sendMeetingReminder } from "./meeting";
+import { MEETING_MENTION_ROLE_ID } from "./config";
 
 const env = {
   NOTION_TOKEN: "secret",
@@ -8,7 +9,11 @@ const env = {
 
 const today = { date: "2026-09-08", hour: 8, weekday: "Tuesday" };
 
-const meeting = (title: string, start: string, location = "McKeldin 2100E") => ({
+const meeting = (
+  title: string,
+  start: string,
+  location = "McKeldin 2100E",
+) => ({
   url: `https://notion.so/${encodeURIComponent(title)}`,
   properties: {
     Name: { type: "title", title: [{ plain_text: title }] },
@@ -69,7 +74,9 @@ test("ignores a general body meeting on the same day", async () => {
 });
 
 test("ignores a magazine design session", async () => {
-  const discord = mockNotion([meeting("Magazine Design Session", "2026-09-08")]);
+  const discord = mockNotion([
+    meeting("Magazine Design Session", "2026-09-08"),
+  ]);
 
   expect(await sendMeetingReminder(env, today)).toContain("no Editorial Board");
   expect(discord).not.toHaveBeenCalled();
@@ -115,6 +122,34 @@ test("names the location when the row has one", async () => {
   expect(discord.mock.calls[0]![0].components[0].content).toContain(
     "in Jimenez 1124",
   );
+});
+
+test("pings the editorial board", async () => {
+  const discord = mockNotion([
+    meeting("Editorial Board Meeting", "2026-09-08"),
+  ]);
+
+  await sendMeetingReminder(env, today);
+
+  const body = discord.mock.calls[0]![0];
+  expect(body.components[0].content).toContain(
+    `<@&${MEETING_MENTION_ROLE_ID}>`,
+  );
+  expect(body.allowed_mentions.roles).toEqual([MEETING_MENTION_ROLE_ID]);
+});
+
+test("REMINDERS_NO_PING renders the mention but notifies nobody", async () => {
+  const discord = mockNotion([
+    meeting("Editorial Board Meeting", "2026-09-08"),
+  ]);
+
+  await sendMeetingReminder({ ...env, REMINDERS_NO_PING: "1" }, today);
+
+  const body = discord.mock.calls[0]![0];
+  expect(body.components[0].content).toContain(
+    `<@&${MEETING_MENTION_ROLE_ID}>`,
+  );
+  expect(body.allowed_mentions.roles).toEqual([]);
 });
 
 test("says what is unset rather than throwing", async () => {

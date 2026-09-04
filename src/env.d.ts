@@ -26,4 +26,6 @@ interface Env {
   REMINDERS_IGNORE_HOUR?: string;
   /** log what would be sent to discord instead of sending it */
   REMINDERS_DRY_RUN?: string;
+  /** post as normal but notify nobody, so a real send is not an annoyance */
+  REMINDERS_NO_PING?: string;
 }

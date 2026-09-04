@@ -47,11 +47,13 @@ export const HAREWARE_ORIGIN: string | undefined =
   "https://hareware.zsrobinson.com";
 
 /**
- * the role the meeting reminder pings, or undefined to post without mentioning
- * anyone. @Editorial Board is `669611068938780673` — deliberately not set yet,
- * so the reminder proves itself before it starts pinging the whole board
+ * the role the meeting reminder pings — @Editorial Board.
+ *
+ * set REMINDERS_NO_PING while testing rather than clearing this: the mention
+ * still renders, so the message looks exactly as it will, and nobody's phone
+ * goes off
  */
-export const MEETING_MENTION_ROLE_ID: string | undefined = undefined;
+export const MEETING_MENTION_ROLE_ID: string | undefined = "669611068938780673";
 
 /**
  * the notion database holding one page per editorial board meeting.

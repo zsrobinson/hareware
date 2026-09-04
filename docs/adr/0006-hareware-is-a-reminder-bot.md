@@ -102,6 +102,11 @@ is the point, not a regression.
 **Notion is nearly untouched by software.** One integration token reads the
 Meetings database. The Articles database is not read or written by anything.
 
+**The _Posted to Instagram_ property was removed.** It existed so the board could
+show what social had left to do. The daily reminder answers that question
+directly and from WordPress, so the column was tracking something nobody had to
+look up any more. Marking a post done moves to the reminder message itself.
+
 **Notion's paid features are no longer load-bearing.** Automations are the part
 of Notion that costs a plan; the API is free on every tier, including Free. The
 club's student-organisation grant lapsing would therefore cost HareWare nothing.

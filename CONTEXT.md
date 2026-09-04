@@ -46,8 +46,10 @@ be mistaken for a **WordPress Post**, and never shortens it to "post" outside a
 screen that is already about Instagram.
 
 An Instagram Post is not a record anywhere. It is generated from an Article on
-demand, downloaded, and posted by hand, so nothing tracks one except the
-Article's own _Posted to Instagram_ property.
+demand, downloaded, and posted by hand, and Notion does not track whether one
+went out — the _Posted to Instagram_ property was removed with the rest of the
+tracker integration. The daily reminder in `#social-media` is where the social
+team sees what still needs posting, and eventually where they mark it done.
 
 ## Publish Date
 

@@ -82,13 +82,13 @@ deployed one, which it usually is not.
 These exist to exercise the reminders. Each changes behaviour in a way nobody
 wants running unattended, and none belongs in a deployed secret.
 
-| Switch                    | What it does                                                 |
-| ------------------------- | ------------------------------------------------------------ |
-| `REMINDERS_DRY_RUN`       | Log the Discord payload instead of sending it                |
-| `REMINDERS_NO_PING`       | Post as normal but notify nobody — the mention still renders |
-| `REMINDERS_IGNORE_HOUR`   | Run both reminders on every tick, not just at 8am            |
-| `REMINDERS_FORCE_MEETING` | Run the meeting reminder on the next tick, whatever the hour |
-| `REMINDERS_FORCE_SOCIAL`  | The same, for the social ping                                |
+| Switch                    | What it does                                                                      |
+| ------------------------- | --------------------------------------------------------------------------------- |
+| `REMINDERS_DRY_RUN`       | Log the Discord payload instead of sending it                                     |
+| `REMINDERS_NO_PING`       | Post as normal but notify nobody — writes the role's name in place of the mention |
+| `REMINDERS_IGNORE_HOUR`   | Run both reminders on every tick, not just at 8am                                 |
+| `REMINDERS_FORCE_MEETING` | Run the meeting reminder on the next tick, whatever the hour                      |
+| `REMINDERS_FORCE_SOCIAL`  | The same, for the social ping                                                     |
 
 `REMINDERS_IGNORE_HOUR` is the most damaging of these if it reaches production:
 a Worker cannot unset its own environment, so it would post both reminders once

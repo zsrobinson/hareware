@@ -1,0 +1,35 @@
+name: Checks
+
+# what a person is expected to run before pushing, run by something that
+# cannot forget. deploys stay with Workers Builds; this only says whether the
+# code is sound
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # `npm ci` fails outright when package.json and the lockfile disagree,
+      # which is worth catching on its own
+      - run: npm ci
+
+      # `npm run build` is `astro check && astro build`, so this typechecks
+      # every file including the tests. its prebuild regenerates the worker
+      # types, which are gitignored and must therefore build from nothing
+      - run: npm run build
+
+      - run: npm test
+
+      # formatting is settled by a tool, so a diff over it is noise nobody
+      # should be reading in review
+      - run: npx prettier --check .

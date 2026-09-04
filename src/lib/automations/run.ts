@@ -1,6 +1,13 @@
 import { easternNow, type EasternNow } from "~/lib/eastern";
 import { record } from "~/lib/log";
-import { AUTOMATIONS, type Automation, type AutomationId } from "./registry";
+import { reportFailure } from "./alert";
+import {
+  AUTOMATIONS,
+  type Automation,
+  type AutomationId,
+  failed,
+  type Result,
+} from "./registry";
 
 /** which automations a caller wants. empty means all of them */
 export type Which = Set<AutomationId>;
@@ -88,36 +95,40 @@ export async function runAutomations(
 }
 
 /** a settled promise as an outcome, so a throw and a failure look the same */
-function read(
-  settled: PromiseSettledResult<{ outcome: string; summary: string }>,
-) {
+function read(settled: PromiseSettledResult<Result>): Result {
   return settled.status === "fulfilled"
     ? settled.value
-    : { outcome: "failed" as const, summary: `failed: ${settled.reason}` };
+    : failed(`failed: ${settled.reason}`);
 }
 
 async function recordRun(
   env: Env,
   automation: Automation,
-  result: { outcome: string; summary: string },
+  result: Result,
   source: "cron" | "manual",
   actor?: string,
 ) {
-  const { reportFailure } = await import("./alert");
-
   /*
     before the row is written, so it compares against the run before this one.
     only the cron reports: a run fired by hand returns its error to whoever
     pressed the button, and telling them twice is noise
   */
   if (result.outcome === "failed" && source === "cron") {
-    await reportFailure(env, automation.action, result.summary);
+    await reportFailure(env, automation, result.summary);
   }
+
+  /*
+    a dry run posted nothing, so recording it `ok` would put a green row in the
+    log for a message that never went out — the exact distinction this branch
+    widened the outcomes to make. it also re-armed the alert gate, so a dry run
+    on wednesday made thursday's real failure read as fresh
+  */
+  if (env.REMINDERS_DRY_RUN) return;
 
   await record(env.DB, {
     source,
     action: automation.action,
-    outcome: result.outcome as "ok" | "failed" | "skipped" | "misconfigured",
+    outcome: result.outcome,
     summary: result.summary,
     actor,
   });

@@ -174,7 +174,7 @@ correctly must not be recorded as failed because the alert could not be sent.
 
 The duty roster's role ids, the Meetings database id, the reminder hour,
 HareWare's own origin, and the Discord application id and public key are
-constants in `src/lib/reminders/config.ts` and `src/lib/discord/config.ts`.
+constants in `src/lib/automations/config.ts` and `src/lib/services/discord/config.ts`.
 None of them is secret, and they change about once a year — a one-line pull
 request is a cheaper way to change them than a store nobody remembers exists,
 and it leaves a reviewable history of what changed and why.
@@ -210,7 +210,7 @@ real.
 ## Moving a reminder to another channel
 
 Both reminders post **as the bot**, so a channel is not a credential: the ids
-are constants in `src/lib/reminders/config.ts` and moving one is a one-line
+are constants in `src/lib/automations/config.ts` and moving one is a one-line
 pull request. The bot needs **View Channel** and **Send Messages** in the new
 channel.
 
@@ -230,7 +230,7 @@ There are two ways a role becomes pingable, and the bot needs one of them:
 
 The second is the one to use. It keeps `@Editorial Board` unpingable by hand,
 which is what a duty role should be, and `allowed_mentions` in
-`src/lib/discord/post-message.ts` still names the single role each message may
+`src/lib/services/discord/post-message.ts` still names the single role each message may
 mention, so the permission is broad but the message is not.
 
 This bites bots only. The reminders posted through webhooks at first, and a

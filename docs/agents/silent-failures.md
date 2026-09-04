@@ -24,7 +24,7 @@ the bot and stopped after it, with no code change to blame.
 **`allowed_mentions` does not gate a mention inside a Components V2 text
 display.** An empty `roles` array notifies the role exactly as though the field
 were absent. The only way not to ping is not to write the markup —
-`defuse()` in `src/lib/discord/post-message.ts` is that, and it is why
+`defuse()` in `src/lib/services/discord/post-message.ts` is that, and it is why
 `REMINDERS_NO_PING` rewrites the text rather than clearing a field.
 
 **A button missing `custom_id` invalidates the whole message.** Discord refuses
@@ -76,7 +76,7 @@ for weeks. Every variable the code reads belongs in `HareWareEnv` in
 ## Testing against the real thing
 
 `#instagram-posting` and `#editorial-board` are the club's real channels, and
-the channel ids are compiled into `src/lib/reminders/config.ts` rather than
+the channel ids are compiled into `src/lib/automations/config.ts` rather than
 supplied per environment — so a local run with no other setting posts to them
 for real. Messages can be deleted; the pings they send cannot be taken back.
 

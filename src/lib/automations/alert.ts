@@ -7,15 +7,10 @@
   findable. this is what makes it noticed.
 */
 
-import { lastOutcome, type Row } from "~/lib/log";
+import { lastOutcome } from "~/lib/log";
+import type { Automation } from "./registry";
 import { postMessage, text } from "~/lib/services/discord/post-message";
 import { ALERT_CHANNEL_ID, HAREWARE_ORIGIN } from "./config";
-
-/** the friendly name for each action, for a line a person reads at 8am */
-const NAMES: Record<string, string> = {
-  "meeting-reminder": "The meeting reminder",
-  "social-ping": "The social ping",
-};
 
 /**
  * posts a failure to the alert channel, once per run of bad luck.
@@ -31,7 +26,7 @@ const NAMES: Record<string, string> = {
  */
 export async function reportFailure(
   env: Env,
-  action: Row["action"],
+  automation: Automation,
   summary: string,
 ) {
   try {
@@ -39,7 +34,8 @@ export async function reportFailure(
       read before the new row is written, so this is the outcome of the run
       before this one rather than of this one
     */
-    if ((await lastOutcome(env.DB, action)) === "failed") return;
+    if ((await lastOutcome(env.DB, automation.action, "cron")) === "failed")
+      return;
 
     const token = env.DISCORD_BOT_TOKEN;
     if (!token) return;
@@ -51,7 +47,7 @@ export async function reportFailure(
         blocks: [
           text(
             [
-              `### ⚠️ ${NAMES[action] ?? action} did not run`,
+              `### ⚠️ ${automation.name} did not run`,
               "",
               `\`\`\`\n${clip(summary)}\n\`\`\``,
               "",

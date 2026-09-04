@@ -25,16 +25,6 @@ function fromHex(hex: string): Uint8Array<ArrayBuffer> | undefined {
   return bytes;
 }
 
-/**
- * the request body, if discord really sent it, and undefined otherwise.
- *
- * returns the body rather than a boolean because it has to read it here — a
- * request body can only be consumed once, and the signature covers the exact
- * bytes, so a caller that re-parsed its own copy could verify one thing and act
- * on another
- *
- * workerd implements ed25519 in webcrypto, so this needs no library
- */
 /** how far from now a signed timestamp may be, in seconds, either direction */
 const MAX_SKEW = 5 * 60;
 
@@ -47,6 +37,16 @@ function recent(timestamp: string) {
   return Math.abs(Date.now() / 1000 - sent) <= MAX_SKEW;
 }
 
+/**
+ * the request body, if discord really sent it, and undefined otherwise.
+ *
+ * returns the body rather than a boolean because it has to read it here — a
+ * request body can only be consumed once, and the signature covers the exact
+ * bytes, so a caller that re-parsed its own copy could verify one thing and act
+ * on another
+ *
+ * workerd implements ed25519 in webcrypto, so this needs no library
+ */
 export async function verifyInteraction(
   request: Request,
   publicKey: string,

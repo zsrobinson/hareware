@@ -182,3 +182,38 @@ test("a dry run says it would post, rather than that it did", async () => {
   expect(result.summary).toContain("would post");
   expect(discord).not.toHaveBeenCalled();
 });
+
+/*
+  outcomes, which no test here asserted — every one was mechanically rewritten
+  to read `.summary`, so `sendMeetingReminder` could have returned `ok` for a
+  day with no meeting and the suite would not have noticed.
+*/
+test("a day with no meeting is skipped, not ok", async () => {
+  mockNotion([]);
+
+  expect((await sendMeetingReminder(env, today)).outcome).toBe("skipped");
+});
+
+test("a missing token is misconfigured, not ok", async () => {
+  expect((await sendMeetingReminder({} as Env, today)).outcome).toBe(
+    "misconfigured",
+  );
+});
+
+test("a posted reminder is ok", async () => {
+  mockNotion([meeting("Editorial Board Meeting", "2026-09-08")]);
+
+  expect((await sendMeetingReminder(env, today)).outcome).toBe("ok");
+});
+
+test("a notion location cannot ping the board", async () => {
+  const discord = mockNotion([
+    meeting("Editorial Board Meeting", "2026-09-08", "@everyone room"),
+  ]);
+
+  await sendMeetingReminder(env, today);
+
+  const body = JSON.stringify(discord.mock.calls[0]?.[0]);
+  expect(body).toContain("room");
+  expect(body).not.toContain("@everyone");
+});

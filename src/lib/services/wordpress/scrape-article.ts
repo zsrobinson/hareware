@@ -1,5 +1,5 @@
 import { parseHTML } from "linkedom";
-import { scrub } from "~/lib/services/wordpress/scrub-html";
+import { scrub, scrubFragment } from "./scrub-html";
 import { ORIGIN, toArticleLink, toArticleSlug } from "./article-url";
 
 /**
@@ -112,16 +112,27 @@ async function fromRenderedPage(link: string) {
   const res = await fetch(link);
   if (!res.ok) throw new Error(`wordpress returned ${res.status} for ${link}`);
 
-  const document = scrub(parseHTML(await res.text()).document);
+  const { document } = parseHTML(await res.text());
+
+  /*
+    read before scrubbing. `scrub` drops <meta> outright — correctly, it is not
+    content — and this reads a url out of one, so scrubbing first meant the
+    featured image was silently always undefined on this path. the value is a
+    url we hand to an <img src>, not markup we render, so taking it from the
+    unscrubbed tree costs nothing
+  */
+  const image = document
+    .querySelector(`meta[property="og:image"]`)
+    ?.getAttribute("content")
+    ?.split("?")[0];
+
+  scrub(document);
 
   return {
     ...readEntryContent(document),
     title:
       document.querySelector(".wp-block-post-title")?.innerHTML.trim() ?? "",
-    image: document
-      .querySelector(`meta[property="og:image"]`)
-      ?.getAttribute("content")
-      ?.split("?")[0],
+    image,
     date: document
       .querySelector(".wp-block-post-date.has-text-align-right time")
       ?.innerHTML.trim(),
@@ -259,18 +270,4 @@ function formatDate(date: string): string {
     year: "numeric",
     timeZone: "UTC",
   });
-}
-
-/**
- * the same treatment for a bare markup string rather than a whole document.
- *
- * wrapped in a div rather than a body: linkedom builds an odd tree for a bare
- * `<body>` and `document.body` comes back empty, so the wrapper is one this
- * file already knows parses predictably
- */
-function scrubFragment(html: string) {
-  const { document } = parseHTML(`<div id="fragment">${html}</div>`);
-  scrub(document);
-
-  return document.querySelector("#fragment")?.innerHTML.trim() ?? "";
 }

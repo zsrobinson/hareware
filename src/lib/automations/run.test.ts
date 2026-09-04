@@ -15,6 +15,13 @@ vi.mock("./social", () => ({
 const reportFailure = vi.fn<(...args: unknown[]) => Promise<void>>(
   async () => undefined,
 );
+
+const record = vi.fn<(...args: unknown[]) => Promise<void>>(
+  async () => undefined,
+);
+vi.mock("~/lib/log", () => ({
+  record: (...a: unknown[]) => record(...(a as [])),
+}));
 vi.mock("./alert", () => ({
   reportFailure: (...a: unknown[]) => reportFailure(...(a as [])),
 }));
@@ -35,6 +42,7 @@ afterEach(() => {
   meeting.mockClear();
   social.mockClear();
   reportFailure.mockClear();
+  record.mockClear();
   vi.restoreAllMocks();
 });
 
@@ -113,12 +121,14 @@ test("reports a failed cron run, naming the automation and the reason", async ()
   await runAutomations({} as Env, eastern, ALL, "cron");
 
   expect(reportFailure).toHaveBeenCalledOnce();
-  const [, action, summary] = reportFailure.mock.calls[0] as [
+  /* the automation itself, not its action string — so the alert can read the
+     friendly name off it rather than keeping a second table of names */
+  const [, automation, summary] = reportFailure.mock.calls[0] as [
     Env,
-    string,
+    { action: string },
     string,
   ];
-  expect(action).toBe("meeting-reminder");
+  expect(automation.action).toBe("meeting-reminder");
   expect(summary).toContain("notion returned 502");
 });
 
@@ -147,4 +157,61 @@ test("reports each reminder that failed, independently", async () => {
   await runAutomations({} as Env, eastern, ALL, "cron");
 
   expect(reportFailure).toHaveBeenCalledTimes(2);
+});
+
+/*
+  what actually reaches the row.
+
+  every test above passes `{} as Env`, so `record()` short-circuits on the
+  missing DB and the write path — the semantics this branch is entirely about —
+  was exercised by nothing. mocking the log rather than D1 keeps that cheap.
+*/
+test("records the outcome the automation returned, not whether it threw", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  meeting.mockResolvedValueOnce({
+    outcome: "skipped",
+    summary: "no meeting today",
+  });
+  social.mockResolvedValueOnce({
+    outcome: "misconfigured",
+    summary: "social ping unset: X",
+  });
+
+  await runAutomations({ DB: {} } as Env, eastern, ALL, "cron");
+
+  const outcomes = record.mock.calls.map(
+    (c) => (c[1] as { outcome: string }).outcome,
+  );
+  expect(outcomes).toEqual(["skipped", "misconfigured"]);
+});
+
+test("records who fired a manual run", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+
+  await runAutomations(
+    { DB: {} } as Env,
+    eastern,
+    new Set(["meeting"] as const),
+    "manual",
+    "342850506328117249",
+  );
+
+  expect((record.mock.calls[0]?.[1] as { actor?: string }).actor).toBe(
+    "342850506328117249",
+  );
+});
+
+test("writes no row for a dry run, which posted nothing", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+
+  await runAutomations(
+    { DB: {}, REMINDERS_DRY_RUN: "1" } as Env,
+    eastern,
+    ALL,
+    "cron",
+  );
+
+  // a green row for a message that never went out is the distinction the
+  // widened outcomes exist to make, undone
+  expect(record).not.toHaveBeenCalled();
 });

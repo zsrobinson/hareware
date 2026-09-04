@@ -1,20 +1,10 @@
 import { expect, test } from "vitest";
 import { parseHTML } from "linkedom";
-import { scrub } from "./scrub-html";
+import { scrub, scrubFragment } from "./scrub-html";
 
-/*
-  scrub a fragment and hand back what would be rendered.
-
-  wrapped in a div: linkedom builds an odd tree for a bare `<body>` — two body
-  elements, and `document.body` empty — which made the first run of these tests
-  look like the scrubber was deleting everything
-*/
-function clean(html: string) {
-  const { document } = parseHTML(`<div id="fragment">${html}</div>`);
-  scrub(document);
-
-  return document.querySelector("#fragment")?.innerHTML ?? "";
-}
+/* the production helper, so these test the function that scrubs every article
+   title rather than a copy of it */
+const clean = scrubFragment;
 
 test("removes a script outright, text and all", () => {
   expect(clean(`<p>hi</p><script>alert(1)</script>`)).toBe("<p>hi</p>");
@@ -78,4 +68,58 @@ test("scrubs inside an unknown tag before unwrapping it", () => {
 
 test("removes an unlisted attribute such as style", () => {
   expect(clean(`<p style="position:fixed;inset:0">x</p>`)).toBe("<p>x</p>");
+});
+
+/*
+  mutation XSS. linkedom does not implement the HTML comment-end-bang state, so
+  it reads `<!-- --!><img …> -->` as one inert comment while every browser reads
+  it as a comment followed by a live image. an allow-list of elements is not an
+  allow-list of nodes: the scrubber was approving a string it never examined.
+*/
+test("removes comments, which the element walk never visited", () => {
+  const out = clean(`<p><!-- --!><img src=x onerror="alert(1)"> --></p>`);
+
+  expect(out).not.toContain("onerror");
+  expect(out).not.toContain("--!>");
+  expect(out).toBe("<p></p>");
+});
+
+test("removes a plain comment too, wherever it sits", () => {
+  expect(clean(`<p>before<!-- hi -->after</p>`)).toBe("<p>beforeafter</p>");
+  expect(clean(`<!-- top --><p>x</p>`)).toBe("<p>x</p>");
+});
+
+test("removes a comment nested inside an element that survives", () => {
+  const out = clean(
+    `<blockquote><p>quoted<!-- --!><script>alert(1)</script> --></p></blockquote>`,
+  );
+
+  expect(out).not.toContain("alert");
+  expect(out).not.toContain("--!>");
+});
+
+test("strips attributes from structural tags rather than skipping them", () => {
+  // <body> is never unwrapped — that would delete the document — but skipping
+  // the whole loop for it let an event handler through untouched
+  const { document } = parseHTML(`<body onload="alert(1)"><p>x</p></body>`);
+  scrub(document);
+
+  expect(document.querySelector("body")?.getAttribute("onload")).toBeFalsy();
+});
+
+test("refuses a protocol-relative url, which is a different origin", () => {
+  expect(clean(`<a href="//evil.example/x">x</a>`)).not.toContain("evil");
+});
+
+test("keeps an ordinary relative link", () => {
+  // requiring a leading slash silently deleted a link wordpress can emit
+  expect(clean(`<a href="article-name">x</a>`)).toContain(
+    'href="article-name"',
+  );
+});
+
+test("checks every candidate in a srcset, not just the first", () => {
+  expect(
+    clean(`<img srcset="/a.png 1x, javascript:alert(1) 2x">`),
+  ).not.toContain("javascript:");
 });

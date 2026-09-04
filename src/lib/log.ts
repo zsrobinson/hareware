@@ -9,7 +9,7 @@
 */
 
 import { drizzle } from "drizzle-orm/d1";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { invocations, type Invocation, type Row } from "./db/schema";
 
 export type { Invocation, Row };
@@ -52,11 +52,18 @@ export function recent(db: D1Database, limit = 100): Promise<Row[]> {
  * used to tell a new failure from a continuing one. null means "nothing to
  * compare against" — no database, no history, or a read that failed — and the
  * caller treats all three as "this is news", because a missing log is a reason
- * to say more rather than less
+ * to say more rather than less.
+ *
+ * scoped to one `source` deliberately. the alert is a statement about the
+ * unattended schedule, so it has to compare cron runs against cron runs: a
+ * failed run somebody fired by hand from the panel would otherwise sit at the
+ * top of the table and suppress the next morning's real alert — the one
+ * morning the club most needs it
  */
 export async function lastOutcome(
   db: D1Database | undefined,
   action: Row["action"],
+  source: Row["source"],
 ): Promise<Row["outcome"] | null> {
   if (!db) return null;
 
@@ -64,7 +71,9 @@ export async function lastOutcome(
     const [row] = await drizzle(db)
       .select({ outcome: invocations.outcome })
       .from(invocations)
-      .where(eq(invocations.action, action))
+      .where(
+        and(eq(invocations.action, action), eq(invocations.source, source)),
+      )
       .orderBy(desc(invocations.at))
       .limit(1);
 

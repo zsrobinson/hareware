@@ -183,3 +183,23 @@ test("a posted ping is ok", async () => {
 
   expect((await sendSocialPing(env, today)).outcome).toBe("ok");
 });
+
+/*
+  the wrapper, not the helper. `inert()` has its own tests, but nothing asserted
+  this file calls it — deleting the wrapper left every test passing, which is
+  the whole point of the ticket going untested
+*/
+test("a headline cannot ping the server through the ping", async () => {
+  const discord = mockFeed(
+    item("@everyone read this", "Thu, 03 Sep 2026 14:00:00 +0000", "x"),
+  );
+
+  await sendSocialPing(env, today);
+
+  const body = JSON.stringify(discord.mock.calls[0]?.[0]);
+  expect(body).toContain("everyone");
+  // the role we meant to mention is still live
+  expect(body).toContain(`<@&${SOCIAL_ROLE_IDS.Thursday}>`);
+  // the one the headline smuggled in is not
+  expect(body).not.toContain("@everyone");
+});

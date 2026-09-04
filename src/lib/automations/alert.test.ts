@@ -1,5 +1,9 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { ALERT_CHANNEL_ID } from "./config";
+import { AUTOMATIONS } from "./registry";
+
+const meetingAutomation = AUTOMATIONS.find((a) => a.id === "meeting")!;
+const socialAutomation = AUTOMATIONS.find((a) => a.id === "social")!;
 
 const lastOutcome = vi.fn<() => Promise<"ok" | "failed" | null>>(
   async () => null,
@@ -31,7 +35,7 @@ afterEach(() => {
 test("reports a failure that follows a run that worked", async () => {
   lastOutcome.mockResolvedValue("ok");
 
-  await reportFailure(env, "meeting-reminder", "notion returned 502");
+  await reportFailure(env, meetingAutomation, "notion returned 502");
 
   expect(postMessage).toHaveBeenCalledOnce();
   const [, channel, message] = postMessage.mock.calls[0] as [
@@ -41,26 +45,26 @@ test("reports a failure that follows a run that worked", async () => {
   ];
 
   expect(channel).toBe(ALERT_CHANNEL_ID);
-  expect(message.blocks[0]?.content).toContain("meeting reminder");
+  expect(message.blocks[0]?.content).toContain(meetingAutomation.name);
   expect(message.blocks[0]?.content).toContain("notion returned 502");
 });
 
 test("stays quiet while a failure is already the standing state", async () => {
   lastOutcome.mockResolvedValue("failed");
 
-  await reportFailure(env, "social-ping", "wordpress unreachable");
+  await reportFailure(env, socialAutomation, "wordpress unreachable");
 
   expect(postMessage).not.toHaveBeenCalled();
 });
 
 test("speaks up again after a run that recovered", async () => {
   lastOutcome.mockResolvedValue("failed");
-  await reportFailure(env, "social-ping", "first");
+  await reportFailure(env, socialAutomation, "first");
   expect(postMessage).not.toHaveBeenCalled();
 
   // the reminder worked once, then broke again
   lastOutcome.mockResolvedValue("ok");
-  await reportFailure(env, "social-ping", "second");
+  await reportFailure(env, socialAutomation, "second");
   expect(postMessage).toHaveBeenCalledOnce();
 });
 
@@ -68,7 +72,7 @@ test("reports when there is no history to compare against", async () => {
   // no D1, or a read that failed: a missing log is a reason to say more
   lastOutcome.mockResolvedValue(null);
 
-  await reportFailure(env, "meeting-reminder", "boom");
+  await reportFailure(env, meetingAutomation, "boom");
 
   expect(postMessage).toHaveBeenCalledOnce();
 });
@@ -76,7 +80,7 @@ test("reports when there is no history to compare against", async () => {
 test("does not mention any role", async () => {
   lastOutcome.mockResolvedValue("ok");
 
-  await reportFailure(env, "meeting-reminder", "boom");
+  await reportFailure(env, meetingAutomation, "boom");
 
   const [, , message] = postMessage.mock.calls[0] as [
     string,
@@ -89,7 +93,7 @@ test("does not mention any role", async () => {
 test("clips a summary too long for a text display", async () => {
   lastOutcome.mockResolvedValue("ok");
 
-  await reportFailure(env, "meeting-reminder", "x".repeat(5000));
+  await reportFailure(env, meetingAutomation, "x".repeat(5000));
 
   const [, , message] = postMessage.mock.calls[0] as [
     string,
@@ -102,7 +106,7 @@ test("clips a summary too long for a text display", async () => {
 test("says nothing without a bot token", async () => {
   lastOutcome.mockResolvedValue("ok");
 
-  await reportFailure({} as Env, "meeting-reminder", "boom");
+  await reportFailure({} as Env, meetingAutomation, "boom");
 
   expect(postMessage).not.toHaveBeenCalled();
 });
@@ -113,6 +117,6 @@ test("never throws, whatever discord does", async () => {
   vi.spyOn(console, "error").mockImplementation(() => {});
 
   await expect(
-    reportFailure(env, "meeting-reminder", "boom"),
+    reportFailure(env, meetingAutomation, "boom"),
   ).resolves.toBeUndefined();
 });

@@ -1,4 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
+import { scrubFragment } from "./scrub-html";
 import { ORIGIN } from "./article-url";
 
 /**
@@ -55,11 +56,19 @@ export async function getRecentArticles(
     */
     if (data.rss === undefined) return undefined;
 
-    const items = data.rss.channel?.item;
+    /* a truncated response can carry <rss> with no <channel>, which is
+       unreadable rather than quiet — the same conflation, mirrored */
+    if (data.rss.channel === undefined) return undefined;
+
+    const items = data.rss.channel.item;
     if (!items) return [];
 
     return (Array.isArray(items) ? items : [items]).map((item) => ({
-      title: item.title,
+      /* the feed is the one markup path into the dom that the scrubber did not
+         cover — /generate renders these with set:html. scrubbing here rather
+         than at the call site makes "already safe" part of this function's
+         contract, so no caller has to remember */
+      title: scrubFragment(String(item.title)),
       link: item.link,
       date: new Date(item.pubDate).toLocaleDateString("en-US", {
         month: "short",

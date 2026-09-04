@@ -1,3 +1,4 @@
+import { parseHTML } from "linkedom";
 /*
   making scraped markup safe to render.
 
@@ -118,21 +119,48 @@ const ALLOWED_ATTRIBUTES = new Set([
   "cite",
 ]);
 
-/** what may begin an href or src: a real scheme, or something relative */
-const SAFE_SCHEME = /^(?:https?:|mailto:|#|\/|\.)/i;
+/*
+  what may begin an href or src. anything with a scheme must have one of ours;
+  anything without a scheme is relative and fine — `article-name` is a link
+  wordpress can legitimately emit, and requiring a leading slash silently
+  deleted it
+*/
+const SAFE_SCHEME = /^(?:https?:|mailto:)/i;
+const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 
 /** whitespace html ignores inside an attribute, which hides a scheme */
 // eslint-disable-next-line no-control-regex
 const IGNORED = /[\u0000-\u0020\u007f]/g;
 
 function safeUrl(value: string) {
+  const cleaned = value.replace(IGNORED, "");
+
+  /*
+    `//evil.example/x` reads as relative to this pattern and as a different
+    origin to a browser — the same confusion `safeReturnTo` closes in auth.ts,
+    and the two halves of this codebase should not disagree about what
+    "relative" means
+  */
+  if (cleaned.startsWith("//")) return false;
+
   /*
     `java\tscript:alert(1)` is a working javascript url in a browser, because
     the parser strips control characters before reading the scheme. strip them
     the same way before deciding, or the check reads a different string than
     the browser will
   */
-  return SAFE_SCHEME.test(value.replace(IGNORED, ""));
+  return HAS_SCHEME.test(cleaned) ? SAFE_SCHEME.test(cleaned) : true;
+}
+
+const URL_ATTRIBUTES = new Set(["href", "src", "srcset"]);
+
+/** srcset holds a comma-separated list, so every candidate needs checking */
+function safeUrls(attribute: string, value: string) {
+  if (attribute !== "srcset") return safeUrl(value);
+
+  return value
+    .split(",")
+    .every((candidate) => safeUrl(candidate.trim().split(/\s+/)[0] ?? ""));
 }
 
 type Elementish = {
@@ -151,13 +179,44 @@ type Elementish = {
  * paths already build, and so there is one place to correct if wordpress starts
  * emitting something new
  */
+/** the DOM's number for a comment node */
+const COMMENT_NODE = 8;
+
+/**
+ * every comment, gone.
+ *
+ * an allow-list of *elements* is not an allow-list of *nodes*, and anything
+ * the walk does not visit is unreviewed by construction. comments are the gap:
+ * linkedom does not implement the comment-end-bang state, so it reads
+ * `<!-- --!><img onerror=…> -->` as one inert comment and hands it back
+ * untouched — while every browser reads the same bytes as a comment followed by
+ * a live image. the scrubber would be approving a string it never examined.
+ *
+ * nothing here needs comments, so the safe move is to delete rather than parse
+ */
+function removeComments(node: { childNodes?: unknown[] }) {
+  for (const child of [...(node.childNodes ?? [])] as {
+    nodeType?: number;
+    remove?: () => void;
+    childNodes?: unknown[];
+  }[]) {
+    if (child.nodeType === COMMENT_NODE) child.remove?.();
+    else removeComments(child);
+  }
+}
+
 export function scrub<T>(root: T): T {
   /*
     linkedom's Document and Element both satisfy this, but neither exposes a
     named type worth importing — so the walk is typed structurally here and the
     caller keeps whatever it passed in
   */
-  const tree = root as { querySelectorAll: (s: string) => Elementish[] };
+  const tree = root as {
+    querySelectorAll: (s: string) => Elementish[];
+    childNodes?: unknown[];
+  };
+
+  removeComments(tree);
 
   for (const element of [...tree.querySelectorAll("*")]) {
     const tag = element.tagName?.toLowerCase() ?? "";
@@ -167,15 +226,13 @@ export function scrub<T>(root: T): T {
       continue;
     }
 
-    if (STRUCTURAL.has(tag)) continue;
-
     for (const { name, value } of [...element.attributes]) {
       const attribute = name.toLowerCase();
 
       const keep =
         ALLOWED_ATTRIBUTES.has(attribute) &&
         !attribute.startsWith("on") &&
-        (!["href", "src", "srcset"].includes(attribute) || safeUrl(value));
+        (!URL_ATTRIBUTES.has(attribute) || safeUrls(attribute, value));
 
       if (!keep) element.removeAttribute(name);
     }
@@ -186,8 +243,29 @@ export function scrub<T>(root: T): T {
       type, and a silent failure is the thing this codebase has already paid
       for more than once
     */
-    if (!ALLOWED.has(tag)) element.replaceWith(...element.childNodes);
+    /*
+      structural tags keep their attributes stripped like everything else but
+      are never unwrapped — removing <body> deletes the document. skipping the
+      whole loop for them let `<body onload=…>` through untouched
+    */
+    if (!ALLOWED.has(tag) && !STRUCTURAL.has(tag)) {
+      element.replaceWith(...element.childNodes);
+    }
   }
 
   return root;
+}
+
+/**
+ * the same treatment for a bare markup string rather than a whole document.
+ *
+ * wrapped in a div rather than a body: linkedom builds an odd tree for a bare
+ * `<body>` and `document.body` comes back empty, which looked exactly like the
+ * scrubber deleting everything
+ */
+export function scrubFragment(html: string) {
+  const { document } = parseHTML(`<div id="fragment">${html}</div>`);
+  scrub(document);
+
+  return document.querySelector("#fragment")?.innerHTML.trim() ?? "";
 }

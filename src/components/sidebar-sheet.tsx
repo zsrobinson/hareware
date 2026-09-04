@@ -10,7 +10,7 @@ import {
 } from "~/components/ui/sheet";
 import { adminNav, toolsNav } from "~/lib/nav";
 import type { Session } from "~/lib/session";
-import { useSession } from "~/lib/use-session";
+import { useAdmin, useSession } from "~/lib/use-session";
 
 /*
   the sidebar itself is static markup and simply hidden below `md`. this is the
@@ -28,6 +28,7 @@ export function SidebarSheet({
   session: Session | null;
 }) {
   const session = useSession(sessionFromServer);
+  const admin = useAdmin();
 
   return (
     <Sheet>
@@ -43,18 +44,18 @@ export function SidebarSheet({
           <SheetTitle className="text-sm">HareWare</SheetTitle>
         </SheetHeader>
 
-        <nav className="flex flex-1 flex-col gap-2 overflow-y-auto p-3">
-          {session && (
-            <>
-              <NavGroup
-                items={adminNav}
-                pathname={pathname}
-                label="Admin tools"
-              />
-              <hr className="border-sidebar-border" />
-            </>
-          )}
+        <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
           <NavGroup items={toolsNav} pathname={pathname} label="Public tools" />
+
+          {/* the sheet only knows there is a session, not whether the member
+              holds the role — the pages themselves are what refuse */}
+          {admin && (
+            <NavGroup
+              items={adminNav}
+              pathname={pathname}
+              label="Admin tools"
+            />
+          )}
         </nav>
 
         <SidebarAccount

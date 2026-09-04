@@ -45,6 +45,14 @@ export const POST: APIRoute = async ({ request }) => {
     member?: { user?: { username?: string; id?: string } };
   };
 
+  /*
+    slash commands answer through the same handler and are logged when they
+    write, not when they run: ADR 0009 makes every *mutation* an invocation, and
+    `/article ping` mutates nothing. a row saying "article-edit" for a command
+    that edited nothing is the kind of log entry that makes the log unreadable.
+    the write paths record from where they follow up, which is also the only
+    place that knows whether the write landed
+  */
   if (press.type === MESSAGE_COMPONENT) {
     await record(env.DB, {
       source: "button",

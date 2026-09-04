@@ -15,6 +15,13 @@
       "when": 1788544631216,
       "tag": "0001_drop_payload",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788561876987,
+      "tag": "0002_article_index",
+      "breakpoints": true
     }
   ]
 }

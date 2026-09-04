@@ -32,9 +32,14 @@ interface HareWareEnv {
   /* ---- secrets ---------------------------------------------------------- */
 
   /**
-   * Notion internal integration token. Needs read access to the Meetings
-   * database and nothing else — the Articles database is never read or written
-   * by anything here, per ADR 0006.
+   * Notion internal integration token. Needs access to Meetings, which the
+   * meeting reminder reads, and to Articles and Members, which the editor
+   * commands read and write — see ADR 0009.
+   *
+   * Members in particular: Notion omits a relation property from a schema
+   * entirely when the integration cannot reach its target, and its value then
+   * reads back as `[]` rather than as missing. Lose that access and an author
+   * write looks like it succeeded on an empty field.
    */
   NOTION_TOKEN?: string;
 
@@ -76,6 +81,20 @@ interface HareWareEnv {
    * than a credential to rotate.
    */
   DISCORD_BOT_TOKEN?: string;
+
+  /**
+   * Signs Notion's webhooks, and is not the Notion token.
+   *
+   * It is the one-time `verification_token` Notion posts when the subscription
+   * is created, which only happens against an endpoint that is already live —
+   * so this is set after the first deploy, not before it. Until it is,
+   * `verifyWebhook` rejects everything and the hourly rebuild is the only thing
+   * keeping the article index current.
+   *
+   * Changing the webhook's URL means deleting and recreating the subscription
+   * in Notion, which issues a new token.
+   */
+  NOTION_WEBHOOK_SECRET?: string;
 
   /* ---- switches, for .dev.vars only -------------------------------------- */
 

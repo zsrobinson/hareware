@@ -76,8 +76,11 @@ keeping the bot's only job a mention.
 
 ## Section
 
-Which desk an Article belongs to: News, Features, Entertainment, Sports, or
-Rabbithole. Every Article has exactly one.
+Which desk an Article belongs to: News, Features, Entertainment, Sports,
+Rabbithole, or Social Media. Every Article has exactly one.
+
+Social Media is the odd one out — it is not a desk with a Section Editor, and
+it covers writing made for the club's own accounts rather than the website.
 
 A Section has a **Section Editor** who approves ideas, edits drafts, and decides
 when an Article is ready to move on. Each Section has its own Discord channel,
@@ -147,8 +150,12 @@ The real name behind a pseudonymous Byline never reaches WordPress.
 A person in the club, identified by their Discord account.
 
 Members carry the things the club needs to remember about a person: their real
-name and the pseudonyms that are theirs, so an editor can answer "who is Gale de
-Silva?" without asking around. What a Member is allowed to _do_ is not recorded here —
+name, and which Articles and images are theirs.
+
+Pseudonyms are not recorded. A pseudonymous Byline is **detected** rather than
+stored — an Article whose printed Byline differs from the linked Member's name
+is one, and Notion computes that. So "who is Gale de Silva?" is answered by
+opening the Article, not by looking the name up on a Member. What a Member is allowed to _do_ is not recorded here —
 that is read live from their Discord roles (@Editor-in-Chief, @Managing Editor,
 @Section Editor, @Media Editor), so that a promotion in Discord takes effect
 without anyone updating a second list.

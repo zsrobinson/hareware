@@ -169,9 +169,5 @@ than **Reminder** on purpose: a reminder is an automation that posts a message,
 and the shape also takes a watcher on a Notion database or a Discord slash
 command without becoming a second system.
 
-Each one is an entry in `src/lib/automations/registry.ts` carrying what it is
-called, when it runs, where it posts, and the function that runs it. Adding one
-is that entry plus its module.
-
 Say "the social ping did not run", never "the social job failed" — **Invocation**
 is what the log records, and an automation is the thing that produced it.

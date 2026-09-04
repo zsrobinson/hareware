@@ -6,6 +6,7 @@ import {
   type Block,
 } from "~/lib/discord/post-message";
 import { easternNow, type EasternNow } from "~/lib/eastern";
+import { postedId } from "~/lib/discord/interactions";
 import { toArticleSlug } from "~/lib/article-url";
 import { getRecentArticles } from "~/lib/get-recent-articles";
 import { HAREWARE_ORIGIN, SOCIAL_ROLE_IDS } from "./config";
@@ -16,9 +17,6 @@ import { HAREWARE_ORIGIN, SOCIAL_ROLE_IDS } from "./config";
   message at forty, and the feed only hands back ten articles a page anyway
 */
 const MAX_ARTICLES = 10;
-
-/** discord rejects a button label over 80 characters, and headlines run long */
-const MAX_LABEL = 80;
 
 export async function sendSocialPing(
   env: Env,
@@ -56,14 +54,19 @@ export async function sendSocialPing(
     // one reads as its own item — discord pings once however often it appears
     ...(index > 0 ? [separator()] : []),
     text(`<@&${roleId}> **${article.title}**`),
-    ...(HAREWARE_ORIGIN
-      ? [
-          buttons({
-            label: truncate("Open Post Generator", MAX_LABEL),
-            url: `${HAREWARE_ORIGIN}/generate?article=${toArticleSlug(article.link)}`,
-          }),
-        ]
-      : []),
+    buttons(
+      // pressing this edits the message in place, so the message itself is
+      // the record of what has been posted and nothing has to store it
+      { label: "Mark as Posted", id: postedId(toArticleSlug(article.link)) },
+      ...(HAREWARE_ORIGIN
+        ? [
+            {
+              label: "Open Post Generator",
+              url: `${HAREWARE_ORIGIN}/generate?article=${toArticleSlug(article.link)}`,
+            },
+          ]
+        : []),
+    ),
   ]);
 
   await postToWebhook(
@@ -76,8 +79,4 @@ export async function sendSocialPing(
   );
 
   return `posted ${posted.length} article(s) for ${eastern.date}`;
-}
-
-function truncate(text: string, limit: number) {
-  return text.length <= limit ? text : `${text.slice(0, limit - 1).trimEnd()}…`;
 }

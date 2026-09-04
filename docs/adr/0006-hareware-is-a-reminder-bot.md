@@ -78,7 +78,7 @@ word-count pages — plus a scheduled reminder bot that posts to Discord:
 
 - **8am Eastern, daily.** Read today's Articles from the public WordPress feed.
   If anything published, ping that day's `@Social <Day>` role in
-  `#social-media`.
+  `#instagram-posting`.
 - **Same schedule.** Query the Notion Meetings database for a meeting dated
   today. If there is one, post a link to its agenda page in the board channel.
 

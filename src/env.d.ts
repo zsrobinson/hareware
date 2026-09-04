@@ -8,9 +8,9 @@
   and says so in the log, rather than throwing on every cron tick
 */
 interface Env {
-  /** channel webhook for #social-media */
+  /** application-owned webhook for #instagram-posting */
   DISCORD_SOCIAL_WEBHOOK_URL?: string;
-  /** channel webhook for the editorial board channel */
+  /** application-owned webhook for #editorial-board */
   DISCORD_BOARD_WEBHOOK_URL?: string;
   /** notion internal integration token, read-only on the Meetings database */
   NOTION_TOKEN?: string;

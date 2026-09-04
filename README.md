@@ -54,7 +54,7 @@ Cloudflare crons are UTC with no timezone setting and both reminders mean 8am
 Eastern — see `src/lib/eastern.ts`.
 
 - **Social duty** — if anything published on theumdhare.com today, posts it to
-  `#social-media` and pings that day's `@Social <Day>` role.
+  `#instagram-posting` and pings that day's poster role.
 - **Board meeting** — if the Notion Meetings database holds a meeting dated
   today, posts a link to its agenda page.
 
@@ -67,11 +67,11 @@ development. **Every one of them is optional**: a reminder whose secret is unset
 logs that it was skipped and does nothing, so the worker runs fine without any
 of them.
 
-| Name                         | What it is                                      |
-| ---------------------------- | ----------------------------------------------- |
-| `DISCORD_SOCIAL_WEBHOOK_URL` | Channel webhook for `#social-media`             |
-| `DISCORD_BOARD_WEBHOOK_URL`  | Channel webhook for the editorial board channel |
-| `NOTION_TOKEN`               | Notion internal integration token, read-only    |
+| Name                         | What it is                                         |
+| ---------------------------- | -------------------------------------------------- |
+| `DISCORD_SOCIAL_WEBHOOK_URL` | Application-owned webhook for `#instagram-posting` |
+| `DISCORD_BOARD_WEBHOOK_URL`  | Application-owned webhook for `#editorial-board`   |
+| `NOTION_TOKEN`               | Notion internal integration token, read-only       |
 
 Three more exist for working on the reminders, and belong in `.dev.vars` only.
 `REMINDERS_DRY_RUN` logs what would be sent instead of sending it.
@@ -95,10 +95,14 @@ than a settings store nobody remembers exists.
 1. **Discord roles.** Create `@Social Sunday` through `@Social Saturday` and
    assign them. Copy each role's ID (Settings → Advanced → Developer Mode, then
    right-click the role → Copy ID) into `SOCIAL_ROLE_IDS`.
-2. **Discord webhooks.** In each of `#social-media` and the board channel,
-   Settings → Integrations → Webhooks → New Webhook, and copy the URL. The URL
-   is the whole credential: it can post to that one channel and do nothing else.
-   There is no bot, no application and no OAuth.
+2. **Discord webhooks.** These must be created _by the application_, not by
+   hand in Discord's UI: only an application-owned webhook may send the
+   interactive **Mark as Posted** button, and Discord answers 400 for any
+   other. Create one in each of `#instagram-posting` and `#editorial-board`
+   with `POST /channels/{id}/webhooks` using the bot token, and put the
+   resulting URLs in the two secrets above. The bot needs View Channel and
+   Manage Webhooks in each.
+
 3. **Notion.** Create an internal integration at
    [notion.so/my-integrations](https://www.notion.com/my-integrations) and copy
    its token. Then open the Meetings database, and under `⋯` → Connections add

@@ -17,17 +17,30 @@ const ACTION_ROW = 1;
 const BUTTON = 2;
 const SEPARATOR = 14;
 const LINK_STYLE = 5;
+const PRIMARY_STYLE = 1;
 
-/** a url button. it fires no interaction, which is why a webhook may send it */
+/** a url button. it fires no interaction, so any webhook may send one */
 export type LinkButton = { label: string; url: string };
+
+/**
+ * a button that calls us back.
+ *
+ * only an *application-owned* webhook may send one — discord answers 400 for
+ * anything else, which is what the reminders hit before the bot created these
+ * webhooks itself. the id comes back on the interaction, and is how the handler
+ * knows which button was pressed
+ */
+export type ActionButton = { label: string; id: string };
+
+export type Button = LinkButton | ActionButton;
 
 export type Block =
   | { kind: "text"; content: string }
-  | { kind: "buttons"; buttons: LinkButton[] }
+  | { kind: "buttons"; buttons: Button[] }
   | { kind: "separator" };
 
 export const text = (content: string): Block => ({ kind: "text", content });
-export const buttons = (...buttons: LinkButton[]): Block => ({
+export const buttons = (...buttons: Button[]): Block => ({
   kind: "buttons",
   buttons,
 });
@@ -48,12 +61,21 @@ function render(block: Block) {
     case "buttons":
       return {
         type: ACTION_ROW,
-        components: block.buttons.map((button) => ({
-          type: BUTTON,
-          style: LINK_STYLE,
-          label: button.label,
-          url: button.url,
-        })),
+        components: block.buttons.map((button) =>
+          "url" in button
+            ? {
+                type: BUTTON,
+                style: LINK_STYLE,
+                label: button.label,
+                url: button.url,
+              }
+            : {
+                type: BUTTON,
+                style: PRIMARY_STYLE,
+                label: button.label,
+                custom_id: button.id,
+              },
+        ),
       };
     case "separator":
       return { type: SEPARATOR, spacing: 1, divider: false };

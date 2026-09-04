@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { sendSocialPing } from "./social";
 import { SOCIAL_ROLE_IDS } from "./config";
+import { postedId } from "~/lib/discord/interactions";
 
 const env = {
   DISCORD_SOCIAL_WEBHOOK_URL: "https://discord.com/api/webhooks/1/abc",
@@ -59,16 +60,35 @@ test("pings the day's role with what published today", async () => {
   expect(body.allowed_mentions.roles).toEqual([SOCIAL_ROLE_IDS.Thursday]);
 });
 
-test("links each article into the post generator", async () => {
+test("offers marking posted, and a link into the post generator", async () => {
   const discord = mockFeed(
     item("A headline", "Wed, 03 Sep 2026 10:00:00 +0000", "a-headline"),
   );
 
   await sendSocialPing(env, today);
 
-  const row = discord.mock.calls[0]![0].components[1];
-  expect(row.components[0].label).toBe("Open Post Generator");
-  expect(row.components[0].url).toContain("/generate?article=a-headline");
+  const [mark, open] = discord.mock.calls[0]![0].components[1].components;
+
+  // interactive: only an application-owned webhook may send this
+  expect(mark.label).toBe("Mark as Posted");
+  expect(mark.custom_id).toBe(postedId("a-headline"));
+  expect(mark.url).toBeUndefined();
+
+  expect(open.label).toBe("Open Post Generator");
+  expect(open.url).toContain("/generate?article=a-headline");
+});
+
+test("each article gets its own button, so one press spends only one", async () => {
+  const discord = mockFeed(
+    item("One", "Wed, 03 Sep 2026 10:00:00 +0000", "one") +
+      item("Two", "Wed, 03 Sep 2026 11:00:00 +0000", "two"),
+  );
+
+  await sendSocialPing(env, today);
+
+  const components = discord.mock.calls[0]![0].components;
+  expect(components[1].components[0].custom_id).toBe(postedId("one"));
+  expect(components[4].components[0].custom_id).toBe(postedId("two"));
 });
 
 test("posts nothing on a day with no articles", async () => {

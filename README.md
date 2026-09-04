@@ -74,7 +74,8 @@ of them.
 | `NOTION_TOKEN`               | Notion internal integration token, read-only    |
 
 Non-secret settings — the duty roster's role IDs, the Meetings database ID, the
-reminder hour — are constants in `src/lib/reminders/config.ts`. They change
+reminder hour, and the origin HareWare itself is served from — are constants in
+`src/lib/reminders/config.ts`. They change
 about once a year, and a one-line pull request is a cheaper way to change them
 than a settings store nobody remembers exists.
 
@@ -93,5 +94,9 @@ than a settings store nobody remembers exists.
    that integration — Notion connections are opt-in per database, so the token
    reads nothing until you do. Read access is all it needs. Put the database's
    ID into `MEETINGS_DATABASE_ID`.
-4. **WordPress.** Nothing. The social reminder reads the public feed and needs
+4. **HareWare's own origin.** Set `HAREWARE_ORIGIN` to wherever this app is
+   deployed. A cron tick has no incoming request to read an origin from, so it
+   has to be written down. Left unset, the social reminder still goes out — it
+   just omits the "open in HareWare" buttons.
+5. **WordPress.** Nothing. The social reminder reads the public feed and needs
    no account, token or plugin.

@@ -7,7 +7,9 @@ import { ORIGIN } from "./article-url";
  */
 export async function getRecentArticles(
   page = 1,
-): Promise<{ title: string; link: string; date: string }[] | undefined> {
+): Promise<
+  { title: string; link: string; date: string; pubDate: string }[] | undefined
+> {
   try {
     // wordpress canonicalises this url — /feed?paged=n becomes /feed/?paged=n,
     // and the parameter is dropped entirely for the first page. asking for the
@@ -27,6 +29,11 @@ export async function getRecentArticles(
         month: "short",
         day: "numeric",
       }),
+      // the raw feed value, kept alongside the display string above because
+      // that one has thrown away the year and the exact instant — callers
+      // that need to compare "is this today" (the social ping) need the
+      // original to run through `easternNow` themselves
+      pubDate: item.pubDate as string,
     }));
   } catch (e) {
     return undefined;

@@ -26,7 +26,10 @@ export type DiscordMessage = {
 
 export class DiscordPostError extends Error {}
 
-export async function postToWebhook(webhookUrl: string, message: DiscordMessage) {
+export async function postToWebhook(
+  webhookUrl: string,
+  message: DiscordMessage,
+) {
   /*
     a non-application-owned webhook drops components unless this is set — and
     drops them *silently*, returning 204 either way, so a missing button looks

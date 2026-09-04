@@ -25,6 +25,15 @@ export const SOCIAL_ROLE_IDS: Record<string, string | undefined> = {
   Saturday: undefined,
 };
 
+/**
+ * where hareware itself is served, for the "open in hareware" buttons.
+ *
+ * a cron tick has no incoming request to read an origin from, so it has to be
+ * written down. leave it undefined and the social ping still goes out, just
+ * without the buttons — they are a convenience, not the point of the message
+ */
+export const HAREWARE_ORIGIN: string | undefined = undefined;
+
 /** the notion database holding one page per editorial board meeting */
 export const MEETINGS_DATABASE_ID: string | undefined = undefined;
 

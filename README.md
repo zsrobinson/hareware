@@ -95,13 +95,9 @@ than a settings store nobody remembers exists.
 1. **Discord roles.** Create `@Social Sunday` through `@Social Saturday` and
    assign them. Copy each role's ID (Settings → Advanced → Developer Mode, then
    right-click the role → Copy ID) into `SOCIAL_ROLE_IDS`.
-2. **Discord webhooks.** These must be created _by the application_, not by
-   hand in Discord's UI: only an application-owned webhook may send the
-   interactive **Mark as Posted** button, and Discord answers 400 for any
-   other. Create one in each of `#instagram-posting` and `#editorial-board`
-   with `POST /channels/{id}/webhooks` using the bot token, and put the
-   resulting URLs in the two secrets above. The bot needs View Channel and
-   Manage Webhooks in each.
+2. **Discord webhooks.** They must be created by the application rather than
+   by hand — see [Recreating the Discord webhooks](#recreating-the-discord-webhooks)
+   below.
 
 3. **Notion.** Create an internal integration at
    [notion.so/my-integrations](https://www.notion.com/my-integrations) and copy
@@ -115,3 +111,64 @@ than a settings store nobody remembers exists.
    just omits the "open in HareWare" buttons.
 5. **WordPress.** Nothing. The social reminder reads the public feed and needs
    no account, token or plugin.
+
+## Recreating the Discord webhooks
+
+The reminders post through webhooks **the application owns**. This is not a
+preference: only an application-owned webhook may carry an interactive
+component, so a webhook created by hand in Discord's UI can post the reminders
+but silently costs you the **Mark as Posted** button — Discord answers `400` to
+the whole message rather than dropping just the button.
+
+You need this procedure to move a reminder to a different channel, or if a
+webhook is ever deleted from the server.
+
+### What the bot needs
+
+The `HareWare` bot must have **View Channel** and **Manage Webhooks** in the
+channel. It does not need Send Messages: it never speaks as itself, it only
+creates the webhook that does. Permission changes take a minute or so to reach
+every Discord node, so a `403` immediately after granting them usually means
+"try again shortly" rather than "wrong permission".
+
+### Creating one
+
+`DISCORD_BOT_TOKEN` is only ever used for this. It is deliberately not read at
+runtime, and does not need to exist as a deployed secret.
+
+```sh
+curl -X POST \
+  -H "Authorization: Bot $DISCORD_BOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"HareWare"}' \
+  "https://discord.com/api/v10/channels/<channel id>/webhooks"
+```
+
+The response holds `id` and `token`; the URL is
+`https://discord.com/api/webhooks/<id>/<token>`. Put it in the matching secret
+with `npx wrangler versions secret put <NAME>` — plain `secret put` refuses
+unless the latest version happens to be the deployed one.
+
+### Reading one back
+
+The token is in the webhook object, so a URL never has to be written down —
+only its id:
+
+```sh
+curl -H "Authorization: Bot $DISCORD_BOT_TOKEN" \
+  "https://discord.com/api/v10/webhooks/<webhook id>"
+```
+
+| Channel              | Purpose                        | Webhook id            |
+| -------------------- | ------------------------------ | --------------------- |
+| `#instagram-posting` | social duty reminder           | `1545273547033935954` |
+| `#editorial-board`   | board meeting reminder         | `1545273549147602944` |
+| `#carl-bot`          | local testing, via `.dev.vars` | `1545273550837911624` |
+
+### One trap worth knowing
+
+**Discord rejects requests carrying the default `User-Agent` of some HTTP
+clients** — Python's `urllib` among them — with a `403` that reads exactly like
+a permissions failure. `curl` and `fetch` are fine. If a call fails with `403`
+while the same call from `curl` succeeds, this is why, and no amount of
+adjusting channel permissions will fix it.

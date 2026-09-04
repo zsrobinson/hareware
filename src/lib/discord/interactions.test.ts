@@ -12,8 +12,8 @@ const message = () => ({
       components: [
         {
           type: 2,
-          style: 1,
-          label: "Mark as Posted",
+          style: 4,
+          label: "Not posted",
           custom_id: postedId("first"),
         },
         {
@@ -31,8 +31,8 @@ const message = () => ({
       components: [
         {
           type: 2,
-          style: 1,
-          label: "Mark as Posted",
+          style: 4,
+          label: "Not posted",
           custom_id: postedId("second"),
         },
       ],
@@ -60,7 +60,35 @@ test("marks the pressed button posted, crediting whoever pressed it", () => {
   const button = reply.data!.components[1].components![0];
   expect(button.label).toBe("Posted by zsrobinson");
   expect(button.style).toBe(3);
-  expect(button.disabled).toBe(true);
+});
+
+/*
+  a checkbox that cannot be unticked is a trap for whoever presses the wrong
+  row, so nothing is ever disabled
+*/
+test("pressing a posted button un-posts it", () => {
+  const posted = press(postedId("first"));
+  posted.message.components[1]!.components![0] = {
+    type: 2,
+    style: 3,
+    label: "Posted by someone else",
+    custom_id: postedId("first"),
+  };
+
+  const button = handleInteraction(posted)!.data!.components[1].components![0];
+
+  expect(button.style).toBe(4);
+  expect(button.label).toBe("Not posted");
+});
+
+test("nothing is ever disabled", () => {
+  const reply = handleInteraction(press(postedId("first")))!;
+
+  for (const row of reply.data!.components) {
+    for (const child of row.components ?? []) {
+      expect(child.disabled).toBeUndefined();
+    }
+  }
 });
 
 /*
@@ -69,12 +97,12 @@ test("marks the pressed button posted, crediting whoever pressed it", () => {
   pressed it as "HareWare didn't respond in time". `disabled` is what stops a
   second press; removing the id only breaks the reply
 */
-test("disables the pressed button but keeps its custom_id", () => {
+test("keeps the custom_id, without which the reply is invalid", () => {
   const reply = handleInteraction(press(postedId("first")))!;
-  const button = reply.data!.components[1].components![0];
 
-  expect(button.disabled).toBe(true);
-  expect(button.custom_id).toBe(postedId("first"));
+  expect(reply.data!.components[1].components![0].custom_id).toBe(
+    postedId("first"),
+  );
 });
 
 test("every interactive button in the reply still has a custom_id", () => {
@@ -92,9 +120,9 @@ test("leaves the other article's button alone", () => {
   const reply = handleInteraction(press(postedId("first")))!;
 
   const other = reply.data!.components[4].components![0];
-  expect(other.label).toBe("Mark as Posted");
+  expect(other.label).toBe("Not posted");
+  expect(other.style).toBe(4);
   expect(other.custom_id).toBe(postedId("second"));
-  expect(other.disabled).toBeUndefined();
 });
 
 test("leaves link buttons alone", () => {

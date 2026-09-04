@@ -20,6 +20,7 @@ const UPDATE_MESSAGE = 7;
 
 const BUTTON = 2;
 const SUCCESS_STYLE = 3;
+const DANGER_STYLE = 4;
 
 /** discord truncates nothing for us; a button label over 80 chars is rejected */
 const MAX_LABEL = 80;
@@ -66,7 +67,7 @@ export function handleInteraction(interaction: Interaction) {
       type: UPDATE_MESSAGE,
       data: {
         flags: IS_COMPONENTS_V2,
-        components: markPosted(components, id, who(interaction)),
+        components: togglePosted(components, id, who(interaction)),
       },
     };
   }
@@ -81,17 +82,19 @@ function who(interaction: Interaction): string {
 }
 
 /**
- * the same components with one button spent.
+ * the same components with one button toggled.
  *
  * only the button whose custom_id matches changes, so a message listing five
- * articles keeps the other four pressable.
+ * articles keeps the other four alone. nothing is disabled: this is a checkbox
+ * discord makes us draw as a button, and a checkbox that cannot be unticked is
+ * a trap for whoever presses the wrong row.
  *
  * the custom_id stays. an interactive button — anything but a link — is invalid
  * without one, and discord rejects the entire response rather than the single
  * component, which surfaces to whoever pressed it as "HareWare didn't respond
- * in time". `disabled` is what stops a second press
+ * in time"
  */
-function markPosted(
+function togglePosted(
   components: Component[],
   id: string,
   name: string,
@@ -104,12 +107,21 @@ function markPosted(
       components: component.components.map((child) => {
         if (child.type !== BUTTON || child.custom_id !== id) return child;
 
-        return {
-          ...child,
-          style: SUCCESS_STYLE,
-          label: `Posted by ${name}`.slice(0, MAX_LABEL),
-          disabled: true,
-        };
+        /*
+          the current state is read off the button itself rather than stored
+          anywhere — green means it has been posted, so pressing it un-posts.
+          un-posting drops the name with it; who posted something that is no
+          longer posted is not a fact worth keeping
+        */
+        const posted = child.style === SUCCESS_STYLE;
+
+        return posted
+          ? { ...child, style: DANGER_STYLE, label: "Not posted" }
+          : {
+              ...child,
+              style: SUCCESS_STYLE,
+              label: `Posted by ${name}`.slice(0, MAX_LABEL),
+            };
       }),
     };
   });

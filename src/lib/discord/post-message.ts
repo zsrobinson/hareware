@@ -19,7 +19,9 @@ const ACTION_ROW = 1;
 const BUTTON = 2;
 const SEPARATOR = 14;
 const LINK_STYLE = 5;
-const PRIMARY_STYLE = 1;
+
+/** discord's button styles, of the four that are not links */
+const STYLES = { primary: 1, secondary: 2, success: 3, danger: 4 } as const;
 
 /** a url button. it fires no interaction, so any webhook may send one */
 export type LinkButton = { label: string; url: string };
@@ -32,7 +34,12 @@ export type LinkButton = { label: string; url: string };
  * webhooks itself. the id comes back on the interaction, and is how the handler
  * knows which button was pressed
  */
-export type ActionButton = { label: string; id: string };
+export type ActionButton = {
+  label: string;
+  id: string;
+  /** defaults to primary. `danger` is discord's red */
+  style?: keyof typeof STYLES;
+};
 
 export type Button = LinkButton | ActionButton;
 
@@ -96,7 +103,7 @@ function render(block: Block) {
               }
             : {
                 type: BUTTON,
-                style: PRIMARY_STYLE,
+                style: STYLES[button.style ?? "primary"],
                 label: button.label,
                 custom_id: button.id,
               },

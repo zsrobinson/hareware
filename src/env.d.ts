@@ -104,3 +104,6 @@ interface Env extends HareWareEnv {}
 declare namespace Cloudflare {
   interface Env extends HareWareEnv {}
 }
+
+/** the tag or short hash this was built from — see `version()` in astro.config */
+declare const __APP_VERSION__: string;

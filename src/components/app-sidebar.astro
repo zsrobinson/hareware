@@ -3,17 +3,26 @@ import { AdminNav } from "~/components/admin-nav";
 import { SidebarAccount } from "~/components/sidebar-account";
 import { NavGroup } from "~/components/nav-group";
 import { adminNav, toolsNav } from "~/lib/nav";
+import type { Profile } from "~/lib/member";
 import type { Session } from "~/lib/session";
 
 type Props = {
   /* whether to draw the admin group. the pages check the role themselves */
   admin?: boolean;
   session: Session | null;
+  profile?: Profile | null;
   pathname: string;
   returnTo: string;
   cached: boolean;
 };
-const { session, pathname, returnTo, cached, admin = false } = Astro.props;
+const {
+  session,
+  profile = null,
+  pathname,
+  returnTo,
+  cached,
+  admin = false,
+} = Astro.props;
 ---
 
 {
@@ -64,5 +73,10 @@ const { session, pathname, returnTo, cached, admin = false } = Astro.props;
     }
   </nav>
 
-  <SidebarAccount client:idle session={session} returnTo={returnTo} />
+  <SidebarAccount
+    client:idle
+    session={session}
+    profile={profile}
+    returnTo={returnTo}
+  />
 </aside>

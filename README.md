@@ -151,6 +151,25 @@ rather than standing until somebody removes them.
 Without `REMINDERS_TRIGGER_SECRET` set, the route answers `404` — the trigger
 does not exist rather than standing open.
 
+#### When a run fails
+
+A failed **cron** run posts to `#carl-bot` naming the reminder and the reason.
+Deliberately not `#editorial-board`: a reminder that did not go out is an
+operational fact, and putting it beside the reminders themselves trains everyone
+to scroll past both.
+
+It reports a failure only when the previous recorded run of that reminder
+succeeded, so a reminder broken for a week says so once and then goes quiet. It
+speaks up again after a run that worked — which is also what "recovered, then
+broke again" looks like from the log. With no history to compare against, it
+reports: a missing log is a reason to say more rather than less.
+
+A reminder fired **by hand** reports nothing, because the response already
+carries the error to whoever triggered it.
+
+The alert never pings a role, and never throws — a reminder that posted
+correctly must not be recorded as failed because the alert could not be sent.
+
 #### Not variables
 
 The duty roster's role ids, the Meetings database id, the reminder hour,

@@ -10,18 +10,12 @@
   procedure, and it is the reason DISCORD_BOT_TOKEN need not be deployed at all
 */
 
-/** the bot: it posts the reminders and receives the button presses */
-export const DISCORD_APPLICATION_ID = "1544938808611573760";
-
 /**
- * the oauth client, which is a *different* application.
- *
- * sign-in was built against one application and the bot against another, so
- * these are not the same id however much they look like they should be. one
- * application could do both — the redirect urls would move to the bot's — and
- * that is worth doing the next time somebody is in the developer portal
+ * one application does everything: it posts the reminders, receives the button
+ * presses, and is the oauth client members sign in through. its id is also the
+ * oauth client id, which is why there is only one of these
  */
-export const DISCORD_OAUTH_CLIENT_ID = "1542247642468319372";
+export const DISCORD_APPLICATION_ID = "1544938808611573760";
 
 /** ed25519 public key from the developer portal, hex, 32 bytes */
 export const DISCORD_PUBLIC_KEY =

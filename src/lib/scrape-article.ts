@@ -1,4 +1,5 @@
 import { parseHTML } from "linkedom";
+import { scrub } from "~/lib/scrub-html";
 import { ORIGIN, toArticleLink, toArticleSlug } from "./article-url";
 
 /**
@@ -56,9 +57,21 @@ export async function scrapeArticle(link: string) {
   } catch (e) {
     if (!(e instanceof Unavailable)) throw e;
 
-    // the api is throttled long before the rendered pages are, so the slow
-    // route is still a better answer than no article
-    return fromRenderedPage(toArticleLink(link) ?? link);
+    /*
+      the api is throttled long before the rendered pages are, so the slow
+      route is still a better answer than no article.
+
+      no `?? link` fallback: that fetched the caller's string unvalidated in
+      exactly the case where it is not one of ours, which made the host
+      allow-list in article-url.ts optional. every path into fetch goes
+      through it
+    */
+    const url = toArticleLink(link);
+    if (!url) {
+      throw new Error(`not an article on this site: ${link}`, { cause: e });
+    }
+
+    return fromRenderedPage(url);
   }
 }
 
@@ -66,13 +79,17 @@ export async function scrapeArticle(link: string) {
 function fromPost(post: WordPressPost) {
   // content.rendered is the markup that lands inside .entry-content on the
   // page, so wrapping it lets one set of selectors serve both sources
-  const document = parseHTML(
-    `<div class="entry-content">${post.content.rendered}</div>`,
-  ).document;
+  /* wordpress decides this markup, so it is scrubbed before anything reads it
+     — see ~/lib/scrub-html for what that is defending against */
+  const document = scrub(
+    parseHTML(`<div class="entry-content">${post.content.rendered}</div>`)
+      .document,
+  );
 
   return {
     ...readEntryContent(document),
-    title: post.title.rendered.trim(),
+    /* the title is rendered as html too, so it goes through the same scrub */
+    title: scrubFragment(post.title.rendered),
     image: post.jetpack_featured_media_url?.split("?")[0],
     date: formatDate(post.date),
     link: post.link,
@@ -95,7 +112,7 @@ async function fromRenderedPage(link: string) {
   const res = await fetch(link);
   if (!res.ok) throw new Error(`wordpress returned ${res.status} for ${link}`);
 
-  const { document } = parseHTML(await res.text());
+  const document = scrub(parseHTML(await res.text()).document);
 
   return {
     ...readEntryContent(document),
@@ -242,4 +259,18 @@ function formatDate(date: string): string {
     year: "numeric",
     timeZone: "UTC",
   });
+}
+
+/**
+ * the same treatment for a bare markup string rather than a whole document.
+ *
+ * wrapped in a div rather than a body: linkedom builds an odd tree for a bare
+ * `<body>` and `document.body` comes back empty, so the wrapper is one this
+ * file already knows parses predictably
+ */
+function scrubFragment(html: string) {
+  const { document } = parseHTML(`<div id="fragment">${html}</div>`);
+  scrub(document);
+
+  return document.querySelector("#fragment")?.innerHTML.trim() ?? "";
 }

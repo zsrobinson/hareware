@@ -9,7 +9,11 @@ const toHex = (bytes: ArrayBuffer) =>
     .join("");
 
 /** stands in for discord: signs a body the way discord signs an interaction */
-async function signed(body: string, timestamp = "1700000000") {
+/* discord's timestamps are unix seconds, and verification now requires one
+   close to now — so the default is generated rather than fixed */
+const nowSeconds = () => String(Math.floor(Date.now() / 1000));
+
+async function signed(body: string, timestamp = nowSeconds()) {
   const pair = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, [
     "sign",
     "verify",
@@ -65,7 +69,9 @@ test("rejects a replay under a different timestamp", async () => {
   const { publicKey, request } = await signed(body);
 
   const moved = new Request(request, { body });
-  moved.headers.set("x-signature-timestamp", "1700009999");
+  // still inside the freshness window, so this tests the signature rather
+  // than the clock — the point is that the timestamp is covered by it
+  moved.headers.set("x-signature-timestamp", String(Number(nowSeconds()) - 30));
 
   expect(await verifyInteraction(moved, publicKey)).toBeUndefined();
 });
@@ -105,4 +111,32 @@ test("the configured public key is a usable ed25519 key", async () => {
   await expect(
     crypto.subtle.importKey("raw", raw, { name: "Ed25519" }, false, ["verify"]),
   ).resolves.toBeDefined();
+});
+
+test("rejects a correctly signed interaction too old to be live", async () => {
+  // a captured request stays signed forever; only the clock says it is stale
+  const old = String(Number(nowSeconds()) - 10 * 60);
+  const { publicKey, request } = await signed("{}", old);
+
+  expect(await verifyInteraction(request, publicKey)).toBeUndefined();
+});
+
+test("rejects one timestamped well into the future", async () => {
+  const ahead = String(Number(nowSeconds()) + 10 * 60);
+  const { publicKey, request } = await signed("{}", ahead);
+
+  expect(await verifyInteraction(request, publicKey)).toBeUndefined();
+});
+
+test("allows the clock skew a real request can carry", async () => {
+  const skewed = String(Number(nowSeconds()) - 60);
+  const { publicKey, request } = await signed("{}", skewed);
+
+  expect(await verifyInteraction(request, publicKey)).toBe("{}");
+});
+
+test("rejects a timestamp that is not a number", async () => {
+  const { publicKey, request } = await signed("{}", "soon");
+
+  expect(await verifyInteraction(request, publicKey)).toBeUndefined();
 });

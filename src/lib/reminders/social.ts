@@ -1,5 +1,6 @@
 import {
   buttons,
+  inert,
   postMessage,
   separator,
   text,
@@ -53,7 +54,9 @@ export async function sendSocialPing(
     // the mention repeats per article rather than heading the message, so each
     // one reads as its own item — discord pings once however often it appears
     ...(index > 0 ? [separator()] : []),
-    text(`<@&${roleId}> **${article.title}**`),
+    /* the headline comes from wordpress, so it is somebody else's text sharing
+       a line with a real role mention — see `inert` */
+    text(`<@&${roleId}> **${inert(article.title)}**`),
     buttons(
       /*
         a checkbox that discord makes us draw as a button: the label carries

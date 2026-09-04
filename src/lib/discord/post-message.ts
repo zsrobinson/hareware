@@ -61,6 +61,37 @@ export class DiscordPostError extends Error {}
 /** `<@&123>` as discord writes it, wherever it appears in a line */
 const ROLE_MENTION = /<@&(\d+)>/g;
 
+/** `@everyone` and `@here`, which need no id and ping the most people */
+const BROADCAST = /@(everyone|here)/gi;
+
+/** any of discord's `<...>` references: user, role or channel */
+const REFERENCE = /<(@[!&]?|#)(\d+)>/g;
+
+/*
+  a zero-width space, which is what breaks a mention without changing how the
+  line looks. discord parses the markup by shape, so one invisible character
+  inside it is the difference between a ping and the literal text
+*/
+const BREAK = "\u200b";
+
+/**
+ * remote text, made unable to mention anybody.
+ *
+ * a wordpress headline and a notion location both land in a text display that
+ * also carries a real role mention, and `allowed_mentions` does not gate a
+ * mention inside a components v2 text display — that is the whole reason
+ * `defuse` exists below. so anything written by somebody outside this codebase
+ * goes through here first: a headline reading "@everyone" is a mistake at best
+ * and a way to ping the whole server from the club's own bot at worst.
+ *
+ * the result renders identically. only the parser can tell the difference
+ */
+export function inert(value: string) {
+  return value
+    .replace(BROADCAST, `@${BREAK}$1`)
+    .replace(REFERENCE, `<${BREAK}$1$2>`);
+}
+
 /**
  * the same block with its mentions turned into plain text.
  *

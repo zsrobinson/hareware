@@ -99,16 +99,27 @@ function clearOAuthStateCookie() {
   return `${AUTH_STATE_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 }
 
+/*
+  where a sign-in may send somebody afterwards.
+
+  the rule is checked against the string that goes into the Location header,
+  not the one that came in. checking the input and returning the *normalised*
+  value left a hole: `/..//evil.com` starts with a single slash and resolves to
+  our own origin — the escape happens inside the path — but `url.pathname`
+  comes back as `//evil.com`, which a browser reads as protocol-relative and
+  follows off-site. A phish is most convincing on the login path, so this is
+  the one place that must not hand out redirects.
+*/
 function safeReturnTo(value: string) {
   const base = "https://hareware.invalid";
 
   try {
     const url = new URL(value, base);
-    return value.startsWith("/") &&
-      !value.startsWith("//") &&
-      url.origin === base
-      ? `${url.pathname}${url.search}${url.hash}`
-      : "/generate";
+    if (url.origin !== base) return "/generate";
+
+    const path = `${url.pathname}${url.search}${url.hash}`;
+
+    return path.startsWith("/") && !path.startsWith("//") ? path : "/generate";
   } catch {
     return "/generate";
   }

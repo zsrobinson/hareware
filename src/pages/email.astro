@@ -1,5 +1,6 @@
 ---
 import { EMAIL_IMAGE_WIDTH, toSizedImage } from "~/lib/image-url";
+import { toArticleLink } from "~/lib/article-url";
 import { getRecentArticles } from "~/lib/get-recent-articles";
 import { mapLimit } from "~/lib/map-limit";
 import { scrapeArticle } from "~/lib/scrape-article";
@@ -16,10 +17,14 @@ Astro.response.headers.set(
 const articles = await getRecentArticles();
 if (!articles) throw Error("cannot fetch recent articles");
 
+/* the feed decides these urls, not us — filter them through the same host
+   allow-list every other entry point uses before anything fetches one */
+const ours = articles.filter(({ link }) => toArticleLink(link) !== undefined);
+
 /* three at a time rather than ten: this page is the one place that reliably
    tripped wordpress.com's rate limit on its own */
 const scraped = (
-  await mapLimit(articles, 3, async ({ link }) => {
+  await mapLimit(ours, 3, async ({ link }) => {
     // an article pulled between the feed and the lookup shouldn't cost us the
     // other nine, same as the batch counter
     try {

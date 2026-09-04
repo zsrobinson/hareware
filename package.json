@@ -5,7 +5,12 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
+    "postinstall": "wrangler types",
+    "prebuild": "wrangler types",
     "build": "astro check && astro build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "reminders:send": "vitest run --config vitest.live.config.ts --reporter=verbose --disable-console-intercept",
     "preview": "astro preview",
     "deploy": "astro build && wrangler deploy",
     "astro": "astro"
@@ -38,12 +43,14 @@
   },
   "devDependencies": {
     "@types/downloadjs": "^1.4.6",
+    "@types/node": "^26.4.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "prettier": "^3.9.4",
     "prettier-plugin-astro": "^0.14.1",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "vite": "^8.2.2",
+    "vitest": "^5.0.0",
     "wrangler": "^4.128.0"
   }
 }

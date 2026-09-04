@@ -55,7 +55,22 @@ continuity test above: there is no version of it a non-technical club member can
 open during an outage.
 
 If Notion's rate limits ever become genuinely unbearable, this is the honest
-trade to reconsider. The requirement is not "must be Notion" but **"must be
+trade to reconsider.
+
+**Amended by [ADR 0006](0006-hareware-is-a-reminder-bot.md), 2026-09-03.** Rate
+limits are no longer the only trigger, and are now the less likely one. The
+second is **plan risk**: the club runs on Notion's free plan for student
+organisations, which grants paid features, and that grant is a startup's
+goodwill rather than a contract. If it ends, the exposure is narrower than it
+first appears — the API is free on every tier including Free, so only
+_automations_ would be lost, and HareWare no longer uses any. The real limit is
+that adding a second member to a Free workspace caps the workspace at 1,000
+blocks. A single shared login sidesteps even that, at the cost of per-person
+attribution.
+
+ADR 0006 names **Google Sheets** as the designated successor should it come to
+that: free through the university's Workspace, and it clears the bar this ADR
+actually sets — something a club member can open and edit unaided. The requirement is not "must be Notion" but **"must be
 something a club member can open and edit unaided."** Any replacement that clears
 that bar is a legitimate successor; one that does not is a regression, however
 much nicer it is to query.

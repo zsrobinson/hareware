@@ -1,6 +1,10 @@
 # 3. Astro, for a project that is becoming an app
 
-**Status:** Accepted — 2026-09-02
+**Status:** Superseded by [ADR 0006](0006-hareware-is-a-reminder-bot.md) — 2026-09-03
+
+> The premise — that v2 turns this into app-shaped work — did not happen. With
+> no editable board, "should we leave Astro" is trivially answered no. `nuqs`
+> and TanStack Table were never installed and are not needed.
 
 ## Context
 

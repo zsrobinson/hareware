@@ -46,8 +46,10 @@ be mistaken for a **WordPress Post**, and never shortens it to "post" outside a
 screen that is already about Instagram.
 
 An Instagram Post is not a record anywhere. It is generated from an Article on
-demand, downloaded, and posted by hand, so nothing tracks one except the
-Article's own _Posted to Instagram_ property.
+demand, downloaded, and posted by hand, and Notion does not track whether one
+went out — the _Posted to Instagram_ property was removed with the rest of the
+tracker integration. The daily reminder in `#instagram-posting` is where the social
+team sees what still needs posting, and eventually where they mark it done.
 
 ## Publish Date
 
@@ -63,10 +65,14 @@ The club aims to put an Article on Instagram the same day it publishes.
 
 Who is responsible for posting to Instagram on a given day of the week.
 
-Not a separate database: it is the **Social Media Day** property on Members, a
-multi-select of the days a Member covers. Set once per semester and changes
-rarely. Lives in Notion so that whoever runs social can edit it without going
-through a developer.
+Not a database at all: it is seven Discord roles, `@Social Sunday` through
+`@Social Saturday`. Set once per semester and changes rarely. Anyone with
+Manage Roles can edit it without going through a developer, and the reminder bot
+pings the role for the day rather than resolving a person.
+
+It lived in Notion as a **Social Media Day** property on Members until ADR 0006.
+Discord roles clear the same bar — a non-developer can change them — while
+keeping the bot's only job a mention.
 
 ## Section
 
@@ -98,11 +104,12 @@ moves forward, except when an Article is bounced.
 - **Written** — a draft exists and has gone to the Section Editor
 - **Section Edited** — the Section Editor has approved the writing
 - **Managing Edited** — the Managing Editor has passed it for grammar and brand
-- **Scheduled**, **Published** — facts about the Article's WordPress Post,
-  mirrored in by a scheduled job rather than chosen by hand
+- **Scheduled**, **Published** — facts about the Article's WordPress Post
 
-The last two are never picked by a person; a human setting Status by hand only
-ever chooses among the first five.
+All seven are set by hand. An earlier design had the last two mirrored in from
+WordPress by a scheduled job; ADR 0006 retired it, and no software writes to the
+Articles database at all. WordPress remains the authority on whether an Article
+is really published — Notion is a description of that, maintained by people.
 
 ## Image Status
 
@@ -140,12 +147,13 @@ The real name behind a pseudonymous Byline never reaches WordPress.
 A person in the club, identified by their Discord account.
 
 Members carry the things the club needs to remember about a person: their real
-name and the pseudonyms that are theirs, so the app can offer a dropdown when
-someone sets a Byline. What a Member is allowed to _do_ is not recorded here —
+name and the pseudonyms that are theirs, so an editor can answer "who is Gale de
+Silva?" without asking around. What a Member is allowed to _do_ is not recorded here —
 that is read live from their Discord roles (@Editor-in-Chief, @Managing Editor,
 @Section Editor, @Media Editor), so that a promotion in Discord takes effect
 without anyone updating a second list.
 
-Historical Articles are not backported to link a Member, and alumni get no stub
-row — Members is keyed by Discord user ID, which alumni can no longer supply.
-See ADR 0004.
+Historical Articles were backported to link a Member where one could be
+identified. Alumni still get no stub row — Members is keyed by Discord user ID,
+which alumni can no longer supply, so a legacy row carrying only its Byline text
+is the honest state. See ADR 0004.

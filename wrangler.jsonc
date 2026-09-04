@@ -19,9 +19,20 @@
 
   "observability": { "enabled": true },
 
-  // what `npm create cloudflare -- --framework=astro` declares. the adapter
-  // would inject all three, but naming them keeps plain `wrangler` commands
-  // working against this file on their own
-  "main": "@astrojs/cloudflare/entrypoints/server",
+  /**
+   * our own entrypoint rather than the adapter's
+   * `@astrojs/cloudflare/entrypoints/server`, which exports only `fetch` and so
+   * gives a cron trigger nowhere to land. src/worker.ts is that file plus a
+   * `scheduled()` handler; it still serves every request through the adapter's
+   * own handler, which must stay the one answering fetch
+   */
+  "main": "./src/worker.ts",
+
+  /**
+   * hourly, because the reminders mean "8am eastern" and cloudflare crons are
+   * utc with no timezone setting. src/lib/eastern.ts decides whether a given
+   * tick is the right hour, so the schedule never drifts across daylight saving
+   */
+  "triggers": { "crons": ["0 * * * *"] },
   "assets": { "directory": "./dist", "binding": "ASSETS" },
 }

@@ -17,10 +17,7 @@ This repo is **single-context**:
 ```
 /
 ├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-notion-as-the-store.md
-│   ├── 0002-durable-object-as-cache-and-write-queue.md
-│   └── 0003-astro-for-an-app-shaped-project.md
+├── docs/adr/          # one file per decision, numbered; read the index by `ls`
 └── src/
 ```
 

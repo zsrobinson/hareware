@@ -22,9 +22,6 @@ export const GET: APIRoute = async ({ request }) => {
     JSON.stringify({
       signedIn: session !== null,
       discordUserId: session?.discordUserId ?? null,
-      displayName: session?.displayName ?? null,
-      username: session?.username ?? null,
-      avatar: session?.avatar ?? null,
       admin,
     }),
     {

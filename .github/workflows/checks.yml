@@ -31,7 +31,9 @@ permissions:
 
 jobs:
   checks:
-    name: Tests, types and formatting
+    # this string is the status check branch protection requires by name, so it
+    # is deliberately plain: renaming it silently stops protecting `main`
+    name: Verify
     runs-on: ubuntu-latest
 
     steps:

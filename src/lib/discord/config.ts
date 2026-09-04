@@ -1,13 +1,14 @@
 /*
-  the discord application, as opposed to the plain channel webhooks the
-  reminders started on. neither of these is a secret: the application id is
-  public, and the public key exists precisely to be published — it verifies
-  discord's signature and cannot produce one.
+  the discord application. one of them does everything: it posts both reminders,
+  receives the button presses, and is the oauth client members sign in through.
 
-  the bot token is the secret, and nothing here reads it: it exists only to
-  create the webhooks the application owns, which is a thing done by hand when a
-  reminder moves channel. the readme's "recreating the discord webhooks" has the
-  procedure, and it is the reason DISCORD_BOT_TOKEN need not be deployed at all
+  none of these is a secret. the application id is public and is also the oauth
+  client id, the guild and role ids are visible to anyone in the server, and the
+  public key exists precisely to be published — it verifies discord's signature
+  and cannot produce one.
+
+  the secret is DISCORD_BOT_TOKEN, which is read at runtime by everything: it
+  sends every message and reads the roles the admin pages gate on
 */
 
 /**

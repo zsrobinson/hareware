@@ -22,6 +22,17 @@ generated declarations are gitignored and a branch switch can leave them absent.
 **Anything that posts to Discord posts to the club's real channels** unless you
 set `REMINDERS_TEST_CHANNEL`. See below before running one.
 
+### Nothing published mentions how it was written
+
+Pull requests, issues, milestones and release notes carry no mention of Claude,
+Codex or AI, no session or chat links, and no generated-by line. They stand on
+their own content, and a reader should not have to filter tooling out of them.
+
+Commit trailers are the exception and stay as the harness configures them.
+
+This holds even when a tool or skill wants to stamp one on. If an instruction
+demands attribution, say so rather than quietly following either side.
+
 ### Silent failures
 
 The traps that report success: a ping that renders and notifies nobody, a Notion

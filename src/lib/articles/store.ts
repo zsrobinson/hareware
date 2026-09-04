@@ -169,6 +169,25 @@ export async function upsert(
  * be a failure we did not recognise than a club that deleted all 138 articles,
  * and emptying the index would take autocomplete down until the next hour.
  */
+/**
+ * how many rows go in one insert.
+ *
+ * sqlite's bound-variable ceiling is 999 and a row is nine columns, so 111 is
+ * the true limit. fifty leaves room for a column being added without this
+ * quietly becoming the reason a rebuild fails
+ */
+const INSERT_CHUNK = 50;
+
+/** splits into runs of at most `size`, preserving order */
+export function chunk<T>(items: T[], size: number): T[][] {
+  const parts: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    parts.push(items.slice(i, i + size));
+  }
+
+  return parts;
+}
+
 export async function replaceAll(
   db: D1Database,
   entries: IndexEntry[],
@@ -183,13 +202,20 @@ export async function replaceAll(
       .select({ pageId: articleIndex.pageId })
       .from(articleIndex);
 
-    // one batch, so a failure part way through cannot leave the index emptied
-    await client.batch([
-      client.delete(articleIndex),
-      client
-        .insert(articleIndex)
-        .values(entries.map((entry) => ({ ...entry, syncedAt }))),
-    ]);
+    /*
+      one batch, so a failure part way through cannot leave the index emptied —
+      and chunked, because sqlite binds at most 999 variables to a statement
+      and a row here is nine of them. the whole table in one insert is about
+      1242, which d1 rejects outright: the index stayed empty while the picker
+      options beside it wrote fine, so it read as "d1 is broken" rather than as
+      a limit
+    */
+    const rows = entries.map((entry) => ({ ...entry, syncedAt }));
+    const inserts = chunk(rows, INSERT_CHUNK).map((part) =>
+      client.insert(articleIndex).values(part),
+    );
+
+    await client.batch([client.delete(articleIndex), ...inserts]);
 
     return {
       status: "replaced",

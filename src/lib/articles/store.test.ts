@@ -235,3 +235,47 @@ test("remove deletes one page and never throws", async () => {
   expect(error).toHaveBeenCalled();
   error.mockRestore();
 });
+
+/*
+  the bug this pair exists for: 138 articles went into one insert, which is
+  about 1242 bound variables against sqlite's ceiling of 999. d1 rejected the
+  statement, `replaceAll` reported `unavailable`, and the index stayed empty
+  while `choice_options` beside it wrote fine — so it read as the database
+  being broken rather than as a limit
+*/
+test("splits a rebuild across statements that sqlite will accept", async () => {
+  const { db, statements } = fakeD1();
+
+  const many = Array.from({ length: 138 }, (_, i) =>
+    entry({ pageId: `page-${i}`, headline: `Article ${i}` }),
+  );
+
+  await replaceAll(db, many);
+
+  const inserts = statements.filter((s) =>
+    s.sql.toLowerCase().startsWith("insert"),
+  );
+
+  expect(inserts.length).toBeGreaterThan(1);
+  for (const insert of inserts) {
+    expect(insert.params.length).toBeLessThanOrEqual(999);
+  }
+});
+
+test("still writes every row, in order, once split", async () => {
+  const { db, statements } = fakeD1();
+
+  const many = Array.from({ length: 138 }, (_, i) =>
+    entry({ pageId: `page-${i}`, headline: `Article ${i}` }),
+  );
+
+  const result = await replaceAll(db, many);
+  expect(result.status).toBe("replaced");
+
+  const written = statements
+    .filter((s) => s.sql.toLowerCase().startsWith("insert"))
+    .flatMap((s) => s.params)
+    .filter((p) => typeof p === "string" && p.startsWith("page-"));
+
+  expect(written).toEqual(many.map((e) => e.pageId));
+});

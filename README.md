@@ -131,11 +131,12 @@ like a form submission, and a request carrying no content type at all counts —
 without that header the answer is `403 Cross-site POST form submissions are
 forbidden`, from Astro rather than from this route.
 
-| Parameter                        | What it does                                    |
-| -------------------------------- | ----------------------------------------------- |
-| `?only=meeting` / `?only=social` | Fire one rather than both                       |
-| `?dry=1`                         | Report what each would post, without posting it |
-| `?silent=1`                      | Post, but notify nobody                         |
+| Parameter                        | What it does                                     |
+| -------------------------------- | ------------------------------------------------ |
+| `?only=meeting` / `?only=social` | Fire one rather than both                        |
+| `?dry=1`                         | Report what each would post, without posting it  |
+| `?silent=1`                      | Post, but notify nobody                          |
+| `?sync=1`                        | Refresh the article index instead; fires nothing |
 
 The response is a line per reminder saying what it did. It is a `POST` because
 it posts to Discord, and the secret travels in a header rather than the URL,
@@ -147,6 +148,12 @@ pings properly — which means an unqualified trigger posts to
 `#instagram-posting` and `#editorial-board` for real and pings the roles. These
 parameters exist because that is easy to forget, and they apply to one request
 rather than standing until somebody removes them.
+
+`?sync=1` is the exception to all of that. It refreshes the article index, the
+picker options and the registered command surface, and returns **without firing
+a reminder** — a caller forcing a resync is not asking to ping the club. Use it
+when a change to the sync needs exercising rather than waiting up to an hour for
+the next tick.
 
 Without `REMINDERS_TRIGGER_SECRET` set, the route answers `404` — the trigger
 does not exist rather than standing open.
@@ -206,6 +213,65 @@ real.
    just omits the "open in HareWare" buttons.
 5. **WordPress.** Nothing. The social reminder reads the public feed and needs
    no account, token or plugin.
+
+## Editor commands
+
+`/article` lets the Editorial Board change an Article without opening Notion.
+See [ADR 0009](docs/adr/0009-editor-commands-in-discord.md) for why it exists
+and how it stays current.
+
+The command's choices for Article Status, Section and Image Status come from
+Notion's schema, so **adding or removing a status is something the club does in
+Notion** and nothing here has to change. Discord bakes those choices into the
+registration rather than resolving them when somebody opens the picker, so the
+surface is registered again when the schema moves — on Notion's webhook, and
+hourly regardless.
+
+### Setting it up
+
+Three things, and only the first two are one-time.
+
+**1. Grant the role.** Commands register with `default_member_permissions: "0"`,
+which hides them from everybody. In **Server Settings → Integrations → HareWare
+→ Commands**, add an override granting `/article` to `@Editorial Board`.
+
+That override is a default and not the boundary: anyone who reaches the command
+another way is still refused at runtime, ephemerally. It survives later
+registrations, so this is done once.
+
+**2. Subscribe to Notion's webhooks.** In the integration's settings, add a
+subscription pointing at `https://hareware.zsrobinson.com/api/notion/webhook`
+and subscribe to the page and data-source events.
+
+Notion posts a one-time `verification_token` to that URL, which the route logs
+rather than stores — an unverified request has no business writing config. Read
+it out of `npx wrangler tail hareware`, then set it:
+
+```sh
+npx wrangler versions secret put NOTION_WEBHOOK_SECRET
+```
+
+The endpoint has to be live before the subscription can be created, so this
+necessarily happens after a deploy rather than before one. **Changing the URL
+later means deleting and recreating the subscription**, which issues a new
+token.
+
+**3. Keep Members shared with the integration.** Notion omits a relation
+property from a schema entirely when it cannot reach the target, and its value
+then reads back as `[]` rather than as missing. Lose that access and an author
+write looks like it succeeded against an empty field. The code refuses rather
+than writes, but the failure is silent from Notion's side.
+
+### The index
+
+Autocomplete reads a copy of the Articles database in D1 rather than asking
+Notion on every keystroke — not for speed (Notion answers in about half a
+second) but for the rate limit, which is roughly three requests a second across
+everything HareWare does.
+
+Nothing reads that copy to decide what to write. Every command re-reads its page
+from Notion first, so a stale row can only ever mean a stale label in a
+dropdown.
 
 ## Moving an automation to another channel
 

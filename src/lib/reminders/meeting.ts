@@ -1,5 +1,5 @@
 import { easternNow, easternTime, type EasternNow } from "~/lib/eastern";
-import { buttons, postMessage, text } from "~/lib/discord/post-message";
+import { buttons, inert, postMessage, text } from "~/lib/discord/post-message";
 import {
   BOARD_CHANNEL_ID,
   MEETING_DATE_PROPERTY,
@@ -224,7 +224,8 @@ function meetingLine(page: NotionPage, property: string): string {
   return [
     `${mention}**Meeting Tonight**`,
     time && ` at ${time}`,
-    location && ` in ${location}`,
+    /* notion text, on a line that mentions @Editorial Board — see `inert` */
+    location && ` in ${inert(location)}`,
   ]
     .filter(Boolean)
     .join("");

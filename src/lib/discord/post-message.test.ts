@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { buttons, postMessage, separator, text } from "./post-message";
+import { buttons, inert, postMessage, separator, text } from "./post-message";
 
 const TOKEN = "bot-token";
 const CHANNEL = "1155994296219091014";
@@ -185,4 +185,32 @@ test("posts to the real channel when no redirect is set", async () => {
   const fetchMock = mockDiscord();
   await postMessage(TOKEN, CHANNEL, { blocks: [text("hi")] });
   expect(String(fetchMock.mock.calls[0]![0])).toContain(CHANNEL);
+});
+
+/*
+  remote text sharing a line with a real role mention. `allowed_mentions` does
+  not gate a mention inside a components v2 text display, so a headline is the
+  one thing between a wordpress contributor and pinging the whole server
+*/
+test("makes @everyone in remote text unable to ping", () => {
+  expect(inert("Council votes @everyone out")).not.toContain("@everyone");
+  expect(inert("@HERE we go")).not.toMatch(/@here/i);
+});
+
+test("makes a role, user or channel reference inert", () => {
+  expect(inert("A win for <@&669611068938780673>")).not.toContain(
+    "<@&669611068938780673>",
+  );
+  expect(inert("<@123> spoke")).not.toContain("<@123>");
+  expect(inert("see <#456>")).not.toContain("<#456>");
+});
+
+test("leaves an ordinary headline exactly as written", () => {
+  const headline = "Terps win 3–2 in overtime: a report";
+  expect(inert(headline)).toBe(headline);
+});
+
+test("changes only what the parser sees, not what a reader sees", () => {
+  // the break is a zero-width space, so the line still reads the same
+  expect(inert("@everyone").replace(/\u200b/g, "")).toBe("@everyone");
 });

@@ -137,6 +137,14 @@ Discord sign-in and adds D1, to hold a log of what the bot did and buttons to
 re-run it. The reasoning here is otherwise unchanged, and the rule that nothing
 in D1 is authoritative is what makes that allowable.
 
+**Amended by [ADR 0009](0009-editor-commands-in-discord.md), 2026-09-04.** The
+revisit below happened: editors now change Articles from Discord slash
+commands. That does not reopen tracker integration — nothing reads the tracker
+to decide anything, and the commands are an input to it rather than an output.
+Note also that this file's rejection of "event-driven webhooks from Notion" was
+about **database automations**; Notion's integration webhooks are a different
+mechanism and carry none of those three limits.
+
 **Revisit this when the club wants something a ping cannot do** — most likely a
 log of what the bot did, or Discord slash commands for editorial approvals. Both
 were designed and deferred; both need the parked OAuth work or a Discord

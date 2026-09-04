@@ -78,6 +78,22 @@ that ID cannot be obtained for someone who has left the server, so stubs would
 either collide on empty or weaken the key. A legacy row carrying only its Byline
 text is the honest state.
 
+### Pseudonyms are detected, not listed
+
+**Amended 2026-09-04.** This ADR said pseudonyms belonging to a Member would be
+recorded on the Members row as a plain list, enough to offer a dropdown when
+setting a Byline. That property was never built, and the split works without it:
+Notion carries an `Author Pseudonym` formula,
+`prop("Author").some(current.prop("Name") != prop("Author Byline"))`, which is
+true exactly when the printed Byline is not the linked Member's name, and an
+`Image Pseudonym` formula beside it.
+
+Detecting the mismatch turned out to be worth more than listing the names. A
+list needs maintaining and can be wrong; the formula cannot disagree with the
+data it reads. What is lost is the dropdown — a Byline that is not the Member's
+name is typed — and answering "who is Gale de Silva?" now means opening one of
+their Articles rather than searching Members.
+
 ## Alternatives considered
 
 ### One text column, as today
@@ -95,8 +111,3 @@ cannot express a co-Byline as printed.
 
 Rejected — the same design as the above with an escape hatch, and it fails the
 same outage test, since the common case still leaves the column blank.
-
-Which pseudonyms belong to a Member is still recorded on the Members row, as a
-plain list. That is enough for the app to offer a dropdown when setting a
-Byline, and for an editor to answer "who is Gale de Silva?", without any
-per-Article structure.

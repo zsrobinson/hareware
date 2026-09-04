@@ -5,7 +5,15 @@
   remembers exists. see ADR 0006
 */
 
-/** the hour, eastern, at which the daily reminders go out */
+/**
+ * the hour, eastern, at which the daily reminders go out.
+ *
+ * the cron ticks hourly and `run.ts` acts on the tick whose eastern hour is
+ * this one, so the value must be an hour that happens exactly once a day. 1 is
+ * the one to avoid: clocks go back at 2am on the first sunday of november, so
+ * eastern 1am comes round twice and every reminder would fire twice with it.
+ * 2 disappears entirely on the march transition for the same reason
+ */
 export const REMINDER_HOUR = 8;
 
 /**

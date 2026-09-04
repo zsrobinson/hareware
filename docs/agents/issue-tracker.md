@@ -24,7 +24,7 @@ Both take the issue's numeric **database id** (`gh api repos/<owner>/<repo>/issu
 
 Issue bodies therefore run straight from what to build into acceptance criteria. Where a skill's template carries `## Parent` or `## Blocked by` sections — those exist for trackers with no native support — wire the relationship and leave the sections out, so each fact has one home.
 
-Naming another issue in prose stays welcome where it explains *why* two tickets relate. The graph records that they relate; it cannot record why.
+Naming another issue in prose stays welcome where it explains _why_ two tickets relate. The graph records that they relate; it cannot record why.
 
 ## Recording a design change
 
@@ -40,7 +40,7 @@ decided by who else needs to know, never by what is convenient at the time.
   cite it from the body of every affected issue. `docs/agents/domain.md` already
   requires every skill to read the relevant ADRs before exploring, which makes
   `docs/adr/` the one surface downstream readers are guaranteed to reach. The
-  issue graph records *that* two tickets relate; it cannot carry a decision
+  issue graph records _that_ two tickets relate; it cannot carry a decision
   between them.
 - **What a word means changed** — `CONTEXT.md`, same reasoning.
 
@@ -48,7 +48,7 @@ decided by who else needs to know, never by what is convenient at the time.
 decided, and an agent picking up a dependent ticket reads that ticket's body and
 the ADRs — never a merged PR from a ticket upstream of it. A decision that
 exists only in a PR description is effectively deleted on merge. The PR
-*carries* the ADR, in the same commit as the code honouring it; it is not the
+_carries_ the ADR, in the same commit as the code honouring it; it is not the
 place the decision lives.
 
 Name the dependent issue numbers in that PR's description. GitHub drops a

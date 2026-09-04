@@ -67,9 +67,7 @@
       "indexes": {
         "invocations_at": {
           "name": "invocations_at",
-          "columns": [
-            "at"
-          ],
+          "columns": ["at"],
           "isUnique": false
         }
       },

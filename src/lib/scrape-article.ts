@@ -208,7 +208,8 @@ async function fetchPost(slug: string): Promise<WordPressPost> {
       continue;
     }
 
-    if (!res.ok) throw new Error(`wordpress returned ${res.status} for ${slug}`);
+    if (!res.ok)
+      throw new Error(`wordpress returned ${res.status} for ${slug}`);
 
     const [post] = (await res.json()) as WordPressPost[];
     if (!post) throw new Error(`no published post matches ${slug}`);

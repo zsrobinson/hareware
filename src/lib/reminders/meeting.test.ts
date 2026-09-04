@@ -138,18 +138,18 @@ test("pings the editorial board", async () => {
   expect(body.allowed_mentions.roles).toEqual([MEETING_MENTION_ROLE_ID]);
 });
 
-test("REMINDERS_NO_PING renders the mention but notifies nobody", async () => {
+test("REMINDERS_NO_PING writes the role's name instead of a mention", async () => {
   const discord = mockNotion([
     meeting("Editorial Board Meeting", "2026-09-08"),
   ]);
 
   await sendMeetingReminder({ ...env, REMINDERS_NO_PING: "1" }, today);
 
-  const body = discord.mock.calls[0]![0];
-  expect(body.components[0].content).toContain(
-    `<@&${MEETING_MENTION_ROLE_ID}>`,
-  );
-  expect(body.allowed_mentions.roles).toEqual([]);
+  // allowed_mentions does not gate a mention inside a components v2 text
+  // display, so the markup itself has to go — see post-message.test.ts
+  const content = discord.mock.calls[0]![0].components[0].content;
+  expect(content).not.toContain("<@&");
+  expect(content).toContain("@Editorial Board");
 });
 
 test("says what is unset rather than throwing", async () => {

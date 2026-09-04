@@ -18,12 +18,12 @@ Articles has this person written".
 
 Two properties per credit, not one:
 
-| Property | Type | |
-| --- | --- | --- |
-| Author Byline | text | the printed name — **always filled** |
-| Author | relation → Members | who that actually was; may be empty or multiple |
-| Image Byline | text | the printed image credit |
-| Image Crew | relation → Members | may be empty or multiple |
+| Property      | Type               |                                                 |
+| ------------- | ------------------ | ----------------------------------------------- |
+| Author Byline | text               | the printed name — **always filled**            |
+| Author        | relation → Members | who that actually was; may be empty or multiple |
+| Image Byline  | text               | the printed image credit                        |
+| Image Crew    | relation → Members | may be empty or multiple                        |
 
 The text is authoritative for what gets printed. The relation is additive
 metadata. The text is **not** an override that is only filled when a Byline is
@@ -61,13 +61,17 @@ The cost is dual-write drift — someone edits the relation and forgets the text
 HareWare writes both together, and hand-editing is the outage path, so this is
 accepted. The status quo is worse: a single text column is drifting already.
 
-### Historical rows are not backported
+### Historical rows were backported after all
 
-The relation stays empty on existing Articles. For anything already on
-WordPress the Byline is frozen in the post body and a Member link buys nothing
-retroactively; the link exists to serve future work — who to ping in Discord,
-credit counts, the roster. Fill it going forward and opportunistically on rows
-people touch anyway.
+**Amended 2026-09-03.** This section originally said the relation would stay
+empty on existing Articles, on the grounds that a Member link buys nothing
+retroactively for a Byline already frozen in a WordPress post body. In practice
+the split was implemented and the existing rows were filled in by hand at the
+same time, so the Writers and Imagers views group correctly across the whole
+history rather than only from the changeover forward.
+
+The original reasoning was not wrong about the value — it was wrong about the
+cost, which turned out to be one sitting.
 
 No stub Member rows for alumni, either. Members is keyed by Discord user ID and
 that ID cannot be obtained for someone who has left the server, so stubs would

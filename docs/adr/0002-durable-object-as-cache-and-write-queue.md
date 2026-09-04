@@ -1,6 +1,12 @@
 # 2. A Durable Object as the cache and Notion write queue
 
-**Status:** Accepted — 2026-09-02
+**Status:** Superseded by [ADR 0006](0006-hareware-is-a-reminder-bot.md) — 2026-09-03
+
+> Never built. The Durable Object existed to batch writes from an
+> inline-editable Article board; there is no board and HareWare no longer writes
+> to Notion at all, so there is nothing left to serialise. The reasoning below
+> stands on its own terms and is kept for the next person who hits a global rate
+> limit from Workers.
 
 ## Context
 

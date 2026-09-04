@@ -16,6 +16,14 @@ interface Env {
   NOTION_TOKEN?: string;
 
   /*
+    the discord application's bot token. only needed to create the webhooks the
+    application owns — a webhook made by hand in discord's ui belongs to nobody
+    and may not carry interactive components. the application id and public key
+    are not secrets and live in ~/lib/discord/config
+  */
+  DISCORD_BOT_TOKEN?: string;
+
+  /*
     the two below exist so the reminders can be exercised on demand. set them
     in `.dev.vars` and never as deployed secrets — `wrangler secret list` is
     the place to check that, since a stray REMINDERS_IGNORE_HOUR in production

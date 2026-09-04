@@ -4,15 +4,10 @@
   <defs>
     <style>
       .st0 {
-        fill: #cc968d;
-        opacity: .5;
-      }
-
-      .st1 {
         fill: none;
       }
 
-      .st1, .st2 {
+      .st0, .st1 {
         stroke: #5b2218;
         stroke-linecap: round;
         stroke-linejoin: round;
@@ -20,15 +15,20 @@
       }
 
       .st2 {
+        fill: #cc968d;
+        fill-opacity: .5;
+      }
+
+      .st1 {
         fill: #fff;
       }
     </style>
   </defs>
-  <circle class="st0" cx="12" cy="12" r="12"/>
-  <path class="st1" d="M12,8.12v-3.39h-3.39"/>
-  <rect class="st2" x="5.21" y="8.12" width="13.58" height="10.18" rx="2" ry="2"/>
-  <path class="st1" d="M3.51,13.21h1.7"/>
-  <path class="st1" d="M18.79,13.21h1.7"/>
-  <path class="st1" d="M14.55,12.36v1.7"/>
-  <path class="st1" d="M9.45,12.36v1.7"/>
+  <rect class="st2" x="0" width="24" height="24"/>
+  <path class="st0" d="M12,8.12v-3.39h-3.39"/>
+  <rect class="st1" x="5.21" y="8.12" width="13.58" height="10.18" rx="2" ry="2"/>
+  <path class="st0" d="M3.51,13.21h1.7"/>
+  <path class="st0" d="M18.79,13.21h1.7"/>
+  <path class="st0" d="M14.55,12.36v1.7"/>
+  <path class="st0" d="M9.45,12.36v1.7"/>
 </svg>

@@ -1,0 +1,86 @@
+---
+import Dashboard from "~/layouts/dashboard.astro";
+import { getAuthConfig, getSessionSecret } from "~/lib/auth-config";
+import { getSession } from "~/lib/session";
+
+Astro.response.headers.set("cache-control", "private, no-store");
+
+const config = getAuthConfig();
+const session = await getSession(Astro.request, getSessionSecret());
+const returnTo = Astro.url.searchParams.get("returnTo") ?? "/generate";
+const authHref = `/auth/discord?${new URLSearchParams({ returnTo })}`;
+
+const errorMessages: Record<string, string> = {
+  cancelled: "Sign-in was cancelled. Nothing changed.",
+  invalid_state:
+    "That sign-in attempt expired or could not be verified. Try again.",
+  discord: "Discord sign-in failed. Try again.",
+  not_configured: import.meta.env.DEV
+    ? "Discord sign-in is not configured. Follow the README setup checklist."
+    : "Sign-in is temporarily unavailable.",
+};
+
+const errorCode = Astro.url.searchParams.get("error") ?? "";
+const error = !config
+  ? errorMessages.not_configured
+  : (errorMessages[errorCode] ?? null);
+---
+
+<Dashboard title="Sign in" session={session}>
+  <section class="mx-auto flex min-h-[calc(100svh-7rem)] max-w-lg items-center">
+    <div class="w-full">
+      <p
+        class="text-hare mb-2 text-xs font-semibold tracking-[0.18em] uppercase"
+      >
+        Member access
+      </p>
+      <h2 class="font-display text-3xl leading-tight">Sign in to HareWare</h2>
+      <p class="text-muted-foreground mt-3 text-sm leading-6">
+        Discord provides your member identity. HareWare requests only the basic
+        account access needed to read your Discord user ID.
+      </p>
+
+      {
+        error ? (
+          <div
+            role="alert"
+            class="bg-muted/50 border-l-hare mt-6 border-y border-r border-l-4 px-4 py-3 text-sm"
+          >
+            {error}
+          </div>
+        ) : null
+      }
+
+      {
+        session ? (
+          <div class="mt-6 rounded-lg border p-4">
+            <p class="text-sm font-medium">Signed in with Discord</p>
+            <p class="text-muted-foreground mt-1 font-mono text-xs">
+              ID {session.discordUserId}
+            </p>
+            <a
+              href="/generate"
+              class="bg-primary text-primary-foreground hover:bg-primary/80 mt-4 inline-flex h-9 items-center rounded-lg px-3 text-sm font-medium transition-colors"
+            >
+              Open the article board
+            </a>
+          </div>
+        ) : config ? (
+          <a
+            href={authHref}
+            class="mt-6 inline-flex h-10 items-center justify-center rounded-lg bg-[#5865F2] px-4 text-sm font-medium text-white transition-colors hover:bg-[#4752c4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5865F2]"
+          >
+            Sign in with Discord
+          </a>
+        ) : (
+          <span
+            aria-disabled="true"
+            class="mt-6 inline-flex h-10 cursor-not-allowed items-center justify-center rounded-lg bg-[#5865F2] px-4 text-sm font-medium text-white opacity-50"
+          >
+            Sign in with Discord
+          </span>
+        )
+      }
+    </div>
+  </section>
+</Dashboard>

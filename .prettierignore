@@ -1,0 +1,10 @@
+# generated, and 590KB of it — prettier has no business reformatting a file
+# nobody writes by hand
+worker-configuration.d.ts
+
+# drizzle's own bookkeeping, likewise generated
+migrations/meta
+
+dist
+.astro
+.wrangler

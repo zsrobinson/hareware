@@ -1,9 +1,14 @@
+import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
+import { record } from "~/lib/log";
 import { DISCORD_PUBLIC_KEY } from "~/lib/discord/config";
 import { handleInteraction } from "~/lib/discord/interactions";
 import { verifyInteraction } from "~/lib/discord/verify";
 
 export const prerender = false;
+
+/** discord's interaction type for a button press */
+const MESSAGE_COMPONENT = 3;
 
 /*
   discord's interactions endpoint url points here. it is never cached — the
@@ -28,6 +33,27 @@ export const POST: APIRoute = async ({ request }) => {
 
   const reply = handleInteraction(interaction as never);
   if (!reply) return new Response("unhandled interaction", { status: 400 });
+
+  /*
+    a button press is the only record of who marked what, and it costs one
+    insert on a request that happens anyway. the ping discord sends to check
+    this endpoint is not an invocation
+  */
+  const press = interaction as {
+    type?: number;
+    data?: { custom_id?: string };
+    member?: { user?: { username?: string; id?: string } };
+  };
+
+  if (press.type === MESSAGE_COMPONENT) {
+    await record(env.DB, {
+      source: "button",
+      action: "mark-posted",
+      outcome: "ok",
+      summary: `${press.member?.user?.username ?? "someone"} toggled ${press.data?.custom_id}`,
+      actor: press.member?.user?.id,
+    });
+  }
 
   return new Response(JSON.stringify(reply), {
     headers: {

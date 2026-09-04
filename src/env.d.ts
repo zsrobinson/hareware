@@ -21,6 +21,14 @@
  * remembers exists.
  */
 interface HareWareEnv {
+  /* ---- bindings ---------------------------------------------------------- */
+
+  /**
+   * The invocation log, and nothing else. Optional so that everything keeps
+   * working when it is absent — a missing log is not a reason to stop posting.
+   */
+  DB?: D1Database;
+
   /* ---- secrets ---------------------------------------------------------- */
 
   /**

@@ -10,6 +10,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Link } from "~/components/ui/link";
 import Dashboard from "~/layouts/dashboard.astro";
+import { getSessionSecret } from "~/lib/auth-config";
 import { getSession } from "~/lib/session";
 import { toArticleLink, toArticleSlug } from "../lib/article-url";
 import { SLIDE_IMAGE_WIDTH, toSizedImage } from "../lib/image-url";
@@ -58,7 +59,9 @@ if (post) {
 }
 
 const articles = post ? null : await getRecentArticles(page);
-const session = post ? getSession(Astro.request) : null;
+const session = post
+  ? await getSession(Astro.request, getSessionSecret())
+  : null;
 ---
 
 <Dashboard title="Instagram Posts" session={session} cached={post === null}>

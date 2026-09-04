@@ -1,0 +1,23 @@
+---
+import Dashboard from "~/layouts/dashboard.astro";
+import { ReminderTriggers } from "~/components/reminder-triggers";
+import { editorialBoardMember, notFound } from "~/lib/admin";
+import { REMINDERS } from "~/lib/reminders/registry";
+
+const session = await editorialBoardMember(Astro.request);
+if (!session) return notFound();
+
+Astro.response.headers.set("cache-control", "private, no-store");
+---
+
+<Dashboard title="Reminders" session={session} admin>
+  <div class="max-w-3xl space-y-4">
+    <p class="text-muted-foreground text-sm">
+      These run on their own each morning. Firing one here takes the same path,
+      so what you see is what the morning would have done, and every run is
+      recorded in the log.
+    </p>
+
+    <ReminderTriggers reminders={REMINDERS} client:load />
+  </div>
+</Dashboard>

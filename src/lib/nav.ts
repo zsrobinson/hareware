@@ -1,8 +1,9 @@
 import {
+  ActivityIcon,
+  BellIcon,
   FileTextIcon,
   ImageIcon,
   MailIcon,
-  NewspaperIcon,
   TypeIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -16,12 +17,6 @@ export type NavItem = {
   match?: string[];
 };
 
-/* the editorial app. only a signed-in member sees these, because everything
-   behind them reads notion */
-export const editorialNav: NavItem[] = [
-  { href: "/articles", label: "Articles", icon: NewspaperIcon },
-];
-
 /* the public tools. these read wordpress and nothing else, so they stay
    reachable signed out, as they always have been */
 export const toolsNav: NavItem[] = [
@@ -34,6 +29,13 @@ export const toolsNav: NavItem[] = [
   { href: "/magazine", label: "InDesign Export", icon: FileTextIcon },
   { href: "/words", label: "Word Counter", icon: TypeIcon },
   { href: "/email", label: "Newsletter", icon: MailIcon },
+];
+
+/* the admin tools. only a signed-in member holding @Editorial Board sees
+   these, and the pages check that themselves rather than trusting the nav */
+export const adminNav: NavItem[] = [
+  { href: "/admin/reminders", label: "Reminders", icon: BellIcon },
+  { href: "/admin/log", label: "Invocation Log", icon: ActivityIcon },
 ];
 
 /* `/` would otherwise light up on every page */

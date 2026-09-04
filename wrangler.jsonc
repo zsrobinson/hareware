@@ -20,6 +20,20 @@
   "observability": { "enabled": true },
 
   /**
+   * the invocation log, and nothing else. per ADR 0006's rule and ADR 0007's
+   * reasoning, nothing in here is authoritative: every row is derived from
+   * something notion, wordpress or discord already knows, so dropping this
+   * database costs the club its history and nothing more
+   */
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "hareware",
+      "database_id": "dbbc955f-2663-4d25-8b5c-fcb1c67276d5",
+    },
+  ],
+
+  /**
    * our own entrypoint rather than the adapter's
    * `@astrojs/cloudflare/entrypoints/server`, which exports only `fetch` and so
    * gives a cron trigger nowhere to land. src/worker.ts is that file plus a

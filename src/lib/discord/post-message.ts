@@ -39,6 +39,8 @@ export async function postToWebhook(
   */
   const url = new URL(webhookUrl);
   url.searchParams.set("with_components", "true");
+  // ask for the created message back, so the check below has something to read
+  url.searchParams.set("wait", "true");
 
   const body = {
     content: message.content,
@@ -82,6 +84,20 @@ export async function postToWebhook(
   if (!response.ok) {
     throw new DiscordPostError(
       `discord returned ${response.status}: ${await response.text()}`,
+    );
+  }
+
+  /*
+    discord drops components it will not accept and still answers as though it
+    posted them, so a button that never rendered looks exactly like one that
+    did. `wait=true` hands back the message as stored — if we asked for buttons
+    and none came back, say so, because nothing else ever will
+  */
+  const created = (await response.json()) as { components?: unknown[] };
+  if (message.buttons?.length && !created.components?.length) {
+    console.error(
+      "[discord] the message posted but its buttons were dropped — a webhook " +
+        "that is not application-owned can only send link buttons",
     );
   }
 }

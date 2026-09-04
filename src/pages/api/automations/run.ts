@@ -4,6 +4,9 @@ import { editorialBoardMember } from "~/lib/admin";
 import { easternNow } from "~/lib/eastern";
 import { ALL, runAutomations, type Which } from "~/lib/automations/run";
 import { automation } from "~/lib/automations/registry";
+import { refreshChoices } from "~/lib/articles/choices";
+import { refreshFromNotion } from "~/lib/articles/refresh";
+import { rebuild } from "~/lib/articles/sync";
 
 export const prerender = false;
 
@@ -60,6 +63,24 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   const query = new URL(request.url).searchParams;
+
+  /*
+    `?sync=1` refreshes the article index, the picker options and the command
+    surface, and fires no reminders.
+
+    it exists because the sync otherwise only runs on the hourly tick, which
+    means a change to it cannot be exercised without waiting up to an hour and
+    then reading a log to find out. one meaning per request: this returns
+    without touching the reminders rather than doing both
+  */
+  if (query.get("sync")) {
+    const sync = await refreshFromNotion(env, { rebuild, refreshChoices });
+
+    return Response.json(
+      { sync },
+      { status: sync.outcome === "failed" ? 500 : 200 },
+    );
+  }
 
   /*
     `?only=meeting` or `?only=social` to fire one; both by default. the reminders

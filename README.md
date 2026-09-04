@@ -102,9 +102,16 @@ without waiting for 8am. It takes the same path the cron takes, so there is no
 second implementation to drift.
 
 ```sh
-curl -X POST -H "Authorization: Bearer $REMINDERS_TRIGGER_SECRET" \
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $REMINDERS_TRIGGER_SECRET" \
   "https://hareware.zsrobinson.com/api/reminders/run"
 ```
+
+The content type is not optional. Astro rejects a cross-site `POST` that looks
+like a form submission, and a request carrying no content type at all counts —
+without that header the answer is `403 Cross-site POST form submissions are
+forbidden`, from Astro rather than from this route.
 
 Add `?only=meeting` or `?only=social` to fire just one. The response is a line
 per reminder saying what it did. It is a `POST` because it posts to Discord, and

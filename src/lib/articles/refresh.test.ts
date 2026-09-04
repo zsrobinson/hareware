@@ -75,7 +75,10 @@ test("refuses to register a command surface with no picker options", async () =>
     were refused. registering that would replace working pickers with empty
     ones, which an editor reads as the command being broken
   */
-  const result = await refreshFromNotion({ DB: undefined } as Env, steps());
+  const result = await refreshFromNotion(
+    { DB: undefined } as unknown as Env,
+    steps(),
+  );
 
   expect(result.summary).toContain("commands skipped");
 });

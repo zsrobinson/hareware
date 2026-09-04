@@ -53,6 +53,11 @@ Run what CI runs before pushing — `npx astro check`, `npm run lint`,
 `D1Database` or `cloudflare:workers` do not exist, run `npm run types`: the
 generated declarations are gitignored and a branch switch can leave them absent.
 
+**A stale copy is worse than a missing one**, because it fails the other way:
+`astro check` passes locally against weaker types and CI fails on the same
+commit. Run `npm run types` before believing a green check on anything that
+touches bindings or a route's `Request`.
+
 **Anything that posts to Discord posts to the club's real channels** unless
 `REMINDERS_TEST_CHANNEL` is set. Messages can be deleted; the pings they send
 cannot.

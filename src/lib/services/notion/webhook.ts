@@ -47,6 +47,19 @@ function sameBytes(a: Uint8Array, b: Uint8Array) {
 }
 
 /**
+ * what verifying a webhook actually needs: one header and the body.
+ *
+ * declared structurally rather than as `Request` because there are two of
+ * those here — the dom lib's and workerd's `Request<CfHostMetadata, Cf>`, which
+ * astro hands a route — and they are not assignable to one another. asking for
+ * the two members used keeps both callers and every test working without a cast
+ */
+export type SignedRequest = {
+  headers: { get(name: string): string | null };
+  text(): Promise<string>;
+};
+
+/**
  * the request body, if notion really sent it, and undefined otherwise.
  *
  * returns the body rather than a boolean for the same reason
@@ -55,7 +68,7 @@ function sameBytes(a: Uint8Array, b: Uint8Array) {
  * could verify one thing and then act on another
  */
 export async function verifyWebhook(
-  request: Request,
+  request: SignedRequest,
   secret: string | undefined,
 ): Promise<string | undefined> {
   /* no secret means the handshake has not happened yet. fail closed: an

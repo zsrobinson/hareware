@@ -9,3 +9,6 @@ migrations/meta
 dist
 .astro
 .wrangler
+
+# agent worktrees — a full checkout of this repo living inside it
+.claude

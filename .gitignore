@@ -35,3 +35,6 @@ worker-configuration.d.ts
 # local worker secrets
 .dev.vars
 .dev.vars.*
+
+# agent worktrees, created under .claude/worktrees by claude code
+.claude/

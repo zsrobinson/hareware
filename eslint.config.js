@@ -32,6 +32,9 @@ export default tseslint.config(
       "node_modules/",
       "worker-configuration.d.ts",
       "src/components/ui/**",
+      /* agent worktrees: a whole checkout of this repo, and linting it means
+         linting every branch anybody left lying around */
+      ".claude/",
     ],
   },
 

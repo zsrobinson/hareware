@@ -23,7 +23,7 @@ export async function runScheduled(controller: ScheduledController, env: Env) {
 
 async function runReminders(controller: ScheduledController, env: Env) {
   const eastern = easternNow(new Date(controller.scheduledTime));
-  if (eastern.hour !== REMINDER_HOUR) return;
+  if (eastern.hour !== REMINDER_HOUR && !env.REMINDERS_IGNORE_HOUR) return;
 
   /*
     both reminders run even if the other throws. they share nothing, and a

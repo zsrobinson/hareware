@@ -14,4 +14,16 @@ interface Env {
   DISCORD_BOARD_WEBHOOK_URL?: string;
   /** notion internal integration token, read-only on the Meetings database */
   NOTION_TOKEN?: string;
+
+  /*
+    the two below exist so the reminders can be exercised on demand. set them
+    in `.dev.vars` and never as deployed secrets — `wrangler secret list` is
+    the place to check that, since a stray REMINDERS_IGNORE_HOUR in production
+    would fire every reminder once an hour, all day
+  */
+
+  /** run the reminders whatever the hour, rather than only at REMINDER_HOUR */
+  REMINDERS_IGNORE_HOUR?: string;
+  /** log what would be sent to discord instead of sending it */
+  REMINDERS_DRY_RUN?: string;
 }

@@ -16,21 +16,24 @@
  */
 export const REMINDER_HOUR = 8;
 
+/** @Weekend Poster covers both saturday and sunday, so two days share it */
+const WEEKEND_POSTER = "1545245632996966493";
+
 /**
  * the duty roster: which discord role covers instagram on which day.
  *
- * seven roles rather than a notion property, so whoever runs social can edit it
- * with Manage Roles and the bot's only job is a mention. fill these in with the
- * role ids from discord (Developer Mode → right-click the role → Copy ID)
+ * discord roles rather than a notion property, so whoever runs social can edit
+ * the roster with Manage Roles and the bot's only job is a mention. keyed by
+ * the weekday names `Intl` produces in `~/lib/eastern`
  */
 export const SOCIAL_ROLE_IDS: Record<string, string | undefined> = {
-  Sunday: undefined,
-  Monday: undefined,
-  Tuesday: undefined,
-  Wednesday: undefined,
-  Thursday: undefined,
-  Friday: undefined,
-  Saturday: undefined,
+  Monday: "1545245444588961943",
+  Tuesday: "1545245519415087124",
+  Wednesday: "1545245547307212880",
+  Thursday: "1545245586276483175",
+  Friday: "1545245612310794310",
+  Saturday: WEEKEND_POSTER,
+  Sunday: WEEKEND_POSTER,
 };
 
 /**
@@ -40,10 +43,31 @@ export const SOCIAL_ROLE_IDS: Record<string, string | undefined> = {
  * written down. leave it undefined and the social ping still goes out, just
  * without the buttons — they are a convenience, not the point of the message
  */
-export const HAREWARE_ORIGIN: string | undefined = undefined;
+export const HAREWARE_ORIGIN: string | undefined =
+  "https://hareware.zsrobinson.com";
 
-/** the notion database holding one page per editorial board meeting */
-export const MEETINGS_DATABASE_ID: string | undefined = undefined;
+/**
+ * the role the meeting reminder pings, or undefined to post without mentioning
+ * anyone. @Editorial Board is `669611068938780673` — deliberately not set yet,
+ * so the reminder proves itself before it starts pinging the whole board
+ */
+export const MEETING_MENTION_ROLE_ID: string | undefined = undefined;
 
-/** the date property on that database carrying the meeting's day */
-export const MEETING_DATE_PROPERTY = "Date";
+/**
+ * the notion database holding one page per editorial board meeting.
+ *
+ * this is NOT the Articles database — the reminder looks for a page whose date
+ * property is today and links its agenda, which Articles has no notion of
+ */
+export const MEETINGS_DATABASE_ID: string | undefined =
+  "22cbe415e24c80299d53e9fa048f0ca5";
+
+/**
+ * the date property on that database carrying the meeting's day.
+ *
+ * left undefined it is discovered from the schema — a meetings database has
+ * exactly one property of type `date`, and finding it beats hardcoding a name
+ * that breaks silently the day someone renames the column. set it only if a
+ * second date property ever appears and the wrong one gets picked
+ */
+export const MEETING_DATE_PROPERTY: string | undefined = undefined;

@@ -29,6 +29,7 @@ export class DiscordPostError extends Error {}
 export async function postToWebhook(
   webhookUrl: string,
   message: DiscordMessage,
+  options: { dryRun?: boolean } = {},
 ) {
   /*
     a non-application-owned webhook drops components unless this is set — and
@@ -65,6 +66,12 @@ export async function postToWebhook(
       roles: message.mentionRoleIds ?? [],
     },
   };
+
+  if (options.dryRun) {
+    // the whole point is to see the payload without a channel full of tests
+    console.log("[discord dry run]", JSON.stringify(body, null, 2));
+    return;
+  }
 
   const response = await fetch(url, {
     method: "POST",

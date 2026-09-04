@@ -54,26 +54,30 @@ export async function sendSocialPing(
     overflow > 0 && `(and ${overflow} more — check the site)`,
   ].filter(Boolean);
 
-  await postToWebhook(env.DISCORD_SOCIAL_WEBHOOK_URL!, {
-    content: lines.join("\n"),
-    mentionRoleIds: [roleId!],
-    embeds: posted.map((article) => ({
-      title: article.title,
-      url: article.link,
-    })),
-    /*
+  await postToWebhook(
+    env.DISCORD_SOCIAL_WEBHOOK_URL!,
+    {
+      content: lines.join("\n"),
+      mentionRoleIds: [roleId!],
+      embeds: posted.map((article) => ({
+        title: article.title,
+        url: article.link,
+      })),
+      /*
       discord renders every button in one row under the whole message rather
       than beside the embed it belongs to, so the label has to name its own
       article — five buttons all saying "open in hareware" would be a guess.
       capped at five separately from the ten embeds, because that is the row
     */
-    buttons: HAREWARE_ORIGIN
-      ? posted.slice(0, MAX_BUTTONS).map((article) => ({
-          label: truncate(article.title, MAX_LABEL),
-          url: `${HAREWARE_ORIGIN}/generate?article=${toArticleSlug(article.link)}`,
-        }))
-      : undefined,
-  });
+      buttons: HAREWARE_ORIGIN
+        ? posted.slice(0, MAX_BUTTONS).map((article) => ({
+            label: truncate(article.title, MAX_LABEL),
+            url: `${HAREWARE_ORIGIN}/generate?article=${toArticleSlug(article.link)}`,
+          }))
+        : undefined,
+    },
+    { dryRun: Boolean(env.REMINDERS_DRY_RUN) },
+  );
 
   return `posted ${today.length} article(s) for ${eastern.date}`;
 }

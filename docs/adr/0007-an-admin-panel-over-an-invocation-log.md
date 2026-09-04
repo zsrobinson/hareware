@@ -47,12 +47,19 @@ nothing else. If a row would cost information that cannot be reconstructed, it
 does not belong there.
 
 **The log is the sensitive surface.** An invocation naming an Article and its
-Byline is mild; a stored request payload carries the Byline-to-Member mapping
-that `CONTEXT.md` says never reaches WordPress. Summaries are kept
+Byline is mild; a stored request payload would carry the Byline-to-Member
+mapping that `CONTEXT.md` says never reaches WordPress. Summaries are kept
 indefinitely, because they are small and answer "what happened last semester".
-Raw payloads are pruned after thirty days by the same cron that sends the
-reminders, so the sensitive half ages out on its own and the role gate protects
-a shrinking window rather than a growing archive.
+
+> **Amended 2026-09-04.** The payload column was never written to, and has been
+> removed along with the thirty-day prune that maintained it. Nothing about that
+> was load-bearing: the summary already carries the failure text, which is what
+> a payload would mostly have duplicated. The gate is unchanged and still right,
+> but its justification is narrower than this section claimed — what the log
+> actually holds is the summary and the `actor`, which names a real Discord user
+> against every button press. That is enough to gate on; the pseudonym mapping
+> is not in there, and adding it later would be the decision this paragraph
+> described.
 
 **Button presses are invocations too.** Every _Mark as Posted_ is already a
 request to us, and it is the only record of who marked what. Recording it costs
@@ -67,7 +74,7 @@ conclusion first, by moving from webhooks to posting as the bot.
 **Per-request role checking costs a Discord call per page view.** It was chosen
 over caching the role in the session anyway: a role removed in Discord takes
 effect immediately, which is the property that matters for the surface holding
-the pseudonym mapping. If the panel is ever slow enough to notice, a cache
+who is on the board. If the panel is ever slow enough to notice, a cache
 measured in minutes is the fix, not a cache measured in days.
 
 **Revisit this if the panel grows past reading and re-running.** It is a window
@@ -88,7 +95,7 @@ a stack trace and the wrong place for a record.
 
 Rejected, narrowly, and the honest runner-up. It removes a Discord call from
 every page view, at the cost of a removed role staying live until the session
-expires. For a surface holding the pseudonym mapping, immediate is worth the
+expires. For the surface that names who did what, immediate is worth the
 request.
 
 ### No store: the panel shows only what a run just did

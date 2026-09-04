@@ -43,13 +43,18 @@ npx wrangler versions upload   # uploads a version, prints a preview url
 
 ## Worker types
 
-`worker-configuration.d.ts` is generated from `wrangler.jsonc` and **committed**.
-It used to be generated during the build, which made every build depend on
-running `wrangler` first — and that is where the build broke. Committing it
-means a clone typechecks with nothing but `npm ci`.
+`worker-configuration.d.ts` is 590KB of runtime declarations generated from
+`wrangler.jsonc`. It is gitignored and written by the `postinstall` hook, so
+`npm ci` is all a clone needs.
 
-Run `npm run types` after changing a binding in `wrangler.jsonc`, and commit
-what it writes.
+Run `npm run types` after changing a binding — or any time the type checker
+starts claiming `D1Database` and `cloudflare:workers` do not exist, which is
+what a missing one looks like.
+
+**It reads `.dev.vars` too**, adding whatever it finds there to `Env`. That
+means a secret you have locally can type check here and nowhere else, so every
+variable the code reads belongs in `HareWareEnv` in `src/env.d.ts` — the
+generated file is not a declaration you can rely on.
 
 ## Deployment
 
@@ -80,25 +85,28 @@ Set them with `npx wrangler versions secret put <NAME>`. Plain
 `wrangler secret put` refuses unless the latest version happens to be the
 deployed one, which it usually is not.
 
-| Secret                       | What it is                                                      |
-| ---------------------------- | --------------------------------------------------------------- |
-| `DISCORD_SOCIAL_WEBHOOK_URL` | Application-owned webhook for `#instagram-posting`              |
-| `DISCORD_BOARD_WEBHOOK_URL`  | Application-owned webhook for `#editorial-board`                |
-| `NOTION_TOKEN`               | Notion integration token, read access to Meetings only          |
-| `DISCORD_BOT_TOKEN`          | **Not read at runtime.** Creates the webhooks above — see below |
+| Secret                     | What it is                                                        |
+| -------------------------- | ----------------------------------------------------------------- |
+| `DISCORD_BOT_TOKEN`        | Sends every reminder, and reads the roles the admin pages gate on |
+| `NOTION_TOKEN`             | Notion integration token, read access to Meetings only            |
+| `SESSION_SECRET`           | Signs the session and OAuth-state cookies. `openssl rand -hex 32` |
+| `DISCORD_CLIENT_SECRET`    | The OAuth client secret, exchanged once per sign-in               |
+| `REMINDERS_TRIGGER_SECRET` | Guards `POST /api/reminders/run`. Unset, that route answers `404` |
+
+`DISCORD_BOT_TOKEN` is the one nothing works without: both reminders post as the
+bot, and the admin pages ask Discord for the caller's roles on every request.
 
 #### Switches, for `.dev.vars` only
 
 These exist to exercise the reminders. Each changes behaviour in a way nobody
 wants running unattended, and none belongs in a deployed secret.
 
-| Switch                    | What it does                                                                      |
-| ------------------------- | --------------------------------------------------------------------------------- |
-| `REMINDERS_DRY_RUN`       | Log the Discord payload instead of sending it                                     |
-| `REMINDERS_NO_PING`       | Post as normal but notify nobody — writes the role's name in place of the mention |
-| `REMINDERS_IGNORE_HOUR`   | Run both reminders on every tick, not just at 8am                                 |
-| `REMINDERS_FORCE_MEETING` | Run the meeting reminder on the next tick, whatever the hour                      |
-| `REMINDERS_FORCE_SOCIAL`  | The same, for the social ping                                                     |
+| Switch                   | What it does                                                                      |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `REMINDERS_DRY_RUN`      | Log the Discord payload instead of sending it                                     |
+| `REMINDERS_NO_PING`      | Post as normal but notify nobody — writes the role's name in place of the mention |
+| `REMINDERS_IGNORE_HOUR`  | Run both reminders on every tick, not just at 8am                                 |
+| `REMINDERS_TEST_CHANNEL` | Send both reminders here instead of the club's real channels                      |
 
 `REMINDERS_IGNORE_HOUR` is the most damaging of these if it reaches production:
 a Worker cannot unset its own environment, so it would post both reminders once
@@ -162,10 +170,11 @@ real.
 1. **Discord roles.** Create `@Social Sunday` through `@Social Saturday` and
    assign them. Copy each role's ID (Settings → Advanced → Developer Mode, then
    right-click the role → Copy ID) into `SOCIAL_ROLE_IDS`.
-2. **Discord webhooks.** They must be created by the application rather than
-   by hand — see [Recreating the Discord webhooks](#recreating-the-discord-webhooks)
-   below.
-
+2. **Discord bot.** Invite the application with **View Channel** and **Send
+   Messages** in `#instagram-posting` and `#editorial-board`, and give its role
+   **Mention @everyone, @here, and All Roles** — without that last one the
+   reminders post and ping nobody, silently. See
+   [Why a ping renders but does not notify](#why-a-ping-renders-but-does-not-notify).
 3. **Notion.** Create an internal integration at
    [notion.so/my-integrations](https://www.notion.com/my-integrations) and copy
    its token. Then open the Meetings database, and under `⋯` → Connections add

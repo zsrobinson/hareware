@@ -22,7 +22,14 @@ export async function getRecentArticles(
     const parser = new XMLParser();
     const data = parser.parse(text);
 
-    return data.rss.channel.item.map((item: any) => ({
+    /*
+      fast-xml-parser gives back a bare object rather than a one-element array
+      when the feed carries a single <item>, and mapping over that throws into
+      the catch below — turning a thin feed into "no articles at all"
+    */
+    const items = data.rss.channel.item;
+
+    return (Array.isArray(items) ? items : [items]).map((item: any) => ({
       title: item.title as string,
       link: item.link as string,
       date: new Date(item.pubDate).toLocaleDateString("en-US", {

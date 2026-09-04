@@ -1,13 +1,21 @@
-import { postToWebhook } from "~/lib/discord/post-message";
+import {
+  buttons,
+  postToWebhook,
+  separator,
+  text,
+  type Block,
+} from "~/lib/discord/post-message";
 import { easternNow, type EasternNow } from "~/lib/eastern";
 import { toArticleSlug } from "~/lib/article-url";
 import { getRecentArticles } from "~/lib/get-recent-articles";
 import { HAREWARE_ORIGIN, SOCIAL_ROLE_IDS } from "./config";
 
-// discord's own limits, not ours: one action row of link buttons and up to
-// ten embeds per message. see `postToWebhook`, which renders exactly one row
-const MAX_BUTTONS = 5;
-const MAX_EMBEDS = 10;
+/*
+  each article gets its own line and its own row of buttons, so the whole
+  message is three components per article plus a divider. components v2 caps a
+  message at forty, and the feed only hands back ten articles a page anyway
+*/
+const MAX_ARTICLES = 10;
 
 /** discord rejects a button label over 80 characters, and headlines run long */
 const MAX_LABEL = 80;
@@ -17,7 +25,7 @@ export async function sendSocialPing(
   eastern: EasternNow,
 ): Promise<string> {
   // the code must stay inert until the club actually sets these up — see ADR
-  // 0006's "setup outside the repo". every role id is undefined right now
+  // 0006's "setup outside the repo"
   const roleId = SOCIAL_ROLE_IDS[eastern.weekday];
   const missing = [
     !env.DISCORD_SOCIAL_WEBHOOK_URL && "DISCORD_SOCIAL_WEBHOOK_URL",
@@ -41,45 +49,30 @@ export async function sendSocialPing(
   if (today.length === 0)
     return `no articles published today (${eastern.date})`;
 
-  /*
-    the feed itself only hands back ten articles a page, so a day busier than
-    that is already truncated before we see it — this cap is the second line of
-    defence rather than the first. the hare has never come close
-  */
-  const posted = today.slice(0, MAX_EMBEDS);
-  const overflow = today.length - posted.length;
+  const posted = today.slice(0, MAX_ARTICLES);
 
-  const lines = [
-    `<@&${roleId}> these went up today — get them on Instagram:`,
-    overflow > 0 && `(and ${overflow} more — check the site)`,
-  ].filter(Boolean);
+  const blocks: Block[] = posted.flatMap((article, index) => [
+    // the mention repeats per article rather than heading the message, so each
+    // one reads as its own item — discord pings once however often it appears
+    ...(index > 0 ? [separator()] : []),
+    text(`<@&${roleId}> **${article.title}**`),
+    ...(HAREWARE_ORIGIN
+      ? [
+          buttons({
+            label: truncate("Open Post Generator", MAX_LABEL),
+            url: `${HAREWARE_ORIGIN}/generate?article=${toArticleSlug(article.link)}`,
+          }),
+        ]
+      : []),
+  ]);
 
   await postToWebhook(
     env.DISCORD_SOCIAL_WEBHOOK_URL!,
-    {
-      content: lines.join("\n"),
-      mentionRoleIds: [roleId!],
-      embeds: posted.map((article) => ({
-        title: article.title,
-        url: article.link,
-      })),
-      /*
-      discord renders every button in one row under the whole message rather
-      than beside the embed it belongs to, so the label has to name its own
-      article — five buttons all saying "open in hareware" would be a guess.
-      capped at five separately from the ten embeds, because that is the row
-    */
-      buttons: HAREWARE_ORIGIN
-        ? posted.slice(0, MAX_BUTTONS).map((article) => ({
-            label: truncate(article.title, MAX_LABEL),
-            url: `${HAREWARE_ORIGIN}/generate?article=${toArticleSlug(article.link)}`,
-          }))
-        : undefined,
-    },
+    { blocks, mentionRoleIds: [roleId!] },
     { dryRun: Boolean(env.REMINDERS_DRY_RUN) },
   );
 
-  return `posted ${today.length} article(s) for ${eastern.date}`;
+  return `posted ${posted.length} article(s) for ${eastern.date}`;
 }
 
 function truncate(text: string, limit: number) {

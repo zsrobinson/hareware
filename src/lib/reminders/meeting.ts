@@ -1,5 +1,5 @@
-import { easternNow, type EasternNow } from "~/lib/eastern";
-import { postToWebhook } from "~/lib/discord/post-message";
+import { easternNow, easternTime, type EasternNow } from "~/lib/eastern";
+import { buttons, postToWebhook, text } from "~/lib/discord/post-message";
 import {
   MEETING_DATE_PROPERTY,
   MEETING_MENTION_ROLE_ID,
@@ -48,17 +48,15 @@ export async function sendMeetingReminder(
     return `no ${MEETING_TITLE_PREFIX} meeting today (${eastern.date})`;
 
   const title = readTitle(page);
-  const location = readLocation(page);
 
   await postToWebhook(
     env.DISCORD_BOARD_WEBHOOK_URL!,
     {
-      content: MEETING_MENTION_ROLE_ID
-        ? `<@&${MEETING_MENTION_ROLE_ID}> meeting today — here's the agenda:`
-        : undefined,
+      blocks: [
+        text(meetingLine(page, property)),
+        buttons({ label: "View Agenda", url: page.url }),
+      ],
       mentionRoleIds: MEETING_MENTION_ROLE_ID ? [MEETING_MENTION_ROLE_ID] : [],
-      embeds: [{ title, url: page.url, description: location || undefined }],
-      buttons: [{ label: "Open agenda", url: page.url }],
     },
     { dryRun: Boolean(env.REMINDERS_DRY_RUN) },
   );
@@ -200,6 +198,27 @@ function readTitle(page: NotionPage): string {
     .map((t) => t.plain_text)
     .join("")
     .trim();
+}
+
+/**
+ * the one line the reminder says, assembled from what the row actually has —
+ * a meeting with no time or no location set simply loses that clause rather
+ * than announcing itself as "at undefined"
+ */
+function meetingLine(page: NotionPage, property: string): string {
+  const mention = MEETING_MENTION_ROLE_ID
+    ? `<@&${MEETING_MENTION_ROLE_ID}> `
+    : "";
+  const time = easternTime(page.properties[property]?.date?.start ?? "");
+  const location = readLocation(page);
+
+  return [
+    `${mention}**Meeting Tonight**`,
+    time && ` at ${time}`,
+    location && ` in ${location}`,
+  ]
+    .filter(Boolean)
+    .join("");
 }
 
 function readLocation(page: NotionPage): string {

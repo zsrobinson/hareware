@@ -2,62 +2,80 @@
   posting to discord through a channel webhook url, which is the whole of our
   discord integration: no application, no bot token, no oauth. the url is the
   credential and it can do exactly one thing — post into the one channel it was
-  made for
+  made for.
+
+  messages are built with components v2, where the layout *is* the message:
+  `content` and `embeds` are unavailable once the flag is set, and text,
+  buttons and dividers are all components instead
 */
 
-/** a link button. style 5 is a url button, which fires no interaction */
+const IS_COMPONENTS_V2 = 1 << 15;
+
+/** discord's component type numbers, named so the payload reads as something */
+const TEXT_DISPLAY = 10;
+const ACTION_ROW = 1;
+const BUTTON = 2;
+const SEPARATOR = 14;
+const LINK_STYLE = 5;
+
+/** a url button. it fires no interaction, which is why a webhook may send it */
 export type LinkButton = { label: string; url: string };
 
-export type DiscordEmbed = {
-  title?: string;
-  url?: string;
-  description?: string;
-  footer?: { text: string };
-};
+export type Block =
+  | { kind: "text"; content: string }
+  | { kind: "buttons"; buttons: LinkButton[] }
+  | { kind: "separator" };
+
+export const text = (content: string): Block => ({ kind: "text", content });
+export const buttons = (...buttons: LinkButton[]): Block => ({
+  kind: "buttons",
+  buttons,
+});
+export const separator = (): Block => ({ kind: "separator" });
 
 export type DiscordMessage = {
-  content?: string;
-  embeds?: DiscordEmbed[];
-  /** rendered as one action row of link buttons beneath the message */
-  buttons?: LinkButton[];
-  /** role ids this message is permitted to ping; everything else is inert */
+  blocks: Block[];
+  /** role ids this message may ping; every other mention in it stays inert */
   mentionRoleIds?: string[];
 };
 
 export class DiscordPostError extends Error {}
+
+function render(block: Block) {
+  switch (block.kind) {
+    case "text":
+      return { type: TEXT_DISPLAY, content: block.content };
+    case "buttons":
+      return {
+        type: ACTION_ROW,
+        components: block.buttons.map((button) => ({
+          type: BUTTON,
+          style: LINK_STYLE,
+          label: button.label,
+          url: button.url,
+        })),
+      };
+    case "separator":
+      return { type: SEPARATOR, spacing: 1, divider: false };
+  }
+}
 
 export async function postToWebhook(
   webhookUrl: string,
   message: DiscordMessage,
   options: { dryRun?: boolean } = {},
 ) {
-  /*
-    a non-application-owned webhook drops components unless this is set — and
-    drops them *silently*, returning 204 either way, so a missing button looks
-    exactly like a success. link buttons are non-interactive, which is why they
-    survive at all; a real "mark as posted" button needs an application
-  */
   const url = new URL(webhookUrl);
+  // without this a webhook that is not application-owned sends no components
   url.searchParams.set("with_components", "true");
   // ask for the created message back, so the check below has something to read
   url.searchParams.set("wait", "true");
 
+  const components = message.blocks.map(render);
+
   const body = {
-    content: message.content,
-    embeds: message.embeds,
-    components: message.buttons?.length
-      ? [
-          {
-            type: 1,
-            components: message.buttons.map((button) => ({
-              type: 2,
-              style: 5,
-              label: button.label,
-              url: button.url,
-            })),
-          },
-        ]
-      : undefined,
+    flags: IS_COMPONENTS_V2,
+    components,
     /*
       never inherit discord's default, which lets a message ping @everyone.
       naming the roles explicitly with an empty `parse` means this message can
@@ -88,16 +106,19 @@ export async function postToWebhook(
   }
 
   /*
-    discord drops components it will not accept and still answers as though it
-    posted them, so a button that never rendered looks exactly like one that
-    did. `wait=true` hands back the message as stored — if we asked for buttons
-    and none came back, say so, because nothing else ever will
+    discord drops components it will not render and still answers as though it
+    posted them, so a button that never appeared looks exactly like one that
+    did. `wait=true` hands back the message as stored — if fewer blocks came
+    back than we sent, say so, because nothing else ever will.
+
+    an *interactive* button is the likelier trip-wire, and that one is refused
+    outright with a 400 above: only an application may send those
   */
   const created = (await response.json()) as { components?: unknown[] };
-  if (message.buttons?.length && !created.components?.length) {
+  if ((created.components?.length ?? 0) < components.length) {
     console.error(
-      "[discord] the message posted but its buttons were dropped — a webhook " +
-        "that is not application-owned can only send link buttons",
+      `[discord] posted, but ${components.length - (created.components?.length ?? 0)} ` +
+        "of its blocks were dropped",
     );
   }
 }

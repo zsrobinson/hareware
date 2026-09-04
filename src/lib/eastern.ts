@@ -41,3 +41,28 @@ export function easternNow(now: Date): EasternNow {
     weekday: found.weekday!,
   };
 }
+
+const clock = new Intl.DateTimeFormat("en-US", {
+  timeZone: ZONE,
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+});
+
+/**
+ * an instant as a short eastern clock time — "8pm", "7:30pm".
+ *
+ * notion hands back a date with no time as a bare `YYYY-MM-DD`, which is a
+ * calendar day and not an instant, so there is nothing to show for one of
+ * those. callers get undefined and leave the time out of the sentence
+ */
+export function easternTime(start: string): string | undefined {
+  if (!start.includes("T")) return undefined;
+
+  const found: Record<string, string> = {};
+  for (const part of clock.formatToParts(new Date(start)))
+    found[part.type] = part.value;
+
+  const minutes = found.minute === "00" ? "" : `:${found.minute}`;
+  return `${found.hour}${minutes}${found.dayPeriod?.toLowerCase()}`;
+}

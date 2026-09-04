@@ -3,9 +3,7 @@ import { sendSocialPing } from "./social";
 import { SOCIAL_ROLE_IDS } from "./config";
 import { postedId } from "~/lib/discord/interactions";
 
-const env = {
-  DISCORD_SOCIAL_WEBHOOK_URL: "https://discord.com/api/webhooks/1/abc",
-} as unknown as Env;
+const env = { DISCORD_BOT_TOKEN: "bot-token" } as unknown as Env;
 
 /** 2026-09-03 was a thursday; 12:00 utc is 8am eastern */
 const today = { date: "2026-09-03", hour: 8, weekday: "Thursday" };
@@ -136,6 +134,6 @@ test("says what is unset rather than throwing", async () => {
 
   const result = await sendSocialPing({} as Env, today);
 
-  expect(result).toContain("DISCORD_SOCIAL_WEBHOOK_URL");
+  expect(result).toContain("DISCORD_BOT_TOKEN");
   expect(fetchMock).not.toHaveBeenCalled();
 });

@@ -70,17 +70,19 @@ test("rejects a replay under a different timestamp", async () => {
   expect(await verifyInteraction(moved, publicKey)).toBeUndefined();
 });
 
-test.each([
-  ["x-signature-ed25519"],
-  ["x-signature-timestamp"],
-])("rejects a request missing %s", async (header) => {
-  const { publicKey, request } = await signed(JSON.stringify({ type: 1 }));
+test.each([["x-signature-ed25519"], ["x-signature-timestamp"]])(
+  "rejects a request missing %s",
+  async (header) => {
+    const { publicKey, request } = await signed(JSON.stringify({ type: 1 }));
 
-  const stripped = new Request(request, { body: JSON.stringify({ type: 1 }) });
-  stripped.headers.delete(header);
+    const stripped = new Request(request, {
+      body: JSON.stringify({ type: 1 }),
+    });
+    stripped.headers.delete(header);
 
-  expect(await verifyInteraction(stripped, publicKey)).toBeUndefined();
-});
+    expect(await verifyInteraction(stripped, publicKey)).toBeUndefined();
+  },
+);
 
 test.each([
   ["not hex at all", "zzzz"],

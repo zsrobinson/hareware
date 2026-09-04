@@ -4,7 +4,7 @@ import { MEETING_MENTION_ROLE_ID } from "./config";
 
 const env = {
   NOTION_TOKEN: "secret",
-  DISCORD_BOARD_WEBHOOK_URL: "https://discord.com/api/webhooks/1/abc",
+  DISCORD_BOT_TOKEN: "bot-token",
 } as unknown as Env;
 
 const today = { date: "2026-09-08", hour: 8, weekday: "Tuesday" };

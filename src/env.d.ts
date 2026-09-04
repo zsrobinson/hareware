@@ -24,17 +24,6 @@ interface HareWareEnv {
   /* ---- secrets ---------------------------------------------------------- */
 
   /**
-   * Application-owned webhook for `#instagram-posting`, where the social duty
-   * reminder posts. Must be created by the application: a webhook made by hand
-   * in Discord's UI cannot carry the Mark as Posted button, and Discord rejects
-   * the whole message rather than dropping the component. See the README.
-   */
-  DISCORD_SOCIAL_WEBHOOK_URL?: string;
-
-  /** Application-owned webhook for `#editorial-board`. Same rule as above. */
-  DISCORD_BOARD_WEBHOOK_URL?: string;
-
-  /**
    * Notion internal integration token. Needs read access to the Meetings
    * database and nothing else — the Articles database is never read or written
    * by anything here, per ADR 0006.
@@ -54,9 +43,12 @@ interface HareWareEnv {
   REMINDERS_TRIGGER_SECRET?: string;
 
   /**
-   * The Discord bot token. **Not read at runtime**, and does not need to be a
-   * deployed secret: it exists only to create the application-owned webhooks by
-   * hand when a reminder moves channel. The README carries that procedure.
+   * The Discord bot token. Both reminders post as the bot, so this is what
+   * sends every message.
+   *
+   * The channels themselves are not secret and are constants in
+   * `~/lib/reminders/config`, so moving a reminder is a one-line change rather
+   * than a credential to rotate.
    */
   DISCORD_BOT_TOKEN?: string;
 
@@ -75,6 +67,14 @@ interface HareWareEnv {
    * easy to forget to put back.
    */
   REMINDERS_NO_PING?: string;
+
+  /**
+   * Post both reminders to this channel instead of their real ones.
+   *
+   * The channels are constants, so without this a local run would post to the
+   * club's actual channels. Never set it in production.
+   */
+  REMINDERS_TEST_CHANNEL?: string;
 
   /**
    * Run both reminders on every tick rather than only at `REMINDER_HOUR`.

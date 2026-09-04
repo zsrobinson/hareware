@@ -104,8 +104,7 @@ test("?dry=1 reports without posting anything", async () => {
   const response = await call(
     {
       REMINDERS_TRIGGER_SECRET: SECRET,
-      DISCORD_SOCIAL_WEBHOOK_URL: "https://discord.com/api/webhooks/1/x",
-      DISCORD_BOARD_WEBHOOK_URL: "https://discord.com/api/webhooks/2/y",
+      DISCORD_BOT_TOKEN: "bot-token",
     },
     `Bearer ${SECRET}`,
     "?dry=1&only=social",
@@ -134,7 +133,7 @@ test("a run without ?dry may post", async () => {
   await call(
     {
       REMINDERS_TRIGGER_SECRET: SECRET,
-      DISCORD_SOCIAL_WEBHOOK_URL: "https://discord.com/api/webhooks/1/x",
+      DISCORD_BOT_TOKEN: "bot-token",
     },
     `Bearer ${SECRET}`,
     "?only=social",

@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
+    "postinstall": "wrangler types",
+    "prebuild": "wrangler types",
     "build": "astro check && astro build",
     "preview": "astro preview",
     "deploy": "astro build && wrangler deploy",

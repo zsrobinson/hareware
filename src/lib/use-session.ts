@@ -31,7 +31,7 @@ function requestSession() {
 
   fetch("/api/session.json")
     .then((r) => (r.ok ? r.json() : { signedIn: false }))
-    .then((d) => mockSignIn(Boolean(d.signedIn)))
+    .then((d) => mockSignIn(Boolean((d as { signedIn?: boolean }).signedIn)))
     .catch(() => mockSignIn(false));
 }
 

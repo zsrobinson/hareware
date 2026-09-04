@@ -131,6 +131,12 @@ what was actually done.
 of it is on `main`. It is the natural starting point if a signed-in surface ever
 returns.
 
+**Amended by [ADR 0007](0007-an-admin-panel-over-an-invocation-log.md),
+2026-09-04.** Two of the removals below did not hold: an admin panel brings back
+Discord sign-in and adds D1, to hold a log of what the bot did and buttons to
+re-run it. The reasoning here is otherwise unchanged, and the rule that nothing
+in D1 is authoritative is what makes that allowable.
+
 **Revisit this when the club wants something a ping cannot do** — most likely a
 log of what the bot did, or Discord slash commands for editorial approvals. Both
 were designed and deferred; both need the parked OAuth work or a Discord

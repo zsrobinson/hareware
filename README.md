@@ -60,35 +60,58 @@ Eastern — see `src/lib/eastern.ts`.
 
 Neither posts anything on a day with nothing to say.
 
-### Secrets
+### Environment
 
-Set with `npx wrangler secret put <NAME>`, and in a local `.dev.vars` for
-development. **Every one of them is optional**: a reminder whose secret is unset
-logs that it was skipped and does nothing, so the worker runs fine without any
-of them.
+Every value below is optional, and nothing throws when one is missing: a
+reminder whose secret is absent returns a line naming it and does nothing. The
+worker runs clean with none of them set.
 
-| Name                         | What it is                                         |
-| ---------------------------- | -------------------------------------------------- |
-| `DISCORD_SOCIAL_WEBHOOK_URL` | Application-owned webhook for `#instagram-posting` |
-| `DISCORD_BOARD_WEBHOOK_URL`  | Application-owned webhook for `#editorial-board`   |
-| `NOTION_TOKEN`               | Notion internal integration token, read-only       |
+Set them with `npx wrangler versions secret put <NAME>`. Plain
+`wrangler secret put` refuses unless the latest version happens to be the
+deployed one, which it usually is not.
 
-Three more exist for working on the reminders, and belong in `.dev.vars` only.
-`REMINDERS_DRY_RUN` logs what would be sent instead of sending it.
-`REMINDERS_NO_PING` posts as normal but notifies nobody — the mention still
-renders, so the message looks exactly as it will. `REMINDERS_IGNORE_HOUR` runs
-the reminders whatever the hour. Setting any of them as a deployed secret would
-be a mistake; the last would fire every reminder once an hour, all day.
+| Secret                       | What it is                                                      |
+| ---------------------------- | --------------------------------------------------------------- |
+| `DISCORD_SOCIAL_WEBHOOK_URL` | Application-owned webhook for `#instagram-posting`              |
+| `DISCORD_BOARD_WEBHOOK_URL`  | Application-owned webhook for `#editorial-board`                |
+| `NOTION_TOKEN`               | Notion integration token, read access to Meetings only          |
+| `DISCORD_BOT_TOKEN`          | **Not read at runtime.** Creates the webhooks above — see below |
 
-`npm test` needs none of them and touches no network. `npm run reminders:send`
-posts real messages using `.dev.vars`, and the shell overrides the file, so
-`REMINDERS_DRY_RUN= npm run reminders:send` sends for real.
+#### Switches, for `.dev.vars` only
 
-Non-secret settings — the duty roster's role IDs, the Meetings database ID, the
-reminder hour, and the origin HareWare itself is served from — are constants in
-`src/lib/reminders/config.ts`. They change
-about once a year, and a one-line pull request is a cheaper way to change them
-than a settings store nobody remembers exists.
+These exist to exercise the reminders. Each changes behaviour in a way nobody
+wants running unattended, and none belongs in a deployed secret.
+
+| Switch                    | What it does                                                 |
+| ------------------------- | ------------------------------------------------------------ |
+| `REMINDERS_DRY_RUN`       | Log the Discord payload instead of sending it                |
+| `REMINDERS_NO_PING`       | Post as normal but notify nobody — the mention still renders |
+| `REMINDERS_IGNORE_HOUR`   | Run both reminders on every tick, not just at 8am            |
+| `REMINDERS_FORCE_MEETING` | Run the meeting reminder on the next tick, whatever the hour |
+| `REMINDERS_FORCE_SOCIAL`  | The same, for the social ping                                |
+
+The two `FORCE` switches are the ones meant to be set in production, briefly, to
+see a reminder without waiting for the morning. **A Worker has no "on deploy"
+hook**, so one takes effect on the next hourly tick and then keeps firing
+**every hour until it is removed**. Each forced run says so in the log. Remove
+it once you have seen the message.
+
+`REMINDERS_IGNORE_HOUR` does the same for both reminders at once and is the most
+damaging of the five if forgotten.
+
+#### Not variables
+
+The duty roster's role ids, the Meetings database id, the reminder hour,
+HareWare's own origin, and the Discord application id and public key are
+constants in `src/lib/reminders/config.ts` and `src/lib/discord/config.ts`.
+None of them is secret, and they change about once a year — a one-line pull
+request is a cheaper way to change them than a store nobody remembers exists,
+and it leaves a reviewable history of what changed and why.
+
+`npm test` needs none of the above and touches no network.
+`npm run reminders:send` posts real messages using `.dev.vars`, and the shell
+overrides the file, so `REMINDERS_DRY_RUN= npm run reminders:send` sends for
+real.
 
 ### Setup outside the repo
 

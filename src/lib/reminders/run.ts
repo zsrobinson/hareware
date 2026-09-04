@@ -23,15 +23,46 @@ export async function runScheduled(controller: ScheduledController, env: Env) {
 
 async function runReminders(controller: ScheduledController, env: Env) {
   const eastern = easternNow(new Date(controller.scheduledTime));
-  if (eastern.hour !== REMINDER_HOUR && !env.REMINDERS_IGNORE_HOUR) return;
+
+  const due =
+    eastern.hour === REMINDER_HOUR || Boolean(env.REMINDERS_IGNORE_HOUR);
+
+  /*
+    a forced reminder runs on the next tick whatever the hour, which is how one
+    is exercised in production without waiting for the morning.
+
+    it is standing state, not a one-shot: a worker has no "on deploy" hook, so
+    the flag keeps firing every hour until it is removed. that is why each one
+    says so in the log every time it fires
+  */
+  const forced = {
+    meeting: !due && Boolean(env.REMINDERS_FORCE_MEETING),
+    social: !due && Boolean(env.REMINDERS_FORCE_SOCIAL),
+  };
+
+  const run = {
+    meeting: due || forced.meeting,
+    social: due || forced.social,
+  };
+
+  if (!run.meeting && !run.social) return;
+
+  for (const [name, isForced] of Object.entries(forced)) {
+    if (isForced) {
+      console.warn(
+        `[${name}] forced by REMINDERS_FORCE_${name.toUpperCase()} — this fires ` +
+          "every hour until that variable is removed",
+      );
+    }
+  }
 
   /*
     both reminders run even if the other throws. they share nothing, and a
     notion outage should not cost the social team their ping
   */
   const results = await Promise.allSettled([
-    sendMeetingReminder(env, eastern),
-    sendSocialPing(env, eastern),
+    run.meeting ? sendMeetingReminder(env, eastern) : "not due",
+    run.social ? sendSocialPing(env, eastern) : "not due",
   ]);
 
   for (const [index, result] of results.entries()) {

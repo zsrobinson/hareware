@@ -1,6 +1,9 @@
 {
   "name": "hareware",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "version": "0.0.1",
   "scripts": {
     "dev": "astro dev",

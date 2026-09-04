@@ -41,7 +41,9 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: 24
+          # .nvmrc, so the version is written down once and CI, Workers Builds
+          # and a laptop cannot quietly disagree about it
+          node-version-file: .nvmrc
           cache: npm
 
       # `npm ci` installs from the lockfile alone and fails outright when it

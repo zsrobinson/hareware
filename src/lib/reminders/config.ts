@@ -63,6 +63,18 @@ export const MEETINGS_DATABASE_ID: string | undefined =
   "22cbe415e24c80299d53e9fa048f0ca5";
 
 /**
+ * which meetings the reminder is for, matched against the start of a meeting's
+ * title.
+ *
+ * the database holds editorial board meetings, general body meetings and the
+ * occasional magazine design session, and nothing distinguishes them but their
+ * name — there is no kind property to filter on. adding a select property in
+ * notion would be more robust than matching prose, and this is the constant to
+ * delete on the day someone does
+ */
+export const MEETING_TITLE_PREFIX = "Editorial Board";
+
+/**
  * the date property on that database carrying the meeting's day.
  *
  * left undefined it is discovered from the schema — a meetings database has

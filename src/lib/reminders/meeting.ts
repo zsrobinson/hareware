@@ -3,16 +3,15 @@ import { postToWebhook } from "~/lib/discord/post-message";
 import {
   MEETING_DATE_PROPERTY,
   MEETING_MENTION_ROLE_ID,
+  MEETING_TITLE_PREFIX,
   MEETINGS_DATABASE_ID,
 } from "./config";
 
-// https://developers.notion.com/reference/versioning — 2026-03-11 is the
-// latest documented version as of writing. pin it explicitly rather than
-// omitting the header, since an unpinned request silently rides whatever the
-// account's default happens to be and can change shape without warning
+// https://developers.notion.com/reference/versioning — pin it explicitly
+// rather than omitting the header, since an unpinned request rides whatever
+// the account's default happens to be and can change shape without warning
 const NOTION_VERSION = "2026-03-11";
 
-/** the properties of a database-query result page, narrowed to what we read */
 type NotionPage = {
   url: string;
   properties: Record<string, NotionProperty>;
@@ -22,16 +21,50 @@ type NotionPage = {
 type NotionProperty = {
   type: string;
   title?: { plain_text: string }[];
+  rich_text?: { plain_text: string }[];
   date?: { start: string } | null;
 };
 
-type NotionQueryResponse = {
-  results: NotionPage[];
-};
+export async function sendMeetingReminder(
+  env: Env,
+  eastern: EasternNow,
+): Promise<string> {
+  // the code must stay inert until the club actually sets these up — see ADR
+  // 0006's "setup outside the repo"
+  const missing = [
+    !env.NOTION_TOKEN && "NOTION_TOKEN",
+    !env.DISCORD_BOARD_WEBHOOK_URL && "DISCORD_BOARD_WEBHOOK_URL",
+    !MEETINGS_DATABASE_ID && "MEETINGS_DATABASE_ID",
+  ].filter(Boolean);
+  if (missing.length > 0)
+    return `meeting reminder unset: ${missing.join(", ")}`;
 
-type NotionDatabase = {
-  properties: Record<string, { type: string }>;
-};
+  const token = env.NOTION_TOKEN!;
+  const source = await dataSource(token);
+  const property = await dateProperty(token, source);
+  const page = await findTodaysMeeting(token, source, property, eastern.date);
+
+  if (!page)
+    return `no ${MEETING_TITLE_PREFIX} meeting today (${eastern.date})`;
+
+  const title = readTitle(page);
+  const location = readLocation(page);
+
+  await postToWebhook(
+    env.DISCORD_BOARD_WEBHOOK_URL!,
+    {
+      content: MEETING_MENTION_ROLE_ID
+        ? `<@&${MEETING_MENTION_ROLE_ID}> meeting today — here's the agenda:`
+        : undefined,
+      mentionRoleIds: MEETING_MENTION_ROLE_ID ? [MEETING_MENTION_ROLE_ID] : [],
+      embeds: [{ title, url: page.url, description: location || undefined }],
+      buttons: [{ label: "Open agenda", url: page.url }],
+    },
+    { dryRun: Boolean(env.REMINDERS_DRY_RUN) },
+  );
+
+  return `posted meeting reminder for "${title}"`;
+}
 
 /** every notion request wants the same headers, and none may echo the token */
 async function notion(path: string, token: string, body?: unknown) {
@@ -56,67 +89,45 @@ async function notion(path: string, token: string, body?: unknown) {
 }
 
 /**
- * the name of the property holding a meeting's day.
+ * the data source inside the meetings database.
  *
- * a meetings database has exactly one property of type `date`, so we ask the
- * schema rather than hardcoding a name that would break — loudly, with a 400 —
- * the day somebody renames the column. `MEETING_DATE_PROPERTY` overrides this
- * if a second date property ever makes the guess ambiguous
+ * a database is a container in the current api and holds no properties of its
+ * own — the schema and the rows both live on a data source inside it, so
+ * `databases/{id}/query` is not the endpoint and `databases/{id}` comes back
+ * with an empty `properties`. ours has exactly one data source
  */
-async function dateProperty(token: string): Promise<string> {
-  if (MEETING_DATE_PROPERTY) return MEETING_DATE_PROPERTY;
-
+async function dataSource(token: string): Promise<string> {
   const database = (await notion(
     `databases/${MEETINGS_DATABASE_ID}`,
     token,
-  )) as NotionDatabase;
+  )) as { data_sources: { id: string }[] };
 
-  const found = Object.entries(database.properties).find(
-    ([, property]) => property.type === "date",
-  );
-  if (!found) throw new Error("the meetings database has no date property");
+  const source = database.data_sources[0]?.id;
+  if (!source) throw new Error("the meetings database has no data source");
 
-  return found[0];
+  return source;
 }
 
-export async function sendMeetingReminder(
-  env: Env,
-  eastern: EasternNow,
-): Promise<string> {
-  // the code must stay inert until the club actually sets these up — see ADR
-  // 0006's "setup outside the repo"
-  const missing = [
-    !env.NOTION_TOKEN && "NOTION_TOKEN",
-    !env.DISCORD_BOARD_WEBHOOK_URL && "DISCORD_BOARD_WEBHOOK_URL",
-    !MEETINGS_DATABASE_ID && "MEETINGS_DATABASE_ID",
-  ].filter(Boolean);
-  if (missing.length > 0)
-    return `meeting reminder unset: ${missing.join(", ")}`;
+/**
+ * the name of the property holding a meeting's day.
+ *
+ * asked of the schema rather than hardcoded, so renaming the column in notion
+ * does not break this quietly. `MEETING_DATE_PROPERTY` overrides it if a second
+ * date property ever makes the guess ambiguous
+ */
+async function dateProperty(token: string, source: string): Promise<string> {
+  if (MEETING_DATE_PROPERTY) return MEETING_DATE_PROPERTY;
 
-  const property = await dateProperty(env.NOTION_TOKEN!);
-  const page = await findTodaysMeeting(
-    env.NOTION_TOKEN!,
-    property,
-    eastern.date,
+  const schema = (await notion(`data_sources/${source}`, token)) as {
+    properties: Record<string, { type: string }>;
+  };
+
+  const found = Object.entries(schema.properties).find(
+    ([, property]) => property.type === "date",
   );
-  if (!page) return `no meeting today (${eastern.date})`;
+  if (!found) throw new Error("the meetings data source has no date property");
 
-  const title = readTitle(page);
-
-  await postToWebhook(
-    env.DISCORD_BOARD_WEBHOOK_URL!,
-    {
-      content: MEETING_MENTION_ROLE_ID
-        ? `<@&${MEETING_MENTION_ROLE_ID}> meeting today — here's the agenda:`
-        : undefined,
-      mentionRoleIds: MEETING_MENTION_ROLE_ID ? [MEETING_MENTION_ROLE_ID] : [],
-      embeds: [{ title, url: page.url }],
-      buttons: [{ label: "Open agenda", url: page.url }],
-    },
-    { dryRun: Boolean(env.REMINDERS_DRY_RUN) },
-  );
-
-  return `posted meeting reminder for "${title}"`;
+  return found[0];
 }
 
 /** the same calendar date, shifted by whole days, still as `YYYY-MM-DD` */
@@ -127,24 +138,24 @@ function shiftDate(date: string, days: number) {
 }
 
 /**
- * the meetings dated today in eastern time, if any.
+ * today's meeting of the kind we care about, if there is one.
  *
  * notion compares dates to millisecond precision and assumes utc when a value
  * carries no offset, so `equals: "2026-09-10"` means *midnight* and matches
- * nothing at all once a meeting has a time on it — which is the normal case,
- * and it fails silently, looking exactly like a day with no meeting.
+ * nothing once a meeting has a time on it — and this database holds both kinds,
+ * so that would have failed silently on half the rows.
  *
- * a utc day window is wrong too: an 8pm eastern meeting is already tomorrow in
- * utc. so ask notion for a window wide enough to contain the eastern day under
- * any offset, and pick the right page here, where `easternNow` already knows
- * what "today" means
+ * a utc day window is wrong in the other direction: an 8pm eastern meeting is
+ * already tomorrow in utc. so ask for a window wide enough to hold the eastern
+ * day under any offset, and pick the right row here
  */
 async function findTodaysMeeting(
   token: string,
+  source: string,
   property: string,
   date: string,
 ): Promise<NotionPage | undefined> {
-  const data = (await notion(`databases/${MEETINGS_DATABASE_ID}/query`, token, {
+  const data = (await notion(`data_sources/${source}/query`, token, {
     filter: {
       and: [
         { property, date: { on_or_after: shiftDate(date, -1) } },
@@ -152,11 +163,16 @@ async function findTodaysMeeting(
       ],
     },
     page_size: 25,
-  })) as NotionQueryResponse;
+  })) as { results: NotionPage[] };
 
   return data.results.find((page) => {
     const start = page.properties[property]?.date?.start;
-    return start !== undefined && startsOn(start, date);
+    if (start === undefined || !startsOn(start, date)) return false;
+
+    // titles carry stray trailing spaces, so compare a trimmed lowercase form
+    return readTitle(page)
+      .toLowerCase()
+      .startsWith(MEETING_TITLE_PREFIX.toLowerCase());
   });
 }
 
@@ -165,9 +181,9 @@ async function findTodaysMeeting(
  *
  * notion writes a date with no time as a bare `YYYY-MM-DD`, which means that
  * calendar day and carries no instant to convert — running it through a
- * timezone would parse it as utc midnight and land it on the evening before,
- * so a meeting with no time set would be missed every time. only a value with
- * a time is an actual instant worth resolving into eastern
+ * timezone would parse it as utc midnight and land it on the evening before, so
+ * a meeting with no time set would be missed every time. this database has both
+ * shapes in it, so both paths matter
  */
 function startsOn(start: string, date: string) {
   if (!start.includes("T")) return start === date;
@@ -175,11 +191,23 @@ function startsOn(start: string, date: string) {
 }
 
 /**
- * the title property's name isn't known ahead of time — every database has
- * exactly one property of type "title", but it can be called anything, so we
- * find it by type rather than by a hardcoded name like "Name"
+ * every database has exactly one property of type "title" but it can be called
+ * anything, so find it by type rather than by a name like "Name"
  */
 function readTitle(page: NotionPage): string {
   const title = Object.values(page.properties).find((p) => p.type === "title");
-  return title?.title?.[0]?.plain_text.trim() || "Board meeting";
+  return (title?.title ?? [])
+    .map((t) => t.plain_text)
+    .join("")
+    .trim();
+}
+
+function readLocation(page: NotionPage): string {
+  const text = Object.values(page.properties).find(
+    (p) => p.type === "rich_text",
+  );
+  return (text?.rich_text ?? [])
+    .map((t) => t.plain_text)
+    .join("")
+    .trim();
 }

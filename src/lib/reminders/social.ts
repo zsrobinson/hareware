@@ -86,5 +86,6 @@ export async function sendSocialPing(
     },
   );
 
-  return `posted ${posted.length} article(s) for ${eastern.date}`;
+  const verb = env.REMINDERS_DRY_RUN ? "would post" : "posted";
+  return `${verb} ${posted.length} article(s) for ${eastern.date}`;
 }

@@ -26,14 +26,6 @@ export async function runScheduled(controller: ScheduledController, env: Env) {
   const eastern = easternNow(new Date(controller.scheduledTime));
 
   /*
-    every tick, not only at REMINDER_HOUR: this is what makes the article index
-    right. notion delivers webhooks at-most-once and out of order, so the
-    rebuild is not a backstop for a rare failure — it is the only thing that
-    guarantees the picker eventually matches notion. see ADR 0009
-  */
-  await syncWithNotion(env);
-
-  /*
     each automation carries its own hour, so a second one at a different time
     is a registry entry rather than a branch here
   */
@@ -43,18 +35,34 @@ export async function runScheduled(controller: ScheduledController, env: Env) {
     ).map((a) => a.id),
   );
 
-  if (due.size === 0) return;
-
-  try {
-    await runAutomations(env, eastern, due, "cron");
-  } catch (error) {
-    /*
-      this runs inside `ctx.waitUntil`, where a rejection is reported as an
-      unhandled one rather than as any of the lines below — so anything that
-      throws outside the settled results would vanish from the log it belongs in
-    */
-    console.error("[automations] failed before dispatch", error);
+  if (due.size > 0) {
+    try {
+      await runAutomations(env, eastern, due, "cron");
+    } catch (error) {
+      /*
+        this runs inside `ctx.waitUntil`, where a rejection is reported as an
+        unhandled one rather than as any of the lines below — so anything that
+        throws outside the settled results would vanish from the log it belongs
+        in
+      */
+      console.error("[automations] failed before dispatch", error);
+    }
   }
+
+  /*
+    after the reminders, and on every tick rather than only at REMINDER_HOUR.
+
+    every tick because this is what makes the article index right: notion
+    delivers webhooks at-most-once and out of order, so the rebuild is not a
+    backstop for a rare failure — it is the only thing that guarantees the
+    picker eventually matches notion. see ADR 0009.
+
+    *after* because it reads notion and writes d1 with no deadline of its own,
+    and at 8am eastern it shares a tick with the reminders. a slow notion
+    delaying the index costs a picker an hour of freshness; the same delay in
+    front of the reminders costs the club its morning ping
+  */
+  await syncWithNotion(env);
 }
 
 /**

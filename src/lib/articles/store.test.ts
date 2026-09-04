@@ -238,11 +238,16 @@ test("remove deletes one page and never throws", async () => {
 
 /*
   the bug this pair exists for: 138 articles went into one insert, which is
-  about 1242 bound variables against sqlite's ceiling of 999. d1 rejected the
-  statement, `replaceAll` reported `unavailable`, and the index stayed empty
-  while `choice_options` beside it wrote fine — so it read as the database
-  being broken rather than as a limit
+  about 1242 bound variables. d1 rejected the statement, `replaceAll` reported
+  `unavailable`, and the index stayed empty while `choice_options` beside it
+  wrote fine — so it read as the database being broken rather than as a limit.
+
+  the ceiling asserted here is **d1's hundred**, not sqlite's 999. the first fix
+  chunked to fifty rows, which is 450 variables: comfortably under sqlite's
+  limit, still four times over d1's, and this test passed on it. a test is only
+  worth its bound
 */
+const D1_MAX_VARIABLES = 100;
 test("splits a rebuild across statements that sqlite will accept", async () => {
   const { db, statements } = fakeD1();
 
@@ -258,7 +263,7 @@ test("splits a rebuild across statements that sqlite will accept", async () => {
 
   expect(inserts.length).toBeGreaterThan(1);
   for (const insert of inserts) {
-    expect(insert.params.length).toBeLessThanOrEqual(999);
+    expect(insert.params.length).toBeLessThanOrEqual(D1_MAX_VARIABLES);
   }
 });
 

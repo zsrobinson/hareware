@@ -172,11 +172,16 @@ export async function upsert(
 /**
  * how many rows go in one insert.
  *
- * sqlite's bound-variable ceiling is 999 and a row is nine columns, so 111 is
- * the true limit. fifty leaves room for a column being added without this
- * quietly becoming the reason a rebuild fails
+ * d1 binds at most **100** variables to a query, which is far below sqlite's
+ * own ceiling of 999 — reasoning from sqlite's number is how this was wrong
+ * twice. a row is nine columns, so eleven rows is the true limit; ten leaves
+ * room for a column being added without that quietly becoming the reason a
+ * rebuild fails.
+ *
+ * the test asserts the d1 limit rather than sqlite's, so a future change that
+ * reaches for the larger number fails there instead of in production
  */
-const INSERT_CHUNK = 50;
+const INSERT_CHUNK = 10;
 
 /** splits into runs of at most `size`, preserving order */
 export function chunk<T>(items: T[], size: number): T[][] {
@@ -204,11 +209,10 @@ export async function replaceAll(
 
     /*
       one batch, so a failure part way through cannot leave the index emptied —
-      and chunked, because sqlite binds at most 999 variables to a statement
-      and a row here is nine of them. the whole table in one insert is about
-      1242, which d1 rejects outright: the index stayed empty while the picker
-      options beside it wrote fine, so it read as "d1 is broken" rather than as
-      a limit
+      and chunked, because d1 binds at most a hundred variables to a query and
+      a row here is nine of them. the whole table in one insert is about 1242,
+      which d1 rejects outright: the index stayed empty while the picker options
+      beside it wrote fine, so it read as "d1 is broken" rather than as a limit
     */
     const rows = entries.map((entry) => ({ ...entry, syncedAt }));
     const inserts = chunk(rows, INSERT_CHUNK).map((part) =>

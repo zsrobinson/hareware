@@ -101,19 +101,71 @@ test("stays quiet when everything survived", async () => {
   error.mockRestore();
 });
 
-test("silent keeps the mention visible but notifies nobody", async () => {
+/*
+  allowed_mentions does not gate a mention inside a components v2 text display:
+  an empty roles array notifies the role exactly as though the field were
+  absent. this cost two real pings to the editorial board before it was found,
+  so the test asserts the markup is gone rather than that the field is empty
+*/
+test("silent writes no mention markup at all", async () => {
   const fetchMock = mockDiscord([{}]);
 
   await postToWebhook(
     WEBHOOK,
-    { blocks: [text("<@&123> meeting today")], mentionRoleIds: ["123"] },
+    {
+      blocks: [text("<@&669611068938780673> **Meeting Tonight**")],
+      mentionRoleIds: ["669611068938780673"],
+    },
+    { silent: true },
+  );
+
+  const content = sentBody(fetchMock).components[0].content;
+  expect(content).not.toContain("<@&");
+  expect(content).toBe("@Editorial Board **Meeting Tonight**");
+});
+
+test("silent leaves an unknown role id recognisable rather than blank", async () => {
+  const fetchMock = mockDiscord([{}]);
+
+  await postToWebhook(
+    WEBHOOK,
+    { blocks: [text("<@&999> hello")] },
+    { silent: true },
+  );
+
+  expect(sentBody(fetchMock).components[0].content).toBe("@<@&999> hello");
+});
+
+test("silent defuses every mention in a message, not just the first", async () => {
+  const fetchMock = mockDiscord([{}, {}]);
+
+  await postToWebhook(
+    WEBHOOK,
+    {
+      blocks: [
+        text("<@&669611068938780673> one"),
+        text("<@&1545245612310794310> two"),
+      ],
+    },
     { silent: true },
   );
 
   const body = sentBody(fetchMock);
-  // the text is untouched, so the message looks exactly as it will in the end
-  expect(body.components[0].content).toContain("<@&123>");
-  expect(body.allowed_mentions.roles).toEqual([]);
+  expect(body.components[0].content).toBe("@Editorial Board one");
+  expect(body.components[1].content).toBe("@Friday Poster two");
+});
+
+test("a normal send keeps the mention markup", async () => {
+  const fetchMock = mockDiscord([{}]);
+
+  await postToWebhook(WEBHOOK, {
+    blocks: [text("<@&669611068938780673> meeting today")],
+    mentionRoleIds: ["669611068938780673"],
+  });
+
+  const body = sentBody(fetchMock);
+  expect(body.components[0].content).toContain("<@&669611068938780673>");
+  expect(body.allowed_mentions.roles).toEqual(["669611068938780673"]);
 });
 
 test("throws when discord refuses the message", async () => {

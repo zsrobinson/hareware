@@ -9,6 +9,8 @@
   buttons and dividers are all components instead
 */
 
+import { ROLE_NAMES } from "~/lib/reminders/config";
+
 const IS_COMPONENTS_V2 = 1 << 15;
 
 /** discord's component type numbers, named so the payload reads as something */
@@ -17,7 +19,9 @@ const ACTION_ROW = 1;
 const BUTTON = 2;
 const SEPARATOR = 14;
 const LINK_STYLE = 5;
-const PRIMARY_STYLE = 1;
+
+/** discord's button styles, of the four that are not links */
+const STYLES = { primary: 1, secondary: 2, success: 3, danger: 4 } as const;
 
 /** a url button. it fires no interaction, so any webhook may send one */
 export type LinkButton = { label: string; url: string };
@@ -30,7 +34,12 @@ export type LinkButton = { label: string; url: string };
  * webhooks itself. the id comes back on the interaction, and is how the handler
  * knows which button was pressed
  */
-export type ActionButton = { label: string; id: string };
+export type ActionButton = {
+  label: string;
+  id: string;
+  /** defaults to primary. `danger` is discord's red */
+  style?: keyof typeof STYLES;
+};
 
 export type Button = LinkButton | ActionButton;
 
@@ -54,6 +63,29 @@ export type DiscordMessage = {
 
 export class DiscordPostError extends Error {}
 
+/** `<@&123>` as discord writes it, wherever it appears in a line */
+const ROLE_MENTION = /<@&(\d+)>/g;
+
+/**
+ * the same block with its mentions turned into plain text.
+ *
+ * `allowed_mentions` does not gate a mention inside a components v2 text
+ * display — an empty roles array notifies the role exactly as though the field
+ * were absent — so the only way not to ping is not to write the markup. the
+ * role's name goes in its place, and the message reads the same
+ */
+function defuse(block: Block): Block {
+  if (block.kind !== "text") return block;
+
+  return {
+    ...block,
+    content: block.content.replace(
+      ROLE_MENTION,
+      (markup, id: string) => `@${ROLE_NAMES[id] ?? markup}`,
+    ),
+  };
+}
+
 function render(block: Block) {
   switch (block.kind) {
     case "text":
@@ -71,7 +103,7 @@ function render(block: Block) {
               }
             : {
                 type: BUTTON,
-                style: PRIMARY_STYLE,
+                style: STYLES[button.style ?? "primary"],
                 label: button.label,
                 custom_id: button.id,
               },
@@ -93,7 +125,9 @@ export async function postToWebhook(
   // ask for the created message back, so the check below has something to read
   url.searchParams.set("wait", "true");
 
-  const components = message.blocks.map(render);
+  const components = (
+    options.silent ? message.blocks.map(defuse) : message.blocks
+  ).map(render);
 
   const body = {
     flags: IS_COMPONENTS_V2,
@@ -105,11 +139,8 @@ export async function postToWebhook(
     */
     allowed_mentions: {
       parse: [] as string[],
-      /*
-        `silent` empties this and nothing else. discord still renders `<@&id>`
-        as the role's name either way — what the list controls is whether
-        anyone is notified, so a silent run looks identical and pings nobody
-      */
+      // kept correct for the mentions we do write, though it is `defuse`
+      // above that actually makes a silent run silent
       roles: options.silent ? [] : (message.mentionRoleIds ?? []),
     },
   };

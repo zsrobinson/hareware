@@ -70,7 +70,8 @@ test("offers marking posted, and a link into the post generator", async () => {
   const [mark, open] = discord.mock.calls[0]![0].components[1].components;
 
   // interactive: only an application-owned webhook may send this
-  expect(mark.label).toBe("Mark as Posted");
+  expect(mark.label).toBe("Not posted");
+  expect(mark.style).toBe(4);
   expect(mark.custom_id).toBe(postedId("a-headline"));
   expect(mark.url).toBeUndefined();
 

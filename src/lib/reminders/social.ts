@@ -55,9 +55,17 @@ export async function sendSocialPing(
     ...(index > 0 ? [separator()] : []),
     text(`<@&${roleId}> **${article.title}**`),
     buttons(
-      // pressing this edits the message in place, so the message itself is
-      // the record of what has been posted and nothing has to store it
-      { label: "Mark as Posted", id: postedId(toArticleSlug(article.link)) },
+      /*
+        a checkbox that discord makes us draw as a button: the label carries
+        the state rather than the action, because the message is read to see
+        what is left to do. pressing it toggles, and the message is the only
+        record of what has been posted
+      */
+      {
+        label: "Not posted",
+        id: postedId(toArticleSlug(article.link)),
+        style: "danger",
+      },
       ...(HAREWARE_ORIGIN
         ? [
             {

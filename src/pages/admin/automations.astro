@@ -12,12 +12,7 @@ if (!who?.admin) return notFound();
 Astro.response.headers.set("cache-control", "private, no-store");
 ---
 
-<Dashboard
-  title="Automations"
-  session={who.session}
-  profile={who.profile}
-  admin
->
+<Dashboard title="Automations" viewer={who}>
   <div class="max-w-3xl space-y-4">
     <p class="text-muted-foreground text-sm">
       These run on their own each morning. Firing one here takes the same path,

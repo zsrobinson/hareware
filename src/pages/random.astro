@@ -1,5 +1,9 @@
 ---
 import { getRandomArticle } from "~/lib/services/wordpress/get-random-article";
 
-return Astro.redirect(await getRandomArticle(), 307);
+const article = await getRandomArticle();
+
+/* wordpress being unreachable should not be a 500 on a link somebody shared —
+   the generator is a reasonable place to land, and it says what happened */
+return Astro.redirect(article ?? "/generate?error", 307);
 ---

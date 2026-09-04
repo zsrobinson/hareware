@@ -5,9 +5,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
-import type { Profile } from "~/lib/member";
-import type { Session } from "~/lib/session";
-import { useProfile, useSession } from "~/lib/use-session";
+import type { ViewerState } from "~/lib/admin";
+import { useViewer } from "~/lib/use-session";
 import { cn } from "~/lib/utils";
 
 /* lucide carries no brand marks */
@@ -118,18 +117,15 @@ function AccountMenu({
   cached pages let the shared client hook fill it in without personalising html.
 */
 export function SidebarAccount({
-  session: knownByServer = null,
-  profile: profileFromServer = null,
+  viewer: knownByServer,
   returnTo,
   inSheet = false,
 }: {
-  session?: Session | null;
-  profile?: Profile | null;
+  viewer?: ViewerState | null;
   returnTo: string;
   inSheet?: boolean;
 }) {
-  const session = useSession(knownByServer);
-  const profile = useProfile(profileFromServer);
+  const { session, profile } = useViewer(knownByServer);
 
   /* the sheet is only ever open at full width, so it never collapses. the rail
      has no room for a row, so the menu sits under what it belongs to */

@@ -24,6 +24,27 @@ export type Viewer = {
 };
 
 /**
+ * the same thing as the nav islands take it, where signed-out is a value.
+ *
+ * `viewer()` returns null for "nobody is signed in", which is the right shape
+ * for a guard. the sidebar has to draw something either way, so it takes this
+ */
+export type ViewerState = {
+  session: Session | null;
+  profile: Profile | null;
+  admin: boolean;
+};
+
+/** `viewer()` in the shape the layout wants, so a page can always pass it */
+export function viewerState(who: Viewer | null): ViewerState {
+  return {
+    session: who?.session ?? null,
+    profile: who?.profile ?? null,
+    admin: who?.admin ?? false,
+  };
+}
+
+/**
  * everything a page needs to know about whoever is asking, in one lookup.
  *
  * `admin` false covers every way of not being allowed in — not in the server,

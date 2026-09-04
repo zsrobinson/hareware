@@ -3,26 +3,15 @@ import { AdminNav } from "~/components/admin-nav";
 import { SidebarAccount } from "~/components/sidebar-account";
 import { NavGroup } from "~/components/nav-group";
 import { adminNav, toolsNav } from "~/lib/nav";
-import type { Profile } from "~/lib/member";
-import type { Session } from "~/lib/session";
+import type { ViewerState } from "~/lib/admin";
 
 type Props = {
-  /* whether to draw the admin group. the pages check the role themselves */
-  admin?: boolean;
-  session: Session | null;
-  profile?: Profile | null;
+  viewer?: ViewerState | null;
   pathname: string;
   returnTo: string;
   cached: boolean;
 };
-const {
-  session,
-  profile = null,
-  pathname,
-  returnTo,
-  cached,
-  admin = false,
-} = Astro.props;
+const { viewer, pathname, returnTo, cached } = Astro.props;
 ---
 
 {
@@ -66,17 +55,12 @@ const {
       cached ? (
         <AdminNav client:idle />
       ) : (
-        admin && (
+        viewer?.admin && (
           <NavGroup items={adminNav} pathname={pathname} label="Admin tools" />
         )
       )
     }
   </nav>
 
-  <SidebarAccount
-    client:idle
-    session={session}
-    profile={profile}
-    returnTo={returnTo}
-  />
+  <SidebarAccount client:idle viewer={viewer} returnTo={returnTo} />
 </aside>

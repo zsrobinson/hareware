@@ -4,51 +4,37 @@ import { PanelLeftIcon } from "lucide-react";
 import AppSidebar from "~/components/app-sidebar.astro";
 import NavProgress from "~/components/nav-progress.astro";
 import { SidebarSheet } from "~/components/sidebar-sheet";
-import type { Profile } from "~/lib/member";
-import type { Session } from "~/lib/session";
+import type { ViewerState } from "~/lib/admin";
+import { assertAnonymous } from "~/lib/anonymous";
 import "~/styles/globals.css";
 import "~/styles/fonts.css";
 
 type Props = {
-  /* an admin page has already checked the role, so the sidebar may show it */
-  admin?: boolean;
   title: string;
-  /* the answer from getSession(), for a page the cdn does not cache */
-  session?: Session | null;
-  /* what to call them, if the page already looked the member up. left out, the
-     account island asks /api/session.json for it instead */
-  profile?: Profile | null;
+  /*
+    who is looking, for a page the cdn does not cache. one prop rather than
+    three: a page that passed `session` and forgot `profile` rendered an id
+    where a name belongs, and one that passed `session` and forgot `admin` hid
+    the editorial nav on its own admin page
+  */
+  viewer?: ViewerState | null;
   /* set on a page that sets `s-maxage`: its html is served to everyone, so the
      nav that varies by who you are has to be revealed client-side instead */
   cached?: boolean;
 };
 
-const {
-  title,
-  session = null,
-  profile = null,
-  cached = false,
-  admin = false,
-} = Astro.props;
+const { title, viewer, cached = false } = Astro.props;
 
 /*
-  the invariant the sidebar rests on: a response that renders who you are must
-  never be one a shared cache can hand to somebody else. adding an `s-maxage`
-  to a page that passes `session` would put one member's name in every other
-  member's sidebar, and it would show up as a support question months later
-  rather than as a failure here. so fail here
+  the invariant the sidebar rests on, checked every request rather than only in
+  dev — see ~/lib/anonymous, where it is a pure function with tests
 */
-if (import.meta.env.DEV && session) {
-  const cacheControl = Astro.response.headers.get("cache-control") ?? "";
-
-  if (/public|s-maxage/.test(cacheControl)) {
-    throw new Error(
-      `${Astro.url.pathname} renders a session but sets "cache-control: ${cacheControl}". ` +
-        "Either drop `session` and pass `cached` so the nav is revealed client-side, " +
-        "or make the response private.",
-    );
-  }
-}
+assertAnonymous({
+  pathname: Astro.url.pathname,
+  headers: Astro.response.headers,
+  viewer: viewer ?? null,
+  dev: import.meta.env.DEV,
+});
 
 /* shadcn's own cookie name and meaning: "true" is open. reading it server-side
    means data-state is already right in the first paint, so the sidebar never
@@ -88,9 +74,7 @@ const collapsed = Astro.isPrerendered
       style="--sidebar-width: 15rem; --sidebar-width-icon: 3.25rem"
     >
       <AppSidebar
-        admin={admin}
-        session={session}
-        profile={profile}
+        viewer={viewer}
         cached={cached}
         pathname={Astro.url.pathname}
         returnTo={`${Astro.url.pathname}${Astro.url.search}`}
@@ -108,8 +92,7 @@ const collapsed = Astro.isPrerendered
             client:media="(max-width: 767px)"
             pathname={Astro.url.pathname}
             returnTo={`${Astro.url.pathname}${Astro.url.search}`}
-            session={session}
-            profile={profile}
+            viewer={viewer}
           />
 
           <button

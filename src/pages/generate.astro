@@ -10,8 +10,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Link } from "~/components/ui/link";
 import Dashboard from "~/layouts/dashboard.astro";
-import { getSessionSecret } from "~/lib/auth-config";
-import { getSession } from "~/lib/session";
+import { viewer, viewerState } from "~/lib/admin";
 import {
   toArticleLink,
   toArticleSlug,
@@ -65,12 +64,15 @@ if (post) {
 }
 
 const articles = post ? null : await getRecentArticles(page);
-const session = post
-  ? await getSession(Astro.request, getSessionSecret())
-  : null;
+/*
+  only the article view resolves a viewer. the landing is cached, so it must
+  render anonymous html and let the island ask — `undefined` is what says "not
+  known here", as distinct from a resolved "nobody"
+*/
+const who = post ? viewerState(await viewer(Astro.request)) : undefined;
 ---
 
-<Dashboard title="Instagram Posts" session={session} cached={post === null}>
+<Dashboard title="Instagram Posts" viewer={who} cached={post === null}>
   <SlideFonts slot="head" />
 
   {

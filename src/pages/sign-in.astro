@@ -1,14 +1,14 @@
 ---
 import Dashboard from "~/layouts/dashboard.astro";
 import { getAuthConfig } from "~/lib/auth-config";
-import { viewer } from "~/lib/admin";
+import { viewer, viewerState } from "~/lib/admin";
 
 Astro.response.headers.set("cache-control", "private, no-store");
 
 const config = getAuthConfig();
-const who = await viewer(Astro.request);
-const session = who?.session ?? null;
-const profile = who?.profile ?? null;
+const who = viewerState(await viewer(Astro.request));
+const session = who.session;
+const profile = who.profile;
 const returnTo = Astro.url.searchParams.get("returnTo") ?? "/generate";
 const authHref = `/auth/discord?${new URLSearchParams({ returnTo })}`;
 
@@ -28,7 +28,7 @@ const error = !config
   : (errorMessages[errorCode] ?? null);
 ---
 
-<Dashboard title="Sign in" session={session} profile={profile}>
+<Dashboard title="Sign in" viewer={who}>
   <section class="mx-auto flex min-h-[calc(100svh-7rem)] max-w-lg items-center">
     <div class="w-full">
       <p

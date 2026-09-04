@@ -13,8 +13,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { CopyButton } from "../components/copy-button";
 import Dashboard from "~/layouts/dashboard.astro";
-import { getSessionSecret } from "~/lib/auth-config";
-import { getSession } from "~/lib/session";
+import { viewer, viewerState } from "~/lib/admin";
 import {
   toArticleLink,
   toArticleSlug,
@@ -58,10 +57,10 @@ const { title, author, image, imageCredits, section, date, body } = post ?? {};
 const { output, unprocessed } = body
   ? getTaggedText(body)
   : { output: "", unprocessed: new Set<string>() };
-const session = await getSession(Astro.request, getSessionSecret());
+const who = viewerState(await viewer(Astro.request));
 ---
 
-<Dashboard title="InDesign Export" session={session}>
+<Dashboard title="InDesign Export" viewer={who}>
   <div class="flex max-w-120 flex-col gap-2">
     {
       /* the landing state is otherwise a field floating on its own, with

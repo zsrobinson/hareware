@@ -1,4 +1,4 @@
-import type { EasternNow } from "~/lib/eastern";
+import { easternNow, type EasternNow } from "~/lib/eastern";
 import { postToWebhook } from "~/lib/discord/post-message";
 import { MEETING_DATE_PROPERTY, MEETINGS_DATABASE_ID } from "./config";
 
@@ -14,10 +14,11 @@ type NotionPage = {
   properties: Record<string, NotionProperty>;
 };
 
-/** a page property can be almost anything; title is the only shape we need */
+/** a page property can be almost anything; these are the shapes we read */
 type NotionProperty = {
   type: string;
   title?: { plain_text: string }[];
+  date?: { start: string } | null;
 };
 
 type NotionQueryResponse = {
@@ -51,7 +52,26 @@ export async function sendMeetingReminder(
   return `posted meeting reminder for "${title}"`;
 }
 
-/** queries the meetings database for the one page dated today, if any */
+/** the same calendar date, shifted by whole days, still as `YYYY-MM-DD` */
+function shiftDate(date: string, days: number) {
+  const shifted = new Date(`${date}T00:00:00Z`);
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+  return shifted.toISOString().slice(0, 10);
+}
+
+/**
+ * the meetings dated today in eastern time, if any.
+ *
+ * notion compares dates to millisecond precision and assumes utc when a value
+ * carries no offset, so `equals: "2026-09-10"` means *midnight* and matches
+ * nothing at all once a meeting has a time on it — which is the normal case,
+ * and it fails silently, looking exactly like a day with no meeting.
+ *
+ * a utc day window is wrong too: an 8pm eastern meeting is already tomorrow in
+ * utc. so ask notion for a window wide enough to contain the eastern day under
+ * any offset, and pick the right page here, where `easternNow` already knows
+ * what "today" means
+ */
 async function findTodaysMeeting(
   token: string,
   date: string,
@@ -67,10 +87,18 @@ async function findTodaysMeeting(
       },
       body: JSON.stringify({
         filter: {
-          property: MEETING_DATE_PROPERTY,
-          date: { equals: date },
+          and: [
+            {
+              property: MEETING_DATE_PROPERTY,
+              date: { on_or_after: shiftDate(date, -1) },
+            },
+            {
+              property: MEETING_DATE_PROPERTY,
+              date: { before: shiftDate(date, 2) },
+            },
+          ],
         },
-        page_size: 1,
+        page_size: 25,
       }),
     },
   );
@@ -84,7 +112,25 @@ async function findTodaysMeeting(
   }
 
   const data = (await response.json()) as NotionQueryResponse;
-  return data.results[0];
+
+  return data.results.find((page) => {
+    const start = page.properties[MEETING_DATE_PROPERTY]?.date?.start;
+    return start !== undefined && startsOn(start, date);
+  });
+}
+
+/**
+ * whether a notion date value falls on the given eastern calendar day.
+ *
+ * notion writes a date with no time as a bare `YYYY-MM-DD`, which means that
+ * calendar day and carries no instant to convert — running it through a
+ * timezone would parse it as utc midnight and land it on the evening before,
+ * so a meeting with no time set would be missed every time. only a value with
+ * a time is an actual instant worth resolving into eastern
+ */
+function startsOn(start: string, date: string) {
+  if (!start.includes("T")) return start === date;
+  return easternNow(new Date(start)).date === date;
 }
 
 /**

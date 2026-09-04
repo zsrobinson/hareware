@@ -9,6 +9,19 @@ import { sendSocialPing } from "./social";
   `~/lib/eastern`
 */
 export async function runScheduled(controller: ScheduledController, env: Env) {
+  try {
+    await runReminders(controller, env);
+  } catch (error) {
+    /*
+      this runs inside `ctx.waitUntil`, where a rejection is reported as an
+      unhandled one rather than as any of the lines below — so anything that
+      throws outside the settled pair would vanish from the log it belongs in
+    */
+    console.error("[reminders] failed before dispatch", error);
+  }
+}
+
+async function runReminders(controller: ScheduledController, env: Env) {
   const eastern = easternNow(new Date(controller.scheduledTime));
   if (eastern.hour !== REMINDER_HOUR) return;
 

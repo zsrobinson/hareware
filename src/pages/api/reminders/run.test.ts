@@ -90,3 +90,58 @@ test("rejects an unknown reminder name", async () => {
 
   expect(response.status).toBe(400);
 });
+
+/*
+  production carries neither switch as a secret, so before these existed the
+  only way to exercise the trigger against the real channels was to post for
+  real and ping the editorial board. it happened twice
+*/
+test("?dry=1 reports without posting anything", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+
+  const response = await call(
+    {
+      REMINDERS_TRIGGER_SECRET: SECRET,
+      DISCORD_SOCIAL_WEBHOOK_URL: "https://discord.com/api/webhooks/1/x",
+      DISCORD_BOARD_WEBHOOK_URL: "https://discord.com/api/webhooks/2/y",
+    },
+    `Bearer ${SECRET}`,
+    "?dry=1&only=social",
+  );
+
+  expect(response.status).toBe(200);
+  // the wordpress feed may be read; discord must not be posted to
+  for (const [url] of fetchMock.mock.calls) {
+    expect(String(url)).not.toContain("discord.com");
+  }
+  log.mockRestore();
+  vi.unstubAllGlobals();
+});
+
+test("a run without ?dry may post", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const seen: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string | URL) => {
+      seen.push(String(input));
+      return new Response(JSON.stringify({ components: [{}, {}] }));
+    }),
+  );
+
+  await call(
+    {
+      REMINDERS_TRIGGER_SECRET: SECRET,
+      DISCORD_SOCIAL_WEBHOOK_URL: "https://discord.com/api/webhooks/1/x",
+    },
+    `Bearer ${SECRET}`,
+    "?only=social",
+  );
+
+  // the feed is read either way; the point is that discord is reachable here
+  expect(seen.some((u) => u.includes("theumdhare.com"))).toBe(true);
+  log.mockRestore();
+  vi.unstubAllGlobals();
+});

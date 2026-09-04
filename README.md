@@ -113,9 +113,22 @@ like a form submission, and a request carrying no content type at all counts —
 without that header the answer is `403 Cross-site POST form submissions are
 forbidden`, from Astro rather than from this route.
 
-Add `?only=meeting` or `?only=social` to fire just one. The response is a line
-per reminder saying what it did. It is a `POST` because it posts to Discord, and
-the secret travels in a header rather than the URL, which Cloudflare logs.
+| Parameter                        | What it does                                    |
+| -------------------------------- | ----------------------------------------------- |
+| `?only=meeting` / `?only=social` | Fire one rather than both                       |
+| `?dry=1`                         | Report what each would post, without posting it |
+| `?silent=1`                      | Post, but notify nobody                         |
+
+The response is a line per reminder saying what it did. It is a `POST` because
+it posts to Discord, and the secret travels in a header rather than the URL,
+which Cloudflare logs.
+
+**Use `?dry=1` the first time.** Production deliberately carries neither
+`REMINDERS_DRY_RUN` nor `REMINDERS_NO_PING`, so that a real 8am run posts and
+pings properly — which means an unqualified trigger posts to
+`#instagram-posting` and `#editorial-board` for real and pings the roles. These
+parameters exist because that is easy to forget, and they apply to one request
+rather than standing until somebody removes them.
 
 Without `REMINDERS_TRIGGER_SECRET` set, the route answers `404` — the trigger
 does not exist rather than standing open.

@@ -186,6 +186,30 @@ are constants in `src/lib/reminders/config.ts` and moving one is a one-line
 pull request. The bot needs **View Channel** and **Send Messages** in the new
 channel.
 
+## Why a ping renders but does not notify
+
+A role mention can look right and reach nobody. Discord draws `<@&id>` as a pill
+whether or not the mention was allowed, and only highlights it for the people it
+actually notified — so a reminder that mentions `@Editorial Board` in grey has
+been posted, rendered, and silently dropped on the way to everyone in it.
+
+There are two ways a role becomes pingable, and the bot needs one of them:
+
+- the role is **Mentionable** in its Discord settings, which also lets every
+  member ping it, or
+- the **HareWare** role holds **Mention @everyone, @here, and All Roles**, which
+  lets the bot ping a role that nobody else can.
+
+The second is the one to use. It keeps `@Editorial Board` unpingable by hand,
+which is what a duty role should be, and `allowed_mentions` in
+`src/lib/discord/post-message.ts` still names the single role each message may
+mention, so the permission is broad but the message is not.
+
+This bites bots only. The reminders posted through webhooks at first, and a
+webhook pings any role listed in `allowed_mentions` without needing the
+permission at all — so the pings worked before the switch to posting as the bot
+and stopped afterwards, with nothing in the code changing to explain it.
+
 This is why there are no webhooks. A webhook would make the message author a
 dead end — webhooks are not users, so clicking the name shows no profile — need
 its own avatar rather than the one set in the developer portal, and turn every

@@ -10,7 +10,6 @@ import {
 } from "~/components/ui/sheet";
 import { adminNav, toolsNav } from "~/lib/nav";
 import type { ViewerState } from "~/lib/admin";
-import { useAdmin } from "~/lib/use-session";
 
 /*
   the sidebar itself is static markup and simply hidden below `md`. this is the
@@ -27,8 +26,6 @@ export function SidebarSheet({
   returnTo: string;
   viewer?: ViewerState | null;
 }) {
-  const admin = useAdmin(viewer);
-
   return (
     <Sheet>
       <SheetTrigger
@@ -46,15 +43,8 @@ export function SidebarSheet({
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
           <NavGroup items={toolsNav} pathname={pathname} label="Public tools" />
 
-          {/* the sheet only knows there is a session, not whether the member
-              holds the role — the pages themselves are what refuse */}
-          {admin && (
-            <NavGroup
-              items={adminNav}
-              pathname={pathname}
-              label="Admin tools"
-            />
-          )}
+          {/* shown to everybody: the pages themselves refuse, and say why */}
+          <NavGroup items={adminNav} pathname={pathname} label="Admin tools" />
         </nav>
 
         <SidebarAccount viewer={viewer} returnTo={returnTo} inSheet />

@@ -1,18 +1,19 @@
 ---
 import Dashboard from "~/layouts/dashboard.astro";
 import { AutomationTriggers } from "~/components/automation-triggers";
-import { notFound, viewer } from "~/lib/admin";
+import { viewerState } from "~/lib/admin";
+import { admitted } from "~/lib/admin-guard";
 import { AUTOMATIONS } from "~/lib/automations/registry";
 
-/* one lookup answers both whether they may be here and what to call them, so
-   the sidebar costs no second request to discord */
-const who = await viewer(Astro.request);
-if (!who?.admin) return notFound();
+/* the guard in `~/middleware` decided this before the page ran, and rewrote
+   anybody it refused to /access-denied — so reaching here is the permission,
+   and the same lookup already knows what to call them */
+const who = admitted(Astro.locals);
 
 Astro.response.headers.set("cache-control", "private, no-store");
 ---
 
-<Dashboard title="Automations" viewer={who}>
+<Dashboard title="Automations" viewer={viewerState(who)}>
   <div class="max-w-3xl space-y-4">
     <p class="text-muted-foreground text-sm">
       These run on their own each morning. Firing one here takes the same path,

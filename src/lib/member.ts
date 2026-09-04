@@ -22,19 +22,31 @@ export type Profile = {
   avatarUrl: string;
 };
 
-/** the member's roles and profile, from one request, or null if unreachable */
+/** the member's roles and profile, from one request */
 export type GuildMember = { roleIds: string[]; profile: Profile };
 
 /**
- * discord's member object for somebody in the guild.
+ * what asking discord about somebody came back as.
  *
- * null covers every way of not being there — no bot token, left the server,
- * discord down — because the caller treats all of them the same way: no roles,
- * so no admin, and no name, so the ui falls back to the id
+ * "absent" and "unreachable" were both null once, because the only caller
+ * turned either into `admin: false`. they are different facts, and a member
+ * reads them differently: one means the club took the role away, the other
+ * means we could not find out. saying the first when the second happened is a
+ * lie that survives a retry — the shape `docs/agents/silent-failures.md` is
+ * about
  */
-export async function guildMember(userId: string): Promise<GuildMember | null> {
+export type MemberLookup =
+  | ({ status: "member" } & GuildMember)
+  /** no such member: they left the guild, or were never in it */
+  | { status: "absent" }
+  /** discord did not answer, or we have no token to ask with */
+  | { status: "unreachable" };
+
+/** discord's member object for somebody in the guild, or why we have none */
+export async function guildMember(userId: string): Promise<MemberLookup> {
   const token = env.DISCORD_BOT_TOKEN;
-  if (!token) return null;
+  /* no token is our own misconfiguration, not a fact about the member */
+  if (!token) return { status: "unreachable" };
 
   try {
     const response = await fetch(
@@ -43,7 +55,14 @@ export async function guildMember(userId: string): Promise<GuildMember | null> {
     );
 
     // 404 is the ordinary answer for somebody who has left the server
-    if (!response.ok) return null;
+    if (response.status === 404) return { status: "absent" };
+
+    /* anything else — a rate limit, a revoked token, discord having a bad day
+       — says nothing about whether they are a member */
+    if (!response.ok) {
+      console.error("[member] discord answered", response.status);
+      return { status: "unreachable" };
+    }
 
     const member = (await response.json()) as {
       roles?: unknown;
@@ -57,9 +76,15 @@ export async function guildMember(userId: string): Promise<GuildMember | null> {
       };
     };
 
-    if (!Array.isArray(member.roles)) return null;
+    /* a 200 whose body is not the shape we asked for is discord behaving
+       oddly, not a member who happens to hold no roles */
+    if (!Array.isArray(member.roles)) {
+      console.error("[member] discord returned no roles array");
+      return { status: "unreachable" };
+    }
 
     return {
+      status: "member",
       roleIds: member.roles.filter(
         (role): role is string => typeof role === "string",
       ),
@@ -68,10 +93,11 @@ export async function guildMember(userId: string): Promise<GuildMember | null> {
   } catch (error) {
     /*
       an outage denies rather than grants, because the caller reads this as
-      permission as well as identity. see ~/lib/admin
+      permission as well as identity — it just says so out loud now, rather
+      than passing for "not a member". see ~/lib/admin
     */
     console.error("[member] could not reach discord", error);
-    return null;
+    return { status: "unreachable" };
   }
 }
 

@@ -20,9 +20,10 @@ export function personal(viewer: Rendered) {
   if (!viewer) return false;
 
   /*
-    `admin` counts. it draws the editorial nav, so a page passing only that
-    would leak which visitors are on the board — and the old guard, keyed on
-    `session` alone, would have said nothing
+    `admin` is no longer part of `ViewerState` — the nav shows every tool to
+    everybody, so nothing draws from it. it stays in the shape this checks
+    anyway: the day something puts a role back into a page's props, that page
+    should not be the one to discover this guard never looked
   */
   return Boolean(viewer.session ?? viewer.profile ?? viewer.admin);
 }
@@ -36,7 +37,7 @@ export function shared(cacheControl: string | null) {
 export function anonymityError(pathname: string, cacheControl: string | null) {
   return (
     `${pathname} renders a viewer but sets "cache-control: ${cacheControl ?? ""}". ` +
-    "Either drop `viewer` and pass `cached` so the nav is revealed client-side, " +
+    "Either drop `viewer` so the account panel is revealed client-side, " +
     "or make the response private."
   );
 }

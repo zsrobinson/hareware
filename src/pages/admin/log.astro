@@ -2,23 +2,23 @@
 import { env } from "cloudflare:workers";
 import Dashboard from "~/layouts/dashboard.astro";
 import { InvocationLog } from "~/components/invocation-log";
-import { notFound, viewer } from "~/lib/admin";
+import { viewerState } from "~/lib/admin";
+import { admitted } from "~/lib/admin-guard";
 import { recent } from "~/lib/log";
 
-/* one lookup answers both whether they may be here and what to call them, so
-   the sidebar costs no second request to discord */
-const who = await viewer(Astro.request);
-if (!who?.admin) return notFound();
+/* the guard in `~/middleware` decided this before the page ran, and rewrote
+   anybody it refused to /access-denied — so reaching here is the permission,
+   and the same lookup already knows what to call them */
+const who = admitted(Astro.locals);
 
-/* the log names real members behind pseudonymous bylines, so no cache may hold
-   any part of this — ADR 0005 for the rule, ADR 0007 for why this page is the
-   sensitive one */
+/* the log names who pressed what, so no cache may hold any part of this —
+   ADR 0005 for the rule, ADR 0007 for why this page is the sensitive one */
 Astro.response.headers.set("cache-control", "private, no-store");
 
 const rows = env.DB ? await recent(env.DB, 500) : [];
 ---
 
-<Dashboard title="Invocation Log" viewer={who}>
+<Dashboard title="Invocation Log" viewer={viewerState(who)}>
   <div class="space-y-4">
     <p class="text-muted-foreground text-sm">
       Everything HareWare has done. A quiet morning shows a row saying nothing

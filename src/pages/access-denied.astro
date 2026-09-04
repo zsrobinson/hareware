@@ -1,0 +1,45 @@
+---
+/*
+  what an /admin route renders when whoever asked may not see it.
+
+  the guard in `~/lib/admin-guard` rewrites to here rather than redirecting, so
+  the address bar still holds the page they were sent to. it leaves the reason
+  in `locals.admission`, which is why this page never has to guess.
+
+  visited directly it works out the same answer for itself. that path is not a
+  real entry point, but a page that told a passer-by something untrue about
+  their own account would be the exact fault this whole change is about
+*/
+import Dashboard from "~/layouts/dashboard.astro";
+import AccessDenied from "~/components/access-denied.astro";
+import { adminAccess, DENIAL_STATUS, viewerState } from "~/lib/admin";
+
+const admission = Astro.locals.admission ?? {
+  access: await adminAccess(Astro.request),
+  /* a direct visit was going nowhere in particular, so offer the panel */
+  returnTo: "/admin/automations",
+};
+
+const { access, returnTo } = admission;
+
+/*
+  somebody who may in fact be here has no business on this page, and arriving
+  means they typed the url. send them where they were trying to go
+*/
+if (access.allowed) return Astro.redirect(returnTo);
+
+/* the guard sets this too, and sets the same value. a direct visit has no
+   guard above it, so the page has to be right on its own */
+Astro.response.status = DENIAL_STATUS[access.denial];
+
+/* it names the member back to them, so no cache may hold it */
+Astro.response.headers.set("cache-control", "private, no-store");
+---
+
+<Dashboard title="No access" viewer={viewerState(access.who)}>
+  <AccessDenied
+    denial={access.denial}
+    profile={access.who?.profile ?? null}
+    returnTo={returnTo}
+  />
+</Dashboard>

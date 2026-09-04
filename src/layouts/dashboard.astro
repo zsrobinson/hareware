@@ -17,13 +17,15 @@ type Props = {
     where a name belongs, and one that passed `session` and forgot `admin` hid
     the editorial nav on its own admin page
   */
+  /*
+    a page that sets `s-maxage` passes nothing: its html goes to everyone, so
+    the account panel asks /api/session.json for itself instead. that is the
+    only thing left that varies by who is looking — the nav no longer does
+  */
   viewer?: ViewerState | null;
-  /* set on a page that sets `s-maxage`: its html is served to everyone, so the
-     nav that varies by who you are has to be revealed client-side instead */
-  cached?: boolean;
 };
 
-const { title, viewer, cached = false } = Astro.props;
+const { title, viewer } = Astro.props;
 
 /*
   the invariant the sidebar rests on, checked every request rather than only in
@@ -75,7 +77,6 @@ const collapsed = Astro.isPrerendered
     >
       <AppSidebar
         viewer={viewer}
-        cached={cached}
         pathname={Astro.url.pathname}
         returnTo={`${Astro.url.pathname}${Astro.url.search}`}
       />

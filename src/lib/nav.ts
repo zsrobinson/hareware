@@ -32,8 +32,9 @@ export const toolsNav: NavItem[] = [
   { href: "/email", label: "Newsletter", icon: MailIcon },
 ];
 
-/* the admin tools. only a signed-in member holding @Editorial Board sees
-   these, and the pages check that themselves rather than trusting the nav */
+/* the admin tools. everybody sees these, signed in or not: the guard over
+   /admin refuses in person and says which of four things is wrong, so there is
+   nothing for the nav to hide — ADR 0007, amended 2026-09-04 */
 export const adminNav: NavItem[] = [
   { href: "/admin/automations", label: "Automations", icon: ZapIcon },
   { href: "/admin/log", label: "Invocation Log", icon: ActivityIcon },

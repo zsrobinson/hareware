@@ -38,6 +38,11 @@ Board** role, holding the invocation log and the manual triggers.
 - The sidebar splits into **Public tools** and **Admin tools**. The public tools
   stay open to everyone and unchanged.
 
+> **Amended 2026-09-04.** The admin tools are shown in the sidebar to
+> **everybody**, signed in or not, and a member who may not open one is told
+> which of four things is true rather than served a 404. See _Refusals say what
+> is wrong_ below.
+
 ## Consequences
 
 **ADR 0006's rule about D1 holds and is the reason this is allowed.** Nothing in
@@ -81,6 +86,47 @@ measured in minutes is the fix, not a cache measured in days.
 onto what the bot did and a button to make it do it again. The moment it grows
 an editable Article board, ADR 0006's reasoning about maintenance applies to it
 in full, and this becomes the v2 that was retired.
+
+**Refusals say what is wrong.** _Added 2026-09-04._ The panel originally
+answered every refusal with a bare 404, on the reasoning that the admin tools
+should not admit to existing. That bought nothing. The repository is public, the
+routes are in it, and that @Editorial Board is what gates them is visible to
+anyone in the Discord's member list. What it cost was real: four different
+situations — not signed in, signed in without the role, signed in with an
+account that has left the server, and Discord not answering when we asked — all
+rendered as the same blank "not found", and only one of them is something the
+member can act on.
+
+The last is the worst. A Discord outage made `guildMember()` return null, which
+became `admin: false`, which became "this page does not exist" — served to a
+board member whose access was fine, and identical on every retry. That is the
+failure shape `docs/agents/silent-failures.md` is about, wearing a 404.
+
+So: the refusal names the reason, and the member wherever Discord gave us one —
+it can only say "this account" to somebody it could not look up, which is the
+`not-in-server` and `unreachable` pair. It carries the status code that goes
+with it: 401 signed out, 403 for the two role cases, 503 when Discord could not
+be reached.
+
+Two things follow. The sidebar shows the admin tools to everyone, because there
+is nothing left to hide and hiding them is what made a member with a stale nav
+click a link into a lie. And nothing about a role is served client-side any more
+— `/api/session.json` answers who you are and not what you may do, because no
+island needs to know.
+
+**The guard moved to middleware** over `/admin/*`, from a line at the top of
+each page. Three reasons, in the order they matter: a page added under `/admin`
+is guarded before its frontmatter runs, so the check cannot be forgotten; a
+refused request never executes the page, so nobody being turned away costs a D1
+query; and the guard is a plain function taking `next`, so a test can watch what
+it does with the answer. That last one is the point — the status mapping is the
+whole change, and while it lived in an `.astro` file nothing could assert it.
+The refusal is a rewrite rather than a redirect, so the address bar still holds
+the page they were sent to and reloading re-reads the answer.
+
+The gating itself is untouched. `adminAccess()` still asks Discord on every
+request, and the API routes still answer a bare status code, because a caller
+holding a bearer secret is not a member who needs a sentence.
 
 ## Alternatives considered
 

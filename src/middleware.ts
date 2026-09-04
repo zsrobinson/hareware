@@ -16,7 +16,8 @@
   were each chosen because they block something real and break nothing.
 */
 
-import { defineMiddleware } from "astro:middleware";
+import { defineMiddleware, sequence } from "astro:middleware";
+import { guardAdmin } from "./lib/admin-guard";
 
 const POLICY = [
   /* a <base> tag injected into scraped markup would silently repoint every
@@ -33,7 +34,13 @@ const POLICY = [
   "frame-ancestors 'none'",
 ].join("; ");
 
-export const onRequest = defineMiddleware(async (_context, next) => {
+/*
+  who may be here, before anything renders. `~/lib/admin-guard` holds the
+  decision; this only supplies astro's context to it
+*/
+const admin = defineMiddleware((context, next) => guardAdmin(context, next));
+
+const headers = defineMiddleware(async (_context, next) => {
   const response = await next();
 
   response.headers.set("content-security-policy", POLICY);
@@ -48,3 +55,11 @@ export const onRequest = defineMiddleware(async (_context, next) => {
 
   return response;
 });
+
+/*
+  the guard first, so a refused request never reaches the route it asked for.
+  the headers are set inside it, on the refusal page it renders instead, and
+  the guard carries them onto the response it hands back — a refusal wears the
+  same policy as anything else
+*/
+export const onRequest = sequence(admin, headers);

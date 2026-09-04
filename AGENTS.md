@@ -18,6 +18,7 @@ src/lib/
   articles/                             Article behavior and Notion's shapes
   db/ log.ts                            the invocation record
   session · auth · admin · member       who is asking, and whether they may
+  admin-guard.ts                        the /admin gate, run from middleware
 src/pages/api/                          the routes those answer
 ```
 
@@ -47,6 +48,19 @@ not cache resolves it and passes the whole thing down as `viewer`; a cached page
 passes nothing and the island asks `/api/session.json`, which makes the same
 lookup. Passing part of it is what put a raw Discord id in the sidebar for a
 week — see below.
+
+**Nothing under `/admin` guards itself.** The middleware runs
+`guardAdmin` from `~/lib/admin-guard` over the whole prefix: it resolves the
+viewer once, leaves it in `locals.admission`, and rewrites anybody it refuses to
+`/access-denied` with the status that fits — 401, 403 or 503. A page there calls
+`admitted(Astro.locals)`, which hands back the member or throws, so reaching the
+page is the permission. A refusal says which of four things is wrong rather than
+claiming the page does not exist; ADR 0007's amendment is why.
+
+`~/lib/admin-guard` must not import `~/lib/admin` at the top level. Middleware
+is in every route's module graph, the prerendered `/custom` is built by node,
+and node cannot load a `cloudflare:` url — the import lives inside the guard,
+past the path check. `npm run build` is what catches a regression here.
 
 ## Working here
 

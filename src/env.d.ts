@@ -136,5 +136,18 @@ declare namespace Cloudflare {
   interface Env extends HareWareEnv {}
 }
 
+declare namespace App {
+  interface Locals {
+    /**
+     * what the /admin guard decided, for the page rendering after it.
+     *
+     * absent on every other route, and absent on an /admin route only if the
+     * guard did not run — which is why the admin pages throw on it rather
+     * than treating it as "no admission"
+     */
+    admission?: import("./lib/admin-guard").Admission;
+  }
+}
+
 /** the tag or short hash this was built from — see `version()` in astro.config */
 declare const __APP_VERSION__: string;

@@ -5,7 +5,7 @@ import { createSessionCookie } from "./session";
 const workers = vi.hoisted(() => ({ env: {} as Record<string, string> }));
 vi.mock("cloudflare:workers", () => workers);
 
-const { editorialBoardMember } = await import("./admin");
+const { adminAccess, editorialBoardMember } = await import("./admin");
 
 const SECRET = "s".repeat(32);
 const USER = "342850506328117249";
@@ -107,4 +107,84 @@ test("denies when there is no bot token to ask with", async () => {
   mockDiscord([EDITORIAL_BOARD_ROLE_ID]);
 
   expect(await editorialBoardMember(await signedIn())).toBeNull();
+});
+
+/*
+  the four refusals, told apart. these are the whole point of the change: a
+  page that cannot say which one happened is the page that told a board member
+  during a discord outage that their tools did not exist
+*/
+
+test("admits a member holding the role", async () => {
+  workers.env.SESSION_SECRET = SECRET;
+  workers.env.DISCORD_BOT_TOKEN = "bot";
+  mockDiscord([EDITORIAL_BOARD_ROLE_ID]);
+
+  const access = await adminAccess(await signedIn());
+
+  expect(access.allowed).toBe(true);
+  expect(access.who?.session.discordUserId).toBe(USER);
+});
+
+test("refuses a signed-out visitor as signed-out", async () => {
+  workers.env.SESSION_SECRET = SECRET;
+  workers.env.DISCORD_BOT_TOKEN = "bot";
+  mockDiscord([EDITORIAL_BOARD_ROLE_ID]);
+
+  const access = await adminAccess(new Request("https://hareware.test/admin"));
+
+  expect(access).toMatchObject({ allowed: false, denial: "signed-out" });
+});
+
+test("refuses a member without the role for the reason they can act on", async () => {
+  workers.env.SESSION_SECRET = SECRET;
+  workers.env.DISCORD_BOT_TOKEN = "bot";
+  mockDiscord(["something-else"]);
+
+  const access = await adminAccess(await signedIn());
+
+  expect(access).toMatchObject({ allowed: false, denial: "no-role" });
+  /* the refusal says their handle back to them, so it needs the profile */
+  expect(access.who).not.toBeNull();
+});
+
+test("tells somebody who has left the server that, not that they lack a role", async () => {
+  workers.env.SESSION_SECRET = SECRET;
+  workers.env.DISCORD_BOT_TOKEN = "bot";
+  mockDiscord(null, false);
+
+  const access = await adminAccess(await signedIn());
+
+  expect(access).toMatchObject({ allowed: false, denial: "not-in-server" });
+});
+
+test("says it could not check, rather than that they lack a role", async () => {
+  workers.env.SESSION_SECRET = SECRET;
+  workers.env.DISCORD_BOT_TOKEN = "bot";
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      throw new Error("network");
+    }),
+  );
+
+  const access = await adminAccess(await signedIn());
+
+  expect(access).toMatchObject({ allowed: false, denial: "unreachable" });
+});
+
+/* a 500 from discord is not a 404, and must not read as one */
+test("reads a discord server error as unreachable", async () => {
+  workers.env.SESSION_SECRET = SECRET;
+  workers.env.DISCORD_BOT_TOKEN = "bot";
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response("upstream", { status: 500 })),
+  );
+
+  const access = await adminAccess(await signedIn());
+
+  expect(access).toMatchObject({ allowed: false, denial: "unreachable" });
 });

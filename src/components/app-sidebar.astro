@@ -1,5 +1,4 @@
 ---
-import { AdminNav } from "~/components/admin-nav";
 import { SidebarAccount } from "~/components/sidebar-account";
 import { NavGroup } from "~/components/nav-group";
 import { adminNav, toolsNav } from "~/lib/nav";
@@ -9,9 +8,8 @@ type Props = {
   viewer?: ViewerState | null;
   pathname: string;
   returnTo: string;
-  cached: boolean;
 };
-const { viewer, pathname, returnTo, cached } = Astro.props;
+const { viewer, pathname, returnTo } = Astro.props;
 ---
 
 {
@@ -50,16 +48,12 @@ const { viewer, pathname, returnTo, cached } = Astro.props;
     <NavGroup items={toolsNav} pathname={pathname} label="Public tools" />
 
     {
-      /* a private page knows the answer already and renders it here; a cached
-         one leaves it to the island so its html stays anonymous */
-      cached ? (
-        <AdminNav client:idle />
-      ) : (
-        viewer?.admin && (
-          <NavGroup items={adminNav} pathname={pathname} label="Admin tools" />
-        )
-      )
+      /* everybody sees these, signed in or not. the pages themselves refuse,
+         and say why — so the nav has nothing to hide and nothing to ask
+         /api/session.json for, which is what let this become static markup on
+         a cached page too. ADR 0007, amended 2026-09-04 */
     }
+    <NavGroup items={adminNav} pathname={pathname} label="Admin tools" />
   </nav>
 
   <SidebarAccount client:idle viewer={viewer} returnTo={returnTo} />

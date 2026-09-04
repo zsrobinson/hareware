@@ -1,0 +1,99 @@
+---
+/*
+  what an admin page draws instead of itself, when whoever asked may not see it.
+
+  one component rather than a message per page, because the four refusals are
+  properties of the viewer and not of the tool they were reaching for. the page
+  passes what it is called; everything else here is about them
+*/
+import { buttonVariants } from "~/components/ui/button";
+import type { Denial } from "~/lib/admin";
+import type { Profile } from "~/lib/member";
+
+type Props = {
+  denial: Denial;
+  /** the name to say it to, when discord gave us one */
+  profile: Profile | null;
+  /** where to come back to once they have fixed it */
+  returnTo: string;
+};
+
+const { denial, profile, returnTo } = Astro.props;
+
+const authHref = `/auth/discord?${new URLSearchParams({ returnTo })}`;
+const signInHref = `/sign-in?${new URLSearchParams({ returnTo })}`;
+
+/* the handle is what a member recognises as themselves — and, when they are
+   signed in as the wrong account, what tells them so */
+const you = profile ? `@${profile.username}` : "this account";
+
+const copy: Record<Denial, { title: string; body: string }> = {
+  "signed-out": {
+    title: "Sign in to see this",
+    body:
+      "The admin tools are for members of @Editorial Board. Sign in with " +
+      "Discord and we will bring you straight back here.",
+  },
+  "no-role": {
+    title: "You are not on the Editorial Board",
+    body:
+      `You are signed in as ${you}, which is a member of The Hare's Discord ` +
+      "but does not hold @Editorial Board. Ask an editor to add the role — " +
+      "the check runs on every page load, so this page works the moment they do.",
+  },
+  "not-in-server": {
+    title: "That account is not in the server",
+    body:
+      `You are signed in as ${you}, and Discord says that account is not a ` +
+      "member of The Hare's server. Ask an editor for an invite, or sign in " +
+      "with the account you use in the club.",
+  },
+  unreachable: {
+    title: "We could not check your access",
+    body:
+      "Discord did not answer when we asked which roles you hold, so we " +
+      "cannot tell whether you are on the Editorial Board. Nothing is wrong " +
+      "with your account. Try again in a moment.",
+  },
+};
+
+const { title, body } = copy[denial];
+
+/* the same buttons the rest of the app draws, rather than a second set of
+   class strings that drift from them */
+const PRIMARY = buttonVariants({ size: "lg" });
+const QUIET = buttonVariants({ variant: "outline", size: "lg" });
+---
+
+<section class="mx-auto max-w-lg py-12">
+  <p class="text-hare mb-2 text-xs font-semibold tracking-[0.18em] uppercase">
+    Member access
+  </p>
+  <h2 class="font-display text-3xl leading-tight">{title}</h2>
+  <p class="text-muted-foreground mt-3 text-sm leading-6">{body}</p>
+
+  <div class="mt-6 flex flex-wrap gap-2">
+    {
+      denial === "signed-out" ? (
+        <a href={authHref} class={PRIMARY}>
+          Sign in with Discord
+        </a>
+      ) : denial === "unreachable" ? (
+        <a href={returnTo} class={PRIMARY}>
+          Try again
+        </a>
+      ) : (
+        /* signing in as somebody else means signing out first, which is a
+           POST — the same one the account menu makes */
+        <form method="post" action="/auth/logout">
+          <input type="hidden" name="returnTo" value={signInHref} />
+          <button type="submit" class={QUIET}>
+            Use a different account
+          </button>
+        </form>
+      )
+    }
+
+    <a href="/generate" class={QUIET}> Back to the public tools </a>
+  </div>
+</section>

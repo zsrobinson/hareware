@@ -1,8 +1,8 @@
 ---
-import { EditorialNav } from "~/components/editorial-nav";
+import { AdminNav } from "~/components/admin-nav";
 import { SidebarAccount } from "~/components/sidebar-account";
 import { NavGroup } from "~/components/nav-group";
-import { adminNav, editorialNav, toolsNav } from "~/lib/nav";
+import { adminNav, toolsNav } from "~/lib/nav";
 import type { Session } from "~/lib/session";
 
 type Props = {
@@ -49,33 +49,19 @@ const { session, pathname, returnTo, cached, admin = false } = Astro.props;
   </a>
 
   <nav class="flex flex-1 flex-col gap-2 overflow-y-auto p-3 pt-1">
+    <NavGroup items={toolsNav} pathname={pathname} label="Public tools" />
+
     {
       /* a private page knows the answer already and renders it here; a cached
          one leaves it to the island so its html stays anonymous */
       cached ? (
-        <EditorialNav client:idle />
+        <AdminNav client:idle />
       ) : (
-        session && (
-          <>
-            <NavGroup
-              items={editorialNav}
-              pathname={pathname}
-              label="Editorial"
-            />
-            {admin && (
-              <NavGroup
-                items={adminNav}
-                pathname={pathname}
-                label="Admin tools"
-              />
-            )}
-            <hr class="border-sidebar-border my-2" />
-          </>
+        admin && (
+          <NavGroup items={adminNav} pathname={pathname} label="Admin tools" />
         )
       )
     }
-
-    <NavGroup items={toolsNav} pathname={pathname} label="Public tools" />
   </nav>
 
   <SidebarAccount client:idle session={session} returnTo={returnTo} />

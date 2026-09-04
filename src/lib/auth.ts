@@ -108,9 +108,9 @@ function safeReturnTo(value: string) {
       !value.startsWith("//") &&
       url.origin === base
       ? `${url.pathname}${url.search}${url.hash}`
-      : "/articles";
+      : "/generate";
   } catch {
-    return "/articles";
+    return "/generate";
   }
 }
 
@@ -144,7 +144,7 @@ export async function beginDiscordSignIn(request: Request, config: AuthConfig) {
   const requestUrl = new URL(request.url);
   const callbackUrl = new URL("/auth/discord/callback", requestUrl.origin);
   const state = crypto.randomUUID();
-  const returnTo = requestUrl.searchParams.get("returnTo") ?? "/articles";
+  const returnTo = requestUrl.searchParams.get("returnTo") ?? "/generate";
   const destination = new URL("https://discord.com/oauth2/authorize");
 
   destination.search = new URLSearchParams({
@@ -225,7 +225,7 @@ export async function completeDiscordSignOut(request: Request) {
   const returnTo = form.get("returnTo");
 
   return redirect(
-    safeReturnTo(typeof returnTo === "string" ? returnTo : "/articles"),
+    safeReturnTo(typeof returnTo === "string" ? returnTo : "/generate"),
     [clearSessionCookie()],
   );
 }

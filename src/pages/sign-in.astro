@@ -7,7 +7,7 @@ Astro.response.headers.set("cache-control", "private, no-store");
 
 const config = getAuthConfig();
 const session = await getSession(Astro.request, getSessionSecret());
-const returnTo = Astro.url.searchParams.get("returnTo") ?? "/articles";
+const returnTo = Astro.url.searchParams.get("returnTo") ?? "/generate";
 const authHref = `/auth/discord?${new URLSearchParams({ returnTo })}`;
 
 const errorMessages: Record<string, string> = {
@@ -59,7 +59,7 @@ const error = !config
               ID {session.discordUserId}
             </p>
             <a
-              href="/articles"
+              href="/generate"
               class="bg-primary text-primary-foreground hover:bg-primary/80 mt-4 inline-flex h-9 items-center rounded-lg px-3 text-sm font-medium transition-colors"
             >
               Open the article board

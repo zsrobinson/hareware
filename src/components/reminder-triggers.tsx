@@ -1,22 +1,37 @@
 import { useState } from "react";
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "~/components/ui/dialog";
+import {
+  hourLabel,
+  type ReminderDefinition,
+  type ReminderId,
+} from "~/lib/reminders/registry";
 
 type Report = Record<string, string>;
+type Mode = "dry" | "silent" | "live";
 
 /*
-  the same endpoint a terminal uses, so a reminder fired from here takes exactly
-  the path it takes at 8am. `dry` is on by default: this posts to the club's real
-  channels, and the button that does that should be the deliberate one
+  the same endpoint a terminal uses, so a reminder fired here takes exactly the
+  path it takes in the morning. the three modes are the three ways it is safe,
+  or not, to run one: report only, post without pinging, and the real thing
 */
-async function run(only: string | null, dry: boolean): Promise<Report> {
-  const query = new URLSearchParams();
-  if (only) query.set("only", only);
-  if (dry) query.set("dry", "1");
+async function run(id: ReminderId, mode: Mode): Promise<Report> {
+  const query = new URLSearchParams({ only: id });
+  if (mode === "dry") query.set("dry", "1");
+  if (mode === "silent") query.set("silent", "1");
 
   const response = await fetch(`/api/reminders/run?${query}`, {
     method: "POST",
     // astro refuses a cross-site POST that looks like a form submission, and
-    // one with no content type counts as one
+    // one carrying no content type counts as one
     headers: { "content-type": "application/json" },
   });
 
@@ -27,83 +42,119 @@ async function run(only: string | null, dry: boolean): Promise<Report> {
   return response.json() as Promise<Report>;
 }
 
-export function ReminderTriggers() {
-  const [dry, setDry] = useState(true);
+export function ReminderTriggers({
+  reminders,
+}: {
+  reminders: ReminderDefinition[];
+}) {
   const [busy, setBusy] = useState<string | null>(null);
-  const [report, setReport] = useState<Report | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [said, setSaid] = useState<Record<string, string>>({});
+  const [confirming, setConfirming] = useState<ReminderDefinition | null>(null);
 
-  async function fire(only: string | null, label: string) {
-    setBusy(label);
-    setError(null);
-    setReport(null);
-
+  async function fire(reminder: ReminderDefinition, mode: Mode) {
+    setBusy(`${reminder.id}:${mode}`);
     try {
-      setReport(await run(only, dry));
+      const report = await run(reminder.id, mode);
+      const line = Object.values(report).find((v) => v !== "not requested");
+      setSaid((prev) => ({ ...prev, [reminder.id]: line ?? "done" }));
     } catch (thrown) {
-      setError(thrown instanceof Error ? thrown.message : String(thrown));
+      setSaid((prev) => ({
+        ...prev,
+        [reminder.id]:
+          thrown instanceof Error ? thrown.message : String(thrown),
+      }));
     } finally {
       setBusy(null);
     }
   }
 
   return (
-    <div className="space-y-4">
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={dry}
-          onChange={(event) => setDry(event.target.checked)}
-          className="size-4"
-        />
-        <span>Dry run — report what would be posted, without posting it</span>
-      </label>
+    <>
+      <div className="divide-y rounded-lg border">
+        {reminders.map((reminder) => (
+          <div
+            key={reminder.id}
+            className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between"
+          >
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-medium">{reminder.name}</h2>
+                <Badge variant="secondary">
+                  {hourLabel(reminder.hour)} Eastern
+                </Badge>
+                <Badge variant="outline">{reminder.channel}</Badge>
+              </div>
+              <p className="text-muted-foreground text-sm">
+                {reminder.description}
+              </p>
+              {said[reminder.id] && (
+                <p className="text-foreground pt-1 text-sm">
+                  {said[reminder.id]}
+                </p>
+              )}
+            </div>
 
-      {!dry && (
-        <p className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">
-          This will post to <strong>#instagram-posting</strong> and{" "}
-          <strong>#editorial-board</strong> and ping the roles.
-        </p>
-      )}
-
-      <div className="flex flex-wrap gap-2">
-        <Button
-          onClick={() => fire(null, "both")}
-          disabled={busy !== null}
-          variant={dry ? "default" : "destructive"}
-        >
-          {busy === "both" ? "Running…" : "Run both"}
-        </Button>
-        <Button
-          onClick={() => fire("meeting", "meeting")}
-          disabled={busy !== null}
-          variant="outline"
-        >
-          {busy === "meeting" ? "Running…" : "Meeting reminder"}
-        </Button>
-        <Button
-          onClick={() => fire("social", "social")}
-          disabled={busy !== null}
-          variant="outline"
-        >
-          {busy === "social" ? "Running…" : "Social ping"}
-        </Button>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy !== null}
+                onClick={() => fire(reminder, "dry")}
+              >
+                {busy === `${reminder.id}:dry` ? "Running…" : "Dry run"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy !== null}
+                onClick={() => fire(reminder, "silent")}
+              >
+                {busy === `${reminder.id}:silent` ? "Running…" : "Pingless"}
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={busy !== null}
+                onClick={() => setConfirming(reminder)}
+              >
+                Run for real
+              </Button>
+            </div>
+          </div>
+        ))}
       </div>
 
-      {error && (
-        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-      )}
-
-      {report && (
-        <dl className="divide-y rounded-lg border text-sm">
-          {Object.entries(report).map(([name, said]) => (
-            <div key={name} className="grid gap-1 px-3 py-2 sm:grid-cols-3">
-              <dt className="font-medium">{name}</dt>
-              <dd className="text-muted-foreground sm:col-span-2">{said}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-    </div>
+      {/* the only button here that reaches the club, so it asks first */}
+      <Dialog
+        open={confirming !== null}
+        onOpenChange={(open) => !open && setConfirming(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Run the {confirming?.name} reminder?</DialogTitle>
+            <DialogDescription>
+              This posts to <strong>{confirming?.channel}</strong> and pings the
+              role, exactly as it would in the morning. Everyone in the channel
+              sees it.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirming(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                const reminder = confirming!;
+                setConfirming(null);
+                void fire(reminder, "live");
+              }}
+            >
+              Post it
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

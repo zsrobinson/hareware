@@ -8,7 +8,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "~/components/ui/sheet";
-import { editorialNav, toolsNav } from "~/lib/nav";
+import { adminNav, toolsNav } from "~/lib/nav";
 import type { Session } from "~/lib/session";
 import { useSession } from "~/lib/use-session";
 
@@ -47,14 +47,14 @@ export function SidebarSheet({
           {session && (
             <>
               <NavGroup
-                items={editorialNav}
+                items={adminNav}
                 pathname={pathname}
-                label="Editorial"
+                label="Admin tools"
               />
               <hr className="border-sidebar-border" />
             </>
           )}
-          <NavGroup items={toolsNav} pathname={pathname} label="Tools" />
+          <NavGroup items={toolsNav} pathname={pathname} label="Public tools" />
         </nav>
 
         <SidebarAccount

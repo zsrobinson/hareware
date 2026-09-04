@@ -9,6 +9,7 @@ import {
   SheetTrigger,
 } from "~/components/ui/sheet";
 import { adminNav, toolsNav } from "~/lib/nav";
+import type { Profile } from "~/lib/member";
 import type { Session } from "~/lib/session";
 import { useAdmin, useSession } from "~/lib/use-session";
 
@@ -22,10 +23,12 @@ export function SidebarSheet({
   pathname,
   returnTo,
   session: sessionFromServer,
+  profile = null,
 }: {
   pathname: string;
   returnTo: string;
   session: Session | null;
+  profile?: Profile | null;
 }) {
   const session = useSession(sessionFromServer);
   const admin = useAdmin();
@@ -60,6 +63,7 @@ export function SidebarSheet({
 
         <SidebarAccount
           session={sessionFromServer}
+          profile={profile}
           returnTo={returnTo}
           inSheet
         />

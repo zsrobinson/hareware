@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { Profile } from "./member";
 import type { Session } from "./session";
 
 /*
@@ -10,6 +11,8 @@ import type { Session } from "./session";
   server-verified session. the fetch remains the one client-side source.
 */
 let session: Session | null | undefined;
+/* what to call them, read live by the api route rather than kept anywhere */
+let profile: Profile | null = null;
 /* whether that member may see the admin tools. the same answer, from the same
    request, so the two cannot disagree */
 let admin = false;
@@ -17,9 +20,14 @@ let requested = false;
 
 const listeners = new Set<(value: Session | null) => void>();
 
-function publish(value: Session | null, isAdmin = false) {
+function publish(
+  value: Session | null,
+  isAdmin = false,
+  who: Profile | null = null,
+) {
   session = value;
   admin = isAdmin;
+  profile = who;
   for (const listener of listeners) listener(value);
 }
 
@@ -35,6 +43,7 @@ function requestSession() {
         body as {
           signedIn?: unknown;
           discordUserId?: unknown;
+          profile?: unknown;
           admin?: unknown;
         },
     )
@@ -44,9 +53,22 @@ function requestSession() {
           ? { discordUserId: data.discordUserId }
           : null,
         data.admin === true,
+        readProfile(data.profile),
       ),
     )
     .catch(() => publish(null));
+}
+
+/** discord's answer off the wire, kept only if it is the shape we asked for */
+function readProfile(value: unknown): Profile | null {
+  if (!value || typeof value !== "object") return null;
+
+  const who = value as Record<string, unknown>;
+  const strings = ["displayName", "username", "avatarUrl"] as const;
+
+  return strings.every((key) => typeof who[key] === "string")
+    ? (who as Profile)
+    : null;
 }
 
 export function useSession(knownByServer: Session | null = null) {
@@ -86,4 +108,16 @@ export function useSession(knownByServer: Session | null = null) {
 export function useAdmin() {
   const value = useSession();
   return value !== null && admin;
+}
+
+/**
+ * what to call the signed-in member, once it has arrived.
+ *
+ * a page that already looked them up server-side passes it in and this returns
+ * it unchanged; a cached page gets it from the same request that answers who is
+ * signed in. null until then, which the ui draws as the plain discord mark
+ */
+export function useProfile(knownByServer: Profile | null = null) {
+  const value = useSession();
+  return knownByServer ?? (value ? profile : null);
 }

@@ -2,11 +2,13 @@
 import { env } from "cloudflare:workers";
 import Dashboard from "~/layouts/dashboard.astro";
 import { InvocationLog } from "~/components/invocation-log";
-import { editorialBoardMember, notFound } from "~/lib/admin";
+import { notFound, viewer } from "~/lib/admin";
 import { PAYLOAD_DAYS, recent } from "~/lib/log";
 
-const session = await editorialBoardMember(Astro.request);
-if (!session) return notFound();
+/* one lookup answers both whether they may be here and what to call them, so
+   the sidebar costs no second request to discord */
+const who = await viewer(Astro.request);
+if (!who?.admin) return notFound();
 
 /* the log names real members behind pseudonymous bylines, so no cache may hold
    any part of this — ADR 0005 for the rule, ADR 0007 for why this page is the
@@ -16,7 +18,12 @@ Astro.response.headers.set("cache-control", "private, no-store");
 const rows = env.DB ? await recent(env.DB, 500) : [];
 ---
 
-<Dashboard title="Invocation Log" session={session} admin>
+<Dashboard
+  title="Invocation Log"
+  session={who.session}
+  profile={who.profile}
+  admin
+>
   <div class="space-y-4">
     <p class="text-muted-foreground text-sm">
       Everything HareWare has done. A quiet morning shows a row saying nothing

@@ -1,12 +1,14 @@
 ---
 import Dashboard from "~/layouts/dashboard.astro";
-import { getAuthConfig, getSessionSecret } from "~/lib/auth-config";
-import { getSession } from "~/lib/session";
+import { getAuthConfig } from "~/lib/auth-config";
+import { viewer } from "~/lib/admin";
 
 Astro.response.headers.set("cache-control", "private, no-store");
 
 const config = getAuthConfig();
-const session = await getSession(Astro.request, getSessionSecret());
+const who = await viewer(Astro.request);
+const session = who?.session ?? null;
+const profile = who?.profile ?? null;
 const returnTo = Astro.url.searchParams.get("returnTo") ?? "/generate";
 const authHref = `/auth/discord?${new URLSearchParams({ returnTo })}`;
 
@@ -26,7 +28,7 @@ const error = !config
   : (errorMessages[errorCode] ?? null);
 ---
 
-<Dashboard title="Sign in" session={session}>
+<Dashboard title="Sign in" session={session} profile={profile}>
   <section class="mx-auto flex min-h-[calc(100svh-7rem)] max-w-lg items-center">
     <div class="w-full">
       <p
@@ -54,10 +56,28 @@ const error = !config
       {
         session ? (
           <div class="mt-6 rounded-lg border p-4">
-            <p class="text-sm font-medium">Signed in with Discord</p>
-            <p class="text-muted-foreground mt-1 font-mono text-xs">
-              ID {session.discordUserId}
-            </p>
+            <div class="flex items-center gap-3">
+              {profile ? (
+                <img
+                  src={profile.avatarUrl}
+                  alt=""
+                  width={40}
+                  height={40}
+                  class="size-10 shrink-0 rounded-full object-cover"
+                  referrerpolicy="no-referrer"
+                />
+              ) : null}
+              <div class="min-w-0">
+                <p class="truncate text-sm font-medium">
+                  {profile?.displayName ?? "Signed in with Discord"}
+                </p>
+                <p class="text-muted-foreground mt-0.5 truncate font-mono text-xs">
+                  {profile
+                    ? `@${profile.username}`
+                    : `ID ${session.discordUserId}`}
+                </p>
+              </div>
+            </div>
             <a
               href="/generate"
               class="bg-primary text-primary-foreground hover:bg-primary/80 mt-4 inline-flex h-9 items-center rounded-lg px-3 text-sm font-medium transition-colors"

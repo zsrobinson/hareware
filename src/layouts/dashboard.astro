@@ -4,6 +4,7 @@ import { PanelLeftIcon } from "lucide-react";
 import AppSidebar from "~/components/app-sidebar.astro";
 import NavProgress from "~/components/nav-progress.astro";
 import { SidebarSheet } from "~/components/sidebar-sheet";
+import type { Profile } from "~/lib/member";
 import type { Session } from "~/lib/session";
 import "~/styles/globals.css";
 import "~/styles/fonts.css";
@@ -14,12 +15,21 @@ type Props = {
   title: string;
   /* the answer from getSession(), for a page the cdn does not cache */
   session?: Session | null;
+  /* what to call them, if the page already looked the member up. left out, the
+     account island asks /api/session.json for it instead */
+  profile?: Profile | null;
   /* set on a page that sets `s-maxage`: its html is served to everyone, so the
      nav that varies by who you are has to be revealed client-side instead */
   cached?: boolean;
 };
 
-const { title, session = null, cached = false, admin = false } = Astro.props;
+const {
+  title,
+  session = null,
+  profile = null,
+  cached = false,
+  admin = false,
+} = Astro.props;
 
 /*
   the invariant the sidebar rests on: a response that renders who you are must
@@ -80,6 +90,7 @@ const collapsed = Astro.isPrerendered
       <AppSidebar
         admin={admin}
         session={session}
+        profile={profile}
         cached={cached}
         pathname={Astro.url.pathname}
         returnTo={`${Astro.url.pathname}${Astro.url.search}`}
@@ -98,6 +109,7 @@ const collapsed = Astro.isPrerendered
             pathname={Astro.url.pathname}
             returnTo={`${Astro.url.pathname}${Astro.url.search}`}
             session={session}
+            profile={profile}
           />
 
           <button

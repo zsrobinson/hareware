@@ -20,7 +20,7 @@
  * one-line pull request is a cheaper way to change them than a store nobody
  * remembers exists.
  */
-interface Env {
+interface HareWareEnv {
   /* ---- secrets ---------------------------------------------------------- */
 
   /**
@@ -40,6 +40,18 @@ interface Env {
    * by anything here, per ADR 0006.
    */
   NOTION_TOKEN?: string;
+
+  /**
+   * Guards `POST /api/reminders/run`, which fires the reminders by hand so one
+   * can be seen without waiting for 8am. Sent as `Authorization: Bearer …`.
+   *
+   * Unlike the switches below this one belongs in production, and is safe
+   * there: it triggers a single run rather than standing state, so nothing
+   * repeats if it is forgotten. Leave it unset and the route answers 404.
+   *
+   * Generate with `openssl rand -hex 32`.
+   */
+  REMINDERS_TRIGGER_SECRET?: string;
 
   /**
    * The Discord bot token. **Not read at runtime**, and does not need to be a
@@ -71,18 +83,16 @@ interface Env {
    * single most damaging variable here.
    */
   REMINDERS_IGNORE_HOUR?: string;
+}
 
-  /**
-   * Run the meeting reminder on the next tick whatever the hour, leaving the
-   * social ping on its normal schedule.
-   *
-   * Deployed, this is how a reminder is exercised in production without waiting
-   * for the morning — but a Worker has no "on deploy" hook, so it takes effect
-   * on the next hourly tick and **keeps firing every hour until removed**. It
-   * says so in the log each time. Remove it once you have seen the message.
-   */
-  REMINDERS_FORCE_MEETING?: string;
+/*
+  `Env` is what a worker handler is handed; `Cloudflare.Env` is what
+  `cloudflare:workers` types its `env` export as. astro v6 removed
+  `locals.runtime.env` — the getter now exists only to throw — so routes read
+  the module, and both names have to carry these
+*/
+interface Env extends HareWareEnv {}
 
-  /** As above, for the social ping. Same warning: it repeats hourly. */
-  REMINDERS_FORCE_SOCIAL?: string;
+declare namespace Cloudflare {
+  interface Env extends HareWareEnv {}
 }

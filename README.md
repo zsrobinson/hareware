@@ -90,14 +90,28 @@ wants running unattended, and none belongs in a deployed secret.
 | `REMINDERS_FORCE_MEETING` | Run the meeting reminder on the next tick, whatever the hour |
 | `REMINDERS_FORCE_SOCIAL`  | The same, for the social ping                                |
 
-The two `FORCE` switches are the ones meant to be set in production, briefly, to
-see a reminder without waiting for the morning. **A Worker has no "on deploy"
-hook**, so one takes effect on the next hourly tick and then keeps firing
-**every hour until it is removed**. Each forced run says so in the log. Remove
-it once you have seen the message.
+`REMINDERS_IGNORE_HOUR` is the most damaging of these if it reaches production:
+a Worker cannot unset its own environment, so it would post both reminders once
+an hour, all day, until somebody noticed. To fire a reminder in production, use
+the manual trigger below instead — it runs once and leaves nothing behind.
 
-`REMINDERS_IGNORE_HOUR` does the same for both reminders at once and is the most
-damaging of the five if forgotten.
+#### Firing a reminder by hand
+
+`POST /api/reminders/run` runs the reminders immediately, so one can be seen
+without waiting for 8am. It takes the same path the cron takes, so there is no
+second implementation to drift.
+
+```sh
+curl -X POST -H "Authorization: Bearer $REMINDERS_TRIGGER_SECRET" \
+  "https://hareware.zsrobinson.com/api/reminders/run"
+```
+
+Add `?only=meeting` or `?only=social` to fire just one. The response is a line
+per reminder saying what it did. It is a `POST` because it posts to Discord, and
+the secret travels in a header rather than the URL, which Cloudflare logs.
+
+Without `REMINDERS_TRIGGER_SECRET` set, the route answers `404` — the trigger
+does not exist rather than standing open.
 
 #### Not variables
 

@@ -1,8 +1,8 @@
 ---
 import Dashboard from "~/layouts/dashboard.astro";
-import { ReminderTriggers } from "~/components/reminder-triggers";
+import { AutomationTriggers } from "~/components/automation-triggers";
 import { notFound, viewer } from "~/lib/admin";
-import { REMINDERS } from "~/lib/reminders/registry";
+import { AUTOMATIONS } from "~/lib/automations/registry";
 
 /* one lookup answers both whether they may be here and what to call them, so
    the sidebar costs no second request to discord */
@@ -12,7 +12,12 @@ if (!who?.admin) return notFound();
 Astro.response.headers.set("cache-control", "private, no-store");
 ---
 
-<Dashboard title="Reminders" session={who.session} profile={who.profile} admin>
+<Dashboard
+  title="Automations"
+  session={who.session}
+  profile={who.profile}
+  admin
+>
   <div class="max-w-3xl space-y-4">
     <p class="text-muted-foreground text-sm">
       These run on their own each morning. Firing one here takes the same path,
@@ -20,6 +25,6 @@ Astro.response.headers.set("cache-control", "private, no-store");
       recorded in the log.
     </p>
 
-    <ReminderTriggers reminders={REMINDERS} client:load />
+    <AutomationTriggers automations={AUTOMATIONS} client:load />
   </div>
 </Dashboard>

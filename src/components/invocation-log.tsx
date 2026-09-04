@@ -8,6 +8,20 @@ import type { Row } from "~/lib/log";
 /** the row as it crosses to the client: json has no Date and needs none */
 export type LogRow = Row;
 
+/*
+  four outcomes, four readings. binary would put `skipped` in the same red as
+  `failed`, so a Tuesday with no board meeting — the quiet morning ADR 0007
+  exists to distinguish — would read as broken. `misconfigured` is amber
+  because somebody has to go and set something, and `failed` is red because
+  something went wrong on its own
+*/
+const BADGES: Record<string, "secondary" | "outline" | "destructive"> = {
+  ok: "secondary",
+  skipped: "outline",
+  misconfigured: "destructive",
+  failed: "destructive",
+};
+
 const when = (at: number) =>
   new Date(at * 1000).toLocaleString("en-US", {
     timeZone: "America/New_York",
@@ -72,9 +86,7 @@ const columns: ColumnDef<LogRow, unknown>[] = [
     filterFn: (row, id, value: string[]) =>
       value.includes(row.getValue(id) as string),
     cell: ({ row }) => (
-      <Badge
-        variant={row.original.outcome === "ok" ? "secondary" : "destructive"}
-      >
+      <Badge variant={BADGES[row.original.outcome] ?? "destructive"}>
         {row.original.outcome}
       </Badge>
     ),

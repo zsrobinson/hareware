@@ -85,13 +85,13 @@ Set them with `npx wrangler versions secret put <NAME>`. Plain
 `wrangler secret put` refuses unless the latest version happens to be the
 deployed one, which it usually is not.
 
-| Secret                     | What it is                                                        |
-| -------------------------- | ----------------------------------------------------------------- |
-| `DISCORD_BOT_TOKEN`        | Sends every reminder, and reads the roles the admin pages gate on |
-| `NOTION_TOKEN`             | Notion integration token, read access to Meetings only            |
-| `SESSION_SECRET`           | Signs the session and OAuth-state cookies. `openssl rand -hex 32` |
-| `DISCORD_CLIENT_SECRET`    | The OAuth client secret, exchanged once per sign-in               |
-| `REMINDERS_TRIGGER_SECRET` | Guards `POST /api/reminders/run`. Unset, that route answers `404` |
+| Secret                     | What it is                                                          |
+| -------------------------- | ------------------------------------------------------------------- |
+| `DISCORD_BOT_TOKEN`        | Sends every reminder, and reads the roles the admin pages gate on   |
+| `NOTION_TOKEN`             | Notion integration token, read access to Meetings only              |
+| `SESSION_SECRET`           | Signs the session and OAuth-state cookies. `openssl rand -hex 32`   |
+| `DISCORD_CLIENT_SECRET`    | The OAuth client secret, exchanged once per sign-in                 |
+| `REMINDERS_TRIGGER_SECRET` | Guards `POST /api/automations/run`. Unset, that route answers `404` |
 
 `DISCORD_BOT_TOKEN` is the one nothing works without: both reminders post as the
 bot, and the admin pages ask Discord for the caller's roles on every request.
@@ -115,7 +115,7 @@ the manual trigger below instead — it runs once and leaves nothing behind.
 
 #### Firing a reminder by hand
 
-`POST /api/reminders/run` runs the reminders immediately, so one can be seen
+`POST /api/automations/run` runs the reminders immediately, so one can be seen
 without waiting for 8am. It takes the same path the cron takes, so there is no
 second implementation to drift.
 
@@ -123,7 +123,7 @@ second implementation to drift.
 curl -X POST \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $REMINDERS_TRIGGER_SECRET" \
-  "https://hareware.zsrobinson.com/api/reminders/run"
+  "https://hareware.zsrobinson.com/api/automations/run"
 ```
 
 The content type is not optional. Astro rejects a cross-site `POST` that looks
@@ -151,11 +151,30 @@ rather than standing until somebody removes them.
 Without `REMINDERS_TRIGGER_SECRET` set, the route answers `404` — the trigger
 does not exist rather than standing open.
 
+#### When a run fails
+
+A failed **cron** run posts to `#carl-bot` naming the reminder and the reason.
+Deliberately not `#editorial-board`: a reminder that did not go out is an
+operational fact, and putting it beside the reminders themselves trains everyone
+to scroll past both.
+
+It reports a failure only when the previous recorded run of that reminder
+succeeded, so a reminder broken for a week says so once and then goes quiet. It
+speaks up again after a run that worked — which is also what "recovered, then
+broke again" looks like from the log. With no history to compare against, it
+reports: a missing log is a reason to say more rather than less.
+
+A reminder fired **by hand** reports nothing, because the response already
+carries the error to whoever triggered it.
+
+The alert never pings a role, and never throws — a reminder that posted
+correctly must not be recorded as failed because the alert could not be sent.
+
 #### Not variables
 
 The duty roster's role ids, the Meetings database id, the reminder hour,
 HareWare's own origin, and the Discord application id and public key are
-constants in `src/lib/reminders/config.ts` and `src/lib/discord/config.ts`.
+constants in `src/lib/automations/config.ts` and `src/lib/services/discord/config.ts`.
 None of them is secret, and they change about once a year — a one-line pull
 request is a cheaper way to change them than a store nobody remembers exists,
 and it leaves a reviewable history of what changed and why.
@@ -191,7 +210,7 @@ real.
 ## Moving a reminder to another channel
 
 Both reminders post **as the bot**, so a channel is not a credential: the ids
-are constants in `src/lib/reminders/config.ts` and moving one is a one-line
+are constants in `src/lib/automations/config.ts` and moving one is a one-line
 pull request. The bot needs **View Channel** and **Send Messages** in the new
 channel.
 
@@ -211,7 +230,7 @@ There are two ways a role becomes pingable, and the bot needs one of them:
 
 The second is the one to use. It keeps `@Editorial Board` unpingable by hand,
 which is what a duty role should be, and `allowed_mentions` in
-`src/lib/discord/post-message.ts` still names the single role each message may
+`src/lib/services/discord/post-message.ts` still names the single role each message may
 mention, so the permission is broad but the message is not.
 
 This bites bots only. The reminders posted through webhooks at first, and a

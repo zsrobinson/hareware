@@ -17,24 +17,6 @@
 export const REMINDER_HOUR = 8;
 
 /**
- * what each role we mention is called, for REMINDERS_NO_PING.
- *
- * suppressing a ping means not writing `<@&id>` at all — `allowed_mentions`
- * does not gate a mention inside a components v2 text display, so an empty
- * roles array notifies everyone exactly as though it were absent. substituting
- * the name keeps the message looking like the real one
- */
-export const ROLE_NAMES: Record<string, string> = {
-  "669611068938780673": "Editorial Board",
-  "1545245444588961943": "Monday Poster",
-  "1545245519415087124": "Tuesday Poster",
-  "1545245547307212880": "Wednesday Poster",
-  "1545245586276483175": "Thursday Poster",
-  "1545245612310794310": "Friday Poster",
-  "1545245632996966493": "Weekend Poster",
-};
-
-/**
  * where each reminder posts.
  *
  * ids rather than webhook urls: the bot posts as itself, so a channel is not a
@@ -42,6 +24,16 @@ export const ROLE_NAMES: Record<string, string> = {
  */
 export const SOCIAL_CHANNEL_ID = "1155994296219091014"; // #instagram-posting
 export const BOARD_CHANNEL_ID = "670351492107993118"; // #editorial-board
+
+/**
+ * where a failed run is reported.
+ *
+ * deliberately not a channel the club reads. a reminder that did not go out is
+ * an operational fact, and putting it beside the reminders themselves would
+ * train everyone to scroll past both — this is the channel that already carries
+ * bot noise, and the one to look in when a morning was quiet
+ */
+export const ALERT_CHANNEL_ID = "1029929430652555364"; // #carl-bot
 
 /** @Weekend Poster covers both saturday and sunday, so two days share it */
 const WEEKEND_POSTER = "1545245632996966493";

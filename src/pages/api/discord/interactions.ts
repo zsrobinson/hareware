@@ -1,9 +1,9 @@
 import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 import { record } from "~/lib/log";
-import { DISCORD_PUBLIC_KEY } from "~/lib/discord/config";
-import { handleInteraction } from "~/lib/discord/interactions";
-import { verifyInteraction } from "~/lib/discord/verify";
+import { DISCORD_PUBLIC_KEY } from "~/lib/services/discord/config";
+import { handleInteraction } from "~/lib/services/discord/interactions";
+import { verifyInteraction } from "~/lib/services/discord/verify";
 
 export const prerender = false;
 

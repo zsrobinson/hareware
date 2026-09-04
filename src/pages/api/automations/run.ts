@@ -2,7 +2,8 @@ import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 import { editorialBoardMember } from "~/lib/admin";
 import { easternNow } from "~/lib/eastern";
-import { runReminders, type Which } from "~/lib/reminders/run";
+import { ALL, runAutomations, type Which } from "~/lib/automations/run";
+import { automation } from "~/lib/automations/registry";
 
 export const prerender = false;
 
@@ -48,11 +49,15 @@ export const POST: APIRoute = async ({ request }) => {
     has already proved who they are
   */
   const given = request.headers.get("authorization")?.replace(/^Bearer /, "");
-  const authorised =
-    (given && matches(given, expected)) ||
-    (await editorialBoardMember(request)) !== null;
+  /* a bearer run legitimately has no actor; a panel run always does */
+  const member =
+    given && matches(given, expected)
+      ? null
+      : await editorialBoardMember(request);
 
-  if (!authorised) return new Response("unauthorized", { status: 401 });
+  if (!(given && matches(given, expected)) && !member) {
+    return new Response("unauthorized", { status: 401 });
+  }
 
   const query = new URL(request.url).searchParams;
 
@@ -62,14 +67,13 @@ export const POST: APIRoute = async ({ request }) => {
     safe
   */
   const only = query.get("only");
-  if (only && only !== "meeting" && only !== "social") {
-    return new Response(`unknown reminder: ${only}`, { status: 400 });
+  if (only && !automation(only)) {
+    return new Response(`unknown automation: ${only}`, { status: 400 });
   }
 
-  const which: Which = {
-    meeting: only !== "social",
-    social: only !== "meeting",
-  };
+  /* validated against the registry rather than a hardcoded pair, so a third
+     automation is reachable here the moment it exists */
+  const which: Which = only ? new Set([automation(only)!.id]) : ALL;
 
   /*
     `?dry=1` reports what each reminder would post without posting it, and
@@ -87,11 +91,17 @@ export const POST: APIRoute = async ({ request }) => {
     ...(query.get("silent") ? { REMINDERS_NO_PING: "1" } : {}),
   };
 
-  const report = await runReminders(
+  /*
+    the session, kept rather than discarded. every panel trigger used to write
+    a row with no actor, which made the one action that pings the whole club the
+    least attributable thing here — the opposite of what ADR 0007 promised
+  */
+  const report = await runAutomations(
     options,
     easternNow(new Date()),
     which,
     "manual",
+    member?.discordUserId,
   );
 
   return new Response(JSON.stringify(report, null, 2), {

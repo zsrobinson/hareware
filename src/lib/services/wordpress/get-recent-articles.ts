@@ -1,4 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
+import { scrubFragment } from "./scrub-html";
 import { ORIGIN } from "./article-url";
 
 /**
@@ -20,6 +21,10 @@ export async function getRecentArticles(
     const res = await fetch(
       page > 1 ? `${ORIGIN}/feed/?paged=${page}` : `${ORIGIN}/feed/`,
     );
+    /* a throttled or erroring wordpress still returns a body, and parsing it
+       would look like an empty feed rather than a refusal */
+    if (!res.ok) return undefined;
+
     const text = await res.text();
 
     const parser = new XMLParser();
@@ -38,11 +43,32 @@ export async function getRecentArticles(
       when the feed carries a single <item>, and mapping over that throws into
       the catch below — turning a thin feed into "no articles at all"
     */
-    const items = data.rss?.channel?.item;
-    if (!items) return undefined;
+    /*
+      an empty feed and an unreadable one are different answers, and collapsing
+      them means a working-but-quiet day gets logged as a wordpress failure.
+      a throttled request answers with html, which parses to no <rss> at all —
+      that is the unreadable case. a <channel> with no <item> is simply empty
+    */
+    /*
+      the presence of <rss> is what says this is a feed at all. an empty
+      <channel></channel> parses to the empty string, so testing it for
+      truthiness reported a working-but-quiet day as a wordpress failure
+    */
+    if (data.rss === undefined) return undefined;
+
+    /* a truncated response can carry <rss> with no <channel>, which is
+       unreadable rather than quiet — the same conflation, mirrored */
+    if (data.rss.channel === undefined) return undefined;
+
+    const items = data.rss.channel.item;
+    if (!items) return [];
 
     return (Array.isArray(items) ? items : [items]).map((item) => ({
-      title: item.title,
+      /* the feed is the one markup path into the dom that the scrubber did not
+         cover — /generate renders these with set:html. scrubbing here rather
+         than at the call site makes "already safe" part of this function's
+         contract, so no caller has to remember */
+      title: scrubFragment(String(item.title)),
       link: item.link,
       date: new Date(item.pubDate).toLocaleDateString("en-US", {
         month: "short",

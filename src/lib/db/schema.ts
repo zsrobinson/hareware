@@ -17,14 +17,21 @@ export const invocations = sqliteTable(
     action: text("action", {
       enum: ["meeting-reminder", "social-ping", "mark-posted"],
     }).notNull(),
-    /** the summary says the rest */
-    outcome: text("outcome", { enum: ["ok", "failed"] }).notNull(),
+    /*
+      four, not two. "did it throw" is the wrong question: the reminders return
+      rather than throw on their most important failures, so a week of wordpress
+      refusing the feed used to write seven rows saying `ok`. a quiet morning and
+      a broken one have to differ by more than prose nobody reads past the badge
+    */
+    outcome: text("outcome", {
+      enum: ["ok", "skipped", "misconfigured", "failed"],
+    }).notNull(),
     /** the plain line the log page shows. kept indefinitely */
     summary: text("summary").notNull(),
     /** the discord user behind it, where a person was */
     actor: text("actor"),
   },
-  // the log page reads newest-first, and the prune job reads oldest-first
+  // the log page reads newest-first
   (table) => [index("invocations_at").on(table.at)],
 );
 

@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { DISCORD_APPLICATION_ID } from "./discord/config";
+import { DISCORD_APPLICATION_ID } from "./services/discord/config";
 import type { AuthConfig } from "./auth";
 
 export function getAuthConfig(): AuthConfig | null {

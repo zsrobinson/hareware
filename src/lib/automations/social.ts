@@ -5,11 +5,12 @@ import {
   separator,
   text,
   type Block,
-} from "~/lib/discord/post-message";
+} from "~/lib/services/discord/post-message";
 import { easternNow, type EasternNow } from "~/lib/eastern";
-import { postedId } from "~/lib/discord/interactions";
-import { toArticleSlug } from "~/lib/article-url";
-import { getRecentArticles } from "~/lib/get-recent-articles";
+import { failed, misconfigured, ok, skipped, type Result } from "./registry";
+import { postedId } from "~/lib/services/discord/interactions";
+import { toArticleSlug } from "~/lib/services/wordpress/article-url";
+import { getRecentArticles } from "~/lib/services/wordpress/get-recent-articles";
 import { HAREWARE_ORIGIN, SOCIAL_CHANNEL_ID, SOCIAL_ROLE_IDS } from "./config";
 
 /*
@@ -22,7 +23,7 @@ const MAX_ARTICLES = 10;
 export async function sendSocialPing(
   env: Env,
   eastern: EasternNow,
-): Promise<string> {
+): Promise<Result> {
   // the code must stay inert until the club actually sets these up — see ADR
   // 0006's "setup outside the repo"
   const roleId = SOCIAL_ROLE_IDS[eastern.weekday];
@@ -30,10 +31,15 @@ export async function sendSocialPing(
     !env.DISCORD_BOT_TOKEN && "DISCORD_BOT_TOKEN",
     !roleId && `SOCIAL_ROLE_IDS.${eastern.weekday}`,
   ].filter(Boolean);
-  if (missing.length > 0) return `social ping unset: ${missing.join(", ")}`;
+  if (missing.length > 0)
+    return misconfigured(`social ping unset: ${missing.join(", ")}`);
 
   const articles = await getRecentArticles();
-  if (!articles) return "could not read the wordpress feed";
+  /*
+    this is the one that mattered most: an unreadable feed used to be recorded
+    as `ok`, so a week of wordpress rate-limiting produced seven green rows
+  */
+  if (!articles) return failed("could not read the wordpress feed");
 
   /*
     the feed's `date` field is a display string with the year thrown away, so
@@ -45,8 +51,9 @@ export async function sendSocialPing(
   const today = articles.filter(
     (article) => easternNow(new Date(article.pubDate)).date === eastern.date,
   );
+  // a genuinely quiet day, which is a different thing from a broken one
   if (today.length === 0)
-    return `no articles published today (${eastern.date})`;
+    return skipped(`no articles published today (${eastern.date})`);
 
   const posted = today.slice(0, MAX_ARTICLES);
 
@@ -92,5 +99,5 @@ export async function sendSocialPing(
   );
 
   const verb = env.REMINDERS_DRY_RUN ? "would post" : "posted";
-  return `${verb} ${posted.length} article(s) for ${eastern.date}`;
+  return ok(`${verb} ${posted.length} article(s) for ${eastern.date}`);
 }

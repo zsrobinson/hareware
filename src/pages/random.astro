@@ -1,5 +1,5 @@
 ---
-import { getRandomArticle } from "../lib/get-random-article";
+import { getRandomArticle } from "~/lib/services/wordpress/get-random-article";
 
 return Astro.redirect(await getRandomArticle(), 307);
 ---

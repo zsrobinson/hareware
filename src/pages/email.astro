@@ -1,9 +1,12 @@
 ---
-import { EMAIL_IMAGE_WIDTH, toSizedImage } from "~/lib/image-url";
-import { toArticleLink } from "~/lib/article-url";
-import { getRecentArticles } from "~/lib/get-recent-articles";
+import {
+  EMAIL_IMAGE_WIDTH,
+  toSizedImage,
+} from "~/lib/services/wordpress/image-url";
+import { toArticleLink } from "~/lib/services/wordpress/article-url";
+import { getRecentArticles } from "~/lib/services/wordpress/get-recent-articles";
 import { mapLimit } from "~/lib/map-limit";
-import { scrapeArticle } from "~/lib/scrape-article";
+import { scrapeArticle } from "~/lib/services/wordpress/scrape-article";
 
 /* this page does render scraped titles and bylines, so the window has to stay
    short enough that a title fixed mid-build isn't served stale behind it. the

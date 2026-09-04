@@ -1,5 +1,5 @@
 import { handle } from "@astrojs/cloudflare/handler";
-import { runScheduled } from "~/lib/reminders/run";
+import { runScheduled } from "~/lib/automations/run";
 
 /*
   the adapter's own entrypoint is `{ fetch: handle }` and nothing else, so a

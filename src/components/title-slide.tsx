@@ -65,9 +65,22 @@ export function TitleSlide({
     // the serif loads with font-display: swap, so a measurement taken against
     // fallback metrics can come out wrong. redo it after the swap, unless the
     // slider has been touched in the meantime
-    document.fonts?.ready.then(() => {
-      if (autoSized.current === useLayoutState.getState().titleSize) measure();
-    });
+    document.fonts?.ready
+      .then(() => {
+        if (autoSized.current === useLayoutState.getState().titleSize)
+          measure();
+      })
+      /* a browser that never resolves this leaves the fallback measurement,
+         which is the size it already has — nothing to recover, only to report */
+      .catch((error: unknown) => {
+        console.error("could not remeasure after the font swap", error);
+      });
+    /*
+      the title is what changes the measurement. `state` as a whole would
+      re-measure on every slider nudge, which is the thing this is meant to
+      stop overriding, and `ref` is stable
+    */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.title]);
 
   return (

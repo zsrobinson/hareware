@@ -36,7 +36,7 @@ if (param) {
 
   try {
     post = await scrapeArticle(link);
-  } catch (e) {
+  } catch {
     return Astro.redirect("/generate?error");
   }
 }

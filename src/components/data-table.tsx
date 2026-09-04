@@ -66,6 +66,9 @@ export function DataTable<T>({
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [search, setSearch] = useState("");
 
+  /* tanstack table hands back functions the react compiler cannot follow, so
+     it skips this component. that is the library's shape, not a mistake here */
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,

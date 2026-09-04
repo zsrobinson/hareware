@@ -10,7 +10,15 @@ function fileToBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result?.toString() ?? "");
+    /*
+      readAsDataURL always yields a string, but the type allows the ArrayBuffer
+      the other read methods produce — and `toString()` on one of those quietly
+      resolves "[object ArrayBuffer]" as though it were an image
+    */
+    reader.onload = () =>
+      typeof reader.result === "string"
+        ? resolve(reader.result)
+        : reject(new Error("the file did not read as a data url"));
     reader.onerror = reject;
   });
 }
@@ -86,7 +94,11 @@ export function CustomPage() {
             type="file"
             onChange={(e) => {
               if (e.target.files?.length !== 1) return;
-              fileToBase64(e.target.files[0]).then((uri) => setImageURI(uri));
+              fileToBase64(e.target.files[0])
+                .then(setImageURI)
+                .catch((error: unknown) => {
+                  console.error("could not read the image", error);
+                });
             }}
           />
         </FormItem>

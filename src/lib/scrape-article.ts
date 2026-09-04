@@ -191,10 +191,11 @@ async function fetchPost(slug: string): Promise<WordPressPost> {
 
     try {
       res = await fetch(url);
-    } catch (e) {
+    } catch (thrown) {
       // a refused connection or dns wobble is no less worth falling back on
       // than a refusal we can read a status off
-      throw new Unavailable(`${slug}: ${e}`);
+      const reason = thrown instanceof Error ? thrown.message : String(thrown);
+      throw new Unavailable(`${slug}: ${reason}`);
     }
 
     // 429 is what wordpress.com throttles with, but a 5xx is the same story

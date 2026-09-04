@@ -73,6 +73,17 @@ of them.
 | `DISCORD_BOARD_WEBHOOK_URL`  | Channel webhook for the editorial board channel |
 | `NOTION_TOKEN`               | Notion internal integration token, read-only    |
 
+Three more exist for working on the reminders, and belong in `.dev.vars` only.
+`REMINDERS_DRY_RUN` logs what would be sent instead of sending it.
+`REMINDERS_NO_PING` posts as normal but notifies nobody — the mention still
+renders, so the message looks exactly as it will. `REMINDERS_IGNORE_HOUR` runs
+the reminders whatever the hour. Setting any of them as a deployed secret would
+be a mistake; the last would fire every reminder once an hour, all day.
+
+`npm test` needs none of them and touches no network. `npm run reminders:send`
+posts real messages using `.dev.vars`, and the shell overrides the file, so
+`REMINDERS_DRY_RUN= npm run reminders:send` sends for real.
+
 Non-secret settings — the duty roster's role IDs, the Meetings database ID, the
 reminder hour, and the origin HareWare itself is served from — are constants in
 `src/lib/reminders/config.ts`. They change

@@ -2,8 +2,12 @@
   the discord application, as opposed to the plain channel webhooks the
   reminders started on. neither of these is a secret: the application id is
   public, and the public key exists precisely to be published — it verifies
-  discord's signature and cannot produce one. the bot token is the secret, and
-  lives in DISCORD_BOT_TOKEN
+  discord's signature and cannot produce one.
+
+  the bot token is the secret, and nothing here reads it: it exists only to
+  create the webhooks the application owns, which is a thing done by hand when a
+  reminder moves channel. the readme's "recreating the discord webhooks" has the
+  procedure, and it is the reason DISCORD_BOT_TOKEN need not be deployed at all
 */
 
 export const DISCORD_APPLICATION_ID = "1544938808611573760";

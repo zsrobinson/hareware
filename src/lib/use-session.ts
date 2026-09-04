@@ -10,12 +10,16 @@ import type { Session } from "./session";
   server-verified session. the fetch remains the one client-side source.
 */
 let session: Session | null | undefined;
+/* whether that member may see the admin tools. the same answer, from the same
+   request, so the two cannot disagree */
+let admin = false;
 let requested = false;
 
 const listeners = new Set<(value: Session | null) => void>();
 
-function publish(value: Session | null) {
+function publish(value: Session | null, isAdmin = false) {
   session = value;
+  admin = isAdmin;
   for (const listener of listeners) listener(value);
 }
 
@@ -26,12 +30,20 @@ function requestSession() {
   fetch("/api/session.json")
     // json() is typed unknown under the workers types, so narrow it here
     .then((r) => (r.ok ? r.json() : { signedIn: false }))
-    .then((body) => body as { signedIn?: unknown; discordUserId?: unknown })
+    .then(
+      (body) =>
+        body as {
+          signedIn?: unknown;
+          discordUserId?: unknown;
+          admin?: unknown;
+        },
+    )
     .then((data) =>
       publish(
         data.signedIn === true && typeof data.discordUserId === "string"
           ? { discordUserId: data.discordUserId }
           : null,
+        data.admin === true,
       ),
     )
     .catch(() => publish(null));
@@ -62,4 +74,16 @@ export function useSession(knownByServer: Session | null = null) {
   }, [knownByServer]);
 
   return value;
+}
+
+/**
+ * whether the signed-in member may see the admin tools.
+ *
+ * the nav only decides what to draw; every admin page checks the role itself,
+ * so a stale answer here shows a link that answers 404 rather than letting
+ * anybody in
+ */
+export function useAdmin() {
+  const value = useSession();
+  return value !== null && admin;
 }

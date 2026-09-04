@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { editorialBoardMember } from "~/lib/admin";
 import { getSessionSecret } from "~/lib/auth-config";
 import { getSession } from "~/lib/session";
 
@@ -10,10 +11,18 @@ import { getSession } from "~/lib/session";
 export const GET: APIRoute = async ({ request }) => {
   const session = await getSession(request, getSessionSecret());
 
+  /*
+    the sidebar needs this too, and asking discord is the same call the admin
+    pages make — so a role removed there empties the group on the next load
+  */
+  const admin =
+    session !== null && (await editorialBoardMember(request)) !== null;
+
   return new Response(
     JSON.stringify({
       signedIn: session !== null,
       discordUserId: session?.discordUserId ?? null,
+      admin,
     }),
     {
       headers: {

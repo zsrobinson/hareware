@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
+import { editorialBoardMember } from "~/lib/admin";
 import { easternNow } from "~/lib/eastern";
 import { runReminders, type Which } from "~/lib/reminders/run";
 
@@ -41,10 +42,17 @@ export const POST: APIRoute = async ({ request }) => {
     return new Response("manual trigger is not configured", { status: 404 });
   }
 
+  /*
+    two ways in, one path out. the bearer secret is for a terminal; the session
+    is for the admin panel's buttons, where a member holding @Editorial Board
+    has already proved who they are
+  */
   const given = request.headers.get("authorization")?.replace(/^Bearer /, "");
-  if (!given || !matches(given, expected)) {
-    return new Response("unauthorized", { status: 401 });
-  }
+  const authorised =
+    (given && matches(given, expected)) ||
+    (await editorialBoardMember(request)) !== null;
+
+  if (!authorised) return new Response("unauthorized", { status: 401 });
 
   const query = new URL(request.url).searchParams;
 

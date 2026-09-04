@@ -1,4 +1,6 @@
 import {
+  ActivityIcon,
+  BellIcon,
   FileTextIcon,
   ImageIcon,
   MailIcon,
@@ -34,6 +36,13 @@ export const toolsNav: NavItem[] = [
   { href: "/magazine", label: "InDesign Export", icon: FileTextIcon },
   { href: "/words", label: "Word Counter", icon: TypeIcon },
   { href: "/email", label: "Newsletter", icon: MailIcon },
+];
+
+/* the admin tools. only a signed-in member holding @Editorial Board sees
+   these, and the pages check that themselves rather than trusting the nav */
+export const adminNav: NavItem[] = [
+  { href: "/admin/log", label: "Invocation Log", icon: ActivityIcon },
+  { href: "/admin/reminders", label: "Reminders", icon: BellIcon },
 ];
 
 /* `/` would otherwise light up on every page */

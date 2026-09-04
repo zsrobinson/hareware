@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavGroup } from "~/components/nav-group";
-import { editorialNav } from "~/lib/nav";
-import { useSession } from "~/lib/use-session";
+import { adminNav, editorialNav } from "~/lib/nav";
+import { useAdmin, useSession } from "~/lib/use-session";
 
 /*
   `/` and `/email` are cached at the edge, so their html has to be identical
@@ -14,6 +14,7 @@ import { useSession } from "~/lib/use-session";
 */
 export function EditorialNav() {
   const signedIn = useSession() !== null;
+  const admin = useAdmin();
   const [pathname, setPathname] = useState("");
 
   useEffect(() => setPathname(window.location.pathname), []);
@@ -23,6 +24,9 @@ export function EditorialNav() {
   return (
     <>
       <NavGroup items={editorialNav} pathname={pathname} label="Editorial" />
+      {admin && (
+        <NavGroup items={adminNav} pathname={pathname} label="Admin tools" />
+      )}
       <hr className="border-sidebar-border my-2" />
     </>
   );

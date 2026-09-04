@@ -1,0 +1,84 @@
+---
+import { env } from "cloudflare:workers";
+import Dashboard from "~/layouts/dashboard.astro";
+import { editorialBoardMember, notFound } from "~/lib/admin";
+import { PAYLOAD_DAYS, recent } from "~/lib/log";
+
+const session = await editorialBoardMember(Astro.request);
+if (!session) return notFound();
+
+/* the log names real members behind pseudonymous bylines, so no cache may
+   hold any part of this — see ADR 0005 for the rule and ADR 0007 for why this
+   page is the sensitive one */
+Astro.response.headers.set("cache-control", "private, no-store");
+
+const rows = env.DB ? await recent(env.DB) : [];
+
+const when = (at: number) =>
+  new Date(at * 1000).toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+---
+
+<Dashboard title="Invocation Log" session={session} admin>
+  <div class="space-y-4">
+    <p class="text-muted-foreground text-sm">
+      Everything HareWare has done. A quiet morning looks like a row saying
+      nothing published, which is how it is told apart from a broken one.
+      Details are kept for {PAYLOAD_DAYS} days; the summaries stay.
+    </p>
+
+    {
+      rows.length === 0 ? (
+        <div class="text-muted-foreground flex min-h-48 items-center justify-center rounded-lg border border-dashed text-sm">
+          Nothing recorded yet.
+        </div>
+      ) : (
+        <div class="overflow-x-auto rounded-lg border">
+          <table class="w-full text-sm">
+            <thead class="bg-muted/50 text-muted-foreground text-left">
+              <tr>
+                <th class="px-3 py-2 font-medium">When</th>
+                <th class="px-3 py-2 font-medium">Source</th>
+                <th class="px-3 py-2 font-medium">What</th>
+                <th class="px-3 py-2 font-medium">Outcome</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr class="border-t align-top">
+                  <td class="text-muted-foreground px-3 py-2 whitespace-nowrap">
+                    {when(row.at)}
+                  </td>
+                  <td class="px-3 py-2 whitespace-nowrap">{row.source}</td>
+                  <td class="px-3 py-2">
+                    <span class="font-medium">{row.action}</span>
+                    <span class="text-muted-foreground block">
+                      {row.summary}
+                    </span>
+                  </td>
+                  <td class="px-3 py-2">
+                    <span
+                      class:list={[
+                        "rounded px-1.5 py-0.5 text-xs",
+                        row.outcome === "ok"
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          : "bg-red-500/10 text-red-600 dark:text-red-400",
+                      ]}
+                    >
+                      {row.outcome}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+  </div>
+</Dashboard>

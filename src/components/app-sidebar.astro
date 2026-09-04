@@ -2,16 +2,18 @@
 import { EditorialNav } from "~/components/editorial-nav";
 import { SidebarAccount } from "~/components/sidebar-account";
 import { NavGroup } from "~/components/nav-group";
-import { editorialNav, toolsNav } from "~/lib/nav";
+import { adminNav, editorialNav, toolsNav } from "~/lib/nav";
 import type { Session } from "~/lib/session";
 
 type Props = {
+  /* whether to draw the admin group. the pages check the role themselves */
+  admin?: boolean;
   session: Session | null;
   pathname: string;
   returnTo: string;
   cached: boolean;
 };
-const { session, pathname, returnTo, cached } = Astro.props;
+const { session, pathname, returnTo, cached, admin = false } = Astro.props;
 ---
 
 {
@@ -60,13 +62,20 @@ const { session, pathname, returnTo, cached } = Astro.props;
               pathname={pathname}
               label="Editorial"
             />
+            {admin && (
+              <NavGroup
+                items={adminNav}
+                pathname={pathname}
+                label="Admin tools"
+              />
+            )}
             <hr class="border-sidebar-border my-2" />
           </>
         )
       )
     }
 
-    <NavGroup items={toolsNav} pathname={pathname} label="Tools" />
+    <NavGroup items={toolsNav} pathname={pathname} label="Public tools" />
   </nav>
 
   <SidebarAccount client:idle session={session} returnTo={returnTo} />

@@ -9,6 +9,8 @@ import "~/styles/globals.css";
 import "~/styles/fonts.css";
 
 type Props = {
+  /* an admin page has already checked the role, so the sidebar may show it */
+  admin?: boolean;
   title: string;
   /* the answer from getSession(), for a page the cdn does not cache */
   session?: Session | null;
@@ -17,7 +19,7 @@ type Props = {
   cached?: boolean;
 };
 
-const { title, session = null, cached = false } = Astro.props;
+const { title, session = null, cached = false, admin = false } = Astro.props;
 
 /*
   the invariant the sidebar rests on: a response that renders who you are must
@@ -76,6 +78,7 @@ const collapsed = Astro.isPrerendered
       style="--sidebar-width: 15rem; --sidebar-width-icon: 3.25rem"
     >
       <AppSidebar
+        admin={admin}
         session={session}
         cached={cached}
         pathname={Astro.url.pathname}

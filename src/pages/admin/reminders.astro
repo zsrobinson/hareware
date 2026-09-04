@@ -1,0 +1,23 @@
+---
+import Dashboard from "~/layouts/dashboard.astro";
+import { ReminderTriggers } from "~/components/reminder-triggers";
+import { editorialBoardMember, notFound } from "~/lib/admin";
+import { REMINDER_HOUR } from "~/lib/reminders/config";
+
+const session = await editorialBoardMember(Astro.request);
+if (!session) return notFound();
+
+Astro.response.headers.set("cache-control", "private, no-store");
+---
+
+<Dashboard title="Reminders" session={session} admin>
+  <div class="max-w-2xl space-y-4">
+    <p class="text-muted-foreground text-sm">
+      Both reminders run on their own at {REMINDER_HOUR}am Eastern. Firing one
+      here takes exactly that path, so what you see is what the morning would
+      have done. Every run is recorded in the log.
+    </p>
+
+    <ReminderTriggers client:load />
+  </div>
+</Dashboard>

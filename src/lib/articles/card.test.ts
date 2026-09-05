@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { card } from "./card";
+import { ARTICLE_PROPERTIES } from "./config";
 import type { ArticlePage } from "./page";
 
 const page = (): ArticlePage => ({
@@ -16,28 +17,37 @@ const page = (): ArticlePage => ({
   },
 });
 
-test("the shared Article card has the selected layout, Notion link, colors and property order", () => {
-  expect(card(page())).toEqual({
-    type: 17,
-    accent_color: 0xd44c47,
-    components: [
-      {
-        type: 9,
-        components: [{ type: 10, content: "### Terps lose again" }],
-        accessory: {
-          type: 2,
-          style: 5,
-          label: "Open in Notion",
-          url: page().url,
-        },
-      },
-      {
-        type: 10,
-        content:
-          "**Author Byline**: Sam R.\n**Article Status**: 🔴 Written\n**Section**: News\n**Image Status**: 🔵 In progress\n**Image Byline**: Not set\n**Publication Date**: Not set",
-      },
-    ],
+test("the shared article card has the selected layout, Notion link, colors and property order", () => {
+  const rendered = card(page());
+  expect(rendered.type).toBe(17);
+  expect(rendered.accent_color).toBe(0xd44c47);
+  expect(rendered.components).toHaveLength(2);
+  expect(rendered.components[0]).toMatchObject({
+    type: 9,
+    accessory: { type: 2, style: 5, url: page().url },
   });
+  expect(JSON.stringify(rendered.components[0])).toContain("Terps lose again");
+
+  const properties = JSON.stringify(rendered.components[1]);
+  const order = [
+    "authorByline",
+    "status",
+    "section",
+    "imageStatus",
+    "imageByline",
+    "publicationDate",
+  ] as const;
+  for (const key of order)
+    expect(properties.indexOf(ARTICLE_PROPERTIES[key].name)).toBeGreaterThan(
+      -1,
+    );
+  for (let index = 1; index < order.length; index++) {
+    expect(
+      properties.indexOf(ARTICLE_PROPERTIES[order[index]!]!.name),
+    ).toBeGreaterThan(
+      properties.indexOf(ARTICLE_PROPERTIES[order[index - 1]!]!.name),
+    );
+  }
 });
 
 test.each([

@@ -19,16 +19,25 @@
   keeps this file testable without D1 or notion.
 */
 
-import { card, type CardPage } from "~/lib/articles/card";
-import type { Actor, EditRequest, PickedUser } from "~/lib/articles/edit";
+import { articleResponse } from "~/lib/articles/response";
+import {
+  IS_COMPONENTS_V2,
+  textMessage,
+  type CommandMessage,
+  type Component,
+} from "./message";
+import type {
+  Actor,
+  EditRequest,
+  EditResult,
+  PickedUser,
+} from "~/lib/articles/edit";
 import { suggestions, type AutocompleteChoice } from "~/lib/articles/pick";
 import type { Intent } from "~/lib/articles/write";
-import type { Article } from "~/lib/articles/page";
+import type { Article, ArticlePage } from "~/lib/articles/page";
 import type { Result } from "~/lib/result";
 import { EDITORIAL_BOARD_ROLE_ID } from "./config";
 import { followUp } from "./follow-up";
-
-const IS_COMPONENTS_V2 = 1 << 15;
 
 /**
  * an ephemeral reply: only the person who ran the command sees it, and it
@@ -53,8 +62,6 @@ const CHANNEL_MESSAGE_WITH_SOURCE = 4;
 const DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE = 5;
 const UPDATE_MESSAGE = 7;
 const APPLICATION_COMMAND_AUTOCOMPLETE_RESULT = 8;
-
-const TEXT_DISPLAY = 10;
 
 const BUTTON = 2;
 const SUCCESS_STYLE = 3;
@@ -82,13 +89,6 @@ export const POSTED_PREFIX = "posted:";
 export function postedId(slug: string) {
   return `${POSTED_PREFIX}${slug}`.slice(0, 100);
 }
-
-export type Component = {
-  type: number;
-  custom_id?: string;
-  components?: Component[];
-  [key: string]: unknown;
-};
 
 /**
  * an option as discord sends it back, which is not the option as we registered
@@ -167,7 +167,7 @@ export type InteractionDeps = {
   /** headlines containing this text, for work too old to be in the recent set */
   search?: (text: string) => Promise<Article[]>;
   /** one Article, read live from notion */
-  page?: (pageId: string) => Promise<CardPage>;
+  page?: (pageId: string) => Promise<ArticlePage>;
   /**
    * the write, which happens after the reply.
    *
@@ -175,7 +175,7 @@ export type InteractionDeps = {
    * `~/lib/articles/edit` is that promise, and this seam is what lets every
    * branch of the deferral be exercised without notion
    */
-  edit?: (request: EditRequest, actor: Actor) => Promise<string>;
+  edit?: (request: EditRequest, actor: Actor) => Promise<EditResult>;
   /**
    * hands work to the platform to finish after the response goes out.
    *
@@ -199,6 +199,7 @@ export type MessageResponse = {
     flags: number;
     /** absent on a deferral, which carries no body at all */
     components?: Component[];
+    allowed_mentions?: { parse: string[] };
   };
 };
 
@@ -260,12 +261,13 @@ export async function handleInteraction(
  * discord refuses, which reaches the editor as "HareWare didn't respond in
  * time" — the same shape of failure a button missing its custom_id causes
  */
-export function ephemeral(content: string): BodyResponse {
-  const components: Component[] = [{ type: TEXT_DISPLAY, content }];
+export function ephemeral(content: string | CommandMessage): BodyResponse {
+  const { components } =
+    typeof content === "string" ? textMessage(content) : content;
 
   return {
     type: CHANNEL_MESSAGE_WITH_SOURCE,
-    data: { flags: EPHEMERAL_V2, components },
+    data: { flags: EPHEMERAL_V2, components, allowed_mentions: { parse: [] } },
   };
 }
 
@@ -581,19 +583,26 @@ function write(
   };
 
   defer(async () => {
-    let content: string;
+    let message: CommandMessage;
 
     try {
-      content = await edit(parsed.request, actor);
+      message = articleResponse(await edit(parsed.request, actor));
     } catch (error) {
       /* `runEdit` promises not to throw, and this is what happens when that
          promise is broken — the editor still gets a sentence */
       console.error("[article] an edit threw rather than answering", error);
-      content =
-        "HareWare hit an error it did not expect and may not have written anything. Check the Article in Notion, and `/admin/log`.";
+      message = articleResponse({
+        status: "failed",
+        explanation:
+          "HareWare could not confirm the edit. Check the Article in Notion and /admin/log.",
+        notes: [],
+        ...(parsed.request.kind !== "create"
+          ? { pageId: parsed.request.pageId }
+          : {}),
+      });
     }
 
-    const result: Result = await send(applicationId, token, content);
+    const result: Result = await send(applicationId, token, message);
 
     /* the write landing and the reply arriving are different mornings: a
        follow-up discord refused leaves an editor believing nothing happened */
@@ -628,7 +637,7 @@ async function show(
   if (!deps.page) return ephemeral("HareWare cannot reach Notion right now.");
 
   try {
-    return ephemeral(card(await deps.page(pageId)));
+    return ephemeral(articleResponse(await deps.page(pageId)));
   } catch (error) {
     console.error("[article] could not read a page for /article show", error);
 

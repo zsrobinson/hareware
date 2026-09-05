@@ -1,3 +1,4 @@
+import { changesSummary } from "./write";
 import { expect, test } from "vitest";
 import {
   dateValue,
@@ -103,7 +104,7 @@ test("Section is a select, so it is patched as one", () => {
 });
 
 test("the sentence says what the value changed from as well as to", () => {
-  const { sentence } = planned(
+  const { changes } = planned(
     plan(
       fullSchema,
       page({
@@ -113,18 +114,22 @@ test("the sentence says what the value changed from as well as to", () => {
     ),
   );
 
-  expect(sentence).toBe('Article Status: "Written" → "Section Edited"');
+  expect(changesSummary(changes)).toBe(
+    'Article Status: "Written" → "Section Edited"',
+  );
 });
 
 test("an empty previous value is named rather than left blank", () => {
-  const { sentence } = planned(
+  const { changes } = planned(
     plan(fullSchema, page(), {
       property: "publicationDate",
       date: "2026-09-10",
     }),
   );
 
-  expect(sentence).toBe("Publication Date: nothing → 2026-09-10");
+  expect(changesSummary(changes)).toBe(
+    'Publication Date: nothing → "2026-09-10"',
+  );
 });
 
 test("clearing a date reads as a clear, not as an empty string", () => {
@@ -139,7 +144,9 @@ test("clearing a date reads as a clear, not as an empty string", () => {
   );
 
   expect(result.properties).toEqual({ "Publication Date": { date: null } });
-  expect(result.sentence).toBe("Publication Date: 2026-09-10 → nothing");
+  expect(changesSummary(result.changes)).toBe(
+    'Publication Date: "2026-09-10" → nothing',
+  );
 });
 
 /* ---- the data-loss guard ------------------------------------------------ */
@@ -264,7 +271,7 @@ test("a credit is refused entirely when the relation half cannot be written", ()
 });
 
 test("a credit's sentence names both halves and where each came from", () => {
-  const { sentence } = planned(
+  const { changes } = planned(
     planCredit(
       fullSchema,
       page({
@@ -278,15 +285,17 @@ test("a credit's sentence names both halves and where each came from", () => {
     ),
   );
 
-  expect(sentence).toContain('Author Byline: "Zach" → "Zachary Robinson"');
-  expect(sentence).toContain("member-9");
-  expect(sentence).toContain("member-1");
+  expect(changesSummary(changes)).toContain(
+    'Author Byline: "Zach" → "Zachary Robinson"',
+  );
+  expect(changesSummary(changes)).toContain("member-9");
+  expect(changesSummary(changes)).toContain("member-1");
 });
 
 /* ---- creating one ------------------------------------------------------- */
 
 test("a new article carries a headline, a byline and whatever else was given", () => {
-  const { properties, sentence } = planned(
+  const { properties, changes } = planned(
     planCreate(fullSchema, {
       headline: "Looney's line",
       byline: "Zachary Robinson",
@@ -303,8 +312,8 @@ test("a new article carries a headline, a byline and whatever else was given", (
     "Article Status": statusValue("Approved"),
     Section: selectValue("Rabbithole"),
   });
-  expect(sentence).toContain("Looney's line");
-  expect(sentence).toContain("Approved");
+  expect(changesSummary(changes)).toContain("Looney's line");
+  expect(changesSummary(changes)).toContain("Approved");
 });
 
 test("a new article without a section writes no section at all", () => {

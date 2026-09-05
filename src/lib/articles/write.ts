@@ -1,9 +1,9 @@
 /*
-  turning an intended change into the body of one notion PATCH, and the
-  sentence that says what it did.
+  turning an intended change into one notion PATCH and structured before/after
+  values. The response and Invocation log format those same facts.
 
   everything here is pure. a command re-reads its page, plans the change,
-  sends the body and logs the sentence — so the interesting part, which is
+  sends the body and confirms the returned values — so the interesting part, which is
   which shape each property type takes and what the value was before, is
   testable without notion and without a write token. see ADR 0009.
 
@@ -55,14 +55,21 @@ export type Credit = {
 };
 
 /**
- * a planned change: the body to send, and what to say about it.
+ * a planned change: the body to send and the values to verify.
  *
- * the sentence carries the value it is changing **from** as well as to. that
+ * each change carries the value it is changing **from** as well as to. that
  * is what makes a command run against the wrong article undoable rather than
  * a mystery, and ADR 0009 requires every mutation to be an Invocation — a log
  * row saying only the new value cannot undo anything
  */
-export type Plan = PatchBody & { sentence: string };
+export type ChangeValue = string | string[] | null;
+export type ArticleChange = {
+  property: PropertyKey;
+  before: ChangeValue;
+  after: ChangeValue;
+  member?: { id: string; name: string };
+};
+export type Plan = PatchBody & { changes: ArticleChange[] };
 
 /**
  * a plan, or a refusal to make one.
@@ -105,53 +112,65 @@ export function relationValue(ids: string[]): PropertyValue {
 
 /* ---- reading what is there now ------------------------------------------ */
 
-const NOTHING = "nothing";
-
-const quoted = (text: string | null) =>
-  text === null || text === "" ? NOTHING : `"${text}"`;
-
-const listed = (ids: string[]) => (ids.length === 0 ? NOTHING : ids.join(", "));
-
-/** the current value of a property, in the words the sentence uses */
-function current(page: ArticlePage, property: PropertyKey): string {
+/** Read raw values once for planning, confirmation and logging. */
+export function current(page: ArticlePage, property: PropertyKey): ChangeValue {
   const value = page.properties?.[ARTICLE_PROPERTIES[property].name];
-
   switch (ARTICLE_PROPERTIES[property].type) {
     case "title":
-      return quoted(plainText(value?.title).trim() || null);
+      return plainText(value?.title).trim() || null;
     case "rich_text":
-      return quoted(plainText(value?.rich_text).trim() || null);
+      return plainText(value?.rich_text).trim() || null;
     case "date":
-      return value?.date?.start ?? NOTHING;
+      return value?.date?.start ?? null;
     case "relation":
-      return listed(relationIds(value));
+      return relationIds(value);
     default:
-      // a status and a select both answer with the option's name
-      return quoted(optionName(value));
+      return optionName(value);
   }
 }
 
-/** the value the intent writes, both as a patch and as words */
-function intended(intent: Intent): { value: PropertyValue; said: string } {
+export function sameValue(a: ChangeValue, b: ChangeValue): boolean {
+  return Array.isArray(a) && Array.isArray(b)
+    ? a.length === b.length && a.every((id) => b.includes(id))
+    : a === b;
+}
+
+/** Detailed log text retains relation ids for undoing an edit. */
+export function changesSummary(changes: ArticleChange[]): string {
+  const said = (value: ChangeValue) =>
+    Array.isArray(value)
+      ? value.join(", ") || "nothing"
+      : value === null || value === ""
+        ? "nothing"
+        : `"${value}"`;
+  return changes
+    .map(
+      ({ property, before, after }) =>
+        `${ARTICLE_PROPERTIES[property].name}: ${said(before)} → ${said(after)}`,
+    )
+    .join("; ");
+}
+
+function intended(intent: Intent): {
+  value: PropertyValue;
+  after: ChangeValue;
+} {
   switch (intent.property) {
     case "headline":
-      return { value: titleValue(intent.text), said: quoted(intent.text) };
+      return { value: titleValue(intent.text), after: intent.text };
     case "status":
     case "imageStatus":
-      return { value: statusValue(intent.option), said: quoted(intent.option) };
+      return { value: statusValue(intent.option), after: intent.option };
     case "section":
-      return { value: selectValue(intent.option), said: quoted(intent.option) };
+      return { value: selectValue(intent.option), after: intent.option };
     case "authorByline":
     case "imageByline":
-      return { value: richTextValue(intent.text), said: quoted(intent.text) };
+      return { value: richTextValue(intent.text), after: intent.text || null };
     case "publicationDate":
-      return {
-        value: dateValue(intent.date),
-        said: intent.date ?? NOTHING,
-      };
+      return { value: dateValue(intent.date), after: intent.date };
     case "author":
     case "imageCrew":
-      return { value: relationValue(intent.ids), said: listed(intent.ids) };
+      return { value: relationValue(intent.ids), after: intent.ids };
   }
 }
 
@@ -200,13 +219,19 @@ export function plan(
   if (reason) return { status: "refused", reason };
 
   const name = ARTICLE_PROPERTIES[intent.property].name;
-  const { value, said } = intended(intent);
+  const { value, after } = intended(intent);
 
   return {
     status: "planned",
     plan: {
       properties: { [name]: value },
-      sentence: `${name}: ${current(page, intent.property)} → ${said}`,
+      changes: [
+        {
+          property: intent.property,
+          before: current(page, intent.property),
+          after,
+        },
+      ],
     },
   };
 }
@@ -263,15 +288,20 @@ export function planCreate(
           ? {}
           : { [name("section")]: selectValue(section) }),
       },
-      sentence: [
-        `${name("headline")}: ${quoted(headline)}`,
-        `${name("authorByline")}: ${quoted(byline)}`,
-        ...(authorIds.length === 0
-          ? []
-          : [`${name("author")}: ${listed(authorIds)}`]),
-        ...(status === null ? [] : [`${name("status")}: ${quoted(status)}`]),
-        ...(section === null ? [] : [`${name("section")}: ${quoted(section)}`]),
-      ].join("; "),
+      changes: writing.map((property) => ({
+        property,
+        before: property === "author" ? [] : null,
+        after:
+          (
+            {
+              headline,
+              authorByline: byline,
+              author: authorIds,
+              status,
+              section,
+            } as Partial<Record<PropertyKey, ChangeValue>>
+          )[property] ?? null,
+      })),
     },
   };
 }
@@ -308,10 +338,14 @@ export function planCredit(
         [textName]: richTextValue(byline),
         [relationName]: relationValue(memberIds),
       },
-      sentence: [
-        `${textName}: ${current(page, text)} → ${quoted(byline)}`,
-        `${relationName}: ${current(page, relation)} → ${listed(memberIds)}`,
-      ].join("; "),
+      changes: [
+        { property: text, before: current(page, text), after: byline },
+        {
+          property: relation,
+          before: current(page, relation),
+          after: memberIds,
+        },
+      ],
     },
   };
 }

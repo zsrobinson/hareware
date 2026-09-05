@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { runEdit, type EditIO, type EditRequest } from "./edit";
+import { editSummary, runEdit, type EditIO, type EditRequest } from "./edit";
 import type { Schema } from "./choices";
 import type { ArticlePage } from "./page";
 import type { Result } from "~/lib/result";
@@ -41,6 +41,14 @@ const article = (properties: ArticlePage["properties"] = {}): ArticlePage => ({
   last_edited_time: "2026-09-04T10:05:00.000Z",
   properties: {
     Headline: { type: "title", title: [{ plain_text: "Looney's line" }] },
+    "Article Status": { status: null },
+    "Image Status": { status: null },
+    Section: { select: null },
+    "Author Byline": { rich_text: [] },
+    "Image Byline": { rich_text: [] },
+    Author: { relation: [] },
+    "Image Crew": { relation: [] },
+    "Publication Date": { date: null },
     ...properties,
   },
 });
@@ -54,6 +62,25 @@ type Recorded = {
   made: { name: string; discordId: string }[];
   logged: { result: Result; actor: string }[];
 };
+
+/** Simulate Notion's response shape, including plain_text from write text. */
+function returnedProperties(body: {
+  properties: Record<string, Record<string, unknown>>;
+}): ArticlePage {
+  return article(
+    Object.fromEntries(
+      Object.entries(body.properties).map(([name, value]) => {
+        const entry = { ...value };
+        for (const key of ["title", "rich_text"])
+          if (Array.isArray(entry[key]))
+            entry[key] = (entry[key] as { text: { content: string } }[]).map(
+              ({ text }) => ({ plain_text: text.content }),
+            );
+        return [name, entry];
+      }),
+    ),
+  );
+}
 
 /** an `EditIO` that records everything, with each piece overridable */
 function spy(over: Partial<EditIO> = {}) {
@@ -70,11 +97,11 @@ function spy(over: Partial<EditIO> = {}) {
     page: async () => article(),
     patch: async (pageId, body) => {
       seen.patched.push({ pageId, body });
-      return article();
+      return returnedProperties(body);
     },
     create: async (body) => {
       seen.created.push(body);
-      return { ...article(), id: "page-new" };
+      return { ...returnedProperties(body), id: "page-new" };
     },
     members: async () => ({ status: "absent" }) as MemberMatch,
     link: async (pageId, patch) => {
@@ -124,11 +151,11 @@ test("a property change patches notion, indexes what came back, and logs it", as
   const said = await runEdit(io, setStatus, actor);
 
   // the reply says what it changed *from*, which is what makes it undoable
-  expect(said).toContain('"Backlog"');
-  expect(said).toContain('"Approved"');
+  expect(editSummary(said)).toContain('"Backlog"');
+  expect(editSummary(said)).toContain('"Approved"');
 
   expect(seen.logged).toEqual([
-    { result: { outcome: "ok", summary: said }, actor: "111" },
+    { result: { outcome: "ok", summary: editSummary(said) }, actor: "111" },
   ]);
 });
 
@@ -141,7 +168,7 @@ test("notion refusing a write is words rather than a thrown promise", async () =
 
   const said = await runEdit(io, setStatus, actor);
 
-  expect(said).toContain("409");
+  expect(editSummary(said)).toContain("409");
   expect(seen.logged[0]!.result.outcome).toBe("failed");
 });
 
@@ -154,7 +181,7 @@ test("notion refusing the schema still answers the editor", async () => {
 
   const said = await runEdit(io, setStatus, actor);
 
-  expect(said).toContain("502");
+  expect(editSummary(said)).toContain("502");
   expect(seen.patched).toEqual([]);
   expect(seen.logged[0]!.result.outcome).toBe("failed");
 });
@@ -188,7 +215,7 @@ test("a new article is created at the schema's own spelling of approved", async 
       },
     },
   ]);
-  expect(said).toContain("Created **Looney's line**");
+  expect(editSummary(said)).toContain("Created article.");
 });
 
 test("a renamed approved option is said out loud rather than sent to notion", async () => {
@@ -218,7 +245,7 @@ test("a renamed approved option is said out loud rather than sent to notion", as
     actor,
   );
 
-  expect(said).toContain("approved");
+  expect(editSummary(said)).toContain("approved");
   expect(
     (seen.created[0] as { properties: Record<string, unknown> }).properties,
   ).not.toHaveProperty("Article Status");
@@ -251,7 +278,7 @@ test("a new article credits the member the picker returned, creating the row", a
     rich_text: [{ text: { content: "Bay Hoffman" } }],
   });
   expect(properties.Author).toEqual({ relation: [{ id: "member-new" }] });
-  expect(said).toContain("created **Bay Hoffman** in Members");
+  expect(editSummary(said)).toContain("Created Bay Hoffman in Members");
 });
 
 test("a new article with no member and no byline is credited to whoever ran it", async () => {
@@ -327,8 +354,8 @@ test("a relation notion is not sharing is refused rather than overwritten", asyn
 
   const said = await runEdit(io, creditRequest(), actor);
 
-  expect(said).toContain("not sharing");
-  expect(said).toContain("Author");
+  expect(editSummary(said)).toContain("not sharing");
+  expect(editSummary(said)).toContain("Author");
   expect(seen.patched).toEqual([]);
   expect(seen.made).toEqual([]);
   expect(seen.logged[0]!.result.outcome).toBe("failed");
@@ -347,8 +374,8 @@ test("two Members sharing a Discord ID is refused, naming both", async () => {
 
   const said = await runEdit(io, creditRequest(), actor);
 
-  expect(said).toContain("member-1");
-  expect(said).toContain("member-2");
+  expect(editSummary(said)).toContain("member-1");
+  expect(editSummary(said)).toContain("member-2");
   expect(seen.patched).toEqual([]);
   expect(seen.logged[0]!.result.outcome).toBe("failed");
 });
@@ -366,7 +393,7 @@ test("two Members answering to one name is refused rather than picked between", 
 
   const said = await runEdit(io, creditRequest(), actor);
 
-  expect(said).toContain("member-1");
+  expect(editSummary(said)).toContain("member-1");
   expect(seen.patched).toEqual([]);
 });
 
@@ -377,7 +404,7 @@ test("Members being unreadable writes nothing and says so", async () => {
 
   const said = await runEdit(io, creditRequest(), actor);
 
-  expect(said).toContain("no token");
+  expect(editSummary(said)).toContain("no token");
   expect(seen.patched).toEqual([]);
 });
 
@@ -396,8 +423,8 @@ test("a name match links the Discord ID onto that row and says so", async () => 
 
   expect(seen.linked).toHaveLength(1);
   expect(seen.linked[0]!.pageId).toBe("member-7");
-  expect(said).toContain("linked");
-  expect(said).toContain("Bay Hoffman");
+  expect(editSummary(said)).toContain("Linked");
+  expect(editSummary(said)).toContain("Bay Hoffman");
 });
 
 test("nobody matching creates a Members row, and the reply names it", async () => {
@@ -406,7 +433,7 @@ test("nobody matching creates a Members row, and the reply names it", async () =
   const said = await runEdit(io, creditRequest(), actor);
 
   expect(seen.made).toEqual([{ name: "Bay Hoffman", discordId: "222" }]);
-  expect(said).toContain("created **Bay Hoffman** in Members");
+  expect(editSummary(said)).toContain("Created Bay Hoffman in Members");
 });
 
 test("a credit writes the printed Byline and the relation in one patch", async () => {
@@ -509,7 +536,7 @@ test("a credit with neither a member nor a byline is a question, not a write", a
     actor,
   );
 
-  expect(said).toContain("member");
+  expect(editSummary(said)).toContain("member");
   expect(seen.patched).toEqual([]);
 });
 
@@ -567,10 +594,193 @@ test("crediting the same member twice does not print them twice", async () => {
 
   await runEdit(io, creditRequest({ also: true }), actor);
 
-  expect(seen.patched[0]!.body).toMatchObject({
-    properties: {
-      "Author Byline": { rich_text: [{ text: { content: "Bay Hoffman" } }] },
-      Author: { relation: [{ id: "member-bay" }] },
+  expect(seen.patched).toEqual([]);
+});
+
+test("a confirmed write survives a logging failure and preserves the returned page", async () => {
+  const returned = article({
+    "Article Status": { status: { name: "Approved" } },
+  });
+  const { io } = spy({
+    patch: async () => returned,
+    log: async () => {
+      throw new Error("D1 unavailable");
     },
   });
+  const result = await runEdit(io, setStatus, actor);
+  expect(result).toMatchObject({
+    status: "updated",
+    page: returned,
+    changes: [{ property: "status", before: null, after: "Approved" }],
+  });
+});
+
+test("an unchanged validated property skips the write and keeps its page", async () => {
+  const page = article({ "Article Status": { status: { name: "Approved" } } });
+  const { io, seen } = spy({ page: async () => page });
+  expect(await runEdit(io, setStatus, actor)).toMatchObject({
+    status: "unchanged",
+    page,
+    changes: [{ before: "Approved", after: "Approved" }],
+  });
+  expect(seen.patched).toEqual([]);
+});
+
+test("a missing property in the write response cannot claim a clear", async () => {
+  const { io } = spy({
+    page: async () =>
+      article({ "Article Status": { status: { name: "Backlog" } } }),
+    patch: async () => ({ id: "page-1", properties: {} }),
+  });
+  expect(await runEdit(io, setStatus, actor)).toMatchObject({
+    status: "failed",
+    pageId: "page-1",
+    explanation: expect.stringContaining("could not be confirmed"),
+  });
+});
+
+test("the receipt reports the returned value, not the intended value", async () => {
+  const { io } = spy({
+    patch: async () =>
+      article({ "Article Status": { status: { name: "Written" } } }),
+  });
+  expect(await runEdit(io, setStatus, actor)).toMatchObject({
+    status: "updated",
+    changes: [{ before: null, after: "Written" }],
+  });
+});
+
+test("a created Member remains in the result and log when the article write fails", async () => {
+  const { io, seen } = spy({
+    patch: async () => {
+      throw new Error("connection lost");
+    },
+  });
+  const result = await runEdit(io, creditRequest(), actor);
+  expect(result).toMatchObject({
+    status: "failed",
+    notes: ["Created Bay Hoffman in Members."],
+  });
+  expect(seen.logged[0]!.result.summary).toContain(
+    "Created Bay Hoffman in Members.",
+  );
+});
+
+test("a linked Member remains in the result when article creation fails", async () => {
+  const { io } = spy({
+    members: async () => ({
+      status: "linkable",
+      member: { pageId: "member-1", name: "Bay Hoffman", discordId: null },
+      patch: { properties: {} },
+    }),
+    create: async () => {
+      throw new Error("connection lost");
+    },
+  });
+  const result = await runEdit(
+    io,
+    {
+      kind: "create",
+      headline: "A headline",
+      section: null,
+      member: { discordId: "222", displayName: "Bay Hoffman" },
+      byline: null,
+    },
+    actor,
+  );
+  expect(result).toMatchObject({
+    status: "failed",
+    notes: ["Linked Bay Hoffman to their Discord account in Members."],
+  });
+});
+
+test("a Member write timeout does not claim the mutation was refused", async () => {
+  const { io } = spy({
+    addMember: async () => {
+      throw new Error("timeout");
+    },
+  });
+  expect(await runEdit(io, creditRequest(), actor)).toMatchObject({
+    status: "failed",
+    explanation: expect.stringContaining(
+      "Check Notion and Members before retrying",
+    ),
+  });
+});
+
+test("an incomplete creation response keeps the new article link without inventing values", async () => {
+  const { io } = spy({
+    create: async () => ({ id: "page-new", properties: {} }),
+  });
+  expect(
+    await runEdit(
+      io,
+      {
+        kind: "create",
+        headline: "A headline",
+        section: null,
+        member: null,
+        byline: null,
+      },
+      actor,
+    ),
+  ).toMatchObject({
+    status: "failed",
+    pageId: "page-new",
+    explanation: expect.stringContaining("Notion created the article"),
+  });
+});
+
+test("an explicitly null date is confirmed as a clear", async () => {
+  const { io } = spy({
+    page: async () =>
+      article({ "Publication Date": { date: { start: "2026-09-10" } } }),
+    patch: async () => article({ "Publication Date": { date: null } }),
+  });
+  expect(
+    await runEdit(
+      io,
+      {
+        kind: "property",
+        pageId: "page-1",
+        intent: { property: "publicationDate", date: null },
+      },
+      actor,
+    ),
+  ).toMatchObject({
+    status: "updated",
+    changes: [
+      { property: "publicationDate", before: "2026-09-10", after: null },
+    ],
+  });
+});
+
+test("a missing before value cannot become an unchanged clear", async () => {
+  const { io, seen } = spy({
+    page: async () => ({ id: "page-1", properties: {} }),
+  });
+  expect(
+    await runEdit(
+      io,
+      {
+        kind: "property",
+        pageId: "page-1",
+        intent: { property: "publicationDate", date: null },
+      },
+      actor,
+    ),
+  ).toMatchObject({ status: "failed" });
+  expect(seen.patched).toEqual([]);
+});
+
+test("a missing credit relation refuses before creating or linking a Member", async () => {
+  const page = article();
+  delete page.properties.Author;
+  const { io, seen } = spy({ page: async () => page });
+  expect(await runEdit(io, creditRequest({ also: true }), actor)).toMatchObject(
+    { status: "failed" },
+  );
+  expect(seen.patched).toEqual([]);
+  expect(seen.made).toEqual([]);
+  expect(seen.linked).toEqual([]);
 });

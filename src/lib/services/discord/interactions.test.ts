@@ -10,7 +10,8 @@ import {
 } from "./interactions";
 import { EDITORIAL_BOARD_ROLE_ID } from "./config";
 import type { Article } from "~/lib/articles/page";
-import type { CardPage } from "~/lib/articles/card";
+import type { ArticlePage } from "~/lib/articles/page";
+import type { CommandMessage } from "./message";
 
 const IS_COMPONENTS_V2 = 1 << 15;
 
@@ -315,7 +316,7 @@ const row = (over: Partial<Article> = {}): Article => ({
 });
 
 /** a notion page as `/article show` reads one */
-const notionPage = (): CardPage => ({
+const notionPage = (): ArticlePage => ({
   id: "page-1",
   url: "https://notion.so/page-1",
   properties: {
@@ -535,7 +536,11 @@ function writing(over: Partial<InteractionDeps> = {}) {
   const seen = {
     requests: [] as unknown[],
     actors: [] as { id: string; name: string }[],
-    followed: [] as { applicationId: string; token: string; content: string }[],
+    followed: [] as {
+      applicationId: string;
+      token: string;
+      content: CommandMessage;
+    }[],
   };
   const work: Promise<void>[] = [];
 
@@ -543,7 +548,12 @@ function writing(over: Partial<InteractionDeps> = {}) {
     edit: async (request, actor) => {
       seen.requests.push(request);
       seen.actors.push(actor);
-      return "did the thing";
+      return {
+        status: "updated",
+        page: notionPage(),
+        changes: [{ property: "status", before: "Approved", after: "Written" }],
+        notes: [],
+      };
     },
     reply: async (applicationId, token, content) => {
       seen.followed.push({ applicationId, token, content });
@@ -597,9 +607,15 @@ test("a write defers, then follows up with what the edit said", async () => {
       intent: { property: "status", option: "Approved" },
     },
   ]);
-  expect(seen.followed).toEqual([
-    { applicationId: "app-1", token: "tok-1", content: "did the thing" },
-  ]);
+  expect(seen.followed).toHaveLength(1);
+  expect(seen.followed[0]).toMatchObject({
+    applicationId: "app-1",
+    token: "tok-1",
+  });
+  expect(seen.followed[0]!.content.components[0]).toEqual({
+    type: 10,
+    content: "Updated **Article Status** from **Approved** to **Written**.",
+  });
 });
 
 /*
@@ -624,7 +640,9 @@ test("an edit that throws still follows up", async () => {
   await settle();
 
   expect(seen.followed).toHaveLength(1);
-  expect(seen.followed[0]!.content).toContain("error");
+  expect(JSON.stringify(seen.followed[0]!.content)).toContain(
+    "could not confirm",
+  );
 });
 
 test("nowhere to run the work is refused inline rather than deferred", async () => {

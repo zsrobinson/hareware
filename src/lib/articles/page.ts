@@ -50,7 +50,7 @@ const NO_TIMESTAMP = "1970-01-01T00:00:00.000Z";
  * the chosen option's name, whichever of the two shapes it arrived in.
  *
  * a `status` carries it under `status` and a `select` under `select`. read
- * tolerantly here because the index only wants the label, and a property
+ * tolerantly here because the picker only wants the label, and a property
  * somebody converted from one to the other in notion should show its value
  * rather than go blank until the code catches up. writes are the opposite and
  * have to know which they are talking to

@@ -64,7 +64,7 @@ const DANGER_STYLE = 4;
 const MAX_LABEL = 80;
 
 /**
- * how long the index gets to answer an autocomplete.
+ * how long the whole autocomplete answer gets.
  *
  * discord's three seconds are hard and there is no deferred autocomplete
  * response, so a slow D1 read has to become an empty dropdown well before the
@@ -166,7 +166,7 @@ export type InteractionDeps = {
   articles?: () => Promise<Article[]>;
   /** headlines containing this text, for work too old to be in the recent set */
   search?: (text: string) => Promise<Article[]>;
-  /** one Article, read live from notion — never from the index, per ADR 0009 */
+  /** one Article, read live from notion */
   page?: (pageId: string) => Promise<CardPage>;
   /**
    * the write, which happens after the reply.
@@ -675,7 +675,7 @@ async function handleCommand(
  *
  * three things shape this. it cannot be deferred — there is no such response
  * type, and discord's three seconds are hard — so the read is raced against a
- * deadline and a slow index becomes an empty dropdown rather than an error.
+ * deadline and a slow notion becomes an empty dropdown rather than an error.
  * it is gated on the role like every other branch, because an autocomplete
  * response is a list of the club's unpublished Articles and reaches whoever an
  * admin left the command visible to. and an empty list is always a valid
@@ -715,29 +715,46 @@ async function handleAutocomplete(
     notion cannot express a fuzzy match, and this is the whole reason an editor
     can type half a headline badly and still find it
   */
-  const { rows, why } = await within(
-    articles(),
-    deps.timeoutMs ?? AUTOCOMPLETE_BUDGET_MS,
-  );
+  /*
+    one deadline for the whole answer, not one per read. the two reads used to
+    get the full budget each, so a throttling notion spent two seconds on the
+    first and two on the second — four against discord's hard three, which
+    reaches the editor as "HareWare didn't respond in time" on every keystroke.
+    exactly what the budget was chosen to prevent
+  */
+  const until = Date.now() + (deps.timeoutMs ?? AUTOCOMPLETE_BUDGET_MS);
+  const left = () => Math.max(0, until - Date.now());
 
-  let choices = suggestions(rows, query);
+  const recent = await within(articles(), left());
+
+  let choices = suggestions(recent.rows, query);
   let source = "recent";
+  let why = recent.why;
 
   /*
     nothing recent matched, so it is probably older than the hundred we hold.
     notion's `contains` is a literal substring — it finds "ellicott" and not
     "elicott" — so this is coarser than the matching above and deliberately a
-    last resort. it costs a request only when the answer would otherwise be an
-    empty dropdown
+    last resort.
+
+    `recent.why === undefined` is load-bearing: without it, a read that timed
+    out or threw also arrives here as "no choices", and we would spend a second
+    request on notion at the exact moment notion is refusing us
   */
-  if (choices.length === 0 && query.length >= MIN_SEARCH && deps.search) {
-    const found = await within(
-      deps.search(query),
-      deps.timeoutMs ?? AUTOCOMPLETE_BUDGET_MS,
-    );
+  if (
+    choices.length === 0 &&
+    recent.why === undefined &&
+    query.length >= MIN_SEARCH &&
+    deps.search
+  ) {
+    const found = await within(deps.search(query), left());
 
     choices = suggestions(found.rows, query);
     source = "search";
+    /* the search's own outcome, not the first read's — reporting "no matches"
+       for a search that never answered is the failure this line exists to
+       describe */
+    why = found.why;
   }
 
   /*
@@ -748,7 +765,7 @@ async function handleAutocomplete(
   */
   if (choices.length === 0) {
     console.warn(
-      `[article] autocomplete answered nothing: query=${JSON.stringify(query)} source=${source} rows=${rows.length} ${why ?? "no matches"}`,
+      `[article] autocomplete answered nothing: query=${JSON.stringify(query)} source=${source} ${why ?? "no matches"}`,
     );
   }
 
@@ -761,12 +778,12 @@ async function handleAutocomplete(
 /**
  * the rows, or none of them if they take too long or the read throws.
  *
- * `store.recent` already swallows its own D1 failures, and this is the second
- * half of that bargain: a promise that never settles is the failure it cannot
- * catch, and it is the one discord punishes
+ * `live.ts` deliberately lets its throws out — it has no better answer to
+ * give — so this is where they stop. a promise that never settles is the
+ * failure a try/catch cannot see, and it is the one discord punishes
  */
 async function within(rows: Promise<Article[]>, ms: number) {
-  /* a sentinel rather than an empty array: "the deadline won" and "the index
+  /* a sentinel rather than an empty array: "the deadline won" and "notion
      holds nothing that matches" are different facts, and answering both with
      `[]` is what made an empty dropdown impossible to explain */
   const LATE = Symbol("late");
@@ -780,7 +797,7 @@ async function within(rows: Promise<Article[]>, ms: number) {
 
     return { rows: raced, why: undefined };
   } catch (error) {
-    console.error("[article] could not read the index for autocomplete", error);
+    console.error("[article] could not read articles for autocomplete", error);
     return { rows: [], why: "threw" as const };
   }
 }

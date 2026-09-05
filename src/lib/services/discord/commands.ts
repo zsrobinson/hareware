@@ -48,7 +48,7 @@ export type CommandOption = {
   required?: boolean;
   /** discord asks us for suggestions as the editor types, rather than us
       listing them up front. only ever on the article picker, whose options
-      are the 138 rows of the index */
+      are whatever notion currently holds */
   autocomplete?: boolean;
 };
 
@@ -122,7 +122,7 @@ const USER = 6;
  *
  * autocompleted rather than choice-listed: there are 138 articles and discord
  * caps a choice list at 25, so the suggestions are computed per keystroke from
- * the index. the value that comes back is a notion page id
+ * notion. the value that comes back is a notion page id
  */
 const articleOption = (): CommandOption => ({
   type: STRING,

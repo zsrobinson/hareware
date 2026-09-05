@@ -17,7 +17,8 @@
 import { buildCommands } from "~/lib/services/discord/commands";
 import { registerCommands } from "~/lib/services/discord/register";
 import { failed, misconfigured, type Result } from "~/lib/result";
-import { extractChoices, fetchSchema } from "./choices";
+import { assertProperties, extractChoices, fetchSchema } from "./choices";
+import { CHOICE_PROPERTIES } from "./config";
 
 /**
  * reads the schema and puts the surface it implies on discord.
@@ -28,21 +29,50 @@ import { extractChoices, fetchSchema } from "./choices";
 export async function refreshCommands(env: Env): Promise<Result> {
   if (!env.NOTION_TOKEN) return misconfigured("NOTION_TOKEN unset");
 
-  let choices;
+  let schema;
   try {
-    choices = extractChoices(await fetchSchema(env.NOTION_TOKEN));
+    schema = await fetchSchema(env.NOTION_TOKEN);
   } catch (error) {
     console.error("[articles] could not read the schema", error);
     return failed(`notion refused the schema: ${String(error)}`);
   }
 
   /*
+    the hourly alarm for notion quietly stopping sharing something. the write
+    paths check this too and refuse rather than write a relation they cannot
+    read back — but that only speaks when somebody tries to credit a Member,
+    which could be weeks. this says so the same day
+  */
+  const missing = assertProperties(schema);
+  if (missing.length > 0) {
+    return misconfigured(
+      `notion is not sharing ${missing
+        .map((miss) => `${miss.name} (${miss.found ?? "absent"})`)
+        .join(", ")}`,
+    );
+  }
+
+  const choices = extractChoices(schema);
+
+  /*
     an empty set is not a surface worth publishing: it would replace working
     pickers with empty ones, which reads to an editor as the command being
     broken. keeping yesterday's is the better failure
   */
-  if (choices.length === 0) {
-    return failed("notion returned no picker options; kept the surface it had");
+  /*
+    per picker, not in aggregate. a read that half worked — `Image Status`
+    renamed, or converted from a status to a select — still returns options for
+    the other two, and registering that publishes a required picker with no
+    choices in it. an editor opens an empty dropdown, or types free text that
+    notion then refuses
+  */
+  const empty = CHOICE_PROPERTIES.filter(
+    (property) => !choices.some((choice) => choice.property === property),
+  );
+  if (empty.length > 0) {
+    return failed(
+      `no options came back for ${empty.join(", ")}; kept the surface it had`,
+    );
   }
 
   const result = await registerCommands(env, buildCommands(choices));

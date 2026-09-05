@@ -34,7 +34,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response("malformed interaction", { status: 400 });
   }
 
-  /* awaited: `handleInteraction` reads d1 for autocomplete and notion for
+  /* awaited: `handleInteraction` reads notion for autocomplete and for
      `show`, so it returns a promise — and an un-awaited one is truthy, which
      would have answered every interaction, button presses included, with a
      serialised promise */

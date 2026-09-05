@@ -24,6 +24,12 @@ anyway. If every command stopped working tomorrow, the club opens Notion.
 
 ### Notion's integration webhooks are not Notion's automations
 
+**Amended 2026-09-05: HareWare no longer receives webhooks.** They were built,
+delivered correctly, and were still not enough — see "The picker reads Notion"
+below. This section stays because the distinction it draws is real and somebody
+will reach for webhooks again, and the constraints listed here are what they
+should weigh before doing so.
+
 ADR 0006 rejected "event-driven webhooks from Notion" and it is easy to read
 that as covering this. It does not. That rejection was about **database
 automations** — the no-code triggers configured on a database — and it was
@@ -64,9 +70,10 @@ those values is written down here.
 
 Discord bakes an option's choices into the command registration rather than
 resolving them at use, so reflecting a schema change means re-registering. That
-happens on the `data_source.schema_updated` webhook, and again on the hourly
-cron regardless — the webhook for speed, the cron for truth. A hash of the
-computed registration is stored so an unchanged schema re-registers nothing.
+happens on the hourly cron, unconditionally. Discord allows two hundred guild
+registrations a day and twenty-four spends fourteen per cent of that, so there
+is nothing worth saving by remembering what was last sent — and a remembered
+hash can disagree with what is actually up there.
 
 ### The picker reads Notion, and holds it for ten seconds
 
@@ -161,14 +168,14 @@ means the club renames a thing once. It also means no value is ever typed into
 this repo, so the casing traps — `Not started`, not `Not Started` — cannot be
 introduced.
 
-**D1 holds a cache for the first time.** ADR 0007 established that nothing in D1
-is authoritative, and that holds: `article_index` is a description of Notion,
-rebuilt hourly from it, and nothing reads it to decide what to write.
+**D1 holds only the invocation log.** An index lived there briefly; ADR 0007's
+rule that nothing in D1 is authoritative is now true by construction rather than
+by discipline, because there is nothing in it to be authoritative about except
+the record of what HareWare did.
 
-**A dead webhook is detectable.** The hourly rebuild diffs what it replaces, and
-an unexplained diff means delivery stopped. That is reported the way a failed
-automation is, because a webhook that quietly stops is the same shape of failure
-as a reminder that quietly did not run.
+**There is no webhook to die.** Nothing is pushed to us and nothing is kept in
+step, so the class of failure where a feed quietly stops — which this document
+originally spent a section defending against — cannot happen.
 
 **Relations can be written safely only while Members is shared with the
 integration.** Notion omits a relation property from the schema entirely when
@@ -183,10 +190,19 @@ automations, so `/admin/log` answers who set an Article to Published and when.
 
 ### Live Notion queries for autocomplete, with no index
 
-Rejected on rate limit rather than latency — a single query measured comfortably
-inside the deadline, but autocomplete fires per keystroke against a
-three-per-second budget, and the failure mode is an empty dropdown with no
-explanation.
+Rejected here, and **adopted 2026-09-05** — the reasoning below was right about
+the constraint and wrong about the shape.
+
+The rejection assumed autocomplete would read the whole table, which is two
+requests per keystroke against a budget of about three a second. The hundred
+most recently edited, sorted by Notion, is **one** request and ~0.7s; a
+ten-second snapshot in the isolate makes a burst of typing one request rather
+than six. The budget the rejection was protecting is intact, and the index it
+justified is gone.
+
+What the rejection got right and is still worth keeping: the failure mode is an
+empty dropdown with no explanation, so every path through autocomplete logs why
+it answered with nothing.
 
 ### Autocomplete for Status, Section and Image Status
 

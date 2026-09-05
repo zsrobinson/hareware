@@ -34,10 +34,10 @@ export type Schema = {
   >;
 };
 
-/** a property the schema does not have in the shape we expect */
 /** one option a picker offers, in notion's own order */
 export type ChoiceOption = { property: string; name: string; position: number };
 
+/** a property the schema does not have in the shape we expect */
 export type MissingProperty = {
   name: string;
   expected: string;

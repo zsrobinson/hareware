@@ -1,18 +1,17 @@
 /*
-  turning index rows into the dropdown discord shows while an editor types.
+  turning Articles into the dropdown discord shows while an editor types.
 
-  pure functions over rows, because everything that can go wrong here goes
+  pure functions over a list, because everything that can go wrong here goes
   wrong silently: discord refuses the *entire* autocomplete response when one
   choice name is empty or over its limit, and refusing looks exactly like a
-  slow index — an empty dropdown with no explanation. so the rules about
-  length, emptiness and the 25 cap live in one place with tests on them, and
-  the caller does the D1 read and nothing else. see ADR 0009.
+  slow read — an empty dropdown with no explanation. so the rules about length,
+  emptiness and the 25 cap live in one place with tests on them, and the caller
+  does the reading and nothing else. see ADR 0009.
 
-  the matching is here rather than in sql on purpose. the index is 139 rows,
-  which is nothing to read whole, and doing it in javascript buys a real fuzzy
-  match and a ranking that understands recency. it also retired a `like`
-  clause whose escape character was wrong for a day, and which failed by
-  showing an empty dropdown.
+  the matching is here rather than in notion's filter because notion has no
+  fuzzy one: its `contains` finds "ellicott" and not "elicott", "hall ellicott"
+  or "stolen card", which is most of how anybody actually half-remembers a
+  headline.
 */
 
 import { UNTITLED } from "./config";

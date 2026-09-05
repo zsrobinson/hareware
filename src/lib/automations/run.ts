@@ -79,7 +79,7 @@ export async function runScheduled(controller: ScheduledController, env: Env) {
 
     *after* because it reads notion and writes d1 with no deadline of its own,
     and at 8am eastern it shares a tick with the reminders. a slow notion
-    delaying the index costs a picker an hour of freshness; the same delay in
+    delaying the command surface costs a picker an hour of new options; the same delay in
     front of the reminders costs the club its morning ping
   */
   await refreshTheCommandSurface(env);

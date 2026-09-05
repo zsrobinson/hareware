@@ -224,9 +224,8 @@ async function allMembers(token: string): Promise<MemberPage[]> {
 /**
  * the Members row behind a discord user, read live.
  *
- * live rather than from the index: `article_index` describes Articles and
- * ADR 0009 keeps it serving autocomplete and nothing else, and a credit is a
- * write — it re-reads notion first, like every other command.
+ * nothing about Members is ever held anywhere: a credit is a write, and every
+ * write re-reads notion first so that what it reports changing *from* is true.
  *
  * a failure answers `unavailable`, never `absent`. absent sends the editor off
  * to create a member who is already there, and notion's write access is the

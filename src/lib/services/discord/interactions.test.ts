@@ -331,10 +331,10 @@ const deps = (over: InteractionDeps = {}): InteractionDeps => ({
 });
 
 /*
-  ADR 0009: the index serves autocomplete and nothing else, so what an editor
+  ADR 0009: what the picker offers is a suggestion, so what an editor
   is shown for one Article is re-read from notion
 */
-test("/article show reads the page live rather than from the index", async () => {
+test("/article show reads the page live rather than from the picker", async () => {
   let asked: string | undefined;
   const reply = asMessage(
     await handleInteraction(
@@ -345,7 +345,7 @@ test("/article show reads the page live rather than from the index", async () =>
           return Promise.resolve(notionPage());
         },
         articles: () => {
-          throw new Error("the index must not answer /article show");
+          throw new Error("the picker must not answer /article show");
         },
       }),
     ),
@@ -455,7 +455,7 @@ test("autocomplete tells somebody off the board nothing", async () => {
       typing("terps", ["some-other-role"]),
       deps({
         articles: () => {
-          throw new Error("must not read the index for somebody off the board");
+          throw new Error("must not read articles for somebody off the board");
         },
       }),
     ),
@@ -886,6 +886,48 @@ test("a one-character query is not searched for", async () => {
     typing("z"),
     deps({
       articles: () => Promise.resolve([]),
+      search: () => {
+        searched = true;
+        return Promise.resolve([]);
+      },
+    }),
+  );
+
+  expect(searched).toBe(false);
+});
+
+/*
+  the two reads used to get the full budget each, so a throttling notion spent
+  two seconds on the recent read and two more on the search — four against
+  discord's hard three, which reaches the editor as "HareWare didn't respond in
+  time" on every keystroke
+*/
+test("the whole answer shares one deadline, not one per read", async () => {
+  const started = Date.now();
+
+  await handleInteraction(
+    typing("ellicott"),
+    deps({
+      articles: () => new Promise<Article[]>(() => {}),
+      search: () => new Promise<Article[]>(() => {}),
+      timeoutMs: 60,
+    }),
+  );
+
+  /* generous, because what is asserted is "one budget, not two" rather than
+     any particular millisecond */
+  expect(Date.now() - started).toBeLessThan(150);
+});
+
+test("a read that failed does not spend a request on the search", async () => {
+  /* without this, a timed-out read arrives as "no choices" and we ask notion
+     again at the exact moment notion is refusing us */
+  let searched = false;
+
+  await handleInteraction(
+    typing("ellicott"),
+    deps({
+      articles: () => Promise.reject(new Error("notion returned 429")),
       search: () => {
         searched = true;
         return Promise.resolve([]);

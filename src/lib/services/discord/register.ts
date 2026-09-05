@@ -15,22 +15,16 @@ import type { Result } from "~/lib/result";
 import type { CommandPayload } from "./commands";
 import { DISCORD_APPLICATION_ID, GUILD_ID } from "./config";
 
-/**
- * what a registration attempt reports.
- *
- * `hash` exists only on the branch that actually registered, so a caller
- * cannot store the hash of a surface discord never received — which would
- * suppress every later attempt and leave the stale commands up for good
- */
+/** what a registration attempt reports */
 export type RegisterResult = Result;
 
 /**
- * registers the payload unless it is the one already up there.
+ * puts the payload on discord, every time it is asked.
  *
- * discord allows 200 guild command registrations a day and the hourly cron
- * re-registers whether or not the notion schema moved, so `previousHash` — the
- * hash stored the last time this succeeded — is what keeps a quiet week from
- * spending the budget.
+ * discord allows two hundred guild registrations a day and the hourly cron
+ * spends twenty-four of them, so there is nothing to be saved by remembering
+ * what was last sent — and a remembered hash can disagree with what is
+ * actually up there.
  *
  * never throws. this is called from a cron tick that also posts the reminders,
  * and a stale command surface must not take the morning's reminders down

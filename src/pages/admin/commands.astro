@@ -1,0 +1,97 @@
+---
+import Dashboard from "~/layouts/dashboard.astro";
+import { Badge } from "~/components/ui/badge";
+import { notFound, viewer } from "~/lib/admin";
+import { buildCommands } from "~/lib/services/discord/commands";
+
+/* one lookup answers both whether they may be here and what to call them, so
+   the sidebar costs no second request to discord */
+const who = await viewer(Astro.request);
+if (!who?.admin) return notFound();
+
+Astro.response.headers.set("cache-control", "private, no-store");
+
+/*
+  the page is the registration payload, read back — the same `buildCommands()`
+  the cron puts on the guild, so a subcommand added to the code shows up here
+  without anyone remembering this page exists. a list typed out by hand could
+  disagree with what discord actually offers, which is worse than no list.
+
+  no notion choices are passed: fetching the schema to render a read-only page
+  would cost a notion request per view, and what an editor needs here is the
+  shape of each command rather than today's status names. an option that takes
+  a picker still says so, because `choicesFor()` gives it a choices array
+  either way — see ADR 0009 for why those values live in notion and not here
+*/
+const commands = buildCommands([]);
+---
+
+<Dashboard title="Slash Commands" viewer={who}>
+  <div class="max-w-3xl space-y-4">
+    <p class="text-muted-foreground text-sm">
+      What an editor can type in Discord. Read straight from the registration
+      the hourly cron puts on the server, so this is the surface that is really
+      there. Every command replies only to whoever ran it, and every edit it
+      makes lands in the log.
+    </p>
+
+    {
+      commands.map((command) => (
+        <div class="space-y-3">
+          <div class="space-y-1">
+            <h2 class="font-mono text-sm font-medium">/{command.name}</h2>
+            <p class="text-muted-foreground text-sm">{command.description}</p>
+          </div>
+
+          <ul class="space-y-3">
+            {command.options.map((subcommand) => (
+              <li class="rounded-lg border p-4">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="font-mono text-sm font-medium">
+                    /{command.name} {subcommand.name}
+                  </span>
+                </div>
+
+                <p class="text-muted-foreground mt-1 text-sm">
+                  {subcommand.description}
+                </p>
+
+                {subcommand.options.length === 0 ? (
+                  <p class="text-muted-foreground mt-3 text-sm">
+                    Takes no options.
+                  </p>
+                ) : (
+                  <ul class="mt-3 space-y-2">
+                    {subcommand.options.map((option) => (
+                      <li class="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+                        <span class="font-mono">{option.name}</span>
+
+                        {option.required ? (
+                          <Badge variant="secondary">required</Badge>
+                        ) : (
+                          <Badge variant="outline">optional</Badge>
+                        )}
+
+                        {option.autocomplete && (
+                          <Badge variant="outline">autocompleted</Badge>
+                        )}
+
+                        {option.choices && (
+                          <Badge variant="outline">Notion choices</Badge>
+                        )}
+
+                        <span class="text-muted-foreground min-w-0">
+                          {option.description}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))
+    }
+  </div>
+</Dashboard>

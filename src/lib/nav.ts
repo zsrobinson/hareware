@@ -1,5 +1,6 @@
 import {
   ActivityIcon,
+  CodeIcon,
   ZapIcon,
   FileTextIcon,
   ImageIcon,
@@ -36,6 +37,7 @@ export const toolsNav: NavItem[] = [
 export const adminNav: NavItem[] = [
   { href: "/admin/automations", label: "Automations", icon: ZapIcon },
   { href: "/admin/log", label: "Invocation Log", icon: ActivityIcon },
+  { href: "/admin/commands", label: "Slash Commands", icon: CodeIcon },
 ];
 
 /* `/` would otherwise light up on every page */

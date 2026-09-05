@@ -72,6 +72,16 @@ const MAX_LABEL = 80;
  */
 const AUTOCOMPLETE_BUDGET_MS = 2000;
 
+/**
+ * how long notion gets before the index answers instead.
+ *
+ * a recency-sorted read measured ~0.7s with a 2.0s outlier, against discord's
+ * hard three seconds. this is chosen so the outlier loses rather than taking
+ * the whole dropdown down with it — the index is a second-best answer and an
+ * empty picker is no answer
+ */
+const LIVE_BUDGET_MS = 1400;
+
 /** the prefix on every custom_id this file put on a message */
 export const POSTED_PREFIX = "posted:";
 
@@ -161,6 +171,10 @@ type Interaction = {
 export type InteractionDeps = {
   /** the index, most recently edited first — the matching happens in `pick` */
   index?: () => Promise<ArticleRow[]>;
+  /** notion itself, tried first so an edit shows up without waiting on a sync */
+  live?: () => Promise<ArticleRow[]>;
+  /** how long notion gets before the index answers instead */
+  liveMs?: number;
   /** one Article, read live from notion — never from the index, per ADR 0009 */
   page?: (pageId: string) => Promise<CardPage>;
   /**
@@ -706,14 +720,28 @@ async function handleAutocomplete(
   }
 
   /*
-    two characters match most of the 138 rows, so a short query is not a search
-    worth running — the useful answer to a picker that has only just opened is
-    the editor's own most recent work
+    notion first, the index behind it.
+
+    the index is what stops two editors typing at once from exhausting notion's
+    three-requests-a-second budget — it is not what makes the picker correct,
+    and waiting on it was the whole complaint: a webhook took nine seconds once
+    and sixty-five the next time, so a cache fed by webhooks is never
+    "immediately".
+
+    one recency-sorted request is about 0.7s of discord's three, which leaves
+    room to give up and use the index instead. so: live when notion is quick,
+    a minute stale when it is not, and never an empty dropdown
   */
-  const { rows, why } = await within(
-    index(),
-    deps.timeoutMs ?? AUTOCOMPLETE_BUDGET_MS,
-  );
+  const fresh = deps.live
+    ? await within(deps.live(), deps.liveMs ?? LIVE_BUDGET_MS)
+    : { rows: [], why: "no live reader" as const };
+
+  const { rows, why } =
+    fresh.rows.length > 0
+      ? fresh
+      : await within(index(), deps.timeoutMs ?? AUTOCOMPLETE_BUDGET_MS);
+
+  const source = fresh.rows.length > 0 ? "notion" : "index";
 
   /*
     ranked here rather than in sql: 139 rows are nothing to read whole, and it
@@ -731,7 +759,7 @@ async function handleAutocomplete(
   */
   if (choices.length === 0) {
     console.warn(
-      `[article] autocomplete answered nothing: query=${JSON.stringify(query)} rows=${rows.length} ${why ?? "no matches"}`,
+      `[article] autocomplete answered nothing: query=${JSON.stringify(query)} source=${source} rows=${rows.length} ${why ?? "no matches"}`,
     );
   }
 

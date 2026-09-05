@@ -43,23 +43,21 @@
   "main": "./src/worker.ts",
 
   /**
-   * two schedules, and `runScheduled` tells them apart by `controller.cron`.
+   * hourly, because the reminders mean "8am eastern" and cloudflare crons are
+   * utc with no timezone setting. src/lib/eastern.ts decides whether a given
+   * tick is the right hour, so the schedule never drifts across daylight saving.
    *
-   * hourly is the reminders: they mean "8am eastern" and cloudflare crons are
-   * utc with no timezone setting, so src/lib/eastern.ts decides whether a tick
-   * is the right hour and the schedule never drifts across daylight saving.
+   * the article index rebuilds on the same tick, and hourly is the right
+   * cadence for it: autocomplete reads notion directly and falls back to the
+   * index only when that read is slow, so the rebuild corrects drift rather
+   * than being what anybody waits on. it briefly ran every minute, which was
+   * 400,000 row writes a day against d1's hundred thousand — the index would
+   * have gone quiet part-way through every afternoon.
    *
-   * every minute is the article index. notion's webhooks are at-most-once and
-   * unordered, so this is the only thing that guarantees the picker ever
-   * matches notion — and an hour of that guarantee reads as broken to somebody
-   * who just renamed a headline. two notion requests a minute against a budget
-   * of three a second is nothing.
-   *
-   * the minute schedule must never reach the reminders. every minute of 8am
-   * would otherwise be a fresh 8am, and the club would be pinged sixty times —
-   * `REMINDER_CRON` in src/lib/automations/run.ts is that check, with the tests
-   * that hold it
+   * `runScheduled` still checks which schedule fired before running a
+   * reminder. that check is why adding a second cron is safe: without it every
+   * minute of 8am is a fresh 8am
    */
-  "triggers": { "crons": ["0 * * * *", "* * * * *"] },
+  "triggers": { "crons": ["0 * * * *"] },
   "assets": { "directory": "./dist", "binding": "ASSETS" },
 }

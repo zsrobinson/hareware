@@ -70,51 +70,29 @@ computed registration is stored so an unchanged schema re-registers nothing.
 
 ### An index in D1, serving autocomplete and nothing else
 
-Picking an Article by name needs a search on every keystroke. Against Notion
-that is a request per keystroke, and Notion's budget is about three per second
-shared with everything else HareWare does — so a fast typist, or two editors at
-once, would exhaust it. Measured latency is 430–520ms, which fits the three
-second deadline; the rate limit is what does not.
+**Amended 2026-09-05: the picker reads Notion directly, and the index is what
+catches it when that read is slow.**
 
-So `article_index` in D1 holds the 138 rows, and autocomplete reads only D1.
+The index was built on the assumption that autocomplete could not ask Notion on
+every keystroke. That is still true of a whole-table read — 139 rows is two
+requests and about 1.2 seconds — but a **recency-sorted hundred is one request
+and about 0.7 seconds**, against Discord's hard three. One request per keystroke
+sits at Notion's budget of roughly three a second rather than double it.
 
-Three things write it, and the containment is that **the index serves
-autocomplete and nothing else**. Every command re-reads the page from Notion
-before it writes. A stale index can therefore only mean the label an editor
-scanned was a minute old — it can never cause a wrong write.
+What forced the change is that a cache fed by webhooks is never "immediately".
+Notion's delivery is documented as "most within a minute, up to five", and
+measured here it was nine seconds once and sixty-five the next. An editor who
+renames a Headline and opens the picker is not waiting on our sync; they are
+waiting on Notion's delivery, and that is not a number anybody can plan around.
 
-- **Write-through.** A mutation is one `PATCH`, and Notion returns the full
-  updated page in the response. The index row and the reply are built from that
-  same object, in the same invocation, so back-to-back commands are correct by
-  construction and cost no extra request.
-- **Webhooks**, for edits made in Notion itself.
-- **The hourly cron**, rebuilding all of it — two requests — as a full replace,
-  so a deletion that lost its webhook still disappears.
+So the picker asks Notion first, with a 1.4 second deadline, and falls back to
+the index. Live when Notion is quick, a rebuild-cadence stale when it is not,
+and never an empty dropdown — which is what the index was really for.
 
-Because delivery is unordered, the rule that makes those three commute is
-version-guarding on `last_edited_time`: **write-through always wins; a webhook
-or rebuild applies only when strictly newer.** Every path is then idempotent and
-arrival order stops mattering.
-
-`last_edited_time` has minute resolution, and **amended 2026-09-05** that turned
-out to matter: "strictly newer" threw away a second edit made in the same minute
-as the first, so somebody typing a headline in Notion watched Discord hold the
-version from nine seconds earlier. A guaranteed wrong answer, in the most
-ordinary use there is.
-
-The rule is now **newer or equal** for a fetch, and the reasoning is where these
-writes come from: every non-authoritative write is a fresh read of the page, not
-a delta applied blind, so a late or out-of-order webhook still carries current
-truth. The thing the guard was protecting against cannot happen. A write-through
-still wins outright, because a fetch already in flight when our own PATCH landed
-is the one case where equal timestamps hide a real ordering.
-
-The rebuild also runs **every minute** rather than hourly. Notion's delivery
-being at-most-once makes the rebuild the only guarantee the index ever matches,
-and an hour of that guarantee reads as broken. Two requests a minute against a
-budget of three a second costs nothing. The minute schedule is kept away from
-the reminders by `controller.cron`: every minute of 8am would otherwise be a
-fresh 8am.
+The rebuild stays **hourly**. It briefly ran every minute, which is 400,000 row
+writes a day against D1's free hundred thousand: the index would have gone quiet
+part-way through every afternoon, silently, which is the failure this whole
+document exists to avoid. It corrects drift; it is not what anybody waits on.
 
 ### Members is keyed by Discord user, and fills itself in
 

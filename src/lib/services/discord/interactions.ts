@@ -20,9 +20,13 @@
 */
 
 import { card, type CardPage } from "~/lib/articles/card";
+import type { Actor, EditRequest, PickedUser } from "~/lib/articles/edit";
 import { choicesFor, type AutocompleteChoice } from "~/lib/articles/pick";
+import type { Intent } from "~/lib/articles/write";
 import type { ArticleRow } from "~/lib/db/schema";
+import type { Result } from "~/lib/automations/registry";
 import { EDITORIAL_BOARD_ROLE_ID } from "./config";
+import { followUp } from "./follow-up";
 
 const IS_COMPONENTS_V2 = 1 << 15;
 
@@ -82,7 +86,7 @@ export function postedId(slug: string) {
   return `${POSTED_PREFIX}${slug}`.slice(0, 100);
 }
 
-type Component = {
+export type Component = {
   type: number;
   custom_id?: string;
   components?: Component[];
@@ -118,16 +122,39 @@ function textOf(option: SubmittedOption | undefined): string {
   return typeof option?.value === "string" ? option.value.trim() : "";
 }
 
+/** a discord user, as much of one as a payload ever carries */
+type DiscordUser = {
+  id?: string;
+  username?: string;
+  global_name?: string | null;
+};
+
 type Interaction = {
   type: number;
-  data?: { custom_id?: string; name?: string; options?: SubmittedOption[] };
+  /** the two halves of the follow-up url; only a deferred reply needs them */
+  application_id?: string;
+  token?: string;
+  data?: {
+    custom_id?: string;
+    name?: string;
+    options?: SubmittedOption[];
+    /*
+      the objects behind a USER option, sent with the interaction rather than
+      looked up. `members` carries the server nickname and `users` the account,
+      which is why crediting somebody costs no discord request at all
+    */
+    resolved?: {
+      members?: Record<string, { nick?: string | null }>;
+      users?: Record<string, DiscordUser>;
+    };
+  };
   message?: { components?: Component[] };
   member?: {
     /** every role the member holds, which is the only access check we get */
     roles?: string[];
-    user?: { username?: string; global_name?: string | null };
+    user?: DiscordUser;
   };
-  user?: { username?: string; global_name?: string | null };
+  user?: DiscordUser;
 };
 
 /**
@@ -142,6 +169,25 @@ export type InteractionDeps = {
   index?: () => Promise<ArticleRow[]>;
   /** one Article, read live from notion — never from the index, per ADR 0009 */
   page?: (pageId: string) => Promise<CardPage>;
+  /**
+   * the write, which happens after the reply.
+   *
+   * it never throws and it always returns words: `runEdit` in
+   * `~/lib/articles/edit` is that promise, and this seam is what lets every
+   * branch of the deferral be exercised without notion
+   */
+  edit?: (request: EditRequest, actor: Actor) => Promise<string>;
+  /**
+   * hands work to the platform to finish after the response goes out.
+   *
+   * the route passes `(work) => locals.cfContext.waitUntil(work())`. without
+   * it a worker is free to tear the isolate down the moment DEFER is returned,
+   * which is the write that lands sometimes — so its absence refuses the
+   * command outright rather than deferring into nothing
+   */
+  defer?: (work: () => Promise<void>) => void;
+  /** overridable so a test can watch the follow-up without reaching discord */
+  reply?: typeof followUp;
   /** overridable so a test can prove the deadline exists without waiting */
   timeoutMs?: number;
 };
@@ -150,7 +196,22 @@ export type InteractionDeps = {
 export type MessageResponse = {
   type: number;
   /** absent on a pong, which is a bare acknowledgement */
-  data?: { flags: number; components: Component[] };
+  data?: {
+    flags: number;
+    /** absent on a deferral, which carries no body at all */
+    components?: Component[];
+  };
+};
+
+/**
+ * a reply that carries a body, which is every reply but a deferral and a pong.
+ *
+ * the distinction is real rather than a convenience: discord rejects a
+ * deferred response that carries `components`, and rejects a message response
+ * that does not
+ */
+export type BodyResponse = MessageResponse & {
+  data: { flags: number; components: Component[] };
 };
 
 /** the dropdown, which carries choices instead of a body and takes no flags */
@@ -200,7 +261,7 @@ export async function handleInteraction(
  * discord refuses, which reaches the editor as "HareWare didn't respond in
  * time" — the same shape of failure a button missing its custom_id causes
  */
-export function ephemeral(content: string): MessageResponse {
+export function ephemeral(content: string): BodyResponse {
   const components: Component[] = [{ type: TEXT_DISPLAY, content }];
 
   return {
@@ -273,7 +334,18 @@ function optionOf(
  * until somebody tries it — which is how `show` shipped working and
  * unreachable
  */
-export const HANDLED = ["ping", "show"] as const;
+export const HANDLED = [
+  "ping",
+  "show",
+  "new",
+  "headline",
+  "status",
+  "image-status",
+  "section",
+  "publication-date",
+  "author",
+  "image-crew",
+] as const;
 
 const SUBCOMMANDS: Record<
   string,
@@ -288,7 +360,258 @@ const SUBCOMMANDS: Record<
     ),
 
   show: (interaction, deps) => show(interaction, deps),
+
+  new: (interaction, deps) =>
+    write(interaction, deps, (subcommand) => {
+      const headline = textOf(optionOf(subcommand, "headline"));
+      if (!headline) return refuse("Give the Article a Headline.");
+
+      return {
+        request: {
+          kind: "create",
+          headline,
+          section: textOf(optionOf(subcommand, "section")) || null,
+          /* ADR 0004: the printed Byline is always filled, so it falls back to
+             whoever ran the command rather than being left blank */
+          byline: textOf(optionOf(subcommand, "byline")) || who(interaction),
+        },
+      };
+    }),
+
+  headline: (interaction, deps) =>
+    write(interaction, deps, (subcommand) => {
+      const text = textOf(optionOf(subcommand, "headline"));
+      if (!text) return refuse("Give the Article a Headline.");
+
+      return property(subcommand, { property: "headline", text });
+    }),
+
+  status: (interaction, deps) =>
+    write(interaction, deps, (subcommand) =>
+      chosen(subcommand, "status", "status"),
+    ),
+
+  "image-status": (interaction, deps) =>
+    write(interaction, deps, (subcommand) =>
+      chosen(subcommand, "image-status", "imageStatus"),
+    ),
+
+  section: (interaction, deps) =>
+    write(interaction, deps, (subcommand) =>
+      chosen(subcommand, "section", "section"),
+    ),
+
+  "publication-date": (interaction, deps) =>
+    write(interaction, deps, (subcommand) => {
+      const typed = textOf(optionOf(subcommand, "date"));
+
+      /*
+        no date clears it, deliberately: an Article that slipped out of the
+        schedule has no Publication Date, and making an editor open notion to
+        express that is the context switch these commands exist to remove.
+        anything that is not a date is refused rather than sent — notion
+        accepts a malformed string on some property types by ignoring it
+      */
+      if (typed && !isDate(typed))
+        return refuse(
+          `\`${typed}\` is not a date HareWare can write. Use YYYY-MM-DD, or leave the date out to clear it.`,
+        );
+
+      return property(subcommand, {
+        property: "publicationDate",
+        date: typed || null,
+      });
+    }),
+
+  author: (interaction, deps) =>
+    write(interaction, deps, (subcommand) =>
+      crediting(interaction, subcommand, "author"),
+    ),
+
+  "image-crew": (interaction, deps) =>
+    write(interaction, deps, (subcommand) =>
+      crediting(interaction, subcommand, "image"),
+    ),
 };
+
+/* ---- turning an interaction into a request ------------------------------ */
+
+/**
+ * a request, or the sentence explaining why there is not one.
+ *
+ * refusal is a state rather than a thrown error, because every one of these is
+ * answerable *before* deferring — and a command answered inline never leaves a
+ * spinner behind
+ */
+type Parsed = { request: EditRequest } | { refusal: string };
+
+const refuse = (reason: string): Parsed => ({ refusal: reason });
+
+/** a one-property change against whichever Article was picked */
+function property(
+  subcommand: SubmittedOption | undefined,
+  intent: Intent,
+): Parsed {
+  const pageId = textOf(optionOf(subcommand, "article"));
+
+  /* discord sends whatever was typed when nobody picked a suggestion, so this
+     is as likely to be half a headline as a page id */
+  if (!pageId) return refuse("Pick an Article from the list HareWare offers.");
+
+  return { request: { kind: "property", pageId, intent } };
+}
+
+/** one of the three pickers whose options came from notion's own schema */
+function chosen(
+  subcommand: SubmittedOption | undefined,
+  option: string,
+  key: "status" | "imageStatus" | "section",
+): Parsed {
+  const picked = textOf(optionOf(subcommand, option));
+  if (!picked) return refuse(`Pick a ${option.replace("-", " ")}.`);
+
+  /*
+    the value is notion's own spelling because that is what was registered as
+    the choice — this is the point of reading them from the schema rather than
+    writing them down, and it is why `Not started` cannot become `Not Started`
+  */
+  return key === "section"
+    ? property(subcommand, { property: "section", option: picked })
+    : property(subcommand, { property: key, option: picked });
+}
+
+function crediting(
+  interaction: Interaction,
+  subcommand: SubmittedOption | undefined,
+  credit: "author" | "image",
+): Parsed {
+  const pageId = textOf(optionOf(subcommand, "article"));
+  if (!pageId) return refuse("Pick an Article from the list HareWare offers.");
+
+  return {
+    request: {
+      kind: "credit",
+      pageId,
+      credit,
+      member: picked(interaction, subcommand, "member"),
+      byline: textOf(optionOf(subcommand, "byline")) || null,
+      also: optionOf(subcommand, "also")?.value === true,
+    },
+  };
+}
+
+/**
+ * whoever the user picker returned, name and all.
+ *
+ * the name comes out of `data.resolved` rather than a lookup, and prefers what
+ * the member chose to be called in this server — nickname, then display name,
+ * then handle — which is the same chain `~/lib/member` uses, so a person is
+ * called one thing everywhere HareWare mentions them
+ */
+function picked(
+  interaction: Interaction,
+  subcommand: SubmittedOption | undefined,
+  name: string,
+): PickedUser | null {
+  const discordId = textOf(optionOf(subcommand, name));
+  if (!discordId) return null;
+
+  const resolved = interaction.data?.resolved;
+  const user = resolved?.users?.[discordId];
+  const displayName =
+    resolved?.members?.[discordId]?.nick ||
+    user?.global_name ||
+    user?.username ||
+    "";
+
+  return { discordId, displayName };
+}
+
+/** a real calendar date, in the one format notion writes a bare date in */
+function isDate(text: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+
+  /* the shape is not enough: 2026-02-31 matches it and notion rejects it, and
+     `new Date` rolls it forward to march rather than refusing */
+  const [year, month, day] = text.split("-").map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+/* ---- deferring ---------------------------------------------------------- */
+
+/**
+ * DEFER now, write later, and say something either way.
+ *
+ * a notion read plus a PATCH does not fit inside discord's three seconds, so
+ * every subcommand that writes comes through here. the shape is the whole
+ * point: the request is parsed *before* deferring, so a bad date is answered
+ * inline; and once deferred, every path — a refused write, a thrown edit, a
+ * follow-up discord rejected — ends in a request to the follow-up url or a
+ * line in the console saying why it could not. a deferred interaction left
+ * silent is the failure `docs/agents/silent-failures.md` exists for: the
+ * editor watches a spinner settle into nothing and cannot tell a refused write
+ * from a slow one
+ */
+function write(
+  interaction: Interaction,
+  deps: InteractionDeps,
+  parse: (subcommand: SubmittedOption | undefined) => Parsed,
+): MessageResponse {
+  const parsed = parse(subcommandOf(interaction));
+  if ("refusal" in parsed) return ephemeral(parsed.refusal);
+
+  const { edit, defer } = deps;
+
+  /*
+    refused inline rather than deferred. without somewhere to hand the work,
+    deferring would answer "HareWare is thinking…" and then stop existing
+  */
+  if (!edit || !defer)
+    return ephemeral(
+      "HareWare cannot write to Notion right now — it is missing the credentials or the runtime to do it with. Nothing was changed.",
+    );
+
+  const applicationId = interaction.application_id ?? "";
+  const token = interaction.token ?? "";
+  const send = deps.reply ?? followUp;
+  const actor: Actor = {
+    id: interaction.member?.user?.id ?? interaction.user?.id ?? "",
+    name: who(interaction),
+  };
+
+  defer(async () => {
+    let content: string;
+
+    try {
+      content = await edit(parsed.request, actor);
+    } catch (error) {
+      /* `runEdit` promises not to throw, and this is what happens when that
+         promise is broken — the editor still gets a sentence */
+      console.error("[article] an edit threw rather than answering", error);
+      content =
+        "HareWare hit an error it did not expect and may not have written anything. Check the Article in Notion, and `/admin/log`.";
+    }
+
+    const result: Result = await send(applicationId, token, content);
+
+    /* the write landing and the reply arriving are different mornings: a
+       follow-up discord refused leaves an editor believing nothing happened */
+    if (result.outcome !== "ok")
+      console.error(`[article] could not answer the editor: ${result.summary}`);
+  });
+
+  return deferEphemeral();
+}
 
 /**
  * `/article show` — one Article, read live from notion.

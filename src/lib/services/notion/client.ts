@@ -32,10 +32,21 @@ export type NotionProperty = {
 
 export class NotionError extends Error {}
 
-/** every request wants the same headers, and none may echo the token */
-export async function notion(path: string, token: string, body?: unknown) {
+/**
+ * every request wants the same headers, and none may echo the token.
+ *
+ * the method is inferred from the body — a read has none — with `method` there
+ * for the one case that breaks the rule: updating a page is a `PATCH` with a
+ * body, and sending it as a `POST` creates a second page rather than failing
+ */
+export async function notion(
+  path: string,
+  token: string,
+  body?: unknown,
+  method?: "POST" | "PATCH",
+) {
   const response = await fetch(`https://api.notion.com/v1/${path}`, {
-    method: body ? "POST" : "GET",
+    method: method ?? (body ? "POST" : "GET"),
     headers: {
       authorization: `Bearer ${token}`,
       "notion-version": NOTION_VERSION,

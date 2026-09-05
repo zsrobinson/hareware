@@ -94,6 +94,37 @@ export function extractChoices(schema: Schema): ChoiceOption[] {
   });
 }
 
+/**
+ * one option of one property, spelled the way notion spells it.
+ *
+ * the only sanctioned way to reach for a particular option, and the reason it
+ * takes the schema rather than a constant: ADR 0009 forbids typing a notion
+ * value into this repo, because that is how `Not started` becomes
+ * `Not Started` and a write is refused with a 400 that reads like a bad id.
+ * asking for a casefolded name and writing back what the schema holds keeps
+ * the trap out while still letting `/article new` start an Article at a
+ * sensible status.
+ *
+ * `null` when the club renamed or removed the option, which the caller says
+ * out loud rather than inventing a value notion would reject
+ */
+export function optionNamed(
+  schema: Schema,
+  property: string,
+  wanted: string,
+): string | null {
+  const definition = schema.properties?.[property];
+  const options =
+    definition?.status?.options ?? definition?.select?.options ?? [];
+
+  const folded = wanted.trim().toLowerCase();
+
+  return (
+    options.find((option) => option.name.trim().toLowerCase() === folded)
+      ?.name ?? null
+  );
+}
+
 /** the Articles schema, straight from notion */
 export function fetchSchema(token: string): Promise<Schema> {
   return notion(

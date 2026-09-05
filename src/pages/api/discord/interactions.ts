@@ -5,6 +5,7 @@ import { DISCORD_PUBLIC_KEY } from "~/lib/services/discord/config";
 import { handleInteraction } from "~/lib/services/discord/interactions";
 import { recent } from "~/lib/articles/store";
 import { readArticle } from "~/lib/articles/card";
+import { notionIO, runEdit } from "~/lib/articles/edit";
 import { verifyInteraction } from "~/lib/services/discord/verify";
 
 export const prerender = false;
@@ -17,7 +18,7 @@ const MESSAGE_COMPONENT = 3;
   worker's `cache` config only ever applies to GETs, and this is a POST — and it
   answers nothing it cannot verify came from discord
 */
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async ({ request, locals }) => {
   const body = await verifyInteraction(request, DISCORD_PUBLIC_KEY);
 
   // discord requires a 401 here, and checks for one before it will accept
@@ -47,6 +48,23 @@ export const POST: APIRoute = async ({ request }) => {
     page: env.NOTION_TOKEN
       ? (pageId) => readArticle(pageId, env.NOTION_TOKEN!)
       : undefined,
+
+    /*
+      the write half, which runs after this response has already gone out.
+      absent without a token, so the handler refuses the command inline rather
+      than deferring into a spinner nothing ever answers
+    */
+    edit: env.NOTION_TOKEN
+      ? (edit, actor) => runEdit(notionIO(env), edit, actor)
+      : undefined,
+
+    /*
+      `waitUntil` and nothing else. a worker may tear the isolate down as soon
+      as the response is returned, and a promise left floating past that is the
+      write that lands four times out of five — which reads exactly like a
+      flaky notion
+    */
+    defer: (work) => locals.cfContext.waitUntil(work()),
   });
   if (!reply) return new Response("unhandled interaction", { status: 400 });
 

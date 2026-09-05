@@ -213,6 +213,60 @@ export function plan(
   };
 }
 
+/** what `/article new` starts an Article with */
+export type NewArticle = {
+  headline: string;
+  /** always filled, per ADR 0004 — the caller's display name by default */
+  byline: string;
+  /** notion's own spelling, resolved from the schema, or null if it is gone */
+  status: string | null;
+  /** null when the editor did not pick one */
+  section: string | null;
+};
+
+/**
+ * a new Article, as the properties of a `POST pages`.
+ *
+ * a create rather than a change, so there is nothing to say it changed *from*
+ * — but it goes through the same refusal as everything else, scoped to the
+ * properties it would actually write. an unchosen section is left out of the
+ * body entirely: `null` and `{ select: { name: "" } }` are both values notion
+ * treats as a write, and neither is what "the editor did not pick one" means
+ */
+export function planCreate(
+  schema: Schema,
+  { headline, byline, status, section }: NewArticle,
+): PlanResult {
+  const writing: PropertyKey[] = ["headline", "authorByline"];
+  if (status !== null) writing.push("status");
+  if (section !== null) writing.push("section");
+
+  const reason = refusal(schema, writing);
+  if (reason) return { status: "refused", reason };
+
+  const name = (key: PropertyKey) => ARTICLE_PROPERTIES[key].name;
+
+  return {
+    status: "planned",
+    plan: {
+      properties: {
+        [name("headline")]: titleValue(headline),
+        [name("authorByline")]: richTextValue(byline),
+        ...(status === null ? {} : { [name("status")]: statusValue(status) }),
+        ...(section === null
+          ? {}
+          : { [name("section")]: selectValue(section) }),
+      },
+      sentence: [
+        `${name("headline")}: ${quoted(headline)}`,
+        `${name("authorByline")}: ${quoted(byline)}`,
+        ...(status === null ? [] : [`${name("status")}: ${quoted(status)}`]),
+        ...(section === null ? [] : [`${name("section")}: ${quoted(section)}`]),
+      ].join("; "),
+    },
+  };
+}
+
 /**
  * a credit, as ADR 0004 requires it: the printed Byline and the Member behind
  * it, in **one** patch body.

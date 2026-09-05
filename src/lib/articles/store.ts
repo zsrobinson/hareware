@@ -45,21 +45,24 @@ export type ReplaceResult =
 const now = () => Math.floor(Date.now() / 1000);
 
 /**
- * whether an incoming row may overwrite the stored one.
+ * whether a write may land on the row that is already there.
  *
- * `lastEdited` is notion's `last_edited_time`: iso 8601 in UTC, fixed width,
- * so a string comparison is a chronological one and no parsing is involved.
+ * `last_edited_time` has **minute** resolution, which is the whole subtlety.
+ * the rule was "strictly newer", and that threw away a second edit made in the
+ * same minute as the first — so somebody typing a headline in notion watched
+ * discord keep the version from nine seconds ago until the next rebuild. a
+ * guaranteed, visible wrong answer.
  *
- * `authoritative` means the caller is holding the page notion returned from
- * its own PATCH, so it is by definition the newest state that exists and wins
- * outright. it has to win a *tie* as well as a race, because
- * `last_edited_time` has minute resolution: a webhook for an edit made in the
- * same minute carries the same timestamp, and arriving five minutes late it
- * would otherwise undo an edit an editor just watched succeed.
+ * "newer or equal" is right because of where these writes come from: every
+ * non-authoritative one is a **fresh fetch of the page**, never a delta applied
+ * blind. what it carries is the page as notion had it at fetch time, so a late
+ * or out-of-order webhook still writes the current truth — the thing the guard
+ * was protecting against cannot happen. what it still rejects is a genuinely
+ * older snapshot, which is a rebuild that read before an edit and wrote after.
  *
- * everything else — webhooks, the hourly rebuild — applies only when strictly
- * newer, which is what makes the three writers commute under notion's
- * unordered at-most-once delivery.
+ * a write-through keeps winning outright: it holds the page notion returned
+ * from our own PATCH, and a fetch already in flight when that PATCH landed is
+ * the one case where equal timestamps hide a real ordering.
  */
 export function wins(
   incoming: string,
@@ -67,7 +70,7 @@ export function wins(
   authoritative: boolean,
 ): boolean {
   if (stored === undefined) return true;
-  return authoritative ? true : incoming > stored;
+  return authoritative ? true : incoming >= stored;
 }
 
 /** what a full replace changed, so a caller can notice webhooks stopped */

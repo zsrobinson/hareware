@@ -43,10 +43,23 @@
   "main": "./src/worker.ts",
 
   /**
-   * hourly, because the reminders mean "8am eastern" and cloudflare crons are
-   * utc with no timezone setting. src/lib/eastern.ts decides whether a given
-   * tick is the right hour, so the schedule never drifts across daylight saving
+   * two schedules, and `runScheduled` tells them apart by `controller.cron`.
+   *
+   * hourly is the reminders: they mean "8am eastern" and cloudflare crons are
+   * utc with no timezone setting, so src/lib/eastern.ts decides whether a tick
+   * is the right hour and the schedule never drifts across daylight saving.
+   *
+   * every minute is the article index. notion's webhooks are at-most-once and
+   * unordered, so this is the only thing that guarantees the picker ever
+   * matches notion — and an hour of that guarantee reads as broken to somebody
+   * who just renamed a headline. two notion requests a minute against a budget
+   * of three a second is nothing.
+   *
+   * the minute schedule must never reach the reminders. every minute of 8am
+   * would otherwise be a fresh 8am, and the club would be pinged sixty times —
+   * `REMINDER_CRON` in src/lib/automations/run.ts is that check, with the tests
+   * that hold it
    */
-  "triggers": { "crons": ["0 * * * *"] },
+  "triggers": { "crons": ["0 * * * *", "* * * * *"] },
   "assets": { "directory": "./dist", "binding": "ASSETS" },
 }

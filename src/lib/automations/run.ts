@@ -18,21 +18,40 @@ export type Which = Set<AutomationId>;
 export const ALL: Which = new Set(AUTOMATIONS.map((a) => a.id));
 
 /**
- * the cron entry. fires hourly and decides what is due, rather than the
- * schedule encoding an hour that would drift across daylight saving — see
- * `~/lib/eastern`
+ * which schedule fires the reminders.
+ *
+ * this is load-bearing rather than cosmetic. the article index syncs every
+ * minute, and the reminders are due when the *eastern hour* matches — so
+ * without a check on which schedule woke us, every minute of 8am would be a
+ * fresh 8am and the club would be pinged sixty times.
+ */
+export const REMINDER_CRON = "0 * * * *";
+
+/**
+ * the cron entry, for both schedules.
+ *
+ * hourly decides what is due by eastern hour rather than the schedule encoding
+ * one, which is what keeps it from drifting across daylight saving — see
+ * `~/lib/eastern`. the minute schedule only syncs.
  */
 export async function runScheduled(controller: ScheduledController, env: Env) {
   const eastern = easternNow(new Date(controller.scheduledTime));
 
   /*
     each automation carries its own hour, so a second one at a different time
-    is a registry entry rather than a branch here
+    is a registry entry rather than a branch here.
+
+    `REMINDERS_IGNORE_HOUR` still ignores the hour, but never the schedule: it
+    exists to see a reminder without waiting for 8am, and on the minute cron it
+    would mean sixty of them
   */
+  const hourly = controller.cron === REMINDER_CRON;
   const due = new Set(
-    AUTOMATIONS.filter(
-      (a) => a.hour === eastern.hour || env.REMINDERS_IGNORE_HOUR,
-    ).map((a) => a.id),
+    hourly
+      ? AUTOMATIONS.filter(
+          (a) => a.hour === eastern.hour || env.REMINDERS_IGNORE_HOUR,
+        ).map((a) => a.id)
+      : [],
   );
 
   if (due.size > 0) {
@@ -50,12 +69,15 @@ export async function runScheduled(controller: ScheduledController, env: Env) {
   }
 
   /*
-    after the reminders, and on every tick rather than only at REMINDER_HOUR.
+    after the reminders, and on every tick of either schedule.
 
-    every tick because this is what makes the article index right: notion
-    delivers webhooks at-most-once and out of order, so the rebuild is not a
-    backstop for a rare failure — it is the only thing that guarantees the
-    picker eventually matches notion. see ADR 0009.
+    every minute because this is what makes the article index right, and how
+    right it is is the whole feel of the thing: notion delivers webhooks
+    at-most-once and out of order, so the rebuild is not a backstop for a rare
+    failure — it is the only guarantee the picker ever matches notion, and an
+    hour of that guarantee is long enough to read as broken. two notion
+    requests a minute against a budget of three a second is nothing. see
+    ADR 0009.
 
     *after* because it reads notion and writes d1 with no deadline of its own,
     and at 8am eastern it shares a tick with the reminders. a slow notion

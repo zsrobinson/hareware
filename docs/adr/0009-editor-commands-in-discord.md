@@ -96,10 +96,25 @@ version-guarding on `last_edited_time`: **write-through always wins; a webhook
 or rebuild applies only when strictly newer.** Every path is then idempotent and
 arrival order stops mattering.
 
-`last_edited_time` has minute resolution, so a human editing the same Article in
-Notion within the same minute as a command is ignored until the next rebuild.
-That is the deliberate trade: a five-minute-late webhook must never undo an edit
-an editor just watched succeed.
+`last_edited_time` has minute resolution, and **amended 2026-09-05** that turned
+out to matter: "strictly newer" threw away a second edit made in the same minute
+as the first, so somebody typing a headline in Notion watched Discord hold the
+version from nine seconds earlier. A guaranteed wrong answer, in the most
+ordinary use there is.
+
+The rule is now **newer or equal** for a fetch, and the reasoning is where these
+writes come from: every non-authoritative write is a fresh read of the page, not
+a delta applied blind, so a late or out-of-order webhook still carries current
+truth. The thing the guard was protecting against cannot happen. A write-through
+still wins outright, because a fetch already in flight when our own PATCH landed
+is the one case where equal timestamps hide a real ordering.
+
+The rebuild also runs **every minute** rather than hourly. Notion's delivery
+being at-most-once makes the rebuild the only guarantee the index ever matches,
+and an hour of that guarantee reads as broken. Two requests a minute against a
+budget of three a second costs nothing. The minute schedule is kept away from
+the reminders by `controller.cron`: every minute of 8am would otherwise be a
+fresh 8am.
 
 ### Members is keyed by Discord user, and fills itself in
 

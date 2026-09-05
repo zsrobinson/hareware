@@ -34,10 +34,7 @@ const POLICY = [
   "frame-ancestors 'none'",
 ].join("; ");
 
-/*
-  who may be here, before anything renders. `~/lib/admin-guard` holds the
-  decision; this only supplies astro's context to it
-*/
+/* Who may be here, before anything renders. */
 const admin = defineMiddleware(guardAdmin);
 
 const headers = defineMiddleware(async (_context, next) => {
@@ -56,10 +53,6 @@ const headers = defineMiddleware(async (_context, next) => {
   return response;
 });
 
-/*
-  the guard first, so a refused request never reaches the route it asked for.
-  the headers are set inside it, on the refusal page it renders instead, and
-  the guard carries them onto the response it hands back — a refusal wears the
-  same policy as anything else
-*/
+/* The guard first, so a refused request never reaches the route it asked for.
+   It carries the headers set inside it onto the response it hands back. */
 export const onRequest = sequence(admin, headers);

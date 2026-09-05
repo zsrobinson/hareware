@@ -1,10 +1,9 @@
 ---
 /*
-  where the oauth callback sends somebody when it could not finish, and where
-  "use a different account" lands after signing out.
-
-  the sidebar's own button is what a member normally signs in with — this page
-  exists for the cases that need a sentence explaining themselves
+  Where the OAuth callback sends somebody when it could not finish, and where
+  "use a different account" lands after signing out. The sidebar's own button
+  is what a member normally signs in with; this page is for the cases that need
+  a sentence.
 */
 import Dashboard from "~/layouts/dashboard.astro";
 import Message from "~/components/message.astro";
@@ -31,11 +30,7 @@ const error = !config
   ? errorMessages.not_configured
   : (errorMessages[errorCode] ?? null);
 
-/*
-  already signed in and nothing went wrong: there is nothing to do here, so
-  send them where they were going rather than showing them a page whose only
-  content is that they are already signed in
-*/
+/* Signed in and nothing went wrong: there is nothing to say here. */
 if (who.session && !error) return Astro.redirect(returnTo);
 
 const title = who.session ? "Signed in" : "Sign in to HareWare";

@@ -6,9 +6,8 @@ import { viewerState } from "~/lib/admin";
 import { admitted } from "~/lib/admin-guard";
 import { recent } from "~/lib/log";
 
-/* the guard in `~/middleware` decided this before the page ran, and rewrote
-   anybody it refused to /access-denied — so reaching here is the permission,
-   and the same lookup already knows what to call them */
+/* Reaching this page is the permission: the guard already refused anybody it
+   would not admit, and its lookup knows what to call them. */
 const who = admitted(Astro.locals);
 
 /* the log names who pressed what, so no cache may hold any part of this —

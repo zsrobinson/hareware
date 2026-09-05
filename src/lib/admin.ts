@@ -12,11 +12,9 @@ import { guildMember, type Profile } from "./member";
 import { getSession, type Session } from "./session";
 
 /**
- * the signed-in member, what to call them, and whether they may see the tools.
- *
- * `admin` and `denial` are one choice rather than two fields: a viewer who may
- * not be here always carries the reason, and one who may cannot carry a stale
- * one. that is what lets the guard read the reason without a fallback
+ * The signed-in member, what to call them, and whether they may see the tools.
+ * `admin` and `denial` are one choice, so a refused viewer always carries its
+ * reason and an admitted one cannot carry a stale one.
  */
 export type Viewer = {
   session: Session;
@@ -25,14 +23,8 @@ export type Viewer = {
 } & ({ admin: true; denial: null } | { admin: false; denial: Denial });
 
 /**
- * the same thing as the nav islands take it, where signed-out is a value.
- *
- * `viewer()` returns null for "nobody is signed in", which is the right shape
- * for a guard. the sidebar has to draw something either way, so it takes this.
- *
- * there is no `admin` here on purpose: the nav shows the admin tools to
- * everybody and the pages themselves refuse, so nothing the sidebar draws
- * varies by role any more
+ * The same thing as the sidebar takes it, where signed-out is a value rather
+ * than null. No `admin`: nothing the sidebar draws varies by role.
  */
 export type ViewerState = {
   session: Session | null;
@@ -84,23 +76,16 @@ export async function adminAccess(request: Request): Promise<Access> {
 
   if (!who) return { allowed: false, who: null, denial: "signed-out" };
 
-  /*
-    `viewer()` fills in `denial` wherever `admin` is false, and the two are set
-    together so they cannot disagree. reading it rather than defaulting to
-    "no-role" is deliberate: a default would be the place a future lookup state
-    quietly became "you do not hold the role", which is the lie this whole
-    guard exists to stop telling
-  */
+  /* Read rather than defaulted to "no-role": a default is where a lookup
+     state nobody has thought about yet would quietly become a lie. */
   if (!who.admin) return { allowed: false, who, denial: who.denial };
 
   return { allowed: true, who };
 }
 
 /**
- * the signed-in member, if they hold @Editorial Board, and null otherwise.
- *
- * what the api routes guard on, where the reason is nobody's business: a
- * caller holding a bearer secret gets a status code, not a page
+ * What the API routes guard on, where a caller holding a bearer secret gets a
+ * status code rather than a page and the reason is nobody's business.
  */
 export async function editorialBoardMember(
   request: Request,

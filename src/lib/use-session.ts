@@ -9,16 +9,12 @@ import type { ViewerState } from "./admin";
   the nav is not in that list: every tool is shown to everybody and the admin
   pages refuse in person, so nothing about which links to draw depends on this.
 
-  one snapshot with three states, not three module variables with a shared
-  boolean. the old shape published `session` from a page that had one while
-  leaving `admin` and `profile` at their defaults, and set the "already asked"
-  flag on the way past — so a member on a page that passed only a session saw
-  their own id where their name belongs, and kept seeing it after navigating
-  away, because the flag outlives the page under client-side routing.
+  one snapshot rather than separate module variables, because a partial one
+  published from a page outlives that page under client-side routing.
 
-  "not asked yet" has to be a state of its own. it is what tells the fetch to
-  run, and conflating it with "asked, and the answer was nobody" is what made
-  seeding silently cancel the request that would have filled in the rest.
+  "not asked yet" has to be a state of its own: it is what tells the fetch to
+  run, and conflating it with "asked, and the answer was nobody" silently
+  cancels the request that would have filled in the rest.
 */
 
 const SIGNED_OUT: ViewerState = { session: null, profile: null };

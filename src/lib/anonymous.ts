@@ -1,25 +1,16 @@
 /*
-  the invariant ADR 0005 rests on, as a function rather than a tripwire.
-
-  a response that renders who you are must never be one a shared cache can hand
-  to somebody else. this lived inline in the dashboard layout, where it checked
-  only `session` and only ran under DEV — so a page passing `admin` while
-  setting `s-maxage` said nothing, and a page written by somebody who never
-  signs in locally shipped clean. here it is pure, total, and tested.
+  The invariant ADR 0005 rests on: a response that renders who you are must
+  never be one a shared cache can hand to somebody else. Pure and total rather
+  than a tripwire in the layout, so it holds in production and not only DEV.
 */
 
 /** whatever a page passed about the viewer, in the shape the layout sees it */
 export type Rendered = Record<string, unknown> | null;
 
 /**
- * whether these props would put one member's details into the html.
- *
- * any field with a value counts, rather than a list of the fields there happen
- * to be today. the list version is how this got caught out once already: it
- * checked `session` while `admin` drew the editorial nav beside it. a shape
- * that grows a field grows the guard with it, and the field that comes back
- * one day — a role, a flag, whatever the nav needs next — is covered before
- * anybody remembers this file exists
+ * Whether these props would put one member's details into the html. Any field
+ * with a value counts, rather than a list of the fields there happen to be
+ * today, so a shape that grows a field grows the guard with it.
  */
 export function personal(viewer: Rendered) {
   if (!viewer) return false;

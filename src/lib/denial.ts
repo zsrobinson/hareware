@@ -18,22 +18,18 @@ export type Denial =
   /** discord did not answer, so we do not know either way */
   | "unreachable";
 
-/** the one thing this member can do about it, as data rather than a branch */
+/** The one thing this member can do about it. */
 export type Action =
-  /** start discord oauth, coming back to where they were */
   | "sign-in"
-  /** reload what they asked for; nothing is wrong with them */
   | "retry"
-  /** sign out, so they can sign in as somebody else */
   | "switch-account"
   /** nothing they can do from here, so point at what they can use */
   | "leave";
 
 export type DenialCopy = {
-  /** what a browser is told, and what `curl -i` shows */
   status: number;
   title: string;
-  /** `you` is their handle, or "this account" when discord gave us no name */
+  /** `you` is their handle, or "This account" when Discord gave us no name */
   body: (you: string) => string;
   action: Action;
 };

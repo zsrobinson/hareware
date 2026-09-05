@@ -425,30 +425,50 @@ async function handleAutocomplete(
     picker lists every Article to anybody who can reach the command, and it
     does so before the command is ever run
   */
-  if (!onTheBoard(interaction)) return empty;
+  if (!onTheBoard(interaction)) {
+    console.warn("[article] autocomplete refused: not on the editorial board");
+    return empty;
+  }
 
   const subcommand = subcommandOf(interaction);
   const focused = subcommand?.options?.find((option) => option.focused);
   const query = textOf(focused);
 
   const search = deps.search;
-  if (!search) return empty;
+  if (!search) {
+    console.error("[article] autocomplete has no index to read");
+    return empty;
+  }
 
   /*
     two characters match most of the 138 rows, so a short query is not a search
     worth running — the useful answer to a picker that has only just opened is
     the editor's own most recent work
   */
-  const rows = await within(
+  const { rows, why } = await within(
     query.length < MIN_QUERY
       ? search("", SHORT_QUERY_ROWS).then((all) => mine(all, who(interaction)))
       : search(query, MAX_CHOICES),
     deps.timeoutMs ?? AUTOCOMPLETE_BUDGET_MS,
   );
 
+  const choices = choicesFor(rows);
+
+  /*
+    every failure here answers with an empty list, because that is the only
+    thing discord accepts — which leaves an editor staring at a blank dropdown
+    with nothing anywhere saying why. this line is the difference between that
+    and a question somebody can answer
+  */
+  if (choices.length === 0) {
+    console.warn(
+      `[article] autocomplete answered nothing: query=${JSON.stringify(query)} rows=${rows.length} ${why ?? "no matches"}`,
+    );
+  }
+
   return {
     type: APPLICATION_COMMAND_AUTOCOMPLETE_RESULT,
-    data: { choices: choicesFor(rows) },
+    data: { choices },
   };
 }
 
@@ -460,15 +480,22 @@ async function handleAutocomplete(
  * catch, and it is the one discord punishes
  */
 async function within(rows: Promise<ArticleRow[]>, ms: number) {
-  const deadline = new Promise<ArticleRow[]>((resolve) =>
-    setTimeout(() => resolve([]), ms),
+  /* a sentinel rather than an empty array: "the deadline won" and "the index
+     holds nothing that matches" are different facts, and answering both with
+     `[]` is what made an empty dropdown impossible to explain */
+  const LATE = Symbol("late");
+  const deadline = new Promise<typeof LATE>((resolve) =>
+    setTimeout(() => resolve(LATE), ms),
   );
 
   try {
-    return await Promise.race([rows, deadline]);
+    const raced = await Promise.race([rows, deadline]);
+    if (raced === LATE) return { rows: [], why: "timed out" as const };
+
+    return { rows: raced, why: undefined };
   } catch (error) {
     console.error("[article] could not read the index for autocomplete", error);
-    return [];
+    return { rows: [], why: "threw" as const };
   }
 }
 

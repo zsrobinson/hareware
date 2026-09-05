@@ -30,6 +30,7 @@
       "binding": "DB",
       "database_name": "hareware",
       "database_id": "dbbc955f-2663-4d25-8b5c-fcb1c67276d5",
+      "remote": true,
     },
   ],
 

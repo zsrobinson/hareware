@@ -830,3 +830,61 @@ test("a new article with no headline is refused before anything is written", asy
   expect(text(reply)).toContain("Headline");
   expect(seen.requests).toEqual([]);
 });
+
+/*
+  the picker reads notion directly, because a cache fed by webhooks is never
+  "immediately": a webhook took nine seconds once and sixty-five the next time,
+  so an edit made in notion sat behind whichever it happened to be
+*/
+test("autocomplete answers from notion when notion is quick enough", async () => {
+  const choices = asChoices(
+    await handleInteraction(
+      typing("fresh"),
+      deps({
+        live: () =>
+          Promise.resolve([
+            row({ pageId: "live", headline: "fresh headline" }),
+          ]),
+        index: () =>
+          Promise.resolve([
+            row({ pageId: "cached", headline: "fresh headline" }),
+          ]),
+      }),
+    ),
+  );
+
+  expect(choices.map((choice) => choice.value)).toEqual(["live"]);
+});
+
+test("a slow notion falls back to the index rather than an empty dropdown", async () => {
+  /*
+    a recency-sorted read measured ~0.7s with a 2.0s outlier against discord's
+    hard three seconds. the outlier has to lose to the index, not to nothing
+  */
+  const choices = asChoices(
+    await handleInteraction(
+      typing("terps"),
+      deps({
+        live: () => new Promise<ArticleRow[]>(() => {}),
+        liveMs: 1,
+        index: () => Promise.resolve([row({ pageId: "cached" })]),
+      }),
+    ),
+  );
+
+  expect(choices.map((choice) => choice.value)).toEqual(["cached"]);
+});
+
+test("notion refusing outright falls back too", async () => {
+  const choices = asChoices(
+    await handleInteraction(
+      typing("terps"),
+      deps({
+        live: () => Promise.reject(new Error("notion returned 429")),
+        index: () => Promise.resolve([row({ pageId: "cached" })]),
+      }),
+    ),
+  );
+
+  expect(choices.map((choice) => choice.value)).toEqual(["cached"]);
+});

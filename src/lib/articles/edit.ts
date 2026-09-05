@@ -146,20 +146,21 @@ async function attempt(
   request: EditRequest,
   actor: Actor,
 ): Promise<EditResult> {
-  let schema: Schema;
   try {
-    schema = await io.schema();
-  } catch (error) {
-    return refused(`Notion did not answer with its schema: ${String(error)}`);
-  }
+    if (request.kind === "delete")
+      return await remove(io, await io.page(request.pageId));
 
-  try {
+    let schema: Schema;
+    try {
+      schema = await io.schema();
+    } catch (error) {
+      return refused(`Notion did not answer with its schema: ${String(error)}`);
+    }
+
     if (request.kind === "create")
       return await create(io, schema, request, actor);
 
     const page = await io.page(request.pageId);
-
-    if (request.kind === "delete") return await remove(io, page);
 
     if (request.kind === "property")
       return await apply(io, page, plan(schema, page, request.intent));

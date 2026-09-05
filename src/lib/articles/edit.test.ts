@@ -1,5 +1,11 @@
-import { expect, test } from "vitest";
-import { editSummary, runEdit, type EditIO, type EditRequest } from "./edit";
+import { afterEach, expect, test, vi } from "vitest";
+import {
+  editSummary,
+  notionIO,
+  runEdit,
+  type EditIO,
+  type EditRequest,
+} from "./edit";
 import type { Schema } from "./choices";
 import type { ArticlePage } from "./page";
 import type { Result } from "~/lib/result";
@@ -54,6 +60,8 @@ const article = (properties: ArticlePage["properties"] = {}): ArticlePage => ({
 });
 
 const actor = { id: "111", name: "Zachary Robinson" };
+
+afterEach(() => vi.restoreAllMocks());
 
 type Recorded = {
   patched: { pageId: string; body: unknown }[];
@@ -139,6 +147,9 @@ test("deleting moves the Article to Notion's Trash and keeps its returned page",
     url: "https://notion.so/page-1",
   };
   const { io, seen } = spy({
+    schema: async () => {
+      throw new Error("schema unavailable");
+    },
     trash: async (pageId) => {
       seen.trashed.push(pageId);
       return returned;
@@ -160,6 +171,23 @@ test("a trash response that does not confirm in_trash is uncertain", async () =>
   const result = await runEdit(io, { kind: "delete", pageId: "page-1" }, actor);
   expect(result).toMatchObject({ status: "failed", pageId: "page-1" });
   expect(editSummary(result)).toContain("could not be confirmed");
+});
+
+test("the Notion adapter moves a page to Trash with in_trash", async () => {
+  const returned = { ...article(), in_trash: true };
+  const fetchMock = vi.fn(async (_input: string, _init?: RequestInit) =>
+    Promise.resolve(new Response(JSON.stringify(returned))),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+
+  await expect(
+    notionIO({ NOTION_TOKEN: "notion-token" } as Env).trash("page-1"),
+  ).resolves.toEqual(returned);
+
+  const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(url).toBe("https://api.notion.com/v1/pages/page-1");
+  expect(init.method).toBe("PATCH");
+  expect(JSON.parse(init.body as string)).toEqual({ in_trash: true });
 });
 
 /* ---- a plain property change -------------------------------------------- */

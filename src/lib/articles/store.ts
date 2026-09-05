@@ -107,7 +107,13 @@ export async function search(
       .select()
       .from(articleIndex)
       .where(
-        sql`lower(${articleIndex.headline}) like ${likePattern(query)} escape '\'`,
+        /*
+          `\\` and not `\`: this is a template literal, so `'\'` collapses to a
+          bare quote and emits `escape ''` — an empty escape string, which
+          sqlite rejects outright. every search threw, `search` swallowed it as
+          designed, and discord showed an empty dropdown
+        */
+        sql`lower(${articleIndex.headline}) like ${likePattern(query)} escape '\\'`,
       )
       .orderBy(desc(articleIndex.lastEdited))
       .limit(limit);

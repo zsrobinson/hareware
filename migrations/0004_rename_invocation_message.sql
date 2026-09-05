@@ -1,1 +1,0 @@
-ALTER TABLE `invocations` RENAME COLUMN "summary" TO "message";

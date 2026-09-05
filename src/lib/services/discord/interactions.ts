@@ -38,7 +38,11 @@ import {
   type InteractionResponse,
   type MessageResponse,
 } from "./interaction-response";
-import { POSTED_PREFIX, togglePosted } from "./posted-button";
+import {
+  POSTED_PREFIX,
+  togglePosted,
+  type PostedChange,
+} from "./posted-button";
 
 /** interaction types, of which we answer four */
 const PING = 1;
@@ -160,6 +164,8 @@ export type InteractionDeps = {
   defer?: (work: () => Promise<void>) => void;
   /** overridable so a test can watch the follow-up without reaching discord */
   reply?: typeof followUp;
+  /** records the resulting state of a posted marker, not merely its press */
+  recordPosted?: (change: PostedChange & { actor: Actor }) => Promise<void>;
   /** overridable so a test can prove the deadline exists without waiting */
   timeoutMs?: number;
 };
@@ -183,11 +189,22 @@ export async function handleInteraction(
     const components = interaction.message?.components;
     if (!components) return undefined;
 
+    const toggled = togglePosted(components, id, who(interaction));
+    if (!toggled.change) return undefined;
+
+    await deps.recordPosted?.({
+      ...toggled.change,
+      actor: {
+        id: interaction.member?.user?.id ?? interaction.user?.id ?? "",
+        name: who(interaction),
+      },
+    });
+
     return {
       type: UPDATE_MESSAGE,
       data: {
         flags: IS_COMPONENTS_V2,
-        components: togglePosted(components, id, who(interaction)),
+        components: toggled.components,
       },
     };
   }

@@ -168,7 +168,7 @@ async function recordRun(
     source,
     action: automation.action,
     outcome: result.outcome,
-    summary: result.summary,
+    message: result.summary,
     actor,
   });
 }
@@ -191,7 +191,7 @@ async function refreshTheCommandSurface(env: Env) {
       source: "cron",
       action: "command-surface",
       outcome: result.outcome,
-      summary: result.summary,
+      message: result.summary,
     });
   } catch (error) {
     /* this runs after the reminders and must never disturb them: a stale picker
@@ -202,7 +202,7 @@ async function refreshTheCommandSurface(env: Env) {
       source: "cron",
       action: "command-surface",
       outcome: "failed",
-      summary: `command surface refresh threw: ${String(error)}`,
+      message: `Command surface refresh threw: ${String(error)}`,
     });
   }
 }

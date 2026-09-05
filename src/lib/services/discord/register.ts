@@ -37,7 +37,7 @@ export async function registerCommands(
   if (!token) {
     return {
       outcome: "misconfigured",
-      summary: "DISCORD_BOT_TOKEN is not set; commands were not registered",
+      summary: "DISCORD_BOT_TOKEN is not set; commands were not registered.",
     };
   }
 
@@ -65,18 +65,18 @@ export async function registerCommands(
     if (!response.ok) {
       return {
         outcome: "failed",
-        summary: `discord refused the commands: ${response.status} ${said.slice(0, 300)}`,
+        summary: `Discord refused the commands: ${response.status} ${said.slice(0, 300)}`,
       };
     }
 
     return {
       outcome: "ok",
-      summary: `registered ${payload.length} command(s) on the guild`,
+      summary: `Registered ${payload.length} ${payload.length === 1 ? "command" : "commands"} on the guild.`,
     };
   } catch (error) {
     return {
       outcome: "failed",
-      summary: `could not reach discord to register commands: ${String(error)}`,
+      summary: `Could not reach Discord to register commands: ${String(error)}`,
     };
   }
 }

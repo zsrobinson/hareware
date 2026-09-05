@@ -7,6 +7,11 @@ const MAX_LABEL = 80;
 
 export const POSTED_PREFIX = "posted:";
 
+export type PostedChange = {
+  article: string;
+  state: "posted" | "not-posted";
+};
+
 /** Discord requires a unique custom id no longer than 100 characters. */
 export function postedId(slug: string) {
   return `${POSTED_PREFIX}${slug}`.slice(0, 100);
@@ -17,8 +22,9 @@ export function togglePosted(
   components: Component[],
   id: string,
   name: string,
-): Component[] {
-  return components.map((component) => {
+): { components: Component[]; change: PostedChange | undefined } {
+  let change: PostedChange | undefined;
+  const toggled = components.map((component) => {
     if (!component.components) return component;
 
     return {
@@ -26,14 +32,26 @@ export function togglePosted(
       components: component.components.map((child) => {
         if (child.type !== BUTTON || child.custom_id !== id) return child;
 
-        return child.style === SUCCESS_STYLE
-          ? { ...child, style: DANGER_STYLE, label: "Not posted" }
-          : {
-              ...child,
-              style: SUCCESS_STYLE,
-              label: `Posted by ${name}`.slice(0, MAX_LABEL),
-            };
+        if (child.style === SUCCESS_STYLE) {
+          change = {
+            article: id.slice(POSTED_PREFIX.length),
+            state: "not-posted",
+          };
+          return { ...child, style: DANGER_STYLE, label: "Not posted" };
+        }
+
+        change = {
+          article: id.slice(POSTED_PREFIX.length),
+          state: "posted",
+        };
+        return {
+          ...child,
+          style: SUCCESS_STYLE,
+          label: `Posted by ${name}`.slice(0, MAX_LABEL),
+        };
       }),
     };
   });
+
+  return { components: toggled, change };
 }

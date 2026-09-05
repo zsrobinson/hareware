@@ -35,7 +35,7 @@ export const invocations = sqliteTable(
       enum: ["ok", "skipped", "misconfigured", "failed"],
     }).notNull(),
     /** the plain line the log page shows. kept indefinitely */
-    summary: text("summary").notNull(),
+    message: text("summary").notNull(),
     /** the discord user behind it, where a person was */
     actor: text("actor"),
   },

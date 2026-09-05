@@ -32,14 +32,16 @@ export async function sendSocialPing(
     !roleId && `SOCIAL_ROLE_IDS.${eastern.weekday}`,
   ].filter(Boolean);
   if (missing.length > 0)
-    return misconfigured(`social ping unset: ${missing.join(", ")}`);
+    return misconfigured(
+      `Social ping is not configured: ${missing.join(", ")}.`,
+    );
 
   const articles = await getRecentArticles();
   /*
     this is the one that mattered most: an unreadable feed used to be recorded
     as `ok`, so a week of wordpress rate-limiting produced seven green rows
   */
-  if (!articles) return failed("could not read the wordpress feed");
+  if (!articles) return failed("Could not read the WordPress feed.");
 
   /*
     the feed's `date` field is a display string with the year thrown away, so
@@ -53,7 +55,7 @@ export async function sendSocialPing(
   );
   // a genuinely quiet day, which is a different thing from a broken one
   if (today.length === 0)
-    return skipped(`no articles published today (${eastern.date})`);
+    return skipped(`No articles published today (${eastern.date}).`);
 
   const posted = today.slice(0, MAX_ARTICLES);
 
@@ -98,6 +100,7 @@ export async function sendSocialPing(
     },
   );
 
-  const verb = env.REMINDERS_DRY_RUN ? "would post" : "posted";
-  return ok(`${verb} ${posted.length} article(s) for ${eastern.date}`);
+  const verb = env.REMINDERS_DRY_RUN ? "Would post" : "Posted";
+  const noun = posted.length === 1 ? "article" : "articles";
+  return ok(`${verb} ${posted.length} ${noun} for ${eastern.date}.`);
 }

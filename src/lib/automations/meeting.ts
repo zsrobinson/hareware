@@ -46,7 +46,9 @@ export async function sendMeetingReminder(
   /* not `ok`: nothing ran, and a row saying otherwise is the failure ADR 0007
      exists to prevent */
   if (missing.length > 0)
-    return misconfigured(`meeting reminder unset: ${missing.join(", ")}`);
+    return misconfigured(
+      `Meeting reminder is not configured: ${missing.join(", ")}.`,
+    );
 
   const token = env.NOTION_TOKEN!;
   const source = await dataSource(MEETINGS_DATABASE_ID!, token);
@@ -61,7 +63,7 @@ export async function sendMeetingReminder(
   // a genuinely quiet day, which is a different thing from a broken one
   if (!page)
     return skipped(
-      `no ${MEETING_TITLE_PREFIX} meeting today (${eastern.date})`,
+      `No ${MEETING_TITLE_PREFIX} meeting today (${eastern.date}).`,
     );
 
   const name = title(page).trim();
@@ -85,8 +87,8 @@ export async function sendMeetingReminder(
 
   // a dry run posts nothing, and saying "posted" made a message that never
   // went out indistinguishable from one that did
-  const verb = env.REMINDERS_DRY_RUN ? "would post" : "posted";
-  return ok(`${verb} meeting reminder for "${name}"`);
+  const verb = env.REMINDERS_DRY_RUN ? "Would post" : "Posted";
+  return ok(`${verb} meeting reminder for “${name}”.`);
 }
 
 /**

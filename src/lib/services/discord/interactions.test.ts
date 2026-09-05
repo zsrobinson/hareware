@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { handleInteraction, type InteractionDeps } from "./interactions";
 import { postedId } from "./posted-button";
 import type {
@@ -95,6 +95,18 @@ test("marks the pressed button posted, crediting whoever pressed it", async () =
   expect(button.style).toBe(3);
 });
 
+test("records the article and resulting posted state", async () => {
+  const recordPosted = vi.fn(async () => {});
+
+  await handleInteraction(press(postedId("first")), { recordPosted });
+
+  expect(recordPosted).toHaveBeenCalledWith({
+    article: "first",
+    state: "posted",
+    actor: { id: "", name: "zsrobinson" },
+  });
+});
+
 /*
   a checkbox that cannot be unticked is a trap for whoever presses the wrong
   row, so nothing is ever disabled
@@ -113,6 +125,23 @@ test("pressing a posted button un-posts it", async () => {
 
   expect(button.style).toBe(4);
   expect(button.label).toBe("Not posted");
+});
+
+test("records when a posted article becomes not posted", async () => {
+  const recordPosted = vi.fn(async () => {});
+  const posted = press(postedId("first"));
+  posted.message.components[1]!.components![0] = {
+    type: 2,
+    style: 3,
+    label: "Posted by someone else",
+    custom_id: postedId("first"),
+  };
+
+  await handleInteraction(posted, { recordPosted });
+
+  expect(recordPosted).toHaveBeenCalledWith(
+    expect.objectContaining({ article: "first", state: "not-posted" }),
+  );
 });
 
 test("nothing is ever disabled", async () => {

@@ -58,6 +58,9 @@ test("the statuses are the ones each situation deserves", () => {
 test("every denial offers an action", () => {
   expect(DENIALS["signed-out"].action).toBe("sign-in");
   expect(DENIALS.unreachable.action).toBe("retry");
-  expect(DENIALS["no-role"].action).toBe("switch-account");
+  /* the wrong account is the one they can fix themselves */
   expect(DENIALS["not-in-server"].action).toBe("switch-account");
+  /* the right account without the role cannot: only an editor can grant it,
+     so the honest offer is the way back to what they can use */
+  expect(DENIALS["no-role"].action).toBe("leave");
 });

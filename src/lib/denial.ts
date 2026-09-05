@@ -41,7 +41,9 @@ export type Action =
   /** reload what they asked for; nothing is wrong with them */
   | "retry"
   /** sign out, so they can sign in as somebody else */
-  | "switch-account";
+  | "switch-account"
+  /** nothing they can do from here, so point at what they can use */
+  | "leave";
 
 export type DenialCopy = {
   /** what a browser is told, and what `curl -i` shows */
@@ -55,41 +57,32 @@ export type DenialCopy = {
 export const DENIALS: Record<Denial, DenialCopy> = {
   "signed-out": {
     status: 401,
-    title: "Sign in to see this",
-    body: () =>
-      "The admin tools are for members of @Editorial Board. Sign in with " +
-      "Discord and we will bring you straight back here.",
+    title: "Sign in to use this",
+    body: () => "This tool is for the Editorial Board.",
     action: "sign-in",
   },
 
   "no-role": {
     status: 403,
-    title: "You are not on the Editorial Board",
+    title: "You need the Editorial Board role",
     body: (you) =>
-      `You are signed in as ${you}, which is a member of The Hare's Discord ` +
-      "but does not hold @Editorial Board. Ask an editor to add the role — " +
-      "the check runs on every page load, so this page works the moment they do.",
-    action: "switch-account",
+      `You are signed in as ${you}. Ask an editor to add the role — it works ` +
+      "the moment they do.",
+    action: "leave",
   },
 
   "not-in-server": {
     status: 403,
-    title: "That account is not in the server",
-    body: (you) =>
-      `You are signed in as ${you}, and Discord says that account is not a ` +
-      "member of The Hare's server. Ask an editor for an invite, or sign in " +
-      "with the account you use in the club.",
+    title: "Wrong account",
+    body: (you) => `${you} is not in The Hare's Discord.`,
     action: "switch-account",
   },
 
   unreachable: {
     /* not 500: nothing here is broken, and a retry is the right advice */
     status: 503,
-    title: "We could not check your access",
-    body: () =>
-      "Discord did not answer when we asked which roles you hold, so we " +
-      "cannot tell whether you are on the Editorial Board. Nothing is wrong " +
-      "with your account. Try again in a moment.",
+    title: "Could not check your access",
+    body: () => "Discord did not answer. Nothing is wrong with your account.",
     action: "retry",
   },
 };

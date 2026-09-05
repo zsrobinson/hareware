@@ -5,8 +5,7 @@ import { createSessionCookie } from "./session";
 const workers = vi.hoisted(() => ({ env: {} as Record<string, string> }));
 vi.mock("cloudflare:workers", () => workers);
 
-const { admitted, guardAdmin, isAdminPath, REFUSAL_PATH } =
-  await import("./admin-guard");
+const { admitted, guardAdmin, REFUSAL_PATH } = await import("./admin-guard");
 type Admission = import("./admin-guard").Admission;
 
 const SECRET = "s".repeat(32);
@@ -59,16 +58,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("claims /admin and everything under it, and nothing else", () => {
-  expect(isAdminPath("/admin")).toBe(true);
-  expect(isAdminPath("/admin/log")).toBe(true);
-  expect(isAdminPath("/admin/anything/new")).toBe(true);
-
-  expect(isAdminPath("/generate")).toBe(false);
-  /* the prefix is a path segment, not a string prefix */
-  expect(isAdminPath("/administrators")).toBe(false);
-});
-
 test("leaves a public route alone, without asking discord", async () => {
   workers.env.SESSION_SECRET = SECRET;
   workers.env.DISCORD_BOT_TOKEN = "bot";
@@ -90,7 +79,7 @@ test("lets a board member through to the page they asked for", async () => {
   mockDiscord([EDITORIAL_BOARD_ROLE_ID]);
 
   const { ctx, next, rendered, locals } = context(
-    "/admin/log",
+    "/log",
     await signedInCookie(),
   );
   const response = await guardAdmin(ctx, next);
@@ -132,7 +121,7 @@ test.each([
     }
 
     const cookie = denial === "signed-out" ? undefined : await signedInCookie();
-    const { ctx, next, rendered, locals } = context("/admin/log", cookie);
+    const { ctx, next, rendered, locals } = context("/log", cookie);
 
     const response = await guardAdmin(ctx, next);
 
@@ -146,7 +135,7 @@ test("keeps the page's own headers on the refusal it returns", async () => {
   workers.env.SESSION_SECRET = SECRET;
   workers.env.DISCORD_BOT_TOKEN = "bot";
 
-  const { ctx, next } = context("/admin/log");
+  const { ctx, next } = context("/log");
   const response = await guardAdmin(ctx, next);
 
   /* the security headers are set inside `next`, so dropping them here would
@@ -159,12 +148,12 @@ test("hands the refusal page somewhere to send them back to", async () => {
   workers.env.SESSION_SECRET = SECRET;
   workers.env.DISCORD_BOT_TOKEN = "bot";
 
-  const { ctx, next, locals } = context("/admin/log?page=2");
+  const { ctx, next, locals } = context("/log?page=2");
   await guardAdmin(ctx, next);
 
   /* the query string too: signing back in should return them to the row they
      were looking at, not the top of the log */
-  expect(locals.admission?.returnTo).toBe("/admin/log?page=2");
+  expect(locals.admission?.returnTo).toBe("/log?page=2");
 });
 
 test("throws when a page reads an admission the guard never left", () => {
@@ -176,7 +165,7 @@ test("throws rather than rendering an admin page for a refused viewer", () => {
     admitted({
       admission: {
         access: { allowed: false, who: null, denial: "no-role" },
-        returnTo: "/admin/log",
+        returnTo: "/log",
       },
     }),
   ).toThrow(/refused/);

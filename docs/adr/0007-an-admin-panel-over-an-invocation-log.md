@@ -114,15 +114,27 @@ click a link into a lie. And nothing about a role is served client-side any more
 — `/api/session.json` answers who you are and not what you may do, because no
 island needs to know.
 
-**The guard moved to middleware** over `/admin/*`, from a line at the top of
-each page. Three reasons, in the order they matter: a page added under `/admin`
-is guarded before its frontmatter runs, so the check cannot be forgotten; a
-refused request never executes the page, so nobody being turned away costs a D1
-query; and the guard is a plain function taking `next`, so a test can watch what
-it does with the answer. That last one is the point — the status mapping is the
-whole change, and while it lived in an `.astro` file nothing could assert it.
-The refusal is a rewrite rather than a redirect, so the address bar still holds
-the page they were sent to and reloading re-reads the answer.
+**The guard moved to middleware**, from a line at the top of each page. Three
+reasons, in the order they matter: the guard runs before any page's frontmatter,
+so the check cannot be forgotten; a refused request never executes the page, so
+nobody being turned away costs a D1 query; and the guard is a plain function
+taking `next`, so a test can watch what it does with the answer. That last one
+is the point — the status mapping is the whole change, and while it lived in an
+`.astro` file nothing could assert it. The refusal is a rewrite rather than a
+redirect, so the address bar still holds the page they were sent to and
+reloading re-reads the answer.
+
+**The `/admin` prefix went with the split it stood for.** _Added 2026-09-05._
+The tools were at `/admin/log` while the public ones were at `/generate`, which
+told a member the club's own permission model through a URL and told the sidebar
+to keep two shapes of link. Every tool is now at the top level, and
+`ADMIN_ROUTES` in `~/lib/admin-routes` carries what the prefix used to: the nav
+builds its group from it and the guard protects exactly it, so a tool cannot be
+listed without being guarded. The prefix's real virtue was that a new file under
+`pages/admin/` was guarded by where it sat; what replaces that is `admitted()`,
+which throws when a page renders with no admission — so the failure is loud
+rather than open. The old URLs redirect, because the bot has already posted
+some of them.
 
 The gating itself is untouched. `adminAccess()` still asks Discord on every
 request, and the API routes still answer a bare status code, because a caller

@@ -139,9 +139,9 @@ declare namespace Cloudflare {
 declare namespace App {
   interface Locals {
     /**
-     * what the /admin guard decided, for the page rendering after it.
+     * what the admin guard decided, for the page rendering after it.
      *
-     * absent on every other route, and absent on an /admin route only if the
+     * absent on every other route, and absent on an admin route only if the
      * guard did not run — which is why the admin pages throw on it rather
      * than treating it as "no admission"
      */

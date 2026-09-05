@@ -505,7 +505,7 @@ function write(
       message = articleResponse({
         status: "failed",
         explanation:
-          "HareWare could not confirm the edit. Check the Article in Notion and /admin/log.",
+          "HareWare could not confirm the edit. Check the Article in Notion and /log.",
         notes: [],
         ...(parsed.request.kind !== "create"
           ? { pageId: parsed.request.pageId }

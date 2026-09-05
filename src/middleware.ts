@@ -30,7 +30,7 @@ const POLICY = [
      somebody types into it */
   "form-action 'self'",
   /* nothing embeds HareWare, so nothing may frame it — clickjacking on
-     /admin/automations would be a way to make somebody fire a real automation */
+     /automations would be a way to make somebody fire a real automation */
   "frame-ancestors 'none'",
 ].join("; ");
 

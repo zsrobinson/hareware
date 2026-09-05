@@ -36,8 +36,19 @@ export function SidebarSheet({
       </SheetTrigger>
 
       <SheetContent side="left" className="bg-sidebar w-64 p-0">
-        <SheetHeader className="px-3 pt-3 pb-0">
-          <SheetTitle className="text-sm">HareWare</SheetTitle>
+        {/* the same mark and name the sidebar wears, so the drawer reads as
+            the same thing rather than a second design */}
+        <SheetHeader className="px-3.5 pt-3.5 pb-0">
+          <SheetTitle className="flex items-center gap-2 text-sm">
+            <img
+              src="/bot-logo.svg"
+              alt=""
+              width={28}
+              height={28}
+              className="size-7 shrink-0 rounded-md"
+            />
+            HareWare
+          </SheetTitle>
         </SheetHeader>
 
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">

@@ -19,29 +19,27 @@ const { viewer, pathname, returnTo } = Astro.props;
 <aside
   class="bg-sidebar text-sidebar-foreground border-sidebar-border hidden h-full w-(--sidebar-width) shrink-0 flex-col border-r transition-[width] duration-200 group-data-[state=collapsed]/shell:w-(--sidebar-width-icon) md:flex"
 >
+  {
+    /* shadcn's sidebar header: one square mark, the name beside it, and the
+      name is what goes when the rail narrows. the mark is 1:1 so it survives
+      that — the old wordmark was 4:1 and would have been four pixels tall */
+  }
   <a
     href="/"
-    aria-label="HareWare"
-    class="block shrink-0 px-4 py-3 group-data-[state=collapsed]/shell:px-3"
+    class="hover:bg-sidebar-accent m-2 flex shrink-0 items-center gap-2 rounded-lg p-1.5 transition-colors group-data-[state=collapsed]/shell:m-1.5"
   >
-    {
-      /* the wordmark is 4:1, so at rail width it would be four pixels tall.
-        the collapsed sidebar wears the mark on its own instead */
-    }
     <img
-      src="/hareware-banner.png"
-      alt="HareWare"
-      width="774"
-      height="191"
-      class="w-full group-data-[state=collapsed]/shell:hidden dark:grayscale dark:invert"
-    />
-    <img
-      src="/favicon.svg"
+      src="/bot-logo.svg"
       alt=""
-      width="20"
-      height="20"
-      class="mx-auto hidden group-data-[state=collapsed]/shell:block dark:invert"
+      width="28"
+      height="28"
+      class="size-7 shrink-0 rounded-md"
     />
+    <span
+      class="truncate text-sm font-semibold group-data-[state=collapsed]/shell:hidden"
+    >
+      HareWare
+    </span>
   </a>
 
   <nav class="flex flex-1 flex-col gap-4 overflow-y-auto p-3 pt-1">

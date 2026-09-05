@@ -72,9 +72,22 @@ function AccountMenu({
 
       <DropdownMenuContent side="top" align="end" className="min-w-48">
         {signedIn ? (
-          <form method="post" action="/auth/logout" data-astro-reload>
+          /*
+            a <button> sizes to its own text even as a flex container, where an
+            <a> fills the row — so without these the one item that is a button
+            highlighted a different width from the ones that are links
+          */
+          <form
+            method="post"
+            action="/auth/logout"
+            data-astro-reload
+            className="w-full"
+          >
             <input type="hidden" name="returnTo" value={returnTo} />
-            <DropdownMenuItem render={<button type="submit" />}>
+            <DropdownMenuItem
+              render={<button type="submit" />}
+              className="w-full"
+            >
               <LogOutIcon className="size-4" />
               Sign out
             </DropdownMenuItem>

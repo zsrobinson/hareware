@@ -1,12 +1,13 @@
 /*
-  the guard over every /admin route, as a function rather than a line each page
+  the guard over the admin tools, as a function rather than a line each page
   remembers to write.
 
   it used to be `if (!who?.admin) return notFound()` at the top of every admin
   page — three of them by the time this was written, each a copy of the thing
-  that must never be missing. here the path decides, so a page added under
-  /admin is guarded before its frontmatter runs — and a refused request never
-  reaches it at all, so nobody being turned away costs a d1 query.
+  that must never be missing. here the route decides, from the list in
+  `~/lib/admin-routes`, so a tool in the sidebar is a tool that is guarded —
+  and a refused request never reaches the page at all, so nobody being turned
+  away costs a d1 query.
 
   it lives apart from `~/middleware` so it can be tested: this file imports
   nothing from `astro:middleware`, and takes `next` as an argument, so a test
@@ -23,12 +24,10 @@
 */
 import type { Access, Viewer } from "./admin";
 
-/* the denial table is plain data and reaches nothing, so it is safe to hold
-   statically — it is only `~/lib/admin` that must stay behind the path check */
+/* both of these are plain data and reach nothing, so they are safe to hold
+   statically — it is only `~/lib/admin` that must stay behind the route check */
+import { isAdminPath } from "./admin-routes";
 import { DENIALS } from "./denial";
-
-/** everything under here is admin, including the bare path itself */
-export const ADMIN_PATH = "/admin";
 
 /** the page a refused request is shown instead, without a redirect */
 export const REFUSAL_PATH = "/access-denied";
@@ -39,10 +38,6 @@ export type Admission = {
   /** where they were going, to come back to once they can */
   returnTo: string;
 };
-
-export function isAdminPath(pathname: string) {
-  return pathname === ADMIN_PATH || pathname.startsWith(`${ADMIN_PATH}/`);
-}
 
 /*
   the only part of `App.Locals` anything here touches. naming it that way

@@ -52,7 +52,7 @@ export async function reportFailure(
               `\`\`\`\n${clip(summary)}\n\`\`\``,
               "",
               HAREWARE_ORIGIN
-                ? `Nothing was posted. [The log](${HAREWARE_ORIGIN}/admin/log) has the rest, and the reminder will try again tomorrow.`
+                ? `Nothing was posted. [The log](${HAREWARE_ORIGIN}/log) has the rest, and the reminder will try again tomorrow.`
                 : "Nothing was posted. The reminder will try again tomorrow.",
             ].join("\n"),
           ),

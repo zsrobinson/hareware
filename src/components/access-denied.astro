@@ -1,6 +1,6 @@
 ---
 /*
-  what an /admin route draws instead of itself, when whoever asked may not see
+  what an admin tool draws instead of itself, when whoever asked may not see
   it.
 
   everything that differs between the four refusals is in `~/lib/denial`, so
@@ -9,7 +9,7 @@
   to whatever the last branch happened to be, silently and in the one place
   that is supposed to be telling the truth
 */
-import { buttonVariants } from "~/components/ui/button";
+import Message from "~/components/message.astro";
 import { DENIALS, type Action, type Denial } from "~/lib/denial";
 import type { Profile } from "~/lib/member";
 
@@ -25,17 +25,15 @@ const { denial, profile, returnTo } = Astro.props;
 
 /* the handle is what a member recognises as themselves — and, when they are
    signed in as the wrong account, what tells them so */
-const you = profile ? `@${profile.username}` : "this account";
+const you = profile ? `@${profile.username}` : "This account";
 
 const { title, body, action } = DENIALS[denial];
 
-/* the same buttons the rest of the app draws, rather than a second set of
-   class strings that drift from them */
-const PRIMARY = buttonVariants({ size: "lg" });
-const QUIET = buttonVariants({ variant: "outline", size: "lg" });
-
-/** where each action goes. the labels sit beside them so both stay in step */
-const ACTIONS: Record<Action, { label: string; href: string }> = {
+/** where each action goes, with the label beside it so both stay in step */
+const ACTIONS: Record<
+  Action,
+  { label: string; href: string; method?: "get" | "post" }
+> = {
   "sign-in": {
     label: "Sign in with Discord",
     href: `/auth/discord?${new URLSearchParams({ returnTo })}`,
@@ -44,38 +42,10 @@ const ACTIONS: Record<Action, { label: string; href: string }> = {
   "switch-account": {
     label: "Use a different account",
     href: `/sign-in?${new URLSearchParams({ returnTo })}`,
+    method: "post",
   },
+  leave: { label: "Back to the tools", href: "/generate" },
 };
-
-const { label, href } = ACTIONS[action];
 ---
 
-<section class="mx-auto max-w-lg py-12">
-  <p class="text-hare mb-2 text-xs font-semibold tracking-[0.18em] uppercase">
-    Member access
-  </p>
-  <h2 class="font-display text-3xl leading-tight">{title}</h2>
-  <p class="text-muted-foreground mt-3 text-sm leading-6">{body(you)}</p>
-
-  <div class="mt-6 flex flex-wrap gap-2">
-    {
-      /* signing in as somebody else means signing out first, and that is a
-         POST — the same one the account menu makes. the other two actions are
-         ordinary links */
-      action === "switch-account" ? (
-        <form method="post" action="/auth/logout">
-          <input type="hidden" name="returnTo" value={href} />
-          <button type="submit" class={QUIET}>
-            {label}
-          </button>
-        </form>
-      ) : (
-        <a href={href} class={PRIMARY}>
-          {label}
-        </a>
-      )
-    }
-
-    <a href="/generate" class={QUIET}> Back to the public tools </a>
-  </div>
-</section>
+<Message title={title} action={ACTIONS[action]}>{body(you)}</Message>

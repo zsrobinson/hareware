@@ -1,6 +1,6 @@
 ---
 /*
-  what an /admin route renders when whoever asked may not see it.
+  what an admin tool renders when whoever asked may not see it.
 
   the guard in `~/lib/admin-guard` rewrites to here rather than redirecting, so
   the address bar still holds the page they were sent to. it leaves the reason
@@ -19,7 +19,7 @@ import { viewerState } from "~/lib/admin";
 const admission = Astro.locals.admission;
 
 if (!admission || admission.access.allowed) {
-  return Astro.redirect("/admin/automations");
+  return Astro.redirect("/automations");
 }
 
 const { access, returnTo } = admission;

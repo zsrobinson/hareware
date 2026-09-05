@@ -8,23 +8,15 @@
   request per stray link. the account panel fills itself in client-side
 */
 import Dashboard from "~/layouts/dashboard.astro";
-import { buttonVariants } from "~/components/ui/button";
+import Message from "~/components/message.astro";
 ---
 
 <Dashboard title="Not found">
-  <section class="mx-auto max-w-lg py-12">
-    <p class="text-hare mb-2 text-xs font-semibold tracking-[0.18em] uppercase">
-      404
-    </p>
-    <h2 class="font-display text-3xl leading-tight">There is nothing here</h2>
-    <p class="text-muted-foreground mt-3 text-sm leading-6">
-      That address does not match any of HareWare's tools. If a link in the
-      Discord sent you here, the tool it pointed at has probably moved or been
-      retired — the sidebar lists everything there is.
-    </p>
-
-    <a href="/generate" class={`${buttonVariants({ size: "lg" })} mt-6`}>
-      Back to the tools
-    </a>
-  </section>
+  <Message
+    title="Page not found"
+    action={{ label: "Back to the tools", href: "/generate" }}
+  >
+    That address does not match any of HareWare's tools. The sidebar has
+    everything there is.
+  </Message>
 </Dashboard>

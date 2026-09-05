@@ -1,5 +1,13 @@
 ---
+/*
+  where the oauth callback sends somebody when it could not finish, and where
+  "use a different account" lands after signing out.
+
+  the sidebar's own button is what a member normally signs in with — this page
+  exists for the cases that need a sentence explaining themselves
+*/
 import Dashboard from "~/layouts/dashboard.astro";
+import Message from "~/components/message.astro";
 import { getAuthConfig } from "~/lib/auth-config";
 import { viewer, viewerState } from "~/lib/admin";
 
@@ -7,15 +15,11 @@ Astro.response.headers.set("cache-control", "private, no-store");
 
 const config = getAuthConfig();
 const who = viewerState(await viewer(Astro.request));
-const session = who.session;
-const profile = who.profile;
 const returnTo = Astro.url.searchParams.get("returnTo") ?? "/generate";
-const authHref = `/auth/discord?${new URLSearchParams({ returnTo })}`;
 
 const errorMessages: Record<string, string> = {
   cancelled: "Sign-in was cancelled. Nothing changed.",
-  invalid_state:
-    "That sign-in attempt expired or could not be verified. Try again.",
+  invalid_state: "That sign-in attempt expired. Try again.",
   discord: "Discord sign-in failed. Try again.",
   not_configured: import.meta.env.DEV
     ? "Discord sign-in is not configured. Follow the README setup checklist."
@@ -26,81 +30,30 @@ const errorCode = Astro.url.searchParams.get("error") ?? "";
 const error = !config
   ? errorMessages.not_configured
   : (errorMessages[errorCode] ?? null);
+
+/*
+  already signed in and nothing went wrong: there is nothing to do here, so
+  send them where they were going rather than showing them a page whose only
+  content is that they are already signed in
+*/
+if (who.session && !error) return Astro.redirect(returnTo);
+
+const title = who.session ? "Signed in" : "Sign in to HareWare";
+
+/* without config there is nothing behind the button, so it is not offered */
+const action = config
+  ? {
+      label: who.session ? "Sign in again" : "Sign in with Discord",
+      href: `/auth/discord?${new URLSearchParams({ returnTo })}`,
+    }
+  : undefined;
 ---
 
 <Dashboard title="Sign in" viewer={who}>
-  <section class="mx-auto flex min-h-[calc(100svh-7rem)] max-w-lg items-center">
-    <div class="w-full">
-      <p
-        class="text-hare mb-2 text-xs font-semibold tracking-[0.18em] uppercase"
-      >
-        Member access
-      </p>
-      <h2 class="font-display text-3xl leading-tight">Sign in to HareWare</h2>
-      <p class="text-muted-foreground mt-3 text-sm leading-6">
-        Discord provides your member identity. HareWare requests only the basic
-        account access needed to read your Discord user ID.
-      </p>
-
-      {
-        error ? (
-          <div
-            role="alert"
-            class="bg-muted/50 border-l-hare mt-6 border-y border-r border-l-4 px-4 py-3 text-sm"
-          >
-            {error}
-          </div>
-        ) : null
-      }
-
-      {
-        session ? (
-          <div class="mt-6 rounded-lg border p-4">
-            <div class="flex items-center gap-3">
-              {profile ? (
-                <img
-                  src={profile.avatarUrl}
-                  alt=""
-                  width={40}
-                  height={40}
-                  class="size-10 shrink-0 rounded-full object-cover"
-                  referrerpolicy="no-referrer"
-                />
-              ) : null}
-              <div class="min-w-0">
-                <p class="truncate text-sm font-medium">
-                  {profile?.displayName ?? "Signed in with Discord"}
-                </p>
-                <p class="text-muted-foreground mt-0.5 truncate font-mono text-xs">
-                  {profile
-                    ? `@${profile.username}`
-                    : `ID ${session.discordUserId}`}
-                </p>
-              </div>
-            </div>
-            <a
-              href="/generate"
-              class="bg-primary text-primary-foreground hover:bg-primary/80 mt-4 inline-flex h-9 items-center rounded-lg px-3 text-sm font-medium transition-colors"
-            >
-              Open the article board
-            </a>
-          </div>
-        ) : config ? (
-          <a
-            href={authHref}
-            class="mt-6 inline-flex h-10 items-center justify-center rounded-lg bg-[#5865F2] px-4 text-sm font-medium text-white transition-colors hover:bg-[#4752c4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5865F2]"
-          >
-            Sign in with Discord
-          </a>
-        ) : (
-          <span
-            aria-disabled="true"
-            class="mt-6 inline-flex h-10 cursor-not-allowed items-center justify-center rounded-lg bg-[#5865F2] px-4 text-sm font-medium text-white opacity-50"
-          >
-            Sign in with Discord
-          </span>
-        )
-      }
-    </div>
-  </section>
+  <Message title={title} action={action}>
+    {
+      error ??
+        "HareWare uses your Discord account to know who you are, and asks for nothing else."
+    }
+  </Message>
 </Dashboard>

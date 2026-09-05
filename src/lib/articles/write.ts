@@ -50,7 +50,7 @@ export type Credit = {
   credit: "author" | "image";
   /** the printed name — always filled, and authoritative for what gets printed */
   byline: string;
-  /** the Members behind it, possibly none and possibly several */
+  /** the Members behind it; commands require at least one */
   memberIds: string[];
 };
 
@@ -239,9 +239,9 @@ export function plan(
 /** what `/article new` starts an Article with */
 export type NewArticle = {
   headline: string;
-  /** always filled, per ADR 0004 — the caller's display name by default */
+  /** always filled, per ADR 0004 — the selected member's name by default */
   byline: string;
-  /** the Members rows behind that byline. empty when nobody was picked */
+  /** the Members rows behind that byline; commands require at least one */
   authorIds: string[];
   /** notion's own spelling, resolved from the schema, or null if it is gone */
   status: string | null;
@@ -262,10 +262,10 @@ export function planCreate(
   schema: Schema,
   { headline, byline, authorIds, status, section }: NewArticle,
 ): PlanResult {
-  const writing: PropertyKey[] = ["headline", "authorByline"];
-  /* ADR 0004 keeps the printed Byline and the relation together, so a create
-     that knows the member writes both or refuses both */
-  if (authorIds.length > 0) writing.push("author");
+  if (authorIds.length === 0)
+    return { status: "refused", reason: "An article must have an author." };
+
+  const writing: PropertyKey[] = ["headline", "authorByline", "author"];
   if (status !== null) writing.push("status");
   if (section !== null) writing.push("section");
 
@@ -280,9 +280,7 @@ export function planCreate(
       properties: {
         [name("headline")]: titleValue(headline),
         [name("authorByline")]: richTextValue(byline),
-        ...(authorIds.length === 0
-          ? {}
-          : { [name("author")]: relationValue(authorIds) }),
+        [name("author")]: relationValue(authorIds),
         ...(status === null ? {} : { [name("status")]: statusValue(status) }),
         ...(section === null
           ? {}
@@ -324,6 +322,9 @@ export function planCredit(
   const text: PropertyKey =
     credit === "author" ? "authorByline" : "imageByline";
   const relation: PropertyKey = credit === "author" ? "author" : "imageCrew";
+
+  if (memberIds.length === 0)
+    return { status: "refused", reason: "A credit must have a member." };
 
   const reason = refusal(schema, [text, relation]);
   if (reason) return { status: "refused", reason };

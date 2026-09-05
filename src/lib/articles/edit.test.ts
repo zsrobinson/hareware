@@ -261,8 +261,8 @@ test("a new article is created at the schema's own spelling of approved", async 
       kind: "create",
       headline: "Looney's line",
       section: "Rabbithole",
-      member: null,
-      byline: "Zachary Robinson",
+      member: { discordId: "222", displayName: "Bay Hoffman" },
+      byline: null,
     },
     actor,
   );
@@ -272,8 +272,9 @@ test("a new article is created at the schema's own spelling of approved", async 
       properties: {
         Headline: { title: [{ text: { content: "Looney's line" } }] },
         "Author Byline": {
-          rich_text: [{ text: { content: "Zachary Robinson" } }],
+          rich_text: [{ text: { content: "Bay Hoffman" } }],
         },
+        Author: { relation: [{ id: "member-new" }] },
         "Article Status": { status: { name: "Approved" } },
         Section: { select: { name: "Rabbithole" } },
       },
@@ -303,8 +304,8 @@ test("a renamed approved option is said out loud rather than sent to notion", as
       kind: "create",
       headline: "Looney's line",
       section: null,
-      member: null,
-      byline: "Zachary Robinson",
+      member: { discordId: "222", displayName: "Bay Hoffman" },
+      byline: null,
     },
     actor,
   );
@@ -343,30 +344,6 @@ test("a new article credits the member the picker returned, creating the row", a
   });
   expect(properties.Author).toEqual({ relation: [{ id: "member-new" }] });
   expect(editSummary(said)).toContain("Created Bay Hoffman in Members");
-});
-
-test("a new article with no member and no byline is credited to whoever ran it", async () => {
-  const { io, seen } = spy();
-
-  await runEdit(
-    io,
-    {
-      kind: "create",
-      headline: "Looney's line",
-      section: null,
-      member: null,
-      byline: null,
-    },
-    actor,
-  );
-
-  const properties = (
-    seen.created[0] as { properties: Record<string, unknown> }
-  ).properties;
-  expect(properties["Author Byline"]).toEqual({
-    rich_text: [{ text: { content: actor.name } }],
-  });
-  expect(properties).not.toHaveProperty("Author");
 });
 
 test("a typed byline on a new article beats the picked member's name", async () => {
@@ -566,7 +543,7 @@ test("without `also` the credit is replaced outright", async () => {
   });
 });
 
-test("a pseudonym changes the printed name without unlinking the member", async () => {
+test("a pseudonym keeps the selected member linked", async () => {
   /* ADR 0004: the text is authoritative for what gets printed and the relation
      is who it actually was. setting one must not silently clear the other */
   const { io, seen } = spy({
@@ -574,13 +551,13 @@ test("a pseudonym changes the printed name without unlinking the member", async 
       article({
         Author: { type: "relation", relation: [{ id: "member-1" }] },
       }),
+    members: async () => ({
+      status: "matched",
+      member: { pageId: "member-1", name: "Bay Hoffman", discordId: "222" },
+    }),
   });
 
-  await runEdit(
-    io,
-    creditRequest({ member: null, byline: "Gale de Silva" }),
-    actor,
-  );
+  await runEdit(io, creditRequest({ byline: "Gale de Silva" }), actor);
 
   expect(seen.patched[0]!.body).toEqual({
     properties: {
@@ -589,19 +566,6 @@ test("a pseudonym changes the printed name without unlinking the member", async 
     },
   });
   expect(seen.made).toEqual([]);
-});
-
-test("a credit with neither a member nor a byline is a question, not a write", async () => {
-  const { io, seen } = spy();
-
-  const said = await runEdit(
-    io,
-    creditRequest({ member: null, byline: null }),
-    actor,
-  );
-
-  expect(editSummary(said)).toContain("member");
-  expect(seen.patched).toEqual([]);
 });
 
 test("an image credit writes the image pair, not the author pair", async () => {
@@ -783,7 +747,7 @@ test("an incomplete creation response keeps the new article link without inventi
         kind: "create",
         headline: "A headline",
         section: null,
-        member: null,
+        member: { discordId: "222", displayName: "Bay Hoffman" },
         byline: null,
       },
       actor,

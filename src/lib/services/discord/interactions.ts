@@ -343,18 +343,19 @@ const SUBCOMMANDS: Record<
   new: (interaction, deps) =>
     write(interaction, deps, (subcommand) => {
       const headline = textOf(optionOf(subcommand, "headline"));
-      if (!headline) return refuse("Give the Article a Headline.");
+      if (!headline) return refuse("Give the article a headline.");
+      const member = picked(interaction, subcommand, "member");
+      if (!member)
+        return refuse("Choose the Discord member writing the article.");
 
       return {
         request: {
           kind: "create",
           headline,
           section: textOf(optionOf(subcommand, "section")) || null,
-          member: picked(interaction, subcommand, "member"),
-          /* ADR 0004: the printed Byline is always filled. the fallback —
-             the member's name, else the caller's — belongs to `edit.ts`,
-             which is the half that knows who the picked member turned out
-             to be */
+          member,
+          /* Optional text is a pseudonym; edit.ts otherwise freezes the
+             selected member's name into the printed Byline. */
           byline: textOf(optionOf(subcommand, "byline")) || null,
         },
       };
@@ -363,7 +364,7 @@ const SUBCOMMANDS: Record<
   headline: (interaction, deps) =>
     write(interaction, deps, (subcommand) => {
       const text = textOf(optionOf(subcommand, "headline"));
-      if (!text) return refuse("Give the Article a Headline.");
+      if (!text) return refuse("Give the article a headline.");
 
       return property(subcommand, { property: "headline", text });
     }),
@@ -488,13 +489,15 @@ function crediting(
 ): Parsed {
   const pageId = textOf(optionOf(subcommand, "article"));
   if (!pageId) return refuse("Pick an Article from the list HareWare offers.");
+  const member = picked(interaction, subcommand, "member");
+  if (!member) return refuse("Choose the Discord member behind this credit.");
 
   return {
     request: {
       kind: "credit",
       pageId,
       credit,
-      member: picked(interaction, subcommand, "member"),
+      member,
       byline: textOf(optionOf(subcommand, "byline")) || null,
       also: optionOf(subcommand, "also")?.value === true,
     },

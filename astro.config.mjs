@@ -29,6 +29,9 @@ function version() {
 // https://astro.build/config
 export default defineConfig({
   output: "server",
+  // HareWare signs its own stateless session cookie; ADR 0008 deliberately
+  // has no server-side session store.
+  session: false,
   integrations: [react()],
 
   adapter: cloudflare({

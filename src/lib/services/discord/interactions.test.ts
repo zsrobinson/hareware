@@ -809,48 +809,65 @@ test("no nickname falls back to the display name, then the handle", async () => 
   });
 });
 
-test("a byline with no member is a credit request all the same", async () => {
-  const { deps, seen, settle } = writing();
+test("a credit without a Discord member is refused before deferring", async () => {
+  const { deps, seen } = writing();
 
-  await handleInteraction(
-    writeCommand("author", [
-      { name: "article", value: "page-1" },
-      { name: "byline", value: "Gale de Silva" },
-    ]),
-    deps,
+  const reply = asMessage(
+    await handleInteraction(
+      writeCommand("author", [
+        { name: "article", value: "page-1" },
+        { name: "byline", value: "Gale de Silva" },
+      ]),
+      deps,
+    ),
   );
-  await settle();
 
-  expect(seen.requests[0]).toMatchObject({
-    member: null,
-    byline: "Gale de Silva",
-  });
+  expect(reply.type).toBe(4);
+  expect(seen.requests).toEqual([]);
 });
 
 /* ---- creating ----------------------------------------------------------- */
 
-test("a new article hands the byline fallback on rather than deciding it", async () => {
+test("a new article carries its selected member and optional pseudonym", async () => {
   const { deps, seen, settle } = writing();
 
   await handleInteraction(
-    writeCommand("new", [{ name: "headline", value: "Looney's line" }]),
+    writeCommand(
+      "new",
+      [
+        { name: "headline", value: "Looney's line" },
+        { name: "member", value: "222" },
+        { name: "byline", value: "A Concerned Terrapin" },
+      ],
+      { users: { "222": { username: "bayh", global_name: "Bay Hoffman" } } },
+    ),
     deps,
   );
   await settle();
 
-  /* ADR 0004's always-filled Byline is `edit.ts`'s job now: it is the half
-     that knows whether the picked member resolved, and the member's name
-     comes before the caller's */
   expect(seen.requests).toEqual([
     {
       kind: "create",
       headline: "Looney's line",
       section: null,
-      member: null,
-      byline: null,
+      member: { discordId: "222", displayName: "Bay Hoffman" },
+      byline: "A Concerned Terrapin",
     },
   ]);
   expect(seen.actors).toEqual([{ id: "", name: "Zachary" }]);
+});
+
+test("a new article without a Discord member is refused before deferring", async () => {
+  const { deps, seen } = writing();
+  const reply = asMessage(
+    await handleInteraction(
+      writeCommand("new", [{ name: "headline", value: "Looney's line" }]),
+      deps,
+    ),
+  );
+
+  expect(reply.type).toBe(4);
+  expect(seen.requests).toEqual([]);
 });
 
 test("a new article with no headline is refused before anything is written", async () => {
@@ -858,7 +875,7 @@ test("a new article with no headline is refused before anything is written", asy
 
   const reply = asMessage(await handleInteraction(writeCommand("new"), deps));
 
-  expect(text(reply)).toContain("Headline");
+  expect(text(reply).toLowerCase()).toContain("headline");
   expect(seen.requests).toEqual([]);
 });
 

@@ -2,7 +2,11 @@
 import Dashboard from "~/layouts/dashboard.astro";
 import { Badge } from "~/components/ui/badge";
 import { notFound, viewer } from "~/lib/admin";
-import { buildCommands } from "~/lib/services/discord/commands";
+import {
+  buildCommands,
+  type ApplicationCommand,
+  type CommandOption,
+} from "~/lib/services/discord/commands";
 
 /* one lookup answers both whether they may be here and what to call them, so
    the sidebar costs no second request to discord */
@@ -24,15 +28,22 @@ Astro.response.headers.set("cache-control", "private, no-store");
   either way — see ADR 0009 for why those values live in notion and not here
 */
 const commands = buildCommands([]);
+
+const usage = (command: ApplicationCommand, subcommand: CommandOption) =>
+  `/${command.name} ${subcommand.name}${subcommand.options
+    .map(
+      (option) =>
+        ` ${option.required ? `<${option.name}>` : `[${option.name}]`}`,
+    )
+    .join("")}`;
 ---
 
 <Dashboard title="Slash Commands" viewer={who}>
   <div class="max-w-3xl space-y-4">
     <p class="text-muted-foreground text-sm">
-      What an editor can type in Discord. Read straight from the registration
-      the hourly cron puts on the server, so this is the surface that is really
-      there. Every command replies only to whoever ran it, and every edit it
-      makes lands in the log.
+      A reference for the editorial commands available in Discord. Replies are
+      visible only to the person who ran the command. Required options use angle
+      brackets; optional ones use square brackets.
     </p>
 
     {
@@ -46,11 +57,9 @@ const commands = buildCommands([]);
           <ul class="space-y-3">
             {command.options.map((subcommand) => (
               <li class="rounded-lg border p-4">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="font-mono text-sm font-medium">
-                    /{command.name} {subcommand.name}
-                  </span>
-                </div>
+                <code class="text-sm font-medium">
+                  {usage(command, subcommand)}
+                </code>
 
                 <p class="text-muted-foreground mt-1 text-sm">
                   {subcommand.description}

@@ -48,9 +48,9 @@ export type EditRequest =
       kind: "create";
       headline: string;
       section: string | null;
-      /** whoever the discord picker returned, or null when nobody was picked */
-      member: PickedUser | null;
-      /** the printed name, when the editor typed one */
+      /** the Discord member who wrote it */
+      member: PickedUser;
+      /** a pseudonym to print instead of the member's name */
       byline: string | null;
     }
   /** every subcommand that sets one property */
@@ -60,9 +60,9 @@ export type EditRequest =
       kind: "credit";
       pageId: string;
       credit: "author" | "image";
-      /** whoever the discord picker returned, or null when only text changed */
-      member: PickedUser | null;
-      /** the printed name, when the editor typed one */
+      /** the Discord member behind the credit */
+      member: PickedUser;
+      /** a pseudonym to print instead of the member's name */
       byline: string | null;
       /** add to the credit that is there rather than replacing it */
       also: boolean;
@@ -226,20 +226,20 @@ async function create(
   /*
     the same resolution `/article author` uses, so picking a writer here
     backfills or creates their Members row rather than leaving the relation
-    empty. without a picker the Byline is text and the relation stays empty,
-    which is what a pseudonym needs
+    empty. a pseudonym changes only the printed text; the selected member still
+    records who wrote it
   */
   const found = await resolve(io, request.member, actor);
   if (found.status === "refused") return refused(found.reason);
 
-  /* ADR 0004: the printed Byline is always filled — the typed one, else the
-     member's name, else whoever ran the command */
-  const byline = request.byline ?? found.member?.name ?? actor.name;
+  /* ADR 0004: the printed Byline is always filled. typed text is explicitly a
+     pseudonym; otherwise the selected member's name is frozen onto the row */
+  const byline = request.byline ?? found.member.name;
 
   const planned = planCreate(schema, {
     headline: request.headline,
     byline,
-    authorIds: found.member ? [found.member.pageId] : [],
+    authorIds: [found.member.pageId],
     status,
     section: request.section,
   });
@@ -411,37 +411,24 @@ async function credit(
   const found = await resolve(io, request.member, actor);
   if (found.status === "refused") return refused(found.reason);
 
-  if (!found.member && request.byline === null)
-    return refused(
-      `Give ${request.credit === "author" ? "an author" : "an image credit"}: a member, a byline, or both.`,
-    );
+  const name = request.byline ?? found.member.name;
 
-  const name = request.byline ?? found.member!.name;
-
-  /*
-    `also` appends. without a member the relation is carried through unchanged
-    rather than replaced with an empty list: changing a printed Byline to a
-    pseudonym must not quietly unlink the person it belongs to — ADR 0004 keeps
-    the two halves together, and dropping one of them is the drift it accepts
-    the denormalisation to avoid
-  */
+  /* `also` appends both the selected member and the printed credit. */
   /* already credited, so `also` has nothing to add. the relation deduped and
      the printed byline did not, which made a second run — a slow follow-up, an
      editor who thought it had not landed — write "Bob and Bob" while the
      relation stayed correct. the two halves ADR 0004 keeps together came apart,
      and only the printed one was wrong */
-  const already = found.member ? held.includes(found.member.pageId) : false;
+  const already = held.includes(found.member.pageId);
 
-  const memberIds = found.member
-    ? request.also
-      ? [...new Set([...held, found.member.pageId])]
-      : [found.member.pageId]
-    : held;
+  const memberIds = request.also
+    ? [...new Set([...held, found.member.pageId])]
+    : [found.member.pageId];
 
   const appending = request.also && printed !== "" && !already;
   const byline = appending
     ? `${printed} and ${name}`
-    : already
+    : request.also && already
       ? printed
       : name;
 
@@ -453,7 +440,7 @@ async function credit(
 
   const result = await apply(io, page, planned);
   if (found.note) result.notes.push(found.note);
-  if (result.status !== "failed" && found.member) {
+  if (result.status !== "failed") {
     for (const change of result.changes) {
       if (change.property === "author" || change.property === "imageCrew")
         change.member = { id: found.member.pageId, name: found.member.name };
@@ -465,7 +452,7 @@ async function credit(
 /* ---- who the picker pointed at ------------------------------------------ */
 
 type Resolved =
-  | { status: "resolved"; member: Member | null; note?: string }
+  | { status: "resolved"; member: Member; note?: string }
   | { status: "refused"; reason: string };
 
 /**
@@ -478,11 +465,9 @@ type Resolved =
  */
 async function resolve(
   io: EditIO,
-  picked: PickedUser | null,
+  picked: PickedUser,
   actor: Actor,
 ): Promise<Resolved> {
-  if (!picked) return { status: "resolved", member: null };
-
   const match = await io.members(picked.discordId, picked.displayName);
 
   switch (match.status) {

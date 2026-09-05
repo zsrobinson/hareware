@@ -229,16 +229,14 @@ test("crediting an author writes the Byline and the relation in one body", () =>
   });
 });
 
-test("a credit with no member still writes the Byline text", () => {
-  const { properties } = planned(
+test("a credit with no member is refused", () => {
+  expect(
     planCredit(fullSchema, page(), {
       credit: "author",
       byline: "Gale de Silva",
       memberIds: [],
-    }),
-  );
-
-  expect(Object.keys(properties).sort()).toEqual(["Author", "Author Byline"]);
+    }).status,
+  ).toBe("refused");
 });
 
 test("an image credit uses the image pair, not the author pair", () => {
@@ -323,13 +321,17 @@ test("a new article without a section writes no section at all", () => {
     planCreate(fullSchema, {
       headline: "Untitled thought",
       byline: "Zachary Robinson",
-      authorIds: [],
+      authorIds: ["member-1"],
       status: null,
       section: null,
     }),
   );
 
-  expect(Object.keys(properties).sort()).toEqual(["Author Byline", "Headline"]);
+  expect(Object.keys(properties).sort()).toEqual([
+    "Author",
+    "Author Byline",
+    "Headline",
+  ]);
 });
 
 test("a new article crediting a member is refused when Author is unshared", () => {
@@ -348,16 +350,6 @@ test("a new article crediting a member is refused when Author is unshared", () =
 });
 
 test("a new article is refused when notion is not sharing what it would write", () => {
-  expect(
-    planCreate(withoutAuthor, {
-      headline: "Looney's line",
-      byline: "Zachary Robinson",
-      authorIds: [],
-      status: null,
-      section: null,
-    }).status,
-  ).toBe("planned");
-
   const withoutHeadline: Schema = {
     properties: Object.fromEntries(
       Object.entries(fullSchema.properties).filter(
@@ -370,7 +362,7 @@ test("a new article is refused when notion is not sharing what it would write", 
     planCreate(withoutHeadline, {
       headline: "Looney's line",
       byline: "Zachary Robinson",
-      authorIds: [],
+      authorIds: ["member-1"],
       status: null,
       section: null,
     }).status,

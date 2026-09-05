@@ -147,6 +147,12 @@ An Article's writer is chosen with Discord's native user picker rather than by
 searching Notion. The user always exists, the picker is always current, and the
 interaction payload resolves their name with no extra request.
 
+The picker is required when creating an Article or changing a credit. HareWare
+always writes the Discord-backed Members relation with the printed Byline; an
+optional Byline argument is specifically a pseudonym for that selected member.
+Legacy rows without a relation can still be repaired directly in Notion, but a
+Discord command never creates another one.
+
 At the time of writing, **9 of 48 Members carry a Discord ID**. Creating a row
 whenever the id does not match would have produced a duplicate for each of the
 other 39. So a miss falls back to matching the Member's Name, normalised, and

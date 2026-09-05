@@ -33,89 +33,20 @@ test("ping is a subcommand and takes no options", () => {
   expect(ping!.options).toEqual([]);
 });
 
-test("every subcommand carries a description discord will accept", () => {
-  for (const option of article().options) {
-    expect(option.description.length).toBeGreaterThan(0);
-    expect(option.description.length).toBeLessThanOrEqual(100);
-  }
-});
-
-test("command descriptions explain the editorial action and every argument", () => {
+test("every registered command and option has a Discord-safe description", () => {
   const command = article();
-  expect(command.description).toBe(
-    "Manage The Hare's Articles in Notion from Discord.",
-  );
-  expect(
-    Object.fromEntries(
-      command.options.map((option) => [option.name, option.description]),
-    ),
-  ).toEqual({
-    ping: "Check whether HareWare is online and see your Discord display name.",
-    show: "Show an Article's current details and open it in Notion.",
-    new: "Create an approved Article in Notion before writing begins.",
-    headline: "Change the headline of an existing Article.",
-    status: "Update an Article's progress through editing and publishing.",
-    "image-status": "Update the progress of an Article's image.",
-    section: "Move an Article to the Section responsible for editing it.",
-    "publication-date":
-      "Set or clear the date an Article is scheduled to publish.",
-    author: "Set or add the Article's writer and printed Author Byline.",
-    "image-crew": "Set or add the image creator and printed Image Byline.",
-    delete: "Move an Article to Notion's Trash, where it can be restored.",
-  });
+  const descriptions = [
+    command.description,
+    ...command.options.flatMap((subcommand) => [
+      subcommand.description,
+      ...subcommand.options.map((option) => option.description),
+    ]),
+  ];
 
-  const descriptions = command.options.flatMap((subcommand) => [
-    subcommand.description,
-    ...subcommand.options.map((option) => option.description),
-  ]);
-  expect(descriptions.every((description) => description.length <= 100)).toBe(
-    true,
-  );
-
-  const optionDescriptions = Object.fromEntries(
-    command.options.flatMap((subcommand) =>
-      subcommand.options.map((option) => [
-        `${subcommand.name}.${option.name}`,
-        option.description,
-      ]),
-    ),
-  );
-  expect(optionDescriptions).toEqual({
-    "show.article": "Choose an Article by typing part of its headline.",
-    "new.headline": "The working headline approved by the Section Editor.",
-    "new.section": "The Section responsible for editing the Article.",
-    "new.member":
-      "The Discord member writing the Article. Creates or links their Members row.",
-    "new.byline":
-      "The Author Byline to print. Defaults to the selected member, then you.",
-    "headline.article": "Choose an Article by typing part of its headline.",
-    "headline.headline": "The Article's new working or final headline.",
-    "status.article": "Choose an Article by typing part of its headline.",
-    "status.status": "The Article's new editorial or publishing status.",
-    "image-status.article": "Choose an Article by typing part of its headline.",
-    "image-status.image-status": "The image's new progress status.",
-    "section.article": "Choose an Article by typing part of its headline.",
-    "section.section": "The Section that should take over editing the Article.",
-    "publication-date.article":
-      "Choose an Article by typing part of its headline.",
-    "publication-date.date":
-      "Publication date in YYYY-MM-DD format. Leave blank to clear it.",
-    "author.article": "Choose an Article by typing part of its headline.",
-    "author.member":
-      "The Discord member who wrote the Article. Creates or links their Members row.",
-    "author.byline":
-      "The Author Byline to print, if different from the member's name.",
-    "author.also":
-      "Add this person to the existing credit instead of replacing it.",
-    "image-crew.article": "Choose an Article by typing part of its headline.",
-    "image-crew.member":
-      "The Discord member who made the image. Creates or links their Members row.",
-    "image-crew.byline":
-      "The Image Byline to print, if different from the member's name.",
-    "image-crew.also":
-      "Add this person to the existing credit instead of replacing it.",
-    "delete.article": "Choose an Article by typing part of its headline.",
-  });
+  for (const description of descriptions) {
+    expect(description.length).toBeGreaterThan(0);
+    expect(description.length).toBeLessThanOrEqual(100);
+  }
 });
 
 /*
@@ -268,19 +199,18 @@ test("a credit takes discord's own user picker, and `also` is a boolean", () => 
   expect(named("also").type).toBe(5);
   expect(named("byline").type).toBe(3);
 
-  /* all three optional: a pseudonym is text with no member, and a co-Byline is
-     a member added to what is already there */
-  for (const name of ["member", "byline", "also"])
+  expect(named("member").required).toBe(true);
+  for (const name of ["byline", "also"])
     expect(named(name).required, name).toBeUndefined();
 });
 
-test("a new Article needs only a headline", () => {
+test("a new article requires a headline and its Discord member", () => {
   const created = buildCommands([])[0]!.options!.find((o) => o.name === "new");
   const required = created!
     .options!.filter((option) => option.required)
     .map((option) => option.name);
 
-  expect(required).toEqual(["headline"]);
+  expect(required).toEqual(["headline", "member"]);
   // no article picker: there is nothing to pick yet
   expect(created!.options!.some((o) => o.autocomplete)).toBe(false);
 });

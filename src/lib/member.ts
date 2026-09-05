@@ -22,19 +22,46 @@ export type Profile = {
   avatarUrl: string;
 };
 
-/** the member's roles and profile, from one request, or null if unreachable */
+/** the member's roles and profile, from one request */
 export type GuildMember = { roleIds: string[]; profile: Profile };
 
 /**
- * discord's member object for somebody in the guild.
- *
- * null covers every way of not being there — no bot token, left the server,
- * discord down — because the caller treats all of them the same way: no roles,
- * so no admin, and no name, so the ui falls back to the id
+ * What asking Discord about somebody came back as. "absent" and "unreachable"
+ * are separate because a member reads them differently: one means the club took
+ * the role away, the other that we could not find out. Saying the first when
+ * the second happened is a lie that survives a retry.
  */
-export async function guildMember(userId: string): Promise<GuildMember | null> {
+export type MemberLookup =
+  | ({ status: "member" } & GuildMember)
+  /** no such member: they left the guild, or were never in it */
+  | { status: "absent" }
+  /** discord did not answer, or we have no token to ask with */
+  | { status: "unreachable" };
+
+/**
+ * Discord's "Unknown Member". Its siblings, 10004 Unknown Guild and 10013
+ * Unknown User, arrive with the same 404 and are about us, not their
+ * membership.
+ */
+const UNKNOWN_MEMBER = 10007;
+
+/** the `code` out of discord's error body, or undefined if it had none */
+async function errorCode(response: Response) {
+  try {
+    const body = (await response.json()) as { code?: unknown };
+    return typeof body.code === "number" ? body.code : undefined;
+  } catch {
+    /* an error body that is not json tells us nothing, and "nothing" is not
+       evidence that somebody left */
+    return undefined;
+  }
+}
+
+/** discord's member object for somebody in the guild, or why we have none */
+export async function guildMember(userId: string): Promise<MemberLookup> {
   const token = env.DISCORD_BOT_TOKEN;
-  if (!token) return null;
+  /* no token is our own misconfiguration, not a fact about the member */
+  if (!token) return { status: "unreachable" };
 
   try {
     const response = await fetch(
@@ -42,8 +69,27 @@ export async function guildMember(userId: string): Promise<GuildMember | null> {
       { headers: { authorization: `Bot ${token}` } },
     );
 
-    // 404 is the ordinary answer for somebody who has left the server
-    if (!response.ok) return null;
+    /*
+      A 404 is not one fact: Discord answers it both for a member who has left
+      and for a guild it will not show us, meaning a wrong GUILD_ID or the bot
+      removed. Only the first is about them, and the refusal page says so by
+      name, so the error code has to decide.
+    */
+    if (response.status === 404) {
+      const code = await errorCode(response);
+
+      if (code === UNKNOWN_MEMBER) return { status: "absent" };
+
+      console.error("[member] discord 404 with error code", code);
+      return { status: "unreachable" };
+    }
+
+    /* anything else — a rate limit, a revoked token, discord having a bad day
+       — says nothing about whether they are a member */
+    if (!response.ok) {
+      console.error("[member] discord answered", response.status);
+      return { status: "unreachable" };
+    }
 
     const member = (await response.json()) as {
       roles?: unknown;
@@ -57,21 +103,25 @@ export async function guildMember(userId: string): Promise<GuildMember | null> {
       };
     };
 
-    if (!Array.isArray(member.roles)) return null;
+    /* a 200 whose body is not the shape we asked for is discord behaving
+       oddly, not a member who happens to hold no roles */
+    if (!Array.isArray(member.roles)) {
+      console.error("[member] discord returned no roles array");
+      return { status: "unreachable" };
+    }
 
     return {
+      status: "member",
       roleIds: member.roles.filter(
         (role): role is string => typeof role === "string",
       ),
       profile: readProfile(userId, member),
     };
   } catch (error) {
-    /*
-      an outage denies rather than grants, because the caller reads this as
-      permission as well as identity. see ~/lib/admin
-    */
+    /* An outage denies rather than grants: the caller reads this as permission
+       as well as identity. See ~/lib/admin. */
     console.error("[member] could not reach discord", error);
-    return null;
+    return { status: "unreachable" };
   }
 }
 

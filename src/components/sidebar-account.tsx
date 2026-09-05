@@ -72,9 +72,22 @@ function AccountMenu({
 
       <DropdownMenuContent side="top" align="end" className="min-w-48">
         {signedIn ? (
-          <form method="post" action="/auth/logout" data-astro-reload>
+          /*
+            a <button> sizes to its own text even as a flex container, where an
+            <a> fills the row. both widths are needed for this item to
+            highlight the same width as the links beside it
+          */
+          <form
+            method="post"
+            action="/auth/logout"
+            data-astro-reload
+            className="w-full"
+          >
             <input type="hidden" name="returnTo" value={returnTo} />
-            <DropdownMenuItem render={<button type="submit" />}>
+            <DropdownMenuItem
+              render={<button type="submit" />}
+              className="w-full"
+            >
               <LogOutIcon className="size-4" />
               Sign out
             </DropdownMenuItem>
@@ -148,7 +161,16 @@ export function SidebarAccount({
         <a
           href={signInHref}
           title="Sign in with Discord"
-          className="flex h-9 min-w-0 flex-1 items-center justify-center gap-2 self-stretch rounded-md bg-[#5865F2] text-sm font-medium text-white transition-colors hover:bg-[#4752c4]"
+          className={cn(
+            "flex h-9 min-w-0 flex-1 items-center justify-center gap-2 rounded-md bg-[#5865F2] text-sm font-medium text-white transition-colors hover:bg-[#4752c4]",
+            /*
+              the rail stacks this row, and `flex-1` in a column grows down
+              rather than across, which would leave a tall blue slab. at rail
+              width this is a square with the mark in it
+            */
+            !inSheet &&
+              "group-data-[state=collapsed]/shell:size-9 group-data-[state=collapsed]/shell:flex-none",
+          )}
         >
           <DiscordMark className="size-4 shrink-0" />
           <span className={cn("truncate", railHidden)}>

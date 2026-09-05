@@ -31,10 +31,12 @@ test("a shared cache may not hold a profile either", () => {
   ).toThrow();
 });
 
-test("a shared cache may not hold the admin flag", () => {
-  /* it draws the editorial nav, so caching it leaks who is on the board — the
-     old guard checked `session` alone and missed this entirely */
+test("a shared cache may not hold a viewer field this file has never heard of", () => {
+  /* `admin` here is a stand-in for whatever a page passes next — the guard
+     used to check `session` alone, and missed the role flag beside it that
+     drew the editorial nav */
   expect(() => check("public, s-maxage=600", { admin: true })).toThrow();
+  expect(() => check("public, s-maxage=600", { somethingNew: "x" })).toThrow();
 });
 
 test("an anonymous response may be cached", () => {
@@ -66,6 +68,8 @@ test("knows which cache-control values a shared cache acts on", () => {
 
 test("counts any viewer detail as personal", () => {
   expect(personal(null)).toBe(false);
-  expect(personal({ session: null, profile: null, admin: false })).toBe(false);
+  expect(personal({ session: null, profile: null })).toBe(false);
+  expect(personal({ session: { discordUserId: "1" } })).toBe(true);
+  /* a field nothing here knows about still counts */
   expect(personal({ admin: true })).toBe(true);
 });

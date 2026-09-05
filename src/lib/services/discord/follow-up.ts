@@ -30,7 +30,7 @@ export const TOKEN_LIFETIME_MS = 15 * 60 * 1000;
 
 /** what an editor sees when a command produced no words of its own */
 const NOTHING_SAID =
-  "HareWare finished, but had nothing to say about it. That is a bug — check `/admin/log`.";
+  "HareWare finished, but had nothing to say about it. That is a bug. Check `/log`.";
 
 /** the message a deferred interaction turned into */
 export function followUpUrl(applicationId: string, interactionToken: string) {

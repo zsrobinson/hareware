@@ -18,6 +18,7 @@ src/lib/
   articles/                             Article behavior and Notion's shapes
   db/ log.ts                            the invocation record
   session · auth · admin · member       who is asking, and whether they may
+  admin-routes · admin-guard · denial   which tools need the role, and the gate
 src/pages/api/                          the routes those answer
 ```
 
@@ -47,6 +48,27 @@ not cache resolves it and passes the whole thing down as `viewer`; a cached page
 passes nothing and the island asks `/api/session.json`, which makes the same
 lookup. Passing part of it is what put a raw Discord id in the sidebar for a
 week — see below.
+
+**No admin page guards itself.** Every tool lives at the top level, public and
+gated alike — `ADMIN_ROUTES` in `~/lib/admin-routes` is the only thing that says
+which is which, and both the nav and the guard read it, so a tool in the sidebar
+is a tool that is guarded. `nav.test.ts` holds those to each other.
+
+The middleware runs `guardAdmin` from `~/lib/admin-guard`: it resolves the
+viewer once, leaves it in `locals.admission`, and rewrites anybody it refuses to
+`/access-denied` with the status that fits — 401, 403 or 503. A gated page calls
+`admitted(Astro.locals)`, which hands back the member or throws, so reaching the
+page is the permission and a page whose route fell off `ADMIN_ROUTES` fails
+loudly rather than quietly serving. That last part only holds while every gated
+page actually calls it, so `nav.test.ts` checks that too. A refusal says which of
+four things is wrong rather than claiming the page does not exist; ADR 0007's
+amendment is why, and `~/lib/denial` is the one table those four live in.
+
+`~/lib/admin-guard` must not import `~/lib/admin` at the top level. Middleware
+is in every route's module graph, the prerendered `/custom` is built by node,
+and node cannot load a `cloudflare:` url — the import lives inside the guard,
+past the route check. `npm run build` is what catches a regression here, and it
+is why `admin-routes` and `denial` import nothing.
 
 ## Working here
 

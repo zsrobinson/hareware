@@ -34,6 +34,17 @@ export default defineConfig({
   session: false,
   integrations: [react()],
 
+  // the admin tools moved out from under /admin to sit beside the public ones,
+  // because nothing a member does with them cares which is which. these keep
+  // the old urls working: they are in Discord messages the bot has already
+  // posted, and one of them is what an alert tells somebody to go and read
+  redirects: {
+    "/admin": "/automations",
+    "/admin/automations": "/automations",
+    "/admin/commands": "/commands",
+    "/admin/log": "/log",
+  },
+
   adapter: cloudflare({
     // nothing here goes through astro:assets — every image is already a
     // wordpress.com url that image-url.ts sizes with a query parameter. the

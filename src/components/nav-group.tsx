@@ -2,10 +2,9 @@ import { isActive, type NavItem } from "~/lib/nav";
 import { cn } from "~/lib/utils";
 
 /*
-  rendered three ways: statically inside the astro sidebar, inside the
-  client:idle island that reveals the editorial nav on cached pages, and inside
-  the mobile sheet. keeping it presentational — no hooks, no state — is what
-  lets the first of those ship no javascript at all
+  Rendered statically inside the Astro sidebar and inside the mobile sheet.
+  Presentational, with no hooks and no state, which is what lets the sidebar
+  ship no javascript: no group here varies by who is looking.
 */
 export function NavGroup({
   items,
@@ -17,12 +16,12 @@ export function NavGroup({
   label?: string;
 }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col">
       {label && (
-        /* shadcn's sidebar group label: quiet, small, and it goes away with
-           the rest of the text when the sidebar collapses to the rail */
+        /* Sits closer to the list under it than to the group above, so it
+           reads as belonging to what it names. */
         <div
-          className="text-sidebar-foreground/60 flex h-8 shrink-0 items-center px-2 text-xs font-medium group-data-[state=collapsed]/shell:md:hidden"
+          className="text-sidebar-foreground/60 flex h-7 shrink-0 items-end px-2 pb-1 text-xs font-medium group-data-[state=collapsed]/shell:md:hidden"
           aria-hidden="true"
         >
           {label}

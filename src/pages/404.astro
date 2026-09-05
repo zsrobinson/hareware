@@ -1,0 +1,19 @@
+---
+/*
+  A url that is nothing at all, which is the only thing a 404 means here now
+  that the admin tools refuse in person. No viewer is resolved: asking Discord
+  who somebody is on the way to saying "no such page" would be a request per
+  stray link, and the account panel fills itself in client-side.
+*/
+import Dashboard from "~/layouts/dashboard.astro";
+import Message from "~/components/message.astro";
+---
+
+<Dashboard title="Not found">
+  <Message
+    title="Page not found"
+    action={{ label: "Back to the tools", href: "/generate" }}
+  >
+    That address is not one of HareWare's tools. The sidebar lists them all.
+  </Message>
+</Dashboard>

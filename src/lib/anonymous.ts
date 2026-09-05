@@ -1,30 +1,21 @@
 /*
-  the invariant ADR 0005 rests on, as a function rather than a tripwire.
-
-  a response that renders who you are must never be one a shared cache can hand
-  to somebody else. this lived inline in the dashboard layout, where it checked
-  only `session` and only ran under DEV — so a page passing `admin` while
-  setting `s-maxage` said nothing, and a page written by somebody who never
-  signs in locally shipped clean. here it is pure, total, and tested.
+  The invariant ADR 0005 rests on: a response that renders who you are must
+  never be one a shared cache can hand to somebody else. Pure and total rather
+  than a tripwire in the layout, so it holds in production and not only DEV.
 */
 
 /** whatever a page passed about the viewer, in the shape the layout sees it */
-export type Rendered = {
-  session?: unknown;
-  profile?: unknown;
-  admin?: boolean;
-} | null;
+export type Rendered = Record<string, unknown> | null;
 
-/** whether these props would put one member's details into the html */
+/**
+ * Whether these props would put one member's details into the html. Any field
+ * with a value counts, rather than a list of the fields there happen to be
+ * today, so a shape that grows a field grows the guard with it.
+ */
 export function personal(viewer: Rendered) {
   if (!viewer) return false;
 
-  /*
-    `admin` counts. it draws the editorial nav, so a page passing only that
-    would leak which visitors are on the board — and the old guard, keyed on
-    `session` alone, would have said nothing
-  */
-  return Boolean(viewer.session ?? viewer.profile ?? viewer.admin);
+  return Object.values(viewer).some((value) => Boolean(value));
 }
 
 /** whether a cache that is not the visitor's own may hold this response */
@@ -36,7 +27,7 @@ export function shared(cacheControl: string | null) {
 export function anonymityError(pathname: string, cacheControl: string | null) {
   return (
     `${pathname} renders a viewer but sets "cache-control: ${cacheControl ?? ""}". ` +
-    "Either drop `viewer` and pass `cached` so the nav is revealed client-side, " +
+    "Either drop `viewer` so the account panel is revealed client-side, " +
     "or make the response private."
   );
 }

@@ -1,0 +1,42 @@
+---
+/*
+  A page with nothing on it but something to say: not found, no access, a
+  sign-in that went wrong. Set in the UI's own sans; the display serif belongs
+  to the Instagram templates, which are artwork.
+*/
+import { buttonVariants } from "~/components/ui/button";
+
+type Props = {
+  title: string;
+  /** the one action worth offering. omitted when there is nothing to do */
+  action?: { label: string; href: string; method?: "get" | "post" };
+};
+
+const { title, action } = Astro.props;
+---
+
+<section class="mx-auto max-w-md px-1 py-16 sm:py-24">
+  <h2 class="text-xl font-semibold tracking-tight">{title}</h2>
+
+  <div class="text-muted-foreground mt-2 text-sm leading-6">
+    <slot />
+  </div>
+
+  {
+    action &&
+      (action.method === "post" ? (
+        /* signing in as somebody else means signing out first, and that is a
+           POST — the same one the account menu makes */
+        <form method="post" action="/auth/logout" class="mt-6">
+          <input type="hidden" name="returnTo" value={action.href} />
+          <button type="submit" class={buttonVariants({ size: "lg" })}>
+            {action.label}
+          </button>
+        </form>
+      ) : (
+        <a href={action.href} class={`${buttonVariants({ size: "lg" })} mt-6`}>
+          {action.label}
+        </a>
+      ))
+  }
+</section>

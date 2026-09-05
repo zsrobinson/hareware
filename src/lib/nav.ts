@@ -1,13 +1,14 @@
 import {
-  ActivityIcon,
   CodeIcon,
-  ZapIcon,
   FileTextIcon,
   ImageIcon,
   MailIcon,
+  SquareActivityIcon,
   TypeIcon,
+  ZapIcon,
   type LucideIcon,
 } from "lucide-react";
+import type { AdminRoute } from "./admin-routes";
 
 export type NavItem = {
   href: string;
@@ -32,12 +33,16 @@ export const toolsNav: NavItem[] = [
   { href: "/email", label: "Newsletter", icon: MailIcon },
 ];
 
-/* the admin tools. only a signed-in member holding @Editorial Board sees
-   these, and the pages check that themselves rather than trusting the nav */
-export const adminNav: NavItem[] = [
-  { href: "/admin/automations", label: "Automations", icon: ZapIcon },
-  { href: "/admin/log", label: "Invocation Log", icon: ActivityIcon },
-  { href: "/admin/commands", label: "Slash Commands", icon: CodeIcon },
+/*
+  The admin tools, shown to everybody: the guard refuses in person, so the nav
+  has nothing to hide (ADR 0007). `href` is an `AdminRoute`, so a tool listed
+  here is one the guard protects. The log goes last, being the one read after
+  the fact rather than a thing somebody came to do.
+*/
+export const adminNav: (NavItem & { href: AdminRoute })[] = [
+  { href: "/automations", label: "Automations", icon: ZapIcon },
+  { href: "/commands", label: "Slash Commands", icon: CodeIcon },
+  { href: "/log", label: "Invocation Log", icon: SquareActivityIcon },
 ];
 
 /* `/` would otherwise light up on every page */

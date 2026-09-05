@@ -16,7 +16,8 @@
   were each chosen because they block something real and break nothing.
 */
 
-import { defineMiddleware } from "astro:middleware";
+import { defineMiddleware, sequence } from "astro:middleware";
+import { guardAdmin } from "./lib/admin-guard";
 
 const POLICY = [
   /* a <base> tag injected into scraped markup would silently repoint every
@@ -29,11 +30,14 @@ const POLICY = [
      somebody types into it */
   "form-action 'self'",
   /* nothing embeds HareWare, so nothing may frame it — clickjacking on
-     /admin/automations would be a way to make somebody fire a real automation */
+     /automations would be a way to make somebody fire a real automation */
   "frame-ancestors 'none'",
 ].join("; ");
 
-export const onRequest = defineMiddleware(async (_context, next) => {
+/* Who may be here, before anything renders. */
+const admin = defineMiddleware(guardAdmin);
+
+const headers = defineMiddleware(async (_context, next) => {
   const response = await next();
 
   response.headers.set("content-security-policy", POLICY);
@@ -48,3 +52,7 @@ export const onRequest = defineMiddleware(async (_context, next) => {
 
   return response;
 });
+
+/* The guard first, so a refused request never reaches the route it asked for.
+   It carries the headers set inside it onto the response it hands back. */
+export const onRequest = sequence(admin, headers);

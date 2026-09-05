@@ -1,17 +1,17 @@
 ---
 import Dashboard from "~/layouts/dashboard.astro";
 import { Badge } from "~/components/ui/badge";
-import { notFound, viewer } from "~/lib/admin";
+import { viewerState } from "~/lib/admin";
+import { admitted } from "~/lib/admin-guard";
 import {
   buildCommands,
   type ApplicationCommand,
   type CommandOption,
 } from "~/lib/services/discord/commands";
 
-/* one lookup answers both whether they may be here and what to call them, so
-   the sidebar costs no second request to discord */
-const who = await viewer(Astro.request);
-if (!who?.admin) return notFound();
+/* Reaching this page is the permission: the guard already refused anybody it
+   would not admit, and its lookup knows what to call them. */
+const who = admitted(Astro.locals);
 
 Astro.response.headers.set("cache-control", "private, no-store");
 
@@ -38,7 +38,7 @@ const usage = (command: ApplicationCommand, subcommand: CommandOption) =>
     .join("")}`;
 ---
 
-<Dashboard title="Slash Commands" viewer={who}>
+<Dashboard title="Slash Commands" viewer={viewerState(who)}>
   <div class="max-w-3xl space-y-4">
     <p class="text-muted-foreground text-sm">
       A reference for the editorial commands available in Discord. Replies are

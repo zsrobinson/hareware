@@ -1,0 +1,46 @@
+---
+/*
+  What an admin tool draws instead of itself. Everything that differs between
+  the four refusals lives in `~/lib/denial`, so this reads a row and renders it
+  rather than choosing anything.
+*/
+import Message from "~/components/message.astro";
+import { DENIALS, type Action, type Denial } from "~/lib/denial";
+import type { Profile } from "~/lib/member";
+
+type Props = {
+  denial: Denial;
+  /** the name to say it to, when discord gave us one */
+  profile: Profile | null;
+  /** where to come back to once they have fixed it */
+  returnTo: string;
+};
+
+const { denial, profile, returnTo } = Astro.props;
+
+/* the handle is what a member recognises as themselves — and, when they are
+   signed in as the wrong account, what tells them so */
+const you = profile ? `@${profile.username}` : "This account";
+
+const { title, body, action } = DENIALS[denial];
+
+/** where each action goes, with the label beside it so both stay in step */
+const ACTIONS: Record<
+  Action,
+  { label: string; href: string; method?: "get" | "post" }
+> = {
+  "sign-in": {
+    label: "Sign in with Discord",
+    href: `/auth/discord?${new URLSearchParams({ returnTo })}`,
+  },
+  retry: { label: "Try again", href: returnTo },
+  "switch-account": {
+    label: "Use a different account",
+    href: `/sign-in?${new URLSearchParams({ returnTo })}`,
+    method: "post",
+  },
+  leave: { label: "Back to the tools", href: "/generate" },
+};
+---
+
+<Message title={title} action={ACTIONS[action]}>{body(you)}</Message>

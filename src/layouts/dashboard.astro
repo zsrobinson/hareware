@@ -13,17 +13,18 @@ type Props = {
   title: string;
   /*
     who is looking, for a page the cdn does not cache. one prop rather than
-    three: a page that passed `session` and forgot `profile` rendered an id
-    where a name belongs, and one that passed `session` and forgot `admin` hid
-    the editorial nav on its own admin page
+    two: a page that passed `session` and forgot `profile` rendered a raw
+    discord id where a name belongs.
+
+    a page that sets `s-maxage` passes nothing at all: its html goes to
+    everyone, so the account panel asks /api/session.json for itself instead.
+    that panel is the only thing left that varies by who is looking, because
+    the nav no longer does
   */
   viewer?: ViewerState | null;
-  /* set on a page that sets `s-maxage`: its html is served to everyone, so the
-     nav that varies by who you are has to be revealed client-side instead */
-  cached?: boolean;
 };
 
-const { title, viewer, cached = false } = Astro.props;
+const { title, viewer } = Astro.props;
 
 /*
   the invariant the sidebar rests on, checked every request rather than only in
@@ -51,7 +52,7 @@ const collapsed = Astro.isPrerendered
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/bot-logo.svg" />
     <meta name="viewport" content="width=device-width" />
     <meta name="generator" content={Astro.generator} />
     <title>HareWare: {title}</title>
@@ -75,7 +76,6 @@ const collapsed = Astro.isPrerendered
     >
       <AppSidebar
         viewer={viewer}
-        cached={cached}
         pathname={Astro.url.pathname}
         returnTo={`${Astro.url.pathname}${Astro.url.search}`}
       />
@@ -88,10 +88,42 @@ const collapsed = Astro.isPrerendered
         <header
           class="bg-background relative z-20 flex h-12 shrink-0 items-center gap-1 border-b px-3"
         >
+          {
+            /*
+              On a phone the sidebar is behind a tap, so the bar carries the
+              brand: HareWare / Invocation Log, where the page half opens the
+              menu. Static markup, so it is there in the first paint rather
+              than after the island hydrates. Below 400px the name gives way
+              and the mark stays, since the mark is what matches the browser
+              tab and the bot's avatar in Discord.
+            */
+          }
+          <a
+            href="/"
+            class="hover:bg-accent -ml-1 flex shrink-0 items-center gap-1.5 rounded-md p-1 transition-colors md:hidden"
+            aria-label="HareWare, home"
+          >
+            <img
+              src="/bot-logo.svg"
+              alt=""
+              width="24"
+              height="24"
+              class="size-6 shrink-0 rounded"
+            />
+            <span class="hidden text-sm font-semibold min-[400px]:inline"
+              >HareWare</span
+            >
+          </a>
+
+          <span class="text-foreground/25 shrink-0 md:hidden" aria-hidden="true"
+            >/</span
+          >
+
           <SidebarSheet
             client:media="(max-width: 767px)"
             pathname={Astro.url.pathname}
             returnTo={`${Astro.url.pathname}${Astro.url.search}`}
+            title={title}
             viewer={viewer}
           />
 
@@ -105,7 +137,13 @@ const collapsed = Astro.isPrerendered
             <PanelLeftIcon className="size-4" />
           </button>
 
-          <h1 class="truncate px-1 text-sm font-medium">{title}</h1>
+          {
+            /* below `md` the sheet trigger is already wearing this, so a
+               second copy of it would only take the room */
+          }
+          <h1 class="hidden truncate px-1 text-sm font-medium md:block">
+            {title}
+          </h1>
 
           {/* #24 fills this with the sync indicator; empty until then */}
           <div class="ml-auto flex items-center gap-2">

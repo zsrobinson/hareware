@@ -40,9 +40,18 @@ the **server nickname** — what the club calls each other, and the name beside
 every message in Discord. The OAuth `/users/@me` call has no idea it exists.
 Per-server avatars come along for the same reason.
 
-**An unreachable Discord denies.** `guildMember()` returns null for every way of
-not being there — no bot token, left the server, an outage — and the admin
-surface answers all of them with `404`.
+**An unreachable Discord denies.** Failing open on the surface that names who
+did what is not a trade worth making, so a lookup that cannot be completed is a
+refusal.
+
+> **Amended 2026-09-05.** This paragraph used to end "`guildMember()` returns
+> null for every way of not being there — no bot token, left the server, an
+> outage — and the admin surface answers all of them with `404`." Neither half
+> holds now. `guildMember()` returns `member`, `absent` or `unreachable`, and
+> the admin surface answers 401, 403 or 503 with a page saying which. Denying on
+> an outage is unchanged and still right; what changed is that it now says so
+> instead of claiming the page does not exist. ADR 0007's amendment of
+> 2026-09-04 has the reasoning.
 
 ## Consequences
 

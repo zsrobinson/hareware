@@ -2,23 +2,22 @@ import { useEffect, useSyncExternalStore } from "react";
 import type { ViewerState } from "./admin";
 
 /*
-  who is looking, shared by the islands that care: the editorial nav, the mobile
-  drawer, and the account panel. they would otherwise each ask
+  who is looking, shared by the islands that care: the account panel, and the
+  mobile drawer that contains one. they would otherwise each ask
   /api/session.json and could disagree.
 
-  one snapshot with three states, not three module variables with a shared
-  boolean. the old shape published `session` from a page that had one while
-  leaving `admin` and `profile` at their defaults, and set the "already asked"
-  flag on the way past — so a member on a page that passed only a session saw
-  their own id where their name belongs, and kept seeing it after navigating
-  away, because the flag outlives the page under client-side routing.
+  the nav is not in that list: every tool is shown to everybody and the admin
+  pages refuse in person, so nothing about which links to draw depends on this.
 
-  "not asked yet" has to be a state of its own. it is what tells the fetch to
-  run, and conflating it with "asked, and the answer was nobody" is what made
-  seeding silently cancel the request that would have filled in the rest.
+  one snapshot rather than separate module variables, because a partial one
+  published from a page outlives that page under client-side routing.
+
+  "not asked yet" has to be a state of its own: it is what tells the fetch to
+  run, and conflating it with "asked, and the answer was nobody" silently
+  cancels the request that would have filled in the rest.
 */
 
-const SIGNED_OUT: ViewerState = { session: null, profile: null, admin: false };
+const SIGNED_OUT: ViewerState = { session: null, profile: null };
 
 type Snapshot =
   { status: "unknown" } | { status: "resolved"; viewer: ViewerState };
@@ -63,7 +62,6 @@ function requestViewer() {
           ? {
               session: { discordUserId: data.discordUserId as string },
               profile: readProfile(data.profile),
-              admin: data.admin === true,
             }
           : SIGNED_OUT,
       ),
@@ -78,7 +76,7 @@ function subscribe(onChange: () => void) {
 }
 
 /**
- * everything the nav knows about whoever is looking.
+ * everything the account panel knows about whoever is looking.
  *
  * a page the cdn does not cache resolves this server-side and passes it in —
  * that answer is used directly and nothing is fetched. a cached page passes
@@ -109,17 +107,6 @@ export function useViewer(knownByServer?: ViewerState | null): ViewerState {
 
 export function useSession(knownByServer?: ViewerState | null) {
   return useViewer(knownByServer).session;
-}
-
-/**
- * whether the signed-in member may see the admin tools.
- *
- * the nav only decides what to draw; every admin page checks the role itself,
- * so a stale answer here shows a link that answers 404 rather than letting
- * anybody in
- */
-export function useAdmin(knownByServer?: ViewerState | null) {
-  return useViewer(knownByServer).admin;
 }
 
 /** what to call the signed-in member, once it has arrived */

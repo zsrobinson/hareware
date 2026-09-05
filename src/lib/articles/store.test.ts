@@ -1,10 +1,9 @@
 import { expect, test, vi } from "vitest";
 import {
   diffPageIds,
-  likePattern,
   remove,
   replaceAll,
-  search,
+  recent,
   upsert,
   wins,
   type IndexEntry,
@@ -72,16 +71,6 @@ const entry = (over: Partial<IndexEntry> = {}): IndexEntry => ({
   ...over,
 });
 
-/* ---- the pure parts ----------------------------------------------------- */
-
-test("a search pattern is lowercased and its wildcards are escaped", () => {
-  expect(likePattern("Looney")).toBe("%looney%");
-  // a headline about a 50% cut must not match every row in the table
-  expect(likePattern("50%")).toBe("%50\\%%");
-  expect(likePattern("a_b")).toBe("%a\\_b%");
-  expect(likePattern("back\\slash")).toBe("%back\\\\slash%");
-});
-
 test("an authoritative write wins even against a newer stored row", () => {
   expect(
     wins("2026-09-04T10:00:00.000Z", "2026-09-04T10:05:00.000Z", true),
@@ -110,29 +99,6 @@ test("the diff names what a rebuild added and removed", () => {
     added: ["d"],
     removed: ["a"],
   });
-});
-
-/* ---- the wrappers ------------------------------------------------------- */
-
-test("search asks for a case-insensitive match, newest first, capped", async () => {
-  const { db, statements } = fakeD1();
-
-  await search(db, "LOONEY", 25);
-
-  const [select] = statements;
-  expect(select!.sql.toLowerCase()).toContain("lower(");
-  expect(select!.sql.toLowerCase()).toContain("order by");
-  expect(select!.params).toContain("%looney%");
-  expect(select!.params).toContain(25);
-});
-
-test("search reports nothing rather than throwing at an autocomplete", async () => {
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
-  const { db } = fakeD1(() => [], true);
-
-  await expect(search(db, "looney", 25)).resolves.toEqual([]);
-  expect(error).toHaveBeenCalled();
-  error.mockRestore();
 });
 
 test("a non-authoritative write is dropped when the stored row is newer", async () => {
@@ -285,26 +251,24 @@ test("still writes every row, in order, once split", async () => {
   expect(written).toEqual(many.map((e) => e.pageId));
 });
 
-/*
-  the bug this exists for: the escape clause was written `escape '\'` inside a
-  template literal, where `\'` is just a quote — so the emitted sql was
-  `escape ''`, an empty escape string, which sqlite rejects. every search threw,
-  `search` swallowed it exactly as designed, and discord showed a blank
-  dropdown with nothing anywhere saying why.
-
-  it survived a check against production because that check was typed into a
-  shell, where `'\'` really is a backslash — so what got verified was a
-  transcription of the code rather than the code
-*/
-test("the like clause carries a real escape character, not an empty one", async () => {
+test("reads the index most recently edited first", async () => {
   const { db, statements } = fakeD1();
 
-  await search(db, "50%");
+  await recent(db);
 
-  const select = statements.find((s) =>
-    s.sql.toLowerCase().startsWith("select"),
-  );
+  const [select] = statements;
+  expect(select!.sql.toLowerCase()).toContain("order by");
+  expect(select!.sql.toLowerCase()).toContain("desc");
+  /* no where clause at all: the matching is a fuzzy one that sql cannot
+     express, and the `like` this replaced spent a day emitting an invalid
+     escape character */
+  expect(select!.sql.toLowerCase()).not.toContain("where");
+});
 
-  expect(select!.sql).toContain("escape '\\'");
-  expect(select!.sql).not.toContain("escape ''");
+test("an unreachable index reads as empty rather than throwing", async () => {
+  /* the alternative reaches the editor as discord's "didn't respond in time"
+     on every keystroke */
+  const { db } = fakeD1(() => [], true);
+
+  await expect(recent(db)).resolves.toEqual([]);
 });

@@ -8,7 +8,7 @@
   rather than letting the index break the command that was updating it, the
   same bargain `record()` makes in ~/lib/log. see ADR 0009.
 
-  the decisions live in `wins`, `likePattern` and `diffPageIds`, which are
+  the decisions live in `wins` and `diffPageIds`, which are
   plain functions over plain data; everything else is a thin wrapper around one
   of them.
 */
@@ -25,7 +25,14 @@ import {
 export type IndexEntry = Omit<ArticleIndexEntry, "syncedAt">;
 
 /** discord will not show more than 25 autocomplete choices, so nor do we */
-export const AUTOCOMPLETE_LIMIT = 25;
+/**
+ * how much of the index one autocomplete reads.
+ *
+ * comfortably above the 139 rows there are, because the ranking happens after
+ * the read: a limit that bit would silently hide the oldest articles from
+ * search rather than from the dropdown
+ */
+export const INDEX_READ_LIMIT = 500;
 
 export type UpsertResult = {
   status: "written" | "stale" | "unavailable";
@@ -64,20 +71,6 @@ export function wins(
   return authoritative ? true : incoming > stored;
 }
 
-/**
- * a substring match for `LIKE`, lowercased and with wildcards defused.
- *
- * an unescaped `%` typed into an autocomplete matches every row, so a search
- * for a headline about a 50% cut would silently return the whole table.
- */
-export function likePattern(query: string): string {
-  const escaped = query
-    .toLowerCase()
-    .replace(/[\\%_]/g, (character) => `\\${character}`);
-
-  return `%${escaped}%`;
-}
-
 /** what a full replace changed, so a caller can notice webhooks stopped */
 export function diffPageIds(before: string[], after: string[]) {
   const had = new Set(before);
@@ -90,35 +83,30 @@ export function diffPageIds(before: string[], after: string[]) {
 }
 
 /**
- * headlines matching a substring, most recently edited first.
+ * the index, most recently edited first.
+ *
+ * the whole table rather than a filtered query: it is 139 rows, the matching
+ * is a fuzzy one that sql cannot express, and the `like` clause this replaced
+ * spent a day emitting an invalid escape character — failing, as every failure
+ * on this path does, by showing an empty dropdown.
  *
  * an empty result is what a discord autocomplete shows for "no matches", and
  * an unreachable index has nothing better to offer, so a failure is logged and
  * answered the same way — the alternative is discord's "didn't respond in
  * time" on every keystroke.
  */
-export async function search(
+export async function recent(
   db: D1Database,
-  query: string,
-  limit = AUTOCOMPLETE_LIMIT,
+  limit = INDEX_READ_LIMIT,
 ): Promise<ArticleRow[]> {
   try {
     return await drizzle(db)
       .select()
       .from(articleIndex)
-      .where(
-        /*
-          `\\` and not `\`: this is a template literal, so `'\'` collapses to a
-          bare quote and emits `escape ''` — an empty escape string, which
-          sqlite rejects outright. every search threw, `search` swallowed it as
-          designed, and discord showed an empty dropdown
-        */
-        sql`lower(${articleIndex.headline}) like ${likePattern(query)} escape '\\'`,
-      )
       .orderBy(desc(articleIndex.lastEdited))
       .limit(limit);
   } catch (error) {
-    console.error("[articles] could not search the index", error);
+    console.error("[articles] could not read the index", error);
     return [];
   }
 }

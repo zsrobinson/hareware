@@ -29,7 +29,13 @@ export async function directory(actors: (string | null)[]): Promise<Directory> {
   );
 
   const found = await Promise.all(
-    ids.map(async (id) => [id, (await guildMember(id))?.profile] as const),
+    ids.map(async (id) => {
+      const member = await guildMember(id);
+      return [
+        id,
+        member.status === "member" ? member.profile : undefined,
+      ] as const;
+    }),
   );
 
   return Object.fromEntries(

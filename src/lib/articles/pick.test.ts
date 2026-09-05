@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { choicesFor, MAX_CHOICE_NAME, quality } from "./pick";
+import { suggestions, MAX_CHOICE_NAME, quality } from "./pick";
 import type { ArticleRow } from "~/lib/db/schema";
 
 const row = (over: Partial<ArticleRow> = {}): ArticleRow => ({
@@ -23,7 +23,7 @@ test("shows the headline and nothing else", () => {
     picking an article already knows which one they mean, and the card they get
     back answers everything else
   */
-  const [choice] = choicesFor([row()]);
+  const [choice] = suggestions([row()]);
 
   expect(choice!.name).toBe("Terps lose again, somehow");
 });
@@ -31,7 +31,7 @@ test("shows the headline and nothing else", () => {
 test("the value is the page id, never the headline", () => {
   /* a headline changes throughout copy edit, so the label somebody scanned and
      the article they picked cannot be identified by the same string */
-  const [choice] = choicesFor([row({ pageId: "3d1be415" })]);
+  const [choice] = suggestions([row({ pageId: "3d1be415" })]);
 
   expect(choice!.value).toBe("3d1be415");
 });
@@ -39,13 +39,13 @@ test("the value is the page id, never the headline", () => {
 test("an untitled row still gets a name", () => {
   /* discord rejects the entire response — every choice, not just this one —
      when a name is empty, which reaches the editor as a blank dropdown */
-  const [choice] = choicesFor([row({ headline: "   " })]);
+  const [choice] = suggestions([row({ headline: "   " })]);
 
   expect(choice!.name).toBe("Untitled");
 });
 
 test("a very long headline is cut rather than taking the dropdown down", () => {
-  const [choice] = choicesFor([row({ headline: "x".repeat(300) })]);
+  const [choice] = suggestions([row({ headline: "x".repeat(300) })]);
 
   expect(choice!.name.length).toBeLessThanOrEqual(MAX_CHOICE_NAME);
   expect(choice!.name.endsWith("…")).toBe(true);
@@ -56,7 +56,7 @@ test("never offers a 26th choice", () => {
     row({ pageId: `page-${i}`, headline: `Article ${i}` }),
   );
 
-  expect(choicesFor(many)).toHaveLength(25);
+  expect(suggestions(many)).toHaveLength(25);
 });
 
 /* ---- matching ----------------------------------------------------------- */
@@ -85,7 +85,7 @@ test("an empty query matches everything", () => {
   /* a picker that has only just opened is not a search, and answering it with
      nothing is how this looked broken for an evening */
   expect(quality("anything at all", "")).toBeGreaterThan(0);
-  expect(choicesFor([row(), row({ pageId: "b" })], "")).toHaveLength(2);
+  expect(suggestions([row(), row({ pageId: "b" })], "")).toHaveLength(2);
 });
 
 test("ranks a better match above a worse one", () => {
@@ -117,7 +117,10 @@ test("among comparable matches, the most recently edited comes first", () => {
     }),
   ];
 
-  expect(choicesFor(rows, "terps").map((c) => c.value)).toEqual(["new", "old"]);
+  expect(suggestions(rows, "terps").map((c) => c.value)).toEqual([
+    "new",
+    "old",
+  ]);
 });
 
 test("an empty query is the recently-edited list, in order", () => {
@@ -127,7 +130,7 @@ test("an empty query is the recently-edited list, in order", () => {
     row({ pageId: "b", lastEdited: "2026-01-01T00:00:00.000Z" }),
   ];
 
-  expect(choicesFor(rows, "").map((c) => c.value)).toEqual(["c", "b", "a"]);
+  expect(suggestions(rows, "").map((c) => c.value)).toEqual(["c", "b", "a"]);
 });
 
 test("a stronger match still beats a more recent weak one", () => {
@@ -144,7 +147,7 @@ test("a stronger match still beats a more recent weak one", () => {
     }),
   ];
 
-  expect(choicesFor(rows, "looney")[0]!.value).toBe("old-strong");
+  expect(suggestions(rows, "looney")[0]!.value).toBe("old-strong");
 });
 
 test("drops rows that do not match at all", () => {
@@ -153,5 +156,5 @@ test("drops rows that do not match at all", () => {
     row({ pageId: "miss", headline: "Zzz" }),
   ];
 
-  expect(choicesFor(rows, "terps").map((c) => c.value)).toEqual(["hit"]);
+  expect(suggestions(rows, "terps").map((c) => c.value)).toEqual(["hit"]);
 });

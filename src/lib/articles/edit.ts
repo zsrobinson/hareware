@@ -50,7 +50,7 @@ import {
   type PatchBody,
   type PlanResult,
 } from "./write";
-import { notion } from "~/lib/services/notion/client";
+import { notion, plainText } from "~/lib/services/notion/client";
 
 /** the discord user who ran the command */
 export type Actor = { id: string; name: string };
@@ -387,9 +387,6 @@ async function resolve(
       };
   }
 }
-
-const plainText = (parts: { plain_text: string }[] | null | undefined) =>
-  (parts ?? []).map((part) => part.plain_text).join("");
 
 /* ---- the real outside world --------------------------------------------- */
 

@@ -15,6 +15,7 @@
   functions rather than one that takes a type.
 */
 
+import { plainText } from "~/lib/services/notion/client";
 import { assertProperties, type Schema } from "./choices";
 import { ARTICLE_PROPERTIES } from "./config";
 import { optionName, relationIds, type ArticlePage } from "./sync";
@@ -105,9 +106,6 @@ export function relationValue(ids: string[]): PropertyValue {
 /* ---- reading what is there now ------------------------------------------ */
 
 const NOTHING = "nothing";
-
-const plainText = (parts: { plain_text: string }[] | null | undefined) =>
-  (parts ?? []).map((part) => part.plain_text).join("");
 
 const quoted = (text: string | null) =>
   text === null || text === "" ? NOTHING : `"${text}"`;

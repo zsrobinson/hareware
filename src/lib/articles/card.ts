@@ -14,7 +14,7 @@
 */
 
 import { notion } from "~/lib/services/notion/client";
-import { ARTICLE_PROPERTIES } from "./config";
+import { ARTICLE_PROPERTIES, UNTITLED } from "./config";
 import { optionName, type ArticlePage } from "./sync";
 
 /**
@@ -24,9 +24,6 @@ import { optionName, type ArticlePage } from "./sync";
  * this one does — the whole point of the card is a way back into notion
  */
 export type CardPage = ArticlePage & { url?: string };
-
-/** what an untitled row is called, matching what the index stores */
-const UNTITLED = "Untitled";
 
 /**
  * the Article as ephemeral discord markdown.

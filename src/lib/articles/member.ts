@@ -14,7 +14,7 @@
   downstream could notice.
 */
 
-import { notion } from "~/lib/services/notion/client";
+import { notion, plainText } from "~/lib/services/notion/client";
 import { MEMBERS_DATA_SOURCE_ID, MEMBER_PROPERTIES } from "./config";
 
 /** a Members row, as much of it as we read */
@@ -64,9 +64,6 @@ export type MemberMatch =
   | { status: "conflicted"; members: Member[] }
   /** we could not ask notion. distinct from `absent` on purpose */
   | { status: "unavailable"; reason: string };
-
-const plainText = (parts: { plain_text: string }[] | null | undefined) =>
-  (parts ?? []).map((part) => part.plain_text).join("");
 
 /**
  * a name reduced to what two spellings of one person share.

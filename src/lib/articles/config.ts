@@ -68,3 +68,12 @@ export const CHOICE_PROPERTIES = [
   ARTICLE_PROPERTIES.imageStatus.name,
   ARTICLE_PROPERTIES.section.name,
 ] as const;
+
+/**
+ * what an Article with no Headline is called.
+ *
+ * one word, in one place, because discord rejects an entire autocomplete
+ * response when any choice name is empty — so this is load-bearing rather than
+ * cosmetic, and three copies of it could disagree
+ */
+export const UNTITLED = "Untitled";

@@ -15,16 +15,12 @@
   showing an empty dropdown.
 */
 
+import { UNTITLED } from "./config";
 import type { ArticleRow } from "~/lib/db/schema";
+import { MAX_CHOICES } from "~/lib/services/discord/commands";
 
 /** discord rejects the whole response over this, per choice name */
 export const MAX_CHOICE_NAME = 100;
-
-/** and it will not show a 26th choice */
-export const MAX_CHOICES = 25;
-
-/** what an untitled row is called; the index says the same, and may be wrong */
-const UNTITLED = "Untitled";
 
 export type AutocompleteChoice = { name: string; value: string };
 
@@ -98,7 +94,7 @@ function fold(value: string): string {
  * noise — an editor picking an article already knows which one they mean, and
  * the card they get answers everything else.
  */
-export function choicesFor(
+export function suggestions(
   rows: ArticleRow[],
   query = "",
 ): AutocompleteChoice[] {

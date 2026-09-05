@@ -58,8 +58,9 @@ The middleware runs `guardAdmin` from `~/lib/admin-guard`: it resolves the
 viewer once, leaves it in `locals.admission`, and rewrites anybody it refuses to
 `/access-denied` with the status that fits — 401, 403 or 503. A gated page calls
 `admitted(Astro.locals)`, which hands back the member or throws, so reaching the
-page is the permission, and a page added to `src/pages/` without being added to
-`ADMIN_ROUTES` fails loudly rather than quietly serving. A refusal says which of
+page is the permission and a page whose route fell off `ADMIN_ROUTES` fails
+loudly rather than quietly serving. That last part only holds while every gated
+page actually calls it, so `nav.test.ts` checks that too. A refusal says which of
 four things is wrong rather than claiming the page does not exist; ADR 0007's
 amendment is why, and `~/lib/denial` is the one table those four live in.
 

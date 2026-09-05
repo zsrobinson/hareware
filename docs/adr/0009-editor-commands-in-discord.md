@@ -194,7 +194,7 @@ missing. An append built on that read would delete co-authors nobody could see.
 The code distinguishes absent from empty and refuses rather than writes.
 
 **Every mutation is an Invocation.** Commands write to the same log as the
-automations, so `/admin/log` answers who set an Article to Published and when.
+automations, so `/log` answers who set an Article to Published and when.
 
 ## Alternatives considered
 

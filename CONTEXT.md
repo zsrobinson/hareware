@@ -170,7 +170,7 @@ is the honest state. See ADR 0004.
 Something HareWare does on a schedule without being asked: today, the two
 morning reminders.
 
-"Automation" is the word the interface uses — `/admin/automations`, the sidebar,
+"Automation" is the word the interface uses: `/automations`, the sidebar,
 the trigger buttons — and the word to use in code and in issues. It is broader
 than **Reminder** on purpose: a reminder is an automation that posts a message,
 and the shape also takes a watcher on a Notion database or a Discord slash

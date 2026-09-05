@@ -50,17 +50,18 @@ type HasAdmission = { admission?: Admission };
  * the member an admin page is rendering for, from what the guard left behind.
  *
  * it throws rather than refusing, because by the time a page runs the guard
- * has already decided: no admission means the guard did not run, and a page
- * under /admin that nothing guarded is a fault to be seen rather than a
- * visitor to be turned away
+ * has already decided: no admission means the guard did not run, and an admin
+ * page that nothing guarded is a fault to be seen rather than a visitor to be
+ * turned away
  */
 export function admitted(locals: HasAdmission): Viewer {
   const { admission } = locals;
 
   if (!admission) {
     throw new Error(
-      "no admission on an admin page: is it under /admin, and is the guard in " +
-        "~/middleware still first in the sequence?",
+      "no admission on an admin page: is its route listed in ADMIN_ROUTES " +
+        "(~/lib/admin-routes), and is the guard in ~/middleware still first " +
+        "in the sequence?",
     );
   }
 

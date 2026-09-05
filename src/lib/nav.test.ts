@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { expect, test } from "vitest";
 import { ADMIN_ROUTES, isAdminPath } from "./admin-routes";
 import { adminNav, isActive, toolsNav } from "./nav";
@@ -35,6 +35,27 @@ test("every guarded route has a page to render", () => {
 
   for (const route of ADMIN_ROUTES) {
     expect(pages).toContain(route);
+  }
+});
+
+/*
+  the guard refuses whoever may not be here, but it is `admitted()` that turns
+  a missing admission into a fault somebody sees. a page that skips it renders
+  for anybody the guard let through and, if the route were ever dropped from
+  ADMIN_ROUTES, for everybody — quietly, which is the one outcome this whole
+  change exists to rule out.
+
+  AGENTS.md says a page added and forgotten fails loudly. this is what makes
+  that true rather than merely hoped for
+*/
+test("every admin page asks the guard who it is rendering for", () => {
+  for (const route of ADMIN_ROUTES) {
+    const source = readFileSync(
+      new URL(`../pages${route}.astro`, import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("admitted(Astro.locals)");
   }
 });
 

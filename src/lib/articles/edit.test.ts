@@ -170,6 +170,7 @@ test("a new article is created at the schema's own spelling of approved", async 
       kind: "create",
       headline: "Looney's line",
       section: "Rabbithole",
+      member: null,
       byline: "Zachary Robinson",
     },
     actor,
@@ -211,6 +212,7 @@ test("a renamed approved option is said out loud rather than sent to notion", as
       kind: "create",
       headline: "Looney's line",
       section: null,
+      member: null,
       byline: "Zachary Robinson",
     },
     actor,
@@ -220,6 +222,85 @@ test("a renamed approved option is said out loud rather than sent to notion", as
   expect(
     (seen.created[0] as { properties: Record<string, unknown> }).properties,
   ).not.toHaveProperty("Article Status");
+});
+
+test("a new article credits the member the picker returned, creating the row", async () => {
+  /* the bug this covers: `/article new` took a free-text byline and no
+     member, so an editor picking a writer got the mention markup printed as
+     the Byline and an empty Author relation */
+  const { io, seen } = spy({ members: async () => ({ status: "absent" }) });
+
+  const said = await runEdit(
+    io,
+    {
+      kind: "create",
+      headline: "Looney's line",
+      section: null,
+      member: { discordId: "222", displayName: "Bay Hoffman" },
+      byline: null,
+    },
+    actor,
+  );
+
+  expect(seen.made).toEqual([{ name: "Bay Hoffman", discordId: "222" }]);
+
+  const properties = (
+    seen.created[0] as { properties: Record<string, unknown> }
+  ).properties;
+  expect(properties["Author Byline"]).toEqual({
+    rich_text: [{ text: { content: "Bay Hoffman" } }],
+  });
+  expect(properties.Author).toEqual({ relation: [{ id: "member-new" }] });
+  expect(said).toContain("created **Bay Hoffman** in Members");
+});
+
+test("a new article with no member and no byline is credited to whoever ran it", async () => {
+  const { io, seen } = spy();
+
+  await runEdit(
+    io,
+    {
+      kind: "create",
+      headline: "Looney's line",
+      section: null,
+      member: null,
+      byline: null,
+    },
+    actor,
+  );
+
+  const properties = (
+    seen.created[0] as { properties: Record<string, unknown> }
+  ).properties;
+  expect(properties["Author Byline"]).toEqual({
+    rich_text: [{ text: { content: actor.name } }],
+  });
+  expect(properties).not.toHaveProperty("Author");
+});
+
+test("a typed byline on a new article beats the picked member's name", async () => {
+  const { io, seen } = spy({ members: async () => ({ status: "absent" }) });
+
+  await runEdit(
+    io,
+    {
+      kind: "create",
+      headline: "Looney's line",
+      section: null,
+      member: { discordId: "222", displayName: "Bay Hoffman" },
+      byline: "A Concerned Terrapin",
+    },
+    actor,
+  );
+
+  const properties = (
+    seen.created[0] as { properties: Record<string, unknown> }
+  ).properties;
+  expect(properties["Author Byline"]).toEqual({
+    rich_text: [{ text: { content: "A Concerned Terrapin" } }],
+  });
+  // the pseudonym is printed, and the person behind it is still linked
+  expect(properties.Author).toEqual({ relation: [{ id: "member-new" }] });
 });
 
 /* ---- credits, and the guards on them ------------------------------------ */

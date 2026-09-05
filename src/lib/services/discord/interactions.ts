@@ -348,9 +348,12 @@ const SUBCOMMANDS: Record<
           kind: "create",
           headline,
           section: textOf(optionOf(subcommand, "section")) || null,
-          /* ADR 0004: the printed Byline is always filled, so it falls back to
-             whoever ran the command rather than being left blank */
-          byline: textOf(optionOf(subcommand, "byline")) || who(interaction),
+          member: picked(interaction, subcommand, "member"),
+          /* ADR 0004: the printed Byline is always filled. the fallback —
+             the member's name, else the caller's — belongs to `edit.ts`,
+             which is the half that knows who the picked member turned out
+             to be */
+          byline: textOf(optionOf(subcommand, "byline")) || null,
         },
       };
     }),

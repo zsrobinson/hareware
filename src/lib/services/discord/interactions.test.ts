@@ -800,7 +800,7 @@ test("a byline with no member is a credit request all the same", async () => {
 
 /* ---- creating ----------------------------------------------------------- */
 
-test("a new article takes the caller's name as its byline by default", async () => {
+test("a new article hands the byline fallback on rather than deciding it", async () => {
   const { deps, seen, settle } = writing();
 
   await handleInteraction(
@@ -809,13 +809,16 @@ test("a new article takes the caller's name as its byline by default", async () 
   );
   await settle();
 
-  // ADR 0004: the printed Byline is always filled
+  /* ADR 0004's always-filled Byline is `edit.ts`'s job now: it is the half
+     that knows whether the picked member resolved, and the member's name
+     comes before the caller's */
   expect(seen.requests).toEqual([
     {
       kind: "create",
       headline: "Looney's line",
       section: null,
-      byline: "Zachary",
+      member: null,
+      byline: null,
     },
   ]);
   expect(seen.actors).toEqual([{ id: "", name: "Zachary" }]);

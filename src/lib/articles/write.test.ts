@@ -290,6 +290,7 @@ test("a new article carries a headline, a byline and whatever else was given", (
     planCreate(fullSchema, {
       headline: "Looney's line",
       byline: "Zachary Robinson",
+      authorIds: ["member-1"],
       status: "Approved",
       section: "Rabbithole",
     }),
@@ -298,6 +299,7 @@ test("a new article carries a headline, a byline and whatever else was given", (
   expect(properties).toEqual({
     Headline: titleValue("Looney's line"),
     "Author Byline": richTextValue("Zachary Robinson"),
+    Author: relationValue(["member-1"]),
     "Article Status": statusValue("Approved"),
     Section: selectValue("Rabbithole"),
   });
@@ -312,6 +314,7 @@ test("a new article without a section writes no section at all", () => {
     planCreate(fullSchema, {
       headline: "Untitled thought",
       byline: "Zachary Robinson",
+      authorIds: [],
       status: null,
       section: null,
     }),
@@ -320,11 +323,27 @@ test("a new article without a section writes no section at all", () => {
   expect(Object.keys(properties).sort()).toEqual(["Author Byline", "Headline"]);
 });
 
+test("a new article crediting a member is refused when Author is unshared", () => {
+  /* the pair ADR 0004 keeps together: a create that knows the member writes
+     the relation, so an unreadable relation refuses the whole create rather
+     than writing a Byline with nothing behind it */
+  expect(
+    planCreate(withoutAuthor, {
+      headline: "Looney's line",
+      byline: "Zachary Robinson",
+      authorIds: ["member-1"],
+      status: null,
+      section: null,
+    }).status,
+  ).toBe("refused");
+});
+
 test("a new article is refused when notion is not sharing what it would write", () => {
   expect(
     planCreate(withoutAuthor, {
       headline: "Looney's line",
       byline: "Zachary Robinson",
+      authorIds: [],
       status: null,
       section: null,
     }).status,
@@ -342,6 +361,7 @@ test("a new article is refused when notion is not sharing what it would write", 
     planCreate(withoutHeadline, {
       headline: "Looney's line",
       byline: "Zachary Robinson",
+      authorIds: [],
       status: null,
       section: null,
     }).status,

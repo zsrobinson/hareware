@@ -216,6 +216,8 @@ export type NewArticle = {
   headline: string;
   /** always filled, per ADR 0004 — the caller's display name by default */
   byline: string;
+  /** the Members rows behind that byline. empty when nobody was picked */
+  authorIds: string[];
   /** notion's own spelling, resolved from the schema, or null if it is gone */
   status: string | null;
   /** null when the editor did not pick one */
@@ -233,9 +235,12 @@ export type NewArticle = {
  */
 export function planCreate(
   schema: Schema,
-  { headline, byline, status, section }: NewArticle,
+  { headline, byline, authorIds, status, section }: NewArticle,
 ): PlanResult {
   const writing: PropertyKey[] = ["headline", "authorByline"];
+  /* ADR 0004 keeps the printed Byline and the relation together, so a create
+     that knows the member writes both or refuses both */
+  if (authorIds.length > 0) writing.push("author");
   if (status !== null) writing.push("status");
   if (section !== null) writing.push("section");
 
@@ -250,6 +255,9 @@ export function planCreate(
       properties: {
         [name("headline")]: titleValue(headline),
         [name("authorByline")]: richTextValue(byline),
+        ...(authorIds.length === 0
+          ? {}
+          : { [name("author")]: relationValue(authorIds) }),
         ...(status === null ? {} : { [name("status")]: statusValue(status) }),
         ...(section === null
           ? {}
@@ -258,6 +266,9 @@ export function planCreate(
       sentence: [
         `${name("headline")}: ${quoted(headline)}`,
         `${name("authorByline")}: ${quoted(byline)}`,
+        ...(authorIds.length === 0
+          ? []
+          : [`${name("author")}: ${listed(authorIds)}`]),
         ...(status === null ? [] : [`${name("status")}: ${quoted(status)}`]),
         ...(section === null ? [] : [`${name("section")}: ${quoted(section)}`]),
       ].join("; "),

@@ -151,3 +151,16 @@ export function richText(page: NotionPage): string | undefined {
 
   return text.trim() || undefined;
 }
+
+/**
+ * the text of a notion rich-text or title array.
+ *
+ * every caller that reads a property needs this, and it was written out
+ * identically in four files under `articles/` — a shape notion decides, so it
+ * belongs beside the rest of what notion's shapes mean
+ */
+export function plainText(
+  parts: { plain_text: string }[] | null | undefined,
+): string {
+  return (parts ?? []).map((part) => part.plain_text).join("");
+}

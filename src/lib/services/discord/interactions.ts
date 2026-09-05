@@ -21,7 +21,7 @@
 
 import { card, type CardPage } from "~/lib/articles/card";
 import type { Actor, EditRequest, PickedUser } from "~/lib/articles/edit";
-import { choicesFor, type AutocompleteChoice } from "~/lib/articles/pick";
+import { suggestions, type AutocompleteChoice } from "~/lib/articles/pick";
 import type { Intent } from "~/lib/articles/write";
 import type { ArticleRow } from "~/lib/db/schema";
 import type { Result } from "~/lib/result";
@@ -721,7 +721,7 @@ async function handleAutocomplete(
     now at the top — which is what an editor opening the picker wants, and
     exactly what an empty query returns
   */
-  const choices = choicesFor(rows, query);
+  const choices = suggestions(rows, query);
 
   /*
     every failure here answers with an empty list, because that is the only

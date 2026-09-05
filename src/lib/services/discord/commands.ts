@@ -34,7 +34,8 @@ export type ChoiceInput = {
 const SUB_COMMAND = 1;
 
 /** discord refuses a registration carrying a 26th choice on any one option */
-const MAX_CHOICES = 25;
+/** discord will not show a 26th choice, in a registration or an autocomplete */
+export const MAX_CHOICES = 25;
 
 export type CommandChoice = { name: string; value: string };
 

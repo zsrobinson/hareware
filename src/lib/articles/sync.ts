@@ -9,9 +9,13 @@
   different shapes carrying the same word. see ADR 0009.
 */
 
-import { notion } from "~/lib/services/notion/client";
+import { notion, plainText } from "~/lib/services/notion/client";
 import { failed, misconfigured, ok, skipped, type Result } from "~/lib/result";
-import { ARTICLES_DATA_SOURCE_ID, ARTICLE_PROPERTIES } from "./config";
+import {
+  ARTICLES_DATA_SOURCE_ID,
+  ARTICLE_PROPERTIES,
+  UNTITLED,
+} from "./config";
 import { remove, replaceAll, upsert, type IndexEntry } from "./store";
 
 /**
@@ -48,12 +52,6 @@ export type ArticlePage = {
   the rebuild will correct it within the hour
 */
 const NO_TIMESTAMP = "1970-01-01T00:00:00.000Z";
-
-/** what an untitled row is called, because discord rejects an empty choice */
-const UNTITLED = "Untitled";
-
-const plainText = (parts: { plain_text: string }[] | null | undefined) =>
-  (parts ?? []).map((part) => part.plain_text).join("");
 
 /**
  * the chosen option's name, whichever of the two shapes it arrived in.

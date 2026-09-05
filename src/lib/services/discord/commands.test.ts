@@ -49,6 +49,22 @@ test("every registered command and option has a Discord-safe description", () =>
   }
 });
 
+test("required arguments precede optional ones as Discord requires", () => {
+  for (const subcommand of article().options) {
+    const firstOptional = subcommand.options.findIndex(
+      (option) => !option.required,
+    );
+    if (firstOptional === -1) continue;
+
+    expect(
+      subcommand.options
+        .slice(firstOptional)
+        .every((option) => !option.required),
+      subcommand.name,
+    ).toBe(true);
+  }
+});
+
 /*
   notion is the source of truth for the interface, not just the data (ADR
   0009), so a choice's value is the option name verbatim — casing included.

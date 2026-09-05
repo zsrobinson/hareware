@@ -156,13 +156,6 @@ const SUBCOMMANDS: Subcommand[] = [
         options: [],
         required: true,
       },
-      chooser(
-        choices,
-        "section",
-        ARTICLE_PROPERTIES.section.name,
-        "The section responsible for editing the article.",
-        false,
-      ),
       {
         type: USER,
         name: "member",
@@ -171,6 +164,13 @@ const SUBCOMMANDS: Subcommand[] = [
         options: [],
         required: true,
       },
+      chooser(
+        choices,
+        "section",
+        ARTICLE_PROPERTIES.section.name,
+        "The section responsible for editing the article.",
+        false,
+      ),
       {
         type: STRING,
         name: "byline",

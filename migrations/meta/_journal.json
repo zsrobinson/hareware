@@ -29,6 +29,13 @@
       "when": 1788630806120,
       "tag": "0003_drop_article_index",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788649035828,
+      "tag": "0004_rename_invocation_message",
+      "breakpoints": true
     }
   ]
 }

@@ -298,7 +298,7 @@ function Detail({
 
   return (
     <div className="space-y-4 p-4">
-      <p className="text-sm break-words">{row.summary}</p>
+      <p className="text-sm break-words">{row.message}</p>
 
       <div className="flex flex-wrap gap-x-8 gap-y-3">
         <div>
@@ -516,13 +516,13 @@ export function InvocationLog({
         cell: ({ row }) => <Outcome row={row.original} />,
       },
       {
-        accessorKey: "summary",
-        header: "Summary",
+        accessorKey: "message",
+        header: "Message",
         enableSorting: false,
-        meta: { label: "Summary" },
+        meta: { label: "Message" },
         cell: ({ row }) => (
           <span className="text-muted-foreground line-clamp-2 max-w-prose whitespace-normal">
-            {row.original.summary}
+            {row.original.message}
           </span>
         ),
       },
@@ -578,7 +578,7 @@ export function InvocationLog({
         const it = row.original;
         const profile = it.actor ? actors[it.actor] : undefined;
         return [
-          it.summary,
+          it.message,
           it.action,
           it.source,
           it.outcome,

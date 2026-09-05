@@ -57,7 +57,7 @@ test("posts for an editorial board meeting dated today", async () => {
 
   const result = await sendMeetingReminder(env, today);
 
-  expect(result.summary).toContain("posted meeting reminder");
+  expect(result.summary).toContain("Posted meeting reminder");
   expect(discord).toHaveBeenCalledOnce();
   expect(discord.mock.calls[0]![0].components[0].content).toContain(
     "**Meeting Tonight**",
@@ -70,7 +70,7 @@ test("ignores a general body meeting on the same day", async () => {
   ]);
 
   expect((await sendMeetingReminder(env, today)).summary).toContain(
-    "no Editorial Board",
+    "No Editorial Board",
   );
   expect(discord).not.toHaveBeenCalled();
 });
@@ -81,7 +81,7 @@ test("ignores a magazine design session", async () => {
   ]);
 
   expect((await sendMeetingReminder(env, today)).summary).toContain(
-    "no Editorial Board",
+    "No Editorial Board",
   );
   expect(discord).not.toHaveBeenCalled();
 });
@@ -91,7 +91,7 @@ test("tolerates the trailing spaces real titles carry", async () => {
     meeting("Editorial Board Meeting 2026-09-08 ", "2026-09-08"),
   ]);
 
-  expect((await sendMeetingReminder(env, today)).summary).toContain("posted");
+  expect((await sendMeetingReminder(env, today)).summary).toContain("Posted");
   expect(discord).toHaveBeenCalledOnce();
 });
 
@@ -104,7 +104,7 @@ test("matches an 8pm eastern meeting, which is tomorrow in utc", async () => {
     meeting("Editorial Board Meeting", "2026-09-08T20:00:00.000-04:00"),
   ]);
 
-  expect((await sendMeetingReminder(env, today)).summary).toContain("posted");
+  expect((await sendMeetingReminder(env, today)).summary).toContain("Posted");
   expect(discord.mock.calls[0]![0].components[0].content).toContain("at 8pm");
 });
 
@@ -114,7 +114,7 @@ test("ignores a meeting that belongs to another day", async () => {
   ]);
 
   expect((await sendMeetingReminder(env, today)).summary).toContain(
-    "no Editorial Board",
+    "No Editorial Board",
   );
   expect(discord).not.toHaveBeenCalled();
 });
@@ -179,7 +179,7 @@ test("a dry run says it would post, rather than that it did", async () => {
     today,
   );
 
-  expect(result.summary).toContain("would post");
+  expect(result.summary).toContain("Would post");
   expect(discord).not.toHaveBeenCalled();
 });
 

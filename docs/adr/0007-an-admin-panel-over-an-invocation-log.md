@@ -53,15 +53,15 @@ does not belong there.
 
 **The log is the sensitive surface.** An invocation naming an Article and its
 Byline is mild; a stored request payload would carry the Byline-to-Member
-mapping that `CONTEXT.md` says never reaches WordPress. Summaries are kept
+mapping that `CONTEXT.md` says never reaches WordPress. Messages are kept
 indefinitely, because they are small and answer "what happened last semester".
 
 > **Amended 2026-09-04.** The payload column was never written to, and has been
 > removed along with the thirty-day prune that maintained it. Nothing about that
-> was load-bearing: the summary already carries the failure text, which is what
+> was load-bearing: the message already carries the failure text, which is what
 > a payload would mostly have duplicated. The gate is unchanged and still right,
 > but its justification is narrower than this section claimed — what the log
-> actually holds is the summary and the `actor`, which names a real Discord user
+> actually holds is the message and the `actor`, which names a real Discord user
 > against every button press. That is enough to gate on; the pseudonym mapping
 > is not in there, and adding it later would be the decision this paragraph
 > described.

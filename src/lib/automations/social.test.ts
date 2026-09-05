@@ -46,7 +46,7 @@ test("pings the day's role with what published today", async () => {
   );
 
   const result = await sendSocialPing(env, today);
-  expect(result.summary).toContain("posted 1 article");
+  expect(result.summary).toContain("Posted 1 article");
 
   const body = discord.mock.calls[0]![0];
   expect(body.components[0].content).toContain(
@@ -96,7 +96,7 @@ test("posts nothing on a day with no articles", async () => {
   );
 
   expect((await sendSocialPing(env, today)).summary).toContain(
-    "no articles published",
+    "No articles published",
   );
   expect(discord).not.toHaveBeenCalled();
 });
@@ -112,7 +112,7 @@ test("counts an evening article as today in eastern, not utc", async () => {
   );
 
   expect((await sendSocialPing(env, today)).summary).toContain(
-    "posted 1 article",
+    "Posted 1 article",
   );
   expect(discord).toHaveBeenCalledOnce();
 });
@@ -157,7 +157,7 @@ test("an unreadable feed is a failure, not a quiet day", async () => {
   const result = await sendSocialPing(env, today);
 
   expect(result.outcome).toBe("failed");
-  expect(result.summary).toContain("wordpress");
+  expect(result.summary).toContain("WordPress");
 });
 
 test("a day with nothing published is skipped, not failed", async () => {
@@ -166,7 +166,7 @@ test("a day with nothing published is skipped, not failed", async () => {
   const result = await sendSocialPing(env, today);
 
   expect(result.outcome).toBe("skipped");
-  expect(result.summary).toContain("no articles");
+  expect(result.summary).toContain("No articles");
 });
 
 test("a missing role id is misconfigured, not ok", async () => {

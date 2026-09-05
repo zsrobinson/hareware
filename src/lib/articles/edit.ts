@@ -575,7 +575,7 @@ export function notionIO(env: Env): EditIO {
         source: "command",
         action: "article-edit",
         outcome: result.outcome,
-        summary: result.summary,
+        message: result.summary,
         actor: actor.id,
       }),
   };

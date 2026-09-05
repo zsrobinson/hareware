@@ -31,14 +31,17 @@ import { CHOICE_PROPERTIES } from "~/lib/articles/config";
  * and a stale picker must not take the morning's reminders down with it
  */
 export async function refreshCommands(env: Env): Promise<Result> {
-  if (!env.NOTION_TOKEN) return misconfigured("NOTION_TOKEN unset");
+  if (!env.NOTION_TOKEN)
+    return misconfigured(
+      "NOTION_TOKEN is not set; commands were not refreshed.",
+    );
 
   let schema;
   try {
     schema = await fetchSchema(env.NOTION_TOKEN);
   } catch (error) {
     console.error("[articles] could not read the schema", error);
-    return failed(`notion refused the schema: ${String(error)}`);
+    return failed(`Notion refused the schema: ${String(error)}`);
   }
 
   /*
@@ -50,9 +53,9 @@ export async function refreshCommands(env: Env): Promise<Result> {
   const missing = assertProperties(schema);
   if (missing.length > 0) {
     return misconfigured(
-      `notion is not sharing ${missing
+      `Notion is not sharing ${missing
         .map((miss) => `${miss.name} (${miss.found ?? "absent"})`)
-        .join(", ")}`,
+        .join(", ")}.`,
     );
   }
 
@@ -75,7 +78,7 @@ export async function refreshCommands(env: Env): Promise<Result> {
   );
   if (empty.length > 0) {
     return failed(
-      `no options came back for ${empty.join(", ")}; kept the surface it had`,
+      `No options came back for ${empty.join(", ")}; kept the existing command surface.`,
     );
   }
 

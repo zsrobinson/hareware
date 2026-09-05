@@ -8,7 +8,7 @@ const row = (row: Partial<Row> & Pick<Row, "at" | "outcome">): Row => ({
   id: next++,
   source: "cron",
   action: "meeting-reminder",
-  summary: "",
+  message: "",
   actor: null,
   ...row,
 });

@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { HANDLED } from "./interactions";
 import { buildCommands, choicesFor, hashCommands } from "./commands";
 
 const article = () => buildCommands([])[0]!;
@@ -134,4 +135,30 @@ test("a changed choice changes the hash", async () => {
 
 test("the hash is a sha-256 hex digest", async () => {
   expect(await hashCommands(buildCommands([]))).toMatch(/^[0-9a-f]{64}$/);
+});
+
+/*
+  the drift this exists for: `find` and `show` were implemented, tested and
+  merged into the handler while `SUBCOMMANDS` here still listed only `ping`, so
+  discord never offered them. nothing failed — the commands simply did not
+  exist, and no test looked at both halves at once
+*/
+test("every subcommand the handler answers to is registered", () => {
+  const registered = buildCommands([])[0]!.options!.map((o) => o.name);
+
+  expect([...registered].sort()).toEqual([...HANDLED].sort());
+});
+
+test("the article picker is autocompleted, not a choice list", () => {
+  /*
+    138 articles against discord's cap of 25 choices: listing them is not an
+    option, and a picker that silently truncated to the first 25 would look
+    like the rest had been deleted
+  */
+  const show = buildCommands([])[0]!.options!.find((o) => o.name === "show");
+  const article = show!.options!.find((o) => o.name === "article");
+
+  expect(article!.autocomplete).toBe(true);
+  expect(article!.choices).toBeUndefined();
+  expect(article!.required).toBe(true);
 });

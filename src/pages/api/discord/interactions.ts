@@ -3,6 +3,8 @@ import type { APIRoute } from "astro";
 import { record } from "~/lib/log";
 import { DISCORD_PUBLIC_KEY } from "~/lib/services/discord/config";
 import { handleInteraction } from "~/lib/services/discord/interactions";
+import { search } from "~/lib/articles/store";
+import { readArticle } from "~/lib/articles/card";
 import { verifyInteraction } from "~/lib/services/discord/verify";
 
 export const prerender = false;
@@ -31,7 +33,23 @@ export const POST: APIRoute = async ({ request }) => {
     return new Response("malformed interaction", { status: 400 });
   }
 
-  const reply = handleInteraction(interaction as never);
+  /* awaited: `handleInteraction` reads d1 for autocomplete and notion for
+     `show`, so it returns a promise — and an un-awaited one is truthy, which
+     would have answered every interaction, button presses included, with a
+     serialised promise */
+  const reply = await handleInteraction(interaction as never, {
+    /*
+      supplied here rather than imported inside the handler, so every branch of
+      it — including the ones that fail — is reachable from a test without a
+      d1 binding or a notion token
+    */
+    search: env.DB
+      ? (query, limit) => search(env.DB!, query, limit)
+      : undefined,
+    page: env.NOTION_TOKEN
+      ? (pageId) => readArticle(pageId, env.NOTION_TOKEN!)
+      : undefined,
+  });
   if (!reply) return new Response("unhandled interaction", { status: 400 });
 
   /*

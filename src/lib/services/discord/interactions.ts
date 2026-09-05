@@ -1,6 +1,6 @@
 /*
-  what happens when somebody presses a button on one of our messages, or runs
-  one of our slash commands.
+  what happens when somebody presses a button on one of our messages, runs one
+  of our slash commands, or types into one of their pickers.
 
   a button press is one request and one reply, with nothing fetched in between:
   discord hands us the message the button belongs to and the member who pressed
@@ -10,9 +10,23 @@
 
   a command is not like that. anything that writes to notion will miss three
   seconds, so those answer DEFER and follow up; `deferEphemeral()` below is that
-  seam. `/article ping` fetches nothing and answers inline
+  seam. `/article ping` fetches nothing and answers inline, and the two read
+  commands fetch once and still answer inline.
+
+  autocomplete is the one that cannot defer at all — there is no such response
+  type — so its read is raced against a deadline and answers an empty dropdown
+  rather than nothing. the reads themselves arrive as `deps`, which is what
+  keeps this file testable without D1 or notion.
 */
 
+import { card, type CardPage } from "~/lib/articles/card";
+import {
+  choicesFor,
+  mine,
+  MAX_CHOICES,
+  type AutocompleteChoice,
+} from "~/lib/articles/pick";
+import type { ArticleRow } from "~/lib/db/schema";
 import { EDITORIAL_BOARD_ROLE_ID } from "./config";
 
 const IS_COMPONENTS_V2 = 1 << 15;
@@ -28,16 +42,18 @@ const IS_COMPONENTS_V2 = 1 << 15;
 const EPHEMERAL = 64;
 const EPHEMERAL_V2 = EPHEMERAL | IS_COMPONENTS_V2;
 
-/** interaction types, of which we answer three */
+/** interaction types, of which we answer four */
 const PING = 1;
 const APPLICATION_COMMAND = 2;
 const MESSAGE_COMPONENT = 3;
+const APPLICATION_COMMAND_AUTOCOMPLETE = 4;
 
 /** response types */
 const PONG = 1;
 const CHANNEL_MESSAGE_WITH_SOURCE = 4;
 const DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE = 5;
 const UPDATE_MESSAGE = 7;
+const APPLICATION_COMMAND_AUTOCOMPLETE_RESULT = 8;
 
 const TEXT_DISPLAY = 10;
 
@@ -47,6 +63,27 @@ const DANGER_STYLE = 4;
 
 /** discord truncates nothing for us; a button label over 80 chars is rejected */
 const MAX_LABEL = 80;
+
+/**
+ * how long the index gets to answer an autocomplete.
+ *
+ * discord's three seconds are hard and there is no deferred autocomplete
+ * response, so a slow D1 read has to become an empty dropdown well before the
+ * deadline rather than a "HareWare didn't respond in time" on every keystroke
+ */
+const AUTOCOMPLETE_BUDGET_MS = 2000;
+
+/**
+ * how many rows a short query pulls before it is narrowed to one editor's.
+ *
+ * wider than the 25 discord shows, because the narrowing happens after the
+ * read and an editor's own articles are not necessarily the 25 most recently
+ * edited in the club
+ */
+const SHORT_QUERY_ROWS = 100;
+
+/** below this a search matches most of the index, so it is not worth running */
+const MIN_QUERY = 2;
 
 export const POSTED_PREFIX = "posted:";
 
@@ -62,15 +99,38 @@ type Component = {
   [key: string]: unknown;
 };
 
-type CommandOption = {
+/**
+ * an option as discord sends it back, which is not the option as we registered
+ * it.
+ *
+ * the registration shape in `commands.ts` carries a description and the
+ * choices we offer; what arrives carries the value the editor chose and, during
+ * autocomplete, which option their cursor is in. they were one type, and that
+ * is why `value` was `unknown` and every read of it went through `String()`
+ */
+type SubmittedOption = {
   name: string;
-  value?: unknown;
-  options?: CommandOption[];
+  /** discord sends the option's own type; ours are all strings */
+  value?: string | number | boolean;
+  /** which option the cursor is in; only autocomplete payloads carry it */
+  focused?: boolean;
+  options?: SubmittedOption[];
 };
+
+/**
+ * an option's value as text.
+ *
+ * every option `/article` takes is a string, so anything else is discord
+ * sending a shape we did not register — treated as absent rather than coerced,
+ * because `String(someObject)` is how "[object Object]" reaches notion
+ */
+function textOf(option: SubmittedOption | undefined): string {
+  return typeof option?.value === "string" ? option.value.trim() : "";
+}
 
 type Interaction = {
   type: number;
-  data?: { custom_id?: string; name?: string; options?: CommandOption[] };
+  data?: { custom_id?: string; name?: string; options?: SubmittedOption[] };
   message?: { components?: Component[] };
   member?: {
     /** every role the member holds, which is the only access check we get */
@@ -81,24 +141,48 @@ type Interaction = {
 };
 
 /**
- * the reply to send discord, or undefined for an interaction we do not handle.
+ * the reads a command needs, as functions rather than an `Env`.
  *
- * pure on purpose: everything it needs is in the payload, so the route stays a
- * signature check and this stays testable without a request
+ * the route supplies the real ones; a test hands over two closures. keeping
+ * `D1Database` and the notion token out of this file is what lets every branch
+ * below — including the ones that fail — be exercised without either
  */
-export type InteractionResponse = {
+export type InteractionDeps = {
+  /** headlines matching a substring, most recently edited first */
+  search?: (query: string, limit?: number) => Promise<ArticleRow[]>;
+  /** one Article, read live from notion — never from the index, per ADR 0009 */
+  page?: (pageId: string) => Promise<CardPage>;
+  /** overridable so a test can prove the deadline exists without waiting */
+  timeoutMs?: number;
+};
+
+/** a reply carrying a message: everything but autocomplete */
+export type MessageResponse = {
   type: number;
   /** absent on a pong, which is a bare acknowledgement */
   data?: { flags: number; components: Component[] };
 };
 
-export function handleInteraction(
+/** the dropdown, which carries choices instead of a body and takes no flags */
+export type AutocompleteResponse = {
+  type: number;
+  data: { choices: AutocompleteChoice[] };
+};
+
+/** the reply to send discord, or undefined for an interaction we do not handle */
+export type InteractionResponse = MessageResponse | AutocompleteResponse;
+
+export async function handleInteraction(
   interaction: Interaction,
-): InteractionResponse | undefined {
+  deps: InteractionDeps = {},
+): Promise<InteractionResponse | undefined> {
   if (interaction.type === PING) return { type: PONG };
 
   if (interaction.type === APPLICATION_COMMAND)
-    return handleCommand(interaction);
+    return handleCommand(interaction, deps);
+
+  if (interaction.type === APPLICATION_COMMAND_AUTOCOMPLETE)
+    return handleAutocomplete(interaction, deps);
 
   if (interaction.type === MESSAGE_COMPONENT) {
     const id = interaction.data?.custom_id;
@@ -126,7 +210,7 @@ export function handleInteraction(
  * discord refuses, which reaches the editor as "HareWare didn't respond in
  * time" — the same shape of failure a button missing its custom_id causes
  */
-export function ephemeral(content: string) {
+export function ephemeral(content: string): MessageResponse {
   const components: Component[] = [{ type: TEXT_DISPLAY, content }];
 
   return {
@@ -148,6 +232,10 @@ export function ephemeral(content: string) {
  * failure `docs/agents/silent-failures.md` is about: the editor sees a spinner
  * settle into nothing and has no way to tell a refused write from a slow one.
  *
+ * nothing returns this yet: both read commands fetch once and fit inline, and
+ * acknowledging a read we could simply answer would mean owning a follow-up
+ * that can itself go quiet.
+ *
  * no components: a deferred acknowledgement carries no body, so this takes the
  * plain ephemeral flag rather than the v2 pair
  */
@@ -159,8 +247,25 @@ export function deferEphemeral() {
 }
 
 /** the subcommand discord was asked for: `/article ping` arrives as "ping" */
-function subcommandOf(interaction: Interaction): string | undefined {
-  return interaction.data?.options?.[0]?.name;
+function subcommandOf(interaction: Interaction): SubmittedOption | undefined {
+  return interaction.data?.options?.[0];
+}
+
+/** whether the member who sent this holds @Editorial Board */
+function onTheBoard(interaction: Interaction): boolean {
+  /*
+    `member` is absent in a DM, where there are no roles to check, and absent
+    has to refuse rather than read as an empty role list
+  */
+  return interaction.member?.roles?.includes(EDITORIAL_BOARD_ROLE_ID) ?? false;
+}
+
+/** one of a subcommand's own options, by name */
+function optionOf(
+  subcommand: SubmittedOption | undefined,
+  name: string,
+): SubmittedOption | undefined {
+  return subcommand?.options?.find((option) => option.name === name);
 }
 
 /*
@@ -169,15 +274,96 @@ function subcommandOf(interaction: Interaction): string | undefined {
   `deferEphemeral()` here and follows up, rather than trying to fit a write
   inside three seconds
 */
+/**
+ * the names this file answers to.
+ *
+ * exported so a test can hold it against the registration: a subcommand
+ * implemented here but not registered is invisible, and one registered but not
+ * implemented answers "HareWare does not know that command". both are silent
+ * until somebody tries it — which is how `find` and `show` shipped working and
+ * unreachable
+ */
+export const HANDLED = ["ping", "find", "show"] as const;
+
 const SUBCOMMANDS: Record<
   string,
-  (interaction: Interaction) => ReturnType<typeof ephemeral>
+  (
+    interaction: Interaction,
+    deps: InteractionDeps,
+  ) => MessageResponse | Promise<MessageResponse>
 > = {
   ping: (interaction) =>
     ephemeral(
       `HareWare is listening. Discord says you are **${who(interaction)}**.`,
     ),
+
+  find: (interaction, deps) => find(interaction, deps),
+  show: (interaction, deps) => show(interaction, deps),
 };
+
+/**
+ * `/article find` — matching Articles, straight off the index.
+ *
+ * the index is allowed to answer this because nothing is being decided on it:
+ * a headline a minute old is a label, and `/article show` re-reads the page
+ * from notion before it prints anything an editor might act on
+ */
+async function find(
+  interaction: Interaction,
+  deps: InteractionDeps,
+): Promise<MessageResponse> {
+  const query = textOf(optionOf(subcommandOf(interaction), "query"));
+
+  if (!deps.search)
+    return ephemeral("HareWare cannot reach the Article index right now.");
+
+  const rows = await deps.search(query, MAX_CHOICES);
+  const found = choicesFor(rows);
+
+  if (found.length === 0)
+    return ephemeral(`No Article has **${query}** in its Headline.`);
+
+  return ephemeral(
+    [
+      `${found.length} ${found.length === 1 ? "Article" : "Articles"} matching **${query}**:`,
+      ...found.map((choice) => `- ${choice.name}`),
+    ].join("\n"),
+  );
+}
+
+/**
+ * `/article show` — one Article, read live from notion.
+ *
+ * answered inline rather than through `deferEphemeral()`: one page read fits
+ * inside three seconds comfortably, and an acknowledgement is a promise to
+ * follow up that can itself go quiet. every branch here says something.
+ */
+async function show(
+  interaction: Interaction,
+  deps: InteractionDeps,
+): Promise<MessageResponse> {
+  const pageId = textOf(optionOf(subcommandOf(interaction), "article"));
+
+  /*
+    discord sends whatever was typed when nobody picked a suggestion, so this
+    is as likely to be half a headline as a page id — either way it is not
+    something to hand to notion
+  */
+  if (!pageId)
+    return ephemeral("Pick an Article from the list HareWare offers.");
+
+  if (!deps.page) return ephemeral("HareWare cannot reach Notion right now.");
+
+  try {
+    return ephemeral(card(await deps.page(pageId)));
+  } catch (error) {
+    console.error("[article] could not read a page for /article show", error);
+
+    return ephemeral(
+      "Notion did not answer, so HareWare cannot show that Article. Try again, or open it in Notion.",
+    );
+  }
+}
 
 /**
  * the reply to a slash command, which is always a reply.
@@ -186,24 +372,23 @@ const SUBCOMMANDS: Record<
  * an unanswered command as "HareWare didn't respond in time", so a command we
  * do not recognise gets a sentence saying so rather than silence
  */
-function handleCommand(interaction: Interaction) {
+async function handleCommand(
+  interaction: Interaction,
+  deps: InteractionDeps,
+): Promise<MessageResponse> {
   /*
     the command registers with default_member_permissions "0" — invisible until
     an admin grants it to a role under Server Settings → Integrations. that
     override is editable by any admin and says nothing about @Editorial Board,
     so it is a default and not a security boundary. this is the boundary.
-
-    `member` is absent in a DM, where there are no roles to check, and absent
-    has to refuse rather than read as an empty role list
   */
-  const roles = interaction.member?.roles;
-  if (!roles?.includes(EDITORIAL_BOARD_ROLE_ID)) {
+  if (!onTheBoard(interaction)) {
     return ephemeral(
       "This command is for the Editorial Board, in the server. If you are on the board and seeing this, ask an admin to check the role.",
     );
   }
 
-  const subcommand = subcommandOf(interaction);
+  const subcommand = subcommandOf(interaction)?.name;
   const run = subcommand ? SUBCOMMANDS[subcommand] : undefined;
 
   if (!run) {
@@ -212,7 +397,79 @@ function handleCommand(interaction: Interaction) {
     );
   }
 
-  return run(interaction);
+  return run(interaction, deps);
+}
+
+/**
+ * the dropdown discord shows while an editor types.
+ *
+ * three things shape this. it cannot be deferred — there is no such response
+ * type, and discord's three seconds are hard — so the read is raced against a
+ * deadline and a slow index becomes an empty dropdown rather than an error.
+ * it is gated on the role like every other branch, because an autocomplete
+ * response is a list of the club's unpublished Articles and reaches whoever an
+ * admin left the command visible to. and an empty list is always a valid
+ * answer, so nothing here may throw.
+ */
+async function handleAutocomplete(
+  interaction: Interaction,
+  deps: InteractionDeps,
+): Promise<AutocompleteResponse> {
+  const empty = {
+    type: APPLICATION_COMMAND_AUTOCOMPLETE_RESULT,
+    data: { choices: [] },
+  };
+
+  /*
+    the same check `handleCommand` makes, for the same reason: without it the
+    picker lists every Article to anybody who can reach the command, and it
+    does so before the command is ever run
+  */
+  if (!onTheBoard(interaction)) return empty;
+
+  const subcommand = subcommandOf(interaction);
+  const focused = subcommand?.options?.find((option) => option.focused);
+  const query = textOf(focused);
+
+  const search = deps.search;
+  if (!search) return empty;
+
+  /*
+    two characters match most of the 138 rows, so a short query is not a search
+    worth running — the useful answer to a picker that has only just opened is
+    the editor's own most recent work
+  */
+  const rows = await within(
+    query.length < MIN_QUERY
+      ? search("", SHORT_QUERY_ROWS).then((all) => mine(all, who(interaction)))
+      : search(query, MAX_CHOICES),
+    deps.timeoutMs ?? AUTOCOMPLETE_BUDGET_MS,
+  );
+
+  return {
+    type: APPLICATION_COMMAND_AUTOCOMPLETE_RESULT,
+    data: { choices: choicesFor(rows) },
+  };
+}
+
+/**
+ * the rows, or none of them if they take too long or the read throws.
+ *
+ * `store.search` already swallows its own D1 failures, and this is the second
+ * half of that bargain: a promise that never settles is the failure it cannot
+ * catch, and it is the one discord punishes
+ */
+async function within(rows: Promise<ArticleRow[]>, ms: number) {
+  const deadline = new Promise<ArticleRow[]>((resolve) =>
+    setTimeout(() => resolve([]), ms),
+  );
+
+  try {
+    return await Promise.race([rows, deadline]);
+  } catch (error) {
+    console.error("[article] could not read the index for autocomplete", error);
+    return [];
+  }
 }
 
 /** the display name to credit, preferring what a member chose to be called */

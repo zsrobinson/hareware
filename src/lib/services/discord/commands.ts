@@ -41,6 +41,10 @@ export type CommandOption = {
   options: CommandOption[];
   choices?: CommandChoice[];
   required?: boolean;
+  /** discord asks us for suggestions as the editor types, rather than us
+      listing them up front. only ever on the article picker, whose options
+      are the 138 rows of the index */
+  autocomplete?: boolean;
 };
 
 export type ApplicationCommand = {
@@ -96,12 +100,49 @@ type Subcommand = {
   options: (choices: ChoiceInput[]) => CommandOption[];
 };
 
+/** discord's option type for a string */
+const STRING = 3;
+
+/**
+ * the article picker, which every subcommand about one article takes first.
+ *
+ * autocompleted rather than choice-listed: there are 138 articles and discord
+ * caps a choice list at 25, so the suggestions are computed per keystroke from
+ * the index. the value that comes back is a notion page id
+ */
+const articleOption = (): CommandOption => ({
+  type: STRING,
+  name: "article",
+  description: "Which Article. Start typing a headline or a byline.",
+  options: [],
+  required: true,
+  autocomplete: true,
+});
+
 const SUBCOMMANDS: Subcommand[] = [
   {
     name: "ping",
     description:
       "Check that HareWare is listening, and see who Discord says you are.",
     options: () => [],
+  },
+  {
+    name: "find",
+    description: "Search the Articles tracker.",
+    options: () => [
+      {
+        type: STRING,
+        name: "query",
+        description: "Part of a headline or a byline.",
+        options: [],
+        required: true,
+      },
+    ],
+  },
+  {
+    name: "show",
+    description: "Everything Notion holds about one Article.",
+    options: () => [articleOption()],
   },
 ];
 

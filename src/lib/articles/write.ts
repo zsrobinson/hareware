@@ -18,7 +18,7 @@
 import { plainText } from "~/lib/services/notion/client";
 import { assertProperties, type Schema } from "./choices";
 import { ARTICLE_PROPERTIES } from "./config";
-import { optionName, relationIds, type ArticlePage } from "./sync";
+import { optionName, relationIds, type ArticlePage } from "./page";
 
 /** the key of an Articles property, as `config.ts` names it */
 export type PropertyKey = keyof typeof ARTICLE_PROPERTIES;

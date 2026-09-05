@@ -1,22 +1,21 @@
 /*
-  turning index rows into the dropdown discord shows while an editor types.
+  turning Articles into the dropdown discord shows while an editor types.
 
-  pure functions over rows, because everything that can go wrong here goes
+  pure functions over a list, because everything that can go wrong here goes
   wrong silently: discord refuses the *entire* autocomplete response when one
   choice name is empty or over its limit, and refusing looks exactly like a
-  slow index — an empty dropdown with no explanation. so the rules about
-  length, emptiness and the 25 cap live in one place with tests on them, and
-  the caller does the D1 read and nothing else. see ADR 0009.
+  slow read — an empty dropdown with no explanation. so the rules about length,
+  emptiness and the 25 cap live in one place with tests on them, and the caller
+  does the reading and nothing else. see ADR 0009.
 
-  the matching is here rather than in sql on purpose. the index is 139 rows,
-  which is nothing to read whole, and doing it in javascript buys a real fuzzy
-  match and a ranking that understands recency. it also retired a `like`
-  clause whose escape character was wrong for a day, and which failed by
-  showing an empty dropdown.
+  the matching is here rather than in notion's filter because notion has no
+  fuzzy one: its `contains` finds "ellicott" and not "elicott", "hall ellicott"
+  or "stolen card", which is most of how anybody actually half-remembers a
+  headline.
 */
 
 import { UNTITLED } from "./config";
-import type { ArticleRow } from "~/lib/db/schema";
+import type { Article } from "./page";
 import { MAX_CHOICES } from "~/lib/services/discord/commands";
 
 /** discord rejects the whole response over this, per choice name */
@@ -94,10 +93,7 @@ function fold(value: string): string {
  * noise — an editor picking an article already knows which one they mean, and
  * the card they get answers everything else.
  */
-export function suggestions(
-  rows: ArticleRow[],
-  query = "",
-): AutocompleteChoice[] {
+export function suggestions(rows: Article[], query = ""): AutocompleteChoice[] {
   return rows
     .map((row) => ({ row, score: quality(row.headline, query) }))
     .filter((scored) => scored.score > 0)
@@ -106,7 +102,7 @@ export function suggestions(
     .map(({ row }) => ({ name: nameFor(row), value: row.pageId }));
 }
 
-type Scored = { row: ArticleRow; score: number };
+type Scored = { row: Article; score: number };
 
 /**
  * a better match first, and among comparable matches the most recently edited.
@@ -135,7 +131,7 @@ function byScoreThenRecency(a: Scored, b: Scored): number {
  * gets a word rather than nothing — and the hard cut at the end is what stops
  * a 200-character headline taking the dropdown down with it.
  */
-function nameFor(row: ArticleRow): string {
+function nameFor(row: Article): string {
   const headline = row.headline.trim() || UNTITLED;
 
   return headline.length <= MAX_CHOICE_NAME

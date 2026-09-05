@@ -1,84 +1,89 @@
-import { expect, test } from "vitest";
-import { refreshFromNotion } from "./refresh";
-import { failed, misconfigured, ok, skipped } from "~/lib/result";
+import { afterEach, expect, test, vi } from "vitest";
+import { refreshCommands } from "./refresh";
+import { ARTICLE_PROPERTIES } from "./config";
 
-/*
-  `refreshCommands` reaches D1 and discord, so these exercise
-  `refreshFromNotion`'s reporting through injected steps. what is being tested
-  is the thing that has burned this codebase before: whether a run in which
-  something broke can still describe itself as fine
-*/
-function steps(index = ok("138 rows"), choices = ok("3 properties")) {
-  return {
-    rebuild: () => Promise.resolve(index),
-    refreshChoices: () => Promise.resolve(choices),
+afterEach(() => vi.restoreAllMocks());
+
+const options = (names: string[]) => names.map((name) => ({ name }));
+
+/** a schema notion would return, with every property the code expects */
+function schema(over: Record<string, unknown> = {}) {
+  const properties: Record<string, unknown> = {};
+  for (const [, property] of Object.entries(ARTICLE_PROPERTIES)) {
+    properties[property.name] = { type: property.type };
+  }
+
+  properties[ARTICLE_PROPERTIES.status.name] = {
+    type: "status",
+    status: { options: options(["Backlog", "Approved"]) },
   };
+  properties[ARTICLE_PROPERTIES.imageStatus.name] = {
+    type: "status",
+    status: { options: options(["Not started", "Done"]) },
+  };
+  properties[ARTICLE_PROPERTIES.section.name] = {
+    type: "select",
+    select: { options: options(["News", "Features"]) },
+  };
+
+  return { properties: { ...properties, ...over } };
 }
 
-/* no DB, so `refreshCommands` returns `skipped` without touching discord */
-const env = {} as Env;
-
-test("reports every step, not just the last one", async () => {
-  const result = await refreshFromNotion(env, steps());
-
-  expect(result.outcome).toBe("ok");
-  expect(result.summary).toContain("index ok");
-  expect(result.summary).toContain("choices ok");
-  expect(result.summary).toContain("commands skipped");
-});
-
-test("a skipped step is not a failure", async () => {
-  const result = await refreshFromNotion(
-    env,
-    steps(ok("138 rows"), skipped("nothing to do")),
+const answering = (body: unknown) =>
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify(body))),
   );
 
-  expect(result.outcome).toBe("ok");
+const env = { NOTION_TOKEN: "token" } as Env;
+
+test("says which secret is missing rather than trying", async () => {
+  expect((await refreshCommands({} as Env)).outcome).toBe("misconfigured");
 });
 
-test("fails the whole run when the index did not rebuild", async () => {
-  /*
-    the bug this exists for: a summary reading `ok` while the index is a day
-    stale. the picker still works, so nothing looks wrong — which is exactly
-    the shape ADR 0007 exists to prevent
-  */
-  const result = await refreshFromNotion(env, steps(failed("notion 502")));
+test("a schema notion refused is a failure, not a silent skip", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response("nope", { status: 500 })),
+  );
+
+  expect((await refreshCommands(env)).outcome).toBe("failed");
+});
+
+/*
+  the alarm for notion quietly stopping sharing something. the write paths
+  refuse too, but only when somebody tries to credit a Member — which could be
+  weeks away. this says so the same day
+*/
+test("reports a property notion has stopped sharing", async () => {
+  const without = schema();
+  delete (without.properties as Record<string, unknown>)[
+    ARTICLE_PROPERTIES.author.name
+  ];
+  answering(without);
+
+  const result = await refreshCommands(env);
+
+  expect(result.outcome).toBe("misconfigured");
+  expect(result.summary).toContain(ARTICLE_PROPERTIES.author.name);
+});
+
+/*
+  a read that half worked. registering it publishes a required picker with no
+  choices in it, and an editor opens an empty dropdown
+*/
+test("refuses when one picker came back with no options", async () => {
+  answering(
+    schema({
+      [ARTICLE_PROPERTIES.imageStatus.name]: {
+        type: "status",
+        status: { options: [] },
+      },
+    }),
+  );
+
+  const result = await refreshCommands(env);
 
   expect(result.outcome).toBe("failed");
-  expect(result.summary).toContain("index failed");
-  expect(result.summary).toContain("notion 502");
-});
-
-test("counts a misconfigured step as broken, not as quiet", async () => {
-  const result = await refreshFromNotion(
-    env,
-    steps(ok("138 rows"), misconfigured("NOTION_TOKEN unset")),
-  );
-
-  expect(result.outcome).toBe("failed");
-  expect(result.summary).toContain("NOTION_TOKEN unset");
-});
-
-test("names every broken step when more than one broke", async () => {
-  const result = await refreshFromNotion(
-    env,
-    steps(failed("notion 502"), failed("schema unreadable")),
-  );
-
-  expect(result.summary).toContain("notion 502");
-  expect(result.summary).toContain("schema unreadable");
-});
-
-test("refuses to register a command surface with no picker options", async () => {
-  /*
-    an empty `choice_options` means the pickers never synced, or synced and
-    were refused. registering that would replace working pickers with empty
-    ones, which an editor reads as the command being broken
-  */
-  const result = await refreshFromNotion(
-    { DB: undefined } as unknown as Env,
-    steps(),
-  );
-
-  expect(result.summary).toContain("commands skipped");
+  expect(result.summary).toContain(ARTICLE_PROPERTIES.imageStatus.name);
 });

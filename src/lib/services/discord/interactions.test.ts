@@ -9,7 +9,7 @@ import {
   type MessageResponse,
 } from "./interactions";
 import { EDITORIAL_BOARD_ROLE_ID } from "./config";
-import type { ArticleRow } from "~/lib/db/schema";
+import type { Article } from "~/lib/articles/page";
 import type { CardPage } from "~/lib/articles/card";
 
 const IS_COMPONENTS_V2 = 1 << 15;
@@ -302,7 +302,7 @@ test("a deferred acknowledgement is ephemeral and carries no body", () => {
 /* ---- the read commands --------------------------------------------------- */
 
 /** an index row, with only what a test cares about spelled out */
-const row = (over: Partial<ArticleRow> = {}): ArticleRow => ({
+const row = (over: Partial<Article> = {}): Article => ({
   pageId: "page-1",
   headline: "Terps lose again",
   section: "News",
@@ -311,7 +311,6 @@ const row = (over: Partial<ArticleRow> = {}): ArticleRow => ({
   authorByline: "Zachary",
   publicationDate: null,
   lastEdited: "2026-09-01T00:00:00.000Z",
-  syncedAt: 0,
   ...over,
 });
 
@@ -326,16 +325,16 @@ const notionPage = (): CardPage => ({
 });
 
 const deps = (over: InteractionDeps = {}): InteractionDeps => ({
-  index: () => Promise.resolve([row()]),
+  articles: () => Promise.resolve([row()]),
   page: () => Promise.resolve(notionPage()),
   ...over,
 });
 
 /*
-  ADR 0009: the index serves autocomplete and nothing else, so what an editor
+  ADR 0009: what the picker offers is a suggestion, so what an editor
   is shown for one Article is re-read from notion
 */
-test("/article show reads the page live rather than from the index", async () => {
+test("/article show reads the page live rather than from the picker", async () => {
   let asked: string | undefined;
   const reply = asMessage(
     await handleInteraction(
@@ -345,8 +344,8 @@ test("/article show reads the page live rather than from the index", async () =>
           asked = id;
           return Promise.resolve(notionPage());
         },
-        index: () => {
-          throw new Error("the index must not answer /article show");
+        articles: () => {
+          throw new Error("the picker must not answer /article show");
         },
       }),
     ),
@@ -433,7 +432,7 @@ test("autocomplete matches what was typed, against what it read", async () => {
     await handleInteraction(
       typing("looney"),
       deps({
-        index: () =>
+        articles: () =>
           Promise.resolve([
             row({ pageId: "hit", headline: "Looney's patrons banned" }),
             row({ pageId: "miss", headline: "Terps lose again" }),
@@ -455,8 +454,8 @@ test("autocomplete tells somebody off the board nothing", async () => {
     await handleInteraction(
       typing("terps", ["some-other-role"]),
       deps({
-        index: () => {
-          throw new Error("must not read the index for somebody off the board");
+        articles: () => {
+          throw new Error("must not read articles for somebody off the board");
         },
       }),
     ),
@@ -496,7 +495,7 @@ test("autocomplete refuses a payload with no member on it", async () => {
 test("an index that never answers becomes an empty dropdown", async () => {
   const reply = await handleInteraction(
     typing("terps"),
-    deps({ index: () => new Promise<ArticleRow[]>(() => {}), timeoutMs: 1 }),
+    deps({ articles: () => new Promise<Article[]>(() => {}), timeoutMs: 1 }),
   );
 
   expect(reply!.type).toBe(AUTOCOMPLETE_RESULT);
@@ -506,7 +505,7 @@ test("an index that never answers becomes an empty dropdown", async () => {
 test("an index that throws becomes an empty dropdown", async () => {
   const reply = await handleInteraction(
     typing("terps"),
-    deps({ index: () => Promise.reject(new Error("d1 is unreachable")) }),
+    deps({ articles: () => Promise.reject(new Error("d1 is unreachable")) }),
   );
 
   expect(reply!.type).toBe(AUTOCOMPLETE_RESULT);
@@ -836,55 +835,105 @@ test("a new article with no headline is refused before anything is written", asy
   "immediately": a webhook took nine seconds once and sixty-five the next time,
   so an edit made in notion sat behind whichever it happened to be
 */
-test("autocomplete answers from notion when notion is quick enough", async () => {
+
+/*
+  the picker holds the hundred most recently edited Articles, which is nearly
+  always what somebody is reaching for. when it is not — a piece from years ago
+  — notion is asked for a substring match rather than the editor being told the
+  Article does not exist
+*/
+test("autocomplete falls back to a search when nothing recent matches", async () => {
   const choices = asChoices(
     await handleInteraction(
-      typing("fresh"),
+      typing("ellicott"),
       deps({
-        live: () =>
+        articles: () =>
+          Promise.resolve([row({ headline: "Terps lose again" })]),
+        search: () =>
           Promise.resolve([
-            row({ pageId: "live", headline: "fresh headline" }),
-          ]),
-        index: () =>
-          Promise.resolve([
-            row({ pageId: "cached", headline: "fresh headline" }),
+            row({ pageId: "old", headline: "Ellicott Hall Stolen" }),
           ]),
       }),
     ),
   );
 
-  expect(choices.map((choice) => choice.value)).toEqual(["live"]);
+  expect(choices.map((choice) => choice.value)).toEqual(["old"]);
 });
 
-test("a slow notion falls back to the index rather than an empty dropdown", async () => {
-  /*
-    a recency-sorted read measured ~0.7s with a 2.0s outlier against discord's
-    hard three seconds. the outlier has to lose to the index, not to nothing
-  */
-  const choices = asChoices(
-    await handleInteraction(
-      typing("terps"),
-      deps({
-        live: () => new Promise<ArticleRow[]>(() => {}),
-        liveMs: 1,
-        index: () => Promise.resolve([row({ pageId: "cached" })]),
-      }),
-    ),
+test("a recent match never costs a search", async () => {
+  let searched = false;
+
+  await handleInteraction(
+    typing("terps"),
+    deps({
+      articles: () => Promise.resolve([row({ headline: "Terps lose again" })]),
+      search: () => {
+        searched = true;
+        return Promise.resolve([]);
+      },
+    }),
   );
 
-  expect(choices.map((choice) => choice.value)).toEqual(["cached"]);
+  expect(searched).toBe(false);
 });
 
-test("notion refusing outright falls back too", async () => {
-  const choices = asChoices(
-    await handleInteraction(
-      typing("terps"),
-      deps({
-        live: () => Promise.reject(new Error("notion returned 429")),
-        index: () => Promise.resolve([row({ pageId: "cached" })]),
-      }),
-    ),
+test("a one-character query is not searched for", async () => {
+  /* a single letter is a substring of most of the corpus, so notion would
+     answer with everything and the dropdown would be noise */
+  let searched = false;
+
+  await handleInteraction(
+    typing("z"),
+    deps({
+      articles: () => Promise.resolve([]),
+      search: () => {
+        searched = true;
+        return Promise.resolve([]);
+      },
+    }),
   );
 
-  expect(choices.map((choice) => choice.value)).toEqual(["cached"]);
+  expect(searched).toBe(false);
+});
+
+/*
+  the two reads used to get the full budget each, so a throttling notion spent
+  two seconds on the recent read and two more on the search — four against
+  discord's hard three, which reaches the editor as "HareWare didn't respond in
+  time" on every keystroke
+*/
+test("the whole answer shares one deadline, not one per read", async () => {
+  const started = Date.now();
+
+  await handleInteraction(
+    typing("ellicott"),
+    deps({
+      articles: () => new Promise<Article[]>(() => {}),
+      search: () => new Promise<Article[]>(() => {}),
+      timeoutMs: 60,
+    }),
+  );
+
+  /* generous, because what is asserted is "one budget, not two" rather than
+     any particular millisecond */
+  expect(Date.now() - started).toBeLessThan(150);
+});
+
+test("a read that failed does not spend a request on the search", async () => {
+  /* without this, a timed-out read arrives as "no choices" and we ask notion
+     again at the exact moment notion is refusing us */
+  let searched = false;
+
+  await handleInteraction(
+    typing("ellicott"),
+    deps({
+      articles: () => Promise.reject(new Error("notion returned 429")),
+      search: () => {
+        searched = true;
+        return Promise.resolve([]);
+      },
+    }),
+  );
+
+  expect(searched).toBe(false);
 });

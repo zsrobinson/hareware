@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { runEdit, type EditIO, type EditRequest } from "./edit";
 import type { Schema } from "./choices";
-import type { ArticlePage } from "./sync";
+import type { ArticlePage } from "./page";
 import type { Result } from "~/lib/result";
 import type { MemberMatch } from "./member";
 
@@ -50,7 +50,6 @@ const actor = { id: "111", name: "Zachary Robinson" };
 type Recorded = {
   patched: { pageId: string; body: unknown }[];
   created: unknown[];
-  indexed: ArticlePage[];
   linked: { pageId: string; patch: unknown }[];
   made: { name: string; discordId: string }[];
   logged: { result: Result; actor: string }[];
@@ -61,7 +60,6 @@ function spy(over: Partial<EditIO> = {}) {
   const seen: Recorded = {
     patched: [],
     created: [],
-    indexed: [],
     linked: [],
     made: [],
     logged: [],
@@ -85,9 +83,6 @@ function spy(over: Partial<EditIO> = {}) {
     addMember: async (name, discordId) => {
       seen.made.push({ name, discordId });
       return { pageId: "member-new", name, discordId };
-    },
-    index: async (page) => {
-      seen.indexed.push(page);
     },
     log: async (result, who) => {
       seen.logged.push({ result, actor: who.id });
@@ -132,10 +127,6 @@ test("a property change patches notion, indexes what came back, and logs it", as
   expect(said).toContain('"Backlog"');
   expect(said).toContain('"Approved"');
 
-  // the index is written from the page the PATCH answered with, not the read
-  expect(seen.indexed).toHaveLength(1);
-  expect(seen.indexed[0]!.last_edited_time).toBe("2026-09-04T10:09:00.000Z");
-
   expect(seen.logged).toEqual([
     { result: { outcome: "ok", summary: said }, actor: "111" },
   ]);
@@ -151,7 +142,6 @@ test("notion refusing a write is words rather than a thrown promise", async () =
   const said = await runEdit(io, setStatus, actor);
 
   expect(said).toContain("409");
-  expect(seen.indexed).toEqual([]);
   expect(seen.logged[0]!.result.outcome).toBe("failed");
 });
 
@@ -198,7 +188,6 @@ test("a new article is created at the schema's own spelling of approved", async 
     },
   ]);
   expect(said).toContain("Created **Looney's line**");
-  expect(seen.indexed).toHaveLength(1);
 });
 
 test("a renamed approved option is said out loud rather than sent to notion", async () => {

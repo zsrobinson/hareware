@@ -4,9 +4,7 @@ import { editorialBoardMember } from "~/lib/admin";
 import { easternNow } from "~/lib/eastern";
 import { ALL, runAutomations, type Which } from "~/lib/automations/run";
 import { automation } from "~/lib/automations/registry";
-import { refreshChoices } from "~/lib/articles/choices";
-import { refreshFromNotion } from "~/lib/articles/refresh";
-import { rebuild } from "~/lib/articles/sync";
+import { refreshCommands } from "~/lib/articles/refresh";
 
 export const prerender = false;
 
@@ -74,7 +72,7 @@ export const POST: APIRoute = async ({ request }) => {
     without touching the reminders rather than doing both
   */
   if (query.get("sync")) {
-    const sync = await refreshFromNotion(env, { rebuild, refreshChoices });
+    const sync = await refreshCommands(env);
 
     return Response.json(
       { sync },

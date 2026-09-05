@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { HANDLED } from "./interactions";
-import { buildCommands, choicesFor, hashCommands } from "./commands";
+import { buildCommands, choicesFor } from "./commands";
 
 const article = () => buildCommands([])[0]!;
 
@@ -102,47 +102,6 @@ test("a property notion did not send has no choices", () => {
   expect(choicesFor([], "Article Status")).toEqual([]);
 });
 
-test("the same payload always hashes the same", async () => {
-  expect(await hashCommands(buildCommands([]))).toBe(
-    await hashCommands(buildCommands([])),
-  );
-});
-
-/*
-  the hash exists to skip a re-registration, and discord allows 200 guild
-  registrations a day. a hash that changed with key order would burn them on
-  every tick; one that ignored a real change would leave the stale surface up
-*/
-test("key order does not change the hash", async () => {
-  const one = [{ name: "article", description: "a", options: [] }];
-  const other = [{ description: "a", options: [], name: "article" }];
-
-  expect(await hashCommands(one as never)).toBe(
-    await hashCommands(other as never),
-  );
-});
-
-test("a changed choice changes the hash", async () => {
-  const before = await hashCommands([
-    { name: "article", description: "a", options: [], x: ["Drafting"] },
-  ] as never);
-  const after = await hashCommands([
-    { name: "article", description: "a", options: [], x: ["Published"] },
-  ] as never);
-
-  expect(after).not.toBe(before);
-});
-
-test("the hash is a sha-256 hex digest", async () => {
-  expect(await hashCommands(buildCommands([]))).toMatch(/^[0-9a-f]{64}$/);
-});
-
-/*
-  the drift this exists for: `find` and `show` were implemented, tested and
-  merged into the handler while `SUBCOMMANDS` here still listed only `ping`, so
-  discord never offered them. nothing failed — the commands simply did not
-  exist, and no test looked at both halves at once
-*/
 test("every subcommand the handler answers to is registered", () => {
   const registered = buildCommands([])[0]!.options!.map((o) => o.name);
 

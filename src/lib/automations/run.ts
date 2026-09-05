@@ -1,8 +1,6 @@
 import { easternNow, type EasternNow } from "~/lib/eastern";
 import { record } from "~/lib/log";
-import { refreshChoices } from "~/lib/articles/choices";
-import { refreshFromNotion } from "~/lib/articles/refresh";
-import { rebuild } from "~/lib/articles/sync";
+import { refreshCommands } from "~/lib/articles/refresh";
 import { reportFailure } from "./alert";
 import {
   AUTOMATIONS,
@@ -81,10 +79,10 @@ export async function runScheduled(controller: ScheduledController, env: Env) {
 
     *after* because it reads notion and writes d1 with no deadline of its own,
     and at 8am eastern it shares a tick with the reminders. a slow notion
-    delaying the index costs a picker an hour of freshness; the same delay in
+    delaying the command surface costs a picker an hour of new options; the same delay in
     front of the reminders costs the club its morning ping
   */
-  await syncWithNotion(env);
+  await refreshTheCommandSurface(env);
 }
 
 /**
@@ -183,28 +181,28 @@ async function recordRun(
  * the log exists to make legible — while a silent failure here is exactly what
  * ADR 0007 says must never look like nothing happened
  */
-async function syncWithNotion(env: Env) {
+async function refreshTheCommandSurface(env: Env) {
   try {
-    const result = await refreshFromNotion(env, { rebuild, refreshChoices });
+    const result = await refreshCommands(env);
 
     if (result.outcome === "ok" || result.outcome === "skipped") return;
 
     await record(env.DB, {
       source: "cron",
-      action: "notion-sync",
+      action: "command-surface",
       outcome: result.outcome,
       summary: result.summary,
     });
   } catch (error) {
     /* this runs after the reminders and must never disturb them: a stale picker
        is a better morning than a stale picker and no meeting reminder */
-    console.error("[articles] sync failed", error);
+    console.error("[articles] command surface refresh failed", error);
 
     await record(env.DB, {
       source: "cron",
-      action: "notion-sync",
+      action: "command-surface",
       outcome: "failed",
-      summary: `sync threw: ${String(error)}`,
+      summary: `command surface refresh threw: ${String(error)}`,
     });
   }
 }

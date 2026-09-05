@@ -40,8 +40,7 @@ import {
   type Member,
   type MemberMatch,
 } from "./member";
-import { upsert } from "./store";
-import { relationIds, toEntry, type ArticlePage } from "./sync";
+import { relationIds, type ArticlePage } from "./page";
 import {
   plan,
   planCreate,
@@ -101,8 +100,6 @@ export type EditIO = {
   members: (discordId: string, displayName: string) => Promise<MemberMatch>;
   link: (memberPageId: string, patch: LinkPatch) => Promise<void>;
   addMember: (name: string, discordId: string) => Promise<Member>;
-  /** the write-through, authoritative — the page came back from our own PATCH */
-  index: (page: ArticlePage) => Promise<void>;
   log: (result: Result, actor: Actor) => Promise<void>;
 };
 
@@ -189,8 +186,7 @@ async function create(
   });
   if (planned.status === "refused") return failed(planned.reason);
 
-  const page = await io.create({ properties: planned.plan.properties });
-  await io.index(page);
+  await io.create({ properties: planned.plan.properties });
 
   const noted =
     status === null
@@ -202,7 +198,7 @@ async function create(
   );
 }
 
-/** the shared tail of a change: send it, index the answer, say what it did */
+/** the shared tail of a change: send it, and say what it did */
 async function apply(
   io: EditIO,
   page: ArticlePage,
@@ -210,16 +206,7 @@ async function apply(
 ): Promise<Result> {
   if (planned.status === "refused") return failed(planned.reason);
 
-  const updated = await io.patch(page.id, {
-    properties: planned.plan.properties,
-  });
-
-  /*
-    the page notion answered the PATCH with, not the one we read: it is the
-    newest state that exists, so the index row and the reply are built from one
-    object in one invocation and cost no extra request
-  */
-  await io.index(updated);
+  await io.patch(page.id, { properties: planned.plan.properties });
 
   return ok(planned.plan.sentence);
 }
@@ -427,13 +414,6 @@ export function notionIO(env: Env): EditIO {
     link: (pageId, patch) => linkMember(env, pageId, patch),
 
     addMember: (name, discordId) => createMember(env, name, discordId),
-
-    /* the index is a cache and never a reason to fail a write that landed —
-       `upsert` swallows its own failures, and this drops the outcome */
-    index: async (page) => {
-      if (!env.DB) return;
-      await upsert(env.DB, toEntry(page), { authoritative: true });
-    },
 
     log: (result, actor) =>
       record(env.DB, {

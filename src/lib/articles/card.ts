@@ -15,7 +15,7 @@
 
 import { notion } from "~/lib/services/notion/client";
 import { ARTICLE_PROPERTIES, UNTITLED } from "./config";
-import { optionName, type ArticlePage } from "./sync";
+import { optionName, type ArticlePage } from "./page";
 
 /**
  * the page a card renders.

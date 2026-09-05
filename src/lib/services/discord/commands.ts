@@ -48,7 +48,7 @@ export type CommandOption = {
   required?: boolean;
   /** discord asks us for suggestions as the editor types, rather than us
       listing them up front. only ever on the article picker, whose options
-      are the 138 rows of the index */
+      are whatever notion currently holds */
   autocomplete?: boolean;
 };
 
@@ -122,7 +122,7 @@ const USER = 6;
  *
  * autocompleted rather than choice-listed: there are 138 articles and discord
  * caps a choice list at 25, so the suggestions are computed per keystroke from
- * the index. the value that comes back is a notion page id
+ * notion. the value that comes back is a notion page id
  */
 const articleOption = (): CommandOption => ({
   type: STRING,
@@ -306,40 +306,4 @@ export function buildCommands(choices: ChoiceInput[]): CommandPayload {
       })),
     },
   ];
-}
-
-/**
- * a stable digest of the payload, so an unchanged schema registers nothing.
- *
- * discord allows 200 guild command registrations a day and the hourly cron
- * re-registers regardless of whether anything changed, so this is what keeps a
- * quiet week from spending the budget. key order is normalised because
- * `JSON.stringify` preserves insertion order — a payload rebuilt with two
- * fields swapped is the same command surface and must hash the same.
- *
- * web crypto rather than node's `crypto`: this runs on workers
- */
-export async function hashCommands(payload: CommandPayload): Promise<string> {
-  const bytes = new TextEncoder().encode(stable(payload));
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-/** json with every object's keys sorted, arrays left in their order */
-function stable(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
-
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, item]) => item !== undefined)
-      .sort(([a], [b]) => (a < b ? -1 : 1))
-      .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`);
-
-    return `{${entries.join(",")}}`;
-  }
-
-  return JSON.stringify(value) ?? "null";
 }

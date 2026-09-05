@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 import { record } from "~/lib/log";
 import { DISCORD_PUBLIC_KEY } from "~/lib/services/discord/config";
 import { handleInteraction } from "~/lib/services/discord/interactions";
-import { search } from "~/lib/articles/store";
+import { recent } from "~/lib/articles/store";
 import { readArticle } from "~/lib/articles/card";
 import { verifyInteraction } from "~/lib/services/discord/verify";
 
@@ -43,9 +43,7 @@ export const POST: APIRoute = async ({ request }) => {
       it — including the ones that fail — is reachable from a test without a
       d1 binding or a notion token
     */
-    search: env.DB
-      ? (query, limit) => search(env.DB!, query, limit)
-      : undefined,
+    index: env.DB ? () => recent(env.DB!) : undefined,
     page: env.NOTION_TOKEN
       ? (pageId) => readArticle(pageId, env.NOTION_TOKEN!)
       : undefined,

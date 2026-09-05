@@ -127,19 +127,6 @@ const SUBCOMMANDS: Subcommand[] = [
     options: () => [],
   },
   {
-    name: "find",
-    description: "Search the Articles tracker.",
-    options: () => [
-      {
-        type: STRING,
-        name: "query",
-        description: "Part of a headline or a byline.",
-        options: [],
-        required: true,
-      },
-    ],
-  },
-  {
     name: "show",
     description: "Everything Notion holds about one Article.",
     options: () => [articleOption()],

@@ -1,149 +1,157 @@
 import { expect, test } from "vitest";
-import { choicesFor, MAX_CHOICE_NAME, mine } from "./pick";
+import { choicesFor, MAX_CHOICE_NAME, quality } from "./pick";
 import type { ArticleRow } from "~/lib/db/schema";
 
-/** an index row, with only the fields a test cares about spelled out */
 const row = (over: Partial<ArticleRow> = {}): ArticleRow => ({
   pageId: "page-1",
-  headline: "Terps lose again",
+  headline: "Terps lose again, somehow",
   section: "News",
   status: "Written",
-  imageStatus: "Not Started",
-  authorByline: "Sam R.",
+  imageStatus: "Not started",
+  authorByline: "Sam Rivera",
   publicationDate: null,
-  lastEdited: "2026-09-01T10:00:00.000Z",
+  lastEdited: "2026-09-01T12:00:00.000Z",
   syncedAt: 0,
   ...over,
 });
 
-test("a choice reads status first, then Section, Headline and Byline", () => {
-  expect(choicesFor([row()])[0].name).toBe(
-    'Written · News · "Terps lose again" — Sam R.',
-  );
+/* ---- what an editor sees ------------------------------------------------ */
+
+test("shows the headline and nothing else", () => {
+  /*
+    the status, section and byline used to be crammed in front of it. an editor
+    picking an article already knows which one they mean, and the card they get
+    back answers everything else
+  */
+  const [choice] = choicesFor([row()]);
+
+  expect(choice!.name).toBe("Terps lose again, somehow");
 });
 
-/*
-  headlines change all the way through copy edit, and a value discord sends
-  back has to still identify the same article an hour later
-*/
-test("the value is the notion page id, never the headline", () => {
-  expect(choicesFor([row({ pageId: "abc-123" })])[0].value).toBe("abc-123");
+test("the value is the page id, never the headline", () => {
+  /* a headline changes throughout copy edit, so the label somebody scanned and
+     the article they picked cannot be identified by the same string */
+  const [choice] = choicesFor([row({ pageId: "3d1be415" })]);
+
+  expect(choice!.value).toBe("3d1be415");
 });
 
-test("drops the parts an article does not have yet", () => {
-  const only = row({ section: null, status: null, authorByline: null });
+test("an untitled row still gets a name", () => {
+  /* discord rejects the entire response — every choice, not just this one —
+     when a name is empty, which reaches the editor as a blank dropdown */
+  const [choice] = choicesFor([row({ headline: "   " })]);
 
-  expect(choicesFor([only])[0].name).toBe('"Terps lose again"');
+  expect(choice!.name).toBe("Untitled");
 });
 
-/*
-  ADR 0009: a published article still appears — looking one up is a real use —
-  but the work in front of an editor is the work that is not finished
-*/
-test("ranks unpublished articles ahead of published ones", () => {
-  const choices = choicesFor([
-    row({ pageId: "done", status: "Published", lastEdited: "2026-09-09" }),
-    row({ pageId: "live", status: "Written", lastEdited: "2026-09-02" }),
-  ]);
+test("a very long headline is cut rather than taking the dropdown down", () => {
+  const [choice] = choicesFor([row({ headline: "x".repeat(300) })]);
 
-  expect(choices.map((choice) => choice.value)).toEqual(["live", "done"]);
+  expect(choice!.name.length).toBeLessThanOrEqual(MAX_CHOICE_NAME);
+  expect(choice!.name.endsWith("…")).toBe(true);
 });
 
-test("orders by most recently edited within each group", () => {
-  const choices = choicesFor([
-    row({ pageId: "old", lastEdited: "2026-09-01T00:00:00.000Z" }),
-    row({ pageId: "new", lastEdited: "2026-09-08T00:00:00.000Z" }),
-  ]);
-
-  expect(choices.map((choice) => choice.value)).toEqual(["new", "old"]);
-});
-
-test("offers at most the 25 choices discord accepts", () => {
-  const many = Array.from({ length: 40 }, (_, index) =>
-    row({ pageId: `page-${index}` }),
+test("never offers a 26th choice", () => {
+  const many = Array.from({ length: 40 }, (_, i) =>
+    row({ pageId: `page-${i}`, headline: `Article ${i}` }),
   );
 
   expect(choicesFor(many)).toHaveLength(25);
 });
 
-/*
-  discord rejects the entire response when any one name is over 100 characters
-  or empty, so the whole dropdown disappears rather than the offending row
-*/
-test("keeps every name inside discord's 100 character limit", () => {
-  const long = row({ headline: "T".repeat(300), authorByline: "S".repeat(80) });
+/* ---- matching ----------------------------------------------------------- */
 
-  expect(choicesFor([long])[0].name.length).toBeLessThanOrEqual(
-    MAX_CHOICE_NAME,
-  );
+test("finds a headline by a word inside it", () => {
+  expect(quality("Local perv excited to leer", "leer")).toBeGreaterThan(0);
 });
 
-test("truncates the headline rather than the status prefix", () => {
-  const name = choicesFor([row({ headline: "T".repeat(300) })])[0].name;
-
-  expect(name.startsWith("Written · News · ")).toBe(true);
-  expect(name).toContain("…");
+test("ignores case, accents and punctuation", () => {
+  /* headlines carry curly quotes and em dashes nobody types into a picker */
+  expect(quality("“Terps’ loss — again”", "terps loss")).toBeGreaterThan(0);
+  expect(quality("Café society", "cafe")).toBeGreaterThan(0);
 });
 
-/* the index substitutes "Untitled", but an empty name takes the whole response
-   down with it, so nothing here relies on that alone */
-test("never emits an empty name, even for a row with nothing on it", () => {
-  const bare = row({
-    headline: "",
-    section: null,
-    status: null,
-    authorByline: null,
-  });
-
-  expect(choicesFor([bare])[0].name.length).toBeGreaterThan(0);
+test("forgives a dropped letter", () => {
+  // the whole of the fuzziness: a subsequence, in order
+  expect(quality("Ellicott Hall Stolen", "elicott")).toBeGreaterThan(0);
 });
 
-test("still names a row whose prefix alone fills the limit", () => {
-  const huge = row({
-    status: "S".repeat(90),
-    section: "E".repeat(90),
-    headline: "Terps lose again",
-  });
-  const name = choicesFor([huge])[0].name;
-
-  expect(name.length).toBeGreaterThan(0);
-  expect(name.length).toBeLessThanOrEqual(MAX_CHOICE_NAME);
+test("refuses letters that are not there in order", () => {
+  expect(quality("Terps lose again", "zebra")).toBe(0);
+  expect(quality("Terps lose again", "again terps")).toBe(0);
 });
 
-test("an empty index offers nothing rather than failing", () => {
-  expect(choicesFor([])).toEqual([]);
+test("an empty query matches everything", () => {
+  /* a picker that has only just opened is not a search, and answering it with
+     nothing is how this looked broken for an evening */
+  expect(quality("anything at all", "")).toBeGreaterThan(0);
+  expect(choicesFor([row(), row({ pageId: "b" })], "")).toHaveLength(2);
 });
 
-/* ---- whose articles ------------------------------------------------------ */
+test("ranks a better match above a worse one", () => {
+  const start = quality("Looney's patrons banned", "looney");
+  const word = quality("McDonalds to ban Looney's patrons", "looney");
+  const loose = quality("Long or nearly every word", "looney");
 
-test("mine keeps the rows bylined to the person asking", () => {
+  expect(start).toBeGreaterThan(word);
+  expect(word).toBeGreaterThan(loose);
+});
+
+/* ---- ranking ------------------------------------------------------------ */
+
+test("among comparable matches, the most recently edited comes first", () => {
+  /*
+    the ranking the club actually needs: a command is nearly always run against
+    something touched this week, so recency decides between equals
+  */
   const rows = [
-    row({ pageId: "theirs", authorByline: "Ada L." }),
-    row({ pageId: "ours", authorByline: "Sam R." }),
+    row({
+      pageId: "old",
+      headline: "Terps one",
+      lastEdited: "2025-01-01T00:00:00.000Z",
+    }),
+    row({
+      pageId: "new",
+      headline: "Terps two",
+      lastEdited: "2026-09-04T00:00:00.000Z",
+    }),
   ];
 
-  expect(mine(rows, "Sam R.").map((r) => r.pageId)).toEqual(["ours"]);
+  expect(choicesFor(rows, "terps").map((c) => c.value)).toEqual(["new", "old"]);
 });
 
-test("mine matches a byline loosely, since it is typed by hand", () => {
-  const rows = [row({ pageId: "ours", authorByline: "  sam r.  " })];
+test("an empty query is the recently-edited list, in order", () => {
+  const rows = [
+    row({ pageId: "a", lastEdited: "2025-05-05T00:00:00.000Z" }),
+    row({ pageId: "c", lastEdited: "2026-09-04T00:00:00.000Z" }),
+    row({ pageId: "b", lastEdited: "2026-01-01T00:00:00.000Z" }),
+  ];
 
-  expect(mine(rows, "Sam R.")).toHaveLength(1);
+  expect(choicesFor(rows, "").map((c) => c.value)).toEqual(["c", "b", "a"]);
 });
 
-/*
-  a byline is the printed name and need not be the writer's, so a miss means
-  "we cannot tell", not "this editor has no articles" — falling back to
-  everything keeps an empty dropdown from being the answer
-*/
-test("mine falls back to every row when nothing is bylined to them", () => {
-  const rows = [row({ pageId: "a" }), row({ pageId: "b" })];
+test("a stronger match still beats a more recent weak one", () => {
+  const rows = [
+    row({
+      pageId: "recent-weak",
+      headline: "Lots of odd, nearly empty yelling",
+      lastEdited: "2026-09-04T00:00:00.000Z",
+    }),
+    row({
+      pageId: "old-strong",
+      headline: "Looney's patrons banned",
+      lastEdited: "2025-01-01T00:00:00.000Z",
+    }),
+  ];
 
-  expect(mine(rows, "Nobody At All")).toHaveLength(2);
+  expect(choicesFor(rows, "looney")[0]!.value).toBe("old-strong");
 });
 
-test("mine falls back to every row when we do not know who is asking", () => {
-  const rows = [row({ pageId: "a" })];
+test("drops rows that do not match at all", () => {
+  const rows = [
+    row({ pageId: "hit" }),
+    row({ pageId: "miss", headline: "Zzz" }),
+  ];
 
-  expect(mine(rows, undefined)).toHaveLength(1);
+  expect(choicesFor(rows, "terps").map((c) => c.value)).toEqual(["hit"]);
 });

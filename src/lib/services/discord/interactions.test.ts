@@ -325,33 +325,9 @@ const notionPage = (): CardPage => ({
 });
 
 const deps = (over: InteractionDeps = {}): InteractionDeps => ({
-  search: () => Promise.resolve([row()]),
+  index: () => Promise.resolve([row()]),
   page: () => Promise.resolve(notionPage()),
   ...over,
-});
-
-test("/article find lists the Articles the index matched", async () => {
-  const reply = asMessage(
-    await handleInteraction(
-      command("find", [{ name: "query", value: "terps" }]),
-      deps(),
-    ),
-  );
-
-  expect(reply.type).toBe(4);
-  expect(text(reply)).toContain("Terps lose again");
-  expect(reply.data!.flags).toBe(EPHEMERAL | IS_COMPONENTS_V2);
-});
-
-test("/article find says so when nothing matched", async () => {
-  const reply = asMessage(
-    await handleInteraction(
-      command("find", [{ name: "query", value: "nothing" }]),
-      deps({ search: () => Promise.resolve([]) }),
-    ),
-  );
-
-  expect(text(reply)).toContain("No Article");
 });
 
 /*
@@ -368,7 +344,7 @@ test("/article show reads the page live rather than from the index", async () =>
           asked = id;
           return Promise.resolve(notionPage());
         },
-        search: () => {
+        index: () => {
           throw new Error("the index must not answer /article show");
         },
       }),
@@ -442,49 +418,30 @@ test("autocomplete answers with choices, not a message", async () => {
   const reply = await handleInteraction(typing("terps"), deps());
 
   expect(reply!.type).toBe(AUTOCOMPLETE_RESULT);
+  /* the headline and nothing else: the status and byline that used to be
+     crammed in front of it were noise an editor already knows */
   expect(asChoices(reply)).toEqual([
-    { name: 'Written · News · "Terps lose again" — Zachary', value: "page-1" },
+    { name: "Terps lose again", value: "page-1" },
   ]);
 });
 
-test("autocomplete searches for what was typed", async () => {
-  let asked: string | undefined;
-  await handleInteraction(
-    typing("terps"),
-    deps({
-      search: (query) => {
-        asked = query;
-        return Promise.resolve([]);
-      },
-    }),
-  );
-
-  expect(asked).toBe("terps");
-});
-
-/*
-  two characters match most of the 138 rows, so a short query is answered with
-  the editor's own recent work instead of a wildcard search
-*/
-test("a query under two characters is not searched for", async () => {
-  const queries: string[] = [];
+test("autocomplete matches what was typed, against what it read", async () => {
+  /* the query never reaches d1 any more — the whole index comes back and the
+     ranking happens here, which is what buys a fuzzy match */
   const choices = asChoices(
     await handleInteraction(
-      typing("t"),
+      typing("looney"),
       deps({
-        search: (query) => {
-          queries.push(query);
-          return Promise.resolve([
-            row({ pageId: "theirs", authorByline: "Ada L." }),
-            row({ pageId: "ours", authorByline: "Zachary" }),
-          ]);
-        },
+        index: () =>
+          Promise.resolve([
+            row({ pageId: "hit", headline: "Looney's patrons banned" }),
+            row({ pageId: "miss", headline: "Terps lose again" }),
+          ]),
       }),
     ),
   );
 
-  expect(queries).toEqual([""]);
-  expect(choices.map((choice) => choice.value)).toEqual(["ours"]);
+  expect(choices.map((choice) => choice.value)).toEqual(["hit"]);
 });
 
 /*
@@ -497,7 +454,7 @@ test("autocomplete tells somebody off the board nothing", async () => {
     await handleInteraction(
       typing("terps", ["some-other-role"]),
       deps({
-        search: () => {
+        index: () => {
           throw new Error("must not read the index for somebody off the board");
         },
       }),
@@ -538,7 +495,7 @@ test("autocomplete refuses a payload with no member on it", async () => {
 test("an index that never answers becomes an empty dropdown", async () => {
   const reply = await handleInteraction(
     typing("terps"),
-    deps({ search: () => new Promise<ArticleRow[]>(() => {}), timeoutMs: 1 }),
+    deps({ index: () => new Promise<ArticleRow[]>(() => {}), timeoutMs: 1 }),
   );
 
   expect(reply!.type).toBe(AUTOCOMPLETE_RESULT);
@@ -548,7 +505,7 @@ test("an index that never answers becomes an empty dropdown", async () => {
 test("an index that throws becomes an empty dropdown", async () => {
   const reply = await handleInteraction(
     typing("terps"),
-    deps({ search: () => Promise.reject(new Error("d1 is unreachable")) }),
+    deps({ index: () => Promise.reject(new Error("d1 is unreachable")) }),
   );
 
   expect(reply!.type).toBe(AUTOCOMPLETE_RESULT);

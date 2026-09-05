@@ -20,12 +20,7 @@
 */
 
 import { card, type CardPage } from "~/lib/articles/card";
-import {
-  choicesFor,
-  mine,
-  MAX_CHOICES,
-  type AutocompleteChoice,
-} from "~/lib/articles/pick";
+import { choicesFor, type AutocompleteChoice } from "~/lib/articles/pick";
 import type { ArticleRow } from "~/lib/db/schema";
 import { EDITORIAL_BOARD_ROLE_ID } from "./config";
 
@@ -80,11 +75,6 @@ const AUTOCOMPLETE_BUDGET_MS = 2000;
  * read and an editor's own articles are not necessarily the 25 most recently
  * edited in the club
  */
-const SHORT_QUERY_ROWS = 100;
-
-/** below this a search matches most of the index, so it is not worth running */
-const MIN_QUERY = 2;
-
 export const POSTED_PREFIX = "posted:";
 
 /** a custom_id must be unique within a message and at most 100 characters */
@@ -148,8 +138,8 @@ type Interaction = {
  * below — including the ones that fail — be exercised without either
  */
 export type InteractionDeps = {
-  /** headlines matching a substring, most recently edited first */
-  search?: (query: string, limit?: number) => Promise<ArticleRow[]>;
+  /** the index, most recently edited first — the matching happens in `pick` */
+  index?: () => Promise<ArticleRow[]>;
   /** one Article, read live from notion — never from the index, per ADR 0009 */
   page?: (pageId: string) => Promise<CardPage>;
   /** overridable so a test can prove the deadline exists without waiting */
@@ -280,10 +270,10 @@ function optionOf(
  * exported so a test can hold it against the registration: a subcommand
  * implemented here but not registered is invisible, and one registered but not
  * implemented answers "HareWare does not know that command". both are silent
- * until somebody tries it — which is how `find` and `show` shipped working and
+ * until somebody tries it — which is how `show` shipped working and
  * unreachable
  */
-export const HANDLED = ["ping", "find", "show"] as const;
+export const HANDLED = ["ping", "show"] as const;
 
 const SUBCOMMANDS: Record<
   string,
@@ -297,39 +287,8 @@ const SUBCOMMANDS: Record<
       `HareWare is listening. Discord says you are **${who(interaction)}**.`,
     ),
 
-  find: (interaction, deps) => find(interaction, deps),
   show: (interaction, deps) => show(interaction, deps),
 };
-
-/**
- * `/article find` — matching Articles, straight off the index.
- *
- * the index is allowed to answer this because nothing is being decided on it:
- * a headline a minute old is a label, and `/article show` re-reads the page
- * from notion before it prints anything an editor might act on
- */
-async function find(
-  interaction: Interaction,
-  deps: InteractionDeps,
-): Promise<MessageResponse> {
-  const query = textOf(optionOf(subcommandOf(interaction), "query"));
-
-  if (!deps.search)
-    return ephemeral("HareWare cannot reach the Article index right now.");
-
-  const rows = await deps.search(query, MAX_CHOICES);
-  const found = choicesFor(rows);
-
-  if (found.length === 0)
-    return ephemeral(`No Article has **${query}** in its Headline.`);
-
-  return ephemeral(
-    [
-      `${found.length} ${found.length === 1 ? "Article" : "Articles"} matching **${query}**:`,
-      ...found.map((choice) => `- ${choice.name}`),
-    ].join("\n"),
-  );
-}
 
 /**
  * `/article show` — one Article, read live from notion.
@@ -434,8 +393,8 @@ async function handleAutocomplete(
   const focused = subcommand?.options?.find((option) => option.focused);
   const query = textOf(focused);
 
-  const search = deps.search;
-  if (!search) {
+  const index = deps.index;
+  if (!index) {
     console.error("[article] autocomplete has no index to read");
     return empty;
   }
@@ -446,13 +405,17 @@ async function handleAutocomplete(
     the editor's own most recent work
   */
   const { rows, why } = await within(
-    query.length < MIN_QUERY
-      ? search("", SHORT_QUERY_ROWS).then((all) => mine(all, who(interaction)))
-      : search(query, MAX_CHOICES),
+    index(),
     deps.timeoutMs ?? AUTOCOMPLETE_BUDGET_MS,
   );
 
-  const choices = choicesFor(rows);
+  /*
+    ranked here rather than in sql: 139 rows are nothing to read whole, and it
+    buys a fuzzy match plus a ranking that puts the articles being worked on
+    now at the top — which is what an editor opening the picker wants, and
+    exactly what an empty query returns
+  */
+  const choices = choicesFor(rows, query);
 
   /*
     every failure here answers with an empty list, because that is the only

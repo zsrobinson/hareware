@@ -284,3 +284,27 @@ test("still writes every row, in order, once split", async () => {
 
   expect(written).toEqual(many.map((e) => e.pageId));
 });
+
+/*
+  the bug this exists for: the escape clause was written `escape '\'` inside a
+  template literal, where `\'` is just a quote — so the emitted sql was
+  `escape ''`, an empty escape string, which sqlite rejects. every search threw,
+  `search` swallowed it exactly as designed, and discord showed a blank
+  dropdown with nothing anywhere saying why.
+
+  it survived a check against production because that check was typed into a
+  shell, where `'\'` really is a backslash — so what got verified was a
+  transcription of the code rather than the code
+*/
+test("the like clause carries a real escape character, not an empty one", async () => {
+  const { db, statements } = fakeD1();
+
+  await search(db, "50%");
+
+  const select = statements.find((s) =>
+    s.sql.toLowerCase().startsWith("select"),
+  );
+
+  expect(select!.sql).toContain("escape '\\'");
+  expect(select!.sql).not.toContain("escape ''");
+});

@@ -83,30 +83,30 @@ export type PlanResult =
 
 /* ---- the value builders ------------------------------------------------- */
 
-export function titleValue(text: string): PropertyValue {
+function titleValue(text: string): PropertyValue {
   return { title: [{ text: { content: text } }] };
 }
 
 /** `null` clears it — a rich_text is emptied with `[]`, never with `null` */
-export function richTextValue(text: string | null): PropertyValue {
+function richTextValue(text: string | null): PropertyValue {
   return { rich_text: text === null ? [] : [{ text: { content: text } }] };
 }
 
-export function statusValue(name: string): PropertyValue {
+function statusValue(name: string): PropertyValue {
   return { status: { name } };
 }
 
-export function selectValue(name: string): PropertyValue {
+function selectValue(name: string): PropertyValue {
   return { select: { name } };
 }
 
 /** `null` clears it — a date is emptied with `null`, never with `{}` or `""` */
-export function dateValue(start: string | null): PropertyValue {
+function dateValue(start: string | null): PropertyValue {
   return { date: start === null ? null : { start } };
 }
 
 /** the whole list, replaced. an append is the caller's read plus its addition */
-export function relationValue(ids: string[]): PropertyValue {
+function relationValue(ids: string[]): PropertyValue {
   return { relation: ids.map((id) => ({ id })) };
 }
 

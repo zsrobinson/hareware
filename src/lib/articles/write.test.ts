@@ -1,16 +1,6 @@
 import { changesSummary } from "./write";
 import { expect, test } from "vitest";
-import {
-  dateValue,
-  plan,
-  planCreate,
-  planCredit,
-  relationValue,
-  richTextValue,
-  selectValue,
-  statusValue,
-  titleValue,
-} from "./write";
+import { plan, planCreate, planCredit } from "./write";
 import type { Schema } from "./choices";
 import type { ArticlePage } from "./page";
 
@@ -54,34 +44,6 @@ const planned = (result: ReturnType<typeof plan>) => {
     throw new Error(`expected a plan, got ${result.status}: ${result.reason}`);
   return result.plan;
 };
-
-/* ---- the value builders ------------------------------------------------- */
-
-test("each property type has its own shape, and they are not interchangeable", () => {
-  expect(titleValue("Looney's line")).toEqual({
-    title: [{ text: { content: "Looney's line" } }],
-  });
-  expect(richTextValue("Zachary Robinson")).toEqual({
-    rich_text: [{ text: { content: "Zachary Robinson" } }],
-  });
-  // a status carries its option under `status`; a select under `select`
-  expect(statusValue("Section Edited")).toEqual({
-    status: { name: "Section Edited" },
-  });
-  expect(selectValue("Rabbithole")).toEqual({ select: { name: "Rabbithole" } });
-  expect(dateValue("2026-09-10")).toEqual({ date: { start: "2026-09-10" } });
-  expect(relationValue(["member-1", "member-2"])).toEqual({
-    relation: [{ id: "member-1" }, { id: "member-2" }],
-  });
-});
-
-test("clearing a value is expressible, and each type clears differently", () => {
-  // a date is cleared with null; an empty object would be a 400
-  expect(dateValue(null)).toEqual({ date: null });
-  // rich_text is cleared with an empty list; null is not accepted there
-  expect(richTextValue(null)).toEqual({ rich_text: [] });
-  expect(relationValue([])).toEqual({ relation: [] });
-});
 
 /* ---- planning a change -------------------------------------------------- */
 
@@ -147,6 +109,40 @@ test("clearing a date reads as a clear, not as an empty string", () => {
   expect(changesSummary(result.changes)).toBe(
     'Publication Date: "2026-09-10" → nothing',
   );
+});
+
+test("clearing a byline empties the rich_text rather than nulling it", () => {
+  /* notion refuses `{ rich_text: null }` with a 400; an empty list is the clear */
+  const result = planned(
+    plan(
+      fullSchema,
+      page({
+        "Author Byline": {
+          type: "rich_text",
+          rich_text: [{ plain_text: "Zachary Robinson" }],
+        },
+      }),
+      { property: "authorByline", text: null },
+    ),
+  );
+
+  expect(result.properties).toEqual({ "Author Byline": { rich_text: [] } });
+  expect(changesSummary(result.changes)).toBe(
+    'Author Byline: "Zachary Robinson" → nothing',
+  );
+});
+
+test("dropping the last credit writes an empty relation, not a null one", () => {
+  /* the same trap as a byline: notion clears a relation with `[]` */
+  const result = planned(
+    plan(
+      fullSchema,
+      page({ Author: { type: "relation", relation: [{ id: "member-1" }] } }),
+      { property: "author", ids: [] },
+    ),
+  );
+
+  expect(result.properties).toEqual({ Author: { relation: [] } });
 });
 
 /* ---- the data-loss guard ------------------------------------------------ */
@@ -304,11 +300,13 @@ test("a new article carries a headline, a byline and whatever else was given", (
   );
 
   expect(properties).toEqual({
-    Headline: titleValue("Looney's line"),
-    "Author Byline": richTextValue("Zachary Robinson"),
-    Author: relationValue(["member-1"]),
-    "Article Status": statusValue("Approved"),
-    Section: selectValue("Rabbithole"),
+    Headline: { title: [{ text: { content: "Looney's line" } }] },
+    "Author Byline": {
+      rich_text: [{ text: { content: "Zachary Robinson" } }],
+    },
+    Author: { relation: [{ id: "member-1" }] },
+    "Article Status": { status: { name: "Approved" } },
+    Section: { select: { name: "Rabbithole" } },
   });
   expect(changesSummary(changes)).toContain("Looney's line");
   expect(changesSummary(changes)).toContain("Approved");

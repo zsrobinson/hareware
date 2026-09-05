@@ -24,7 +24,6 @@ import {
 /** an index row as a caller supplies it; `syncedAt` is ours, not theirs */
 export type IndexEntry = Omit<ArticleIndexEntry, "syncedAt">;
 
-/** discord will not show more than 25 autocomplete choices, so nor do we */
 /**
  * how much of the index one autocomplete reads.
  *

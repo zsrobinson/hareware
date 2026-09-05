@@ -280,13 +280,25 @@ async function credit(
     the two halves together, and dropping one of them is the drift it accepts
     the denormalisation to avoid
   */
+  /* already credited, so `also` has nothing to add. the relation deduped and
+     the printed byline did not, which made a second run — a slow follow-up, an
+     editor who thought it had not landed — write "Bob and Bob" while the
+     relation stayed correct. the two halves ADR 0004 keeps together came apart,
+     and only the printed one was wrong */
+  const already = found.member ? held.includes(found.member.pageId) : false;
+
   const memberIds = found.member
     ? request.also
       ? [...new Set([...held, found.member.pageId])]
       : [found.member.pageId]
     : held;
 
-  const byline = request.also && printed ? `${printed} and ${name}` : name;
+  const appending = request.also && printed !== "" && !already;
+  const byline = appending
+    ? `${printed} and ${name}`
+    : already
+      ? printed
+      : name;
 
   const planned = planCredit(schema, page, {
     credit: request.credit,

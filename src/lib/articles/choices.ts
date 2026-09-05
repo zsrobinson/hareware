@@ -15,6 +15,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { asc } from "drizzle-orm";
 import { notion } from "~/lib/services/notion/client";
 import { choiceOptions, type ChoiceOption } from "~/lib/db/schema";
+import { chunk } from "./store";
 import {
   failed,
   misconfigured,
@@ -26,6 +27,15 @@ import {
   ARTICLE_PROPERTIES,
   CHOICE_PROPERTIES,
 } from "./config";
+
+/**
+ * how many picker options go in one insert.
+ *
+ * a choice is three columns against d1's hundred-variable ceiling, so
+ * thirty-three is the true limit — which the three pickers are one added
+ * section away from reaching
+ */
+const CHOICE_CHUNK = 20;
 
 /** a data source's schema, as much of it as we read */
 export type Schema = {
@@ -147,7 +157,15 @@ export async function refreshChoices(env: Env): Promise<Result> {
   if (missing.length > 0)
     return misconfigured(`article choices unset: ${missing.join(", ")}`);
 
-  const schema = await fetchSchema(env.NOTION_TOKEN!);
+  let schema: Schema;
+  try {
+    schema = await fetchSchema(env.NOTION_TOKEN!);
+  } catch (error) {
+    /* a Result, not a throw: the webhook route and `?sync=1` answer with what
+       this returns, and an exception reaches them as a 500 page */
+    console.error("[articles] could not read the schema", error);
+    return failed(`notion refused the schema: ${String(error)}`);
+  }
 
   const absent = assertProperties(schema);
   if (absent.length > 0)
@@ -169,10 +187,19 @@ export async function refreshChoices(env: Env): Promise<Result> {
   try {
     const client = drizzle(env.DB!);
 
-    // one batch: a delete that lands without its insert is an empty picker
+    /*
+      one batch, so a delete that lands without its insert is not an empty
+      picker — and chunked, because d1 binds at most a hundred variables to a
+      query and a choice is three of them. thirty-four options across the three
+      pickers is enough to break an unchunked insert, which is a club adding
+      one section away. the identical bug was fixed in `store.ts` and the fix
+      was not carried across
+    */
     await client.batch([
       client.delete(choiceOptions),
-      client.insert(choiceOptions).values(choices),
+      ...chunk(choices, CHOICE_CHUNK).map((part) =>
+        client.insert(choiceOptions).values(part),
+      ),
     ]);
   } catch (error) {
     console.error("[articles] could not store the choices", error);

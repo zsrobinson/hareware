@@ -72,13 +72,7 @@ const MAX_LABEL = 80;
  */
 const AUTOCOMPLETE_BUDGET_MS = 2000;
 
-/**
- * how many rows a short query pulls before it is narrowed to one editor's.
- *
- * wider than the 25 discord shows, because the narrowing happens after the
- * read and an editor's own articles are not necessarily the 25 most recently
- * edited in the club
- */
+/** the prefix on every custom_id this file put on a message */
 export const POSTED_PREFIX = "posted:";
 
 /** a custom_id must be unique within a message and at most 100 characters */
@@ -325,28 +319,6 @@ function optionOf(
   `deferEphemeral()` here and follows up, rather than trying to fit a write
   inside three seconds
 */
-/**
- * the names this file answers to.
- *
- * exported so a test can hold it against the registration: a subcommand
- * implemented here but not registered is invisible, and one registered but not
- * implemented answers "HareWare does not know that command". both are silent
- * until somebody tries it — which is how `show` shipped working and
- * unreachable
- */
-export const HANDLED = [
-  "ping",
-  "show",
-  "new",
-  "headline",
-  "status",
-  "image-status",
-  "section",
-  "publication-date",
-  "author",
-  "image-crew",
-] as const;
-
 const SUBCOMMANDS: Record<
   string,
   (
@@ -433,6 +405,17 @@ const SUBCOMMANDS: Record<
       crediting(interaction, subcommand, "image"),
     ),
 };
+
+/**
+ * the names this file answers to, read off the table above.
+ *
+ * a hand-written list here was a third copy of one fact: `commands.test.ts`
+ * held it against the registration, and nothing held it against the handlers —
+ * so a subcommand could be registered, listed, and still answer "HareWare does
+ * not know that command". derived, the two lists cannot disagree, and the test
+ * is comparing the registration against what actually runs.
+ */
+export const HANDLED = Object.keys(SUBCOMMANDS);
 
 /* ---- turning an interaction into a request ------------------------------ */
 
@@ -761,7 +744,7 @@ async function handleAutocomplete(
 /**
  * the rows, or none of them if they take too long or the read throws.
  *
- * `store.search` already swallows its own D1 failures, and this is the second
+ * `store.recent` already swallows its own D1 failures, and this is the second
  * half of that bargain: a promise that never settles is the failure it cannot
  * catch, and it is the one discord punishes
  */

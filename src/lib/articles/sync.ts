@@ -132,7 +132,20 @@ export async function rebuild(env: Env): Promise<Result> {
   if (missing.length > 0)
     return misconfigured(`article index unset: ${missing.join(", ")}`);
 
-  const pages = await allArticles(env.NOTION_TOKEN!);
+  /*
+    notion throwing has to become a Result rather than an exception: two of the
+    three callers — the webhook route and `?sync=1` — answer with what this
+    returns, and an unhandled throw reaches them as a 500 page instead of the
+    per-step outcome they promise
+  */
+  let pages;
+  try {
+    pages = await allArticles(env.NOTION_TOKEN!);
+  } catch (error) {
+    console.error("[articles] could not read the articles", error);
+    return failed(`notion refused the article list: ${String(error)}`);
+  }
+
   const result = await replaceAll(env.DB!, pages.map(toEntry));
 
   if (result.status === "refused")
@@ -162,10 +175,16 @@ export async function syncPage(env: Env, pageId: string): Promise<Result> {
   if (missing.length > 0)
     return misconfigured(`article index unset: ${missing.join(", ")}`);
 
-  const page = (await notion(
-    `pages/${pageId}`,
-    env.NOTION_TOKEN!,
-  )) as ArticlePage;
+  let page: ArticlePage;
+  try {
+    page = (await notion(`pages/${pageId}`, env.NOTION_TOKEN!)) as ArticlePage;
+  } catch (error) {
+    /* the webhook route answers with this, and notion retries what it answers
+       with an error — which is the behaviour we want, but only if it is a
+       Result rather than a thrown 500 */
+    console.error("[articles] could not read a changed page", error);
+    return failed(`notion refused page ${pageId}: ${String(error)}`);
+  }
 
   // a deleted page still answers, flagged, rather than 404ing
   if (page.in_trash || page.archived) {

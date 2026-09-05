@@ -93,6 +93,7 @@ const collapsed = Astro.isPrerendered
             client:media="(max-width: 767px)"
             pathname={Astro.url.pathname}
             returnTo={`${Astro.url.pathname}${Astro.url.search}`}
+            title={title}
             viewer={viewer}
           />
 
@@ -106,7 +107,13 @@ const collapsed = Astro.isPrerendered
             <PanelLeftIcon className="size-4" />
           </button>
 
-          <h1 class="truncate px-1 text-sm font-medium">{title}</h1>
+          {
+            /* below `md` the sheet trigger is already wearing this, so a
+               second copy of it would only take the room */
+          }
+          <h1 class="hidden truncate px-1 text-sm font-medium md:block">
+            {title}
+          </h1>
 
           {/* #24 fills this with the sync indicator; empty until then */}
           <div class="ml-auto flex items-center gap-2">

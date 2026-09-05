@@ -161,7 +161,16 @@ export function SidebarAccount({
         <a
           href={signInHref}
           title="Sign in with Discord"
-          className="flex h-9 min-w-0 flex-1 items-center justify-center gap-2 self-stretch rounded-md bg-[#5865F2] text-sm font-medium text-white transition-colors hover:bg-[#4752c4]"
+          className={cn(
+            "flex h-9 min-w-0 flex-1 items-center justify-center gap-2 rounded-md bg-[#5865F2] text-sm font-medium text-white transition-colors hover:bg-[#4752c4]",
+            /*
+              the rail stacks this row, and `flex-1` in a column grows down
+              rather than across, so the button stretched into a tall blue
+              slab. at rail width it is a square with the mark in it
+            */
+            !inSheet &&
+              "group-data-[state=collapsed]/shell:size-9 group-data-[state=collapsed]/shell:flex-none",
+          )}
         >
           <DiscordMark className="size-4 shrink-0" />
           <span className={cn("truncate", railHidden)}>

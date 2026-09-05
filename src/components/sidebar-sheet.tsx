@@ -1,4 +1,4 @@
-import { PanelLeftIcon } from "lucide-react";
+import { ChevronDownIcon, PanelLeftIcon } from "lucide-react";
 import { NavGroup } from "~/components/nav-group";
 import { SidebarAccount } from "~/components/sidebar-account";
 import {
@@ -20,19 +20,30 @@ import type { ViewerState } from "~/lib/admin";
 export function SidebarSheet({
   pathname,
   returnTo,
+  title,
   viewer,
 }: {
   pathname: string;
   returnTo: string;
+  /** the page being looked at, which the trigger wears as its label */
+  title: string;
   viewer?: ViewerState | null;
 }) {
   return (
     <Sheet>
+      {/*
+        the whole header is the control on a phone, not a bare icon beside a
+        heading that does nothing. it names where you are and carries a
+        chevron, so the way to everything else is the most obvious thing on the
+        screen rather than a glyph you have to already know about
+      */}
       <SheetTrigger
-        className="text-foreground/70 hover:bg-accent hover:text-foreground inline-flex size-8 items-center justify-center rounded-md md:hidden"
-        aria-label="Open navigation"
+        className="text-foreground hover:bg-accent -ml-1 inline-flex h-8 max-w-[calc(100vw-6rem)] min-w-0 items-center gap-1.5 rounded-md px-2 md:hidden"
+        aria-label={`${title}. Open navigation`}
       >
-        <PanelLeftIcon className="size-4" />
+        <PanelLeftIcon className="text-foreground/70 size-4 shrink-0" />
+        <span className="truncate text-sm font-medium">{title}</span>
+        <ChevronDownIcon className="text-foreground/50 size-3.5 shrink-0" />
       </SheetTrigger>
 
       <SheetContent side="left" className="bg-sidebar w-64 p-0">

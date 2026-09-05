@@ -51,9 +51,6 @@ const action = config
 
 <Dashboard title="Sign in" viewer={who}>
   <Message title={title} action={action}>
-    {
-      error ??
-        "HareWare uses your Discord account to know who you are, and asks for nothing else."
-    }
+    {error ?? "HareWare uses your Discord account to know who you are."}
   </Message>
 </Dashboard>

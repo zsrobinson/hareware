@@ -57,17 +57,20 @@ export type DenialCopy = {
 export const DENIALS: Record<Denial, DenialCopy> = {
   "signed-out": {
     status: 401,
-    title: "Sign in to use this",
+    title: "Sign in to continue",
     body: () => "This tool is for the Editorial Board.",
     action: "sign-in",
   },
 
   "no-role": {
+    /*
+      it does not say how to get the role. the board is the board, and an
+      earlier draft that said "ask an editor to add it" read as though the
+      answer were a favour somebody could do you
+    */
     status: 403,
-    title: "You need the Editorial Board role",
-    body: (you) =>
-      `You are signed in as ${you}. Ask an editor to add the role — it works ` +
-      "the moment they do.",
+    title: "This tool is for the Editorial Board",
+    body: (you) => `You are signed in as ${you}, who is not on the board.`,
     action: "leave",
   },
 
@@ -82,7 +85,7 @@ export const DENIALS: Record<Denial, DenialCopy> = {
     /* not 500: nothing here is broken, and a retry is the right advice */
     status: 503,
     title: "Could not check your access",
-    body: () => "Discord did not answer. Nothing is wrong with your account.",
+    body: () => "Discord did not answer. Try again in a moment.",
     action: "retry",
   },
 };

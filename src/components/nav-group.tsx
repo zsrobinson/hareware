@@ -20,12 +20,16 @@ export function NavGroup({
   label?: string;
 }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col">
       {label && (
         /* shadcn's sidebar group label: quiet, small, and it goes away with
-           the rest of the text when the sidebar collapses to the rail */
+           the rest of the text when the sidebar collapses to the rail.
+
+           it sits close to what it names. the height it used to carry put as
+           much space under the word as the gap above it, so the label floated
+           between the two groups rather than belonging to the one below */
         <div
-          className="text-sidebar-foreground/60 flex h-8 shrink-0 items-center px-2 text-xs font-medium group-data-[state=collapsed]/shell:md:hidden"
+          className="text-sidebar-foreground/60 flex h-7 shrink-0 items-end px-2 pb-1 text-xs font-medium group-data-[state=collapsed]/shell:md:hidden"
           aria-hidden="true"
         >
           {label}

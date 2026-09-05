@@ -14,7 +14,7 @@
 */
 
 import { drizzle } from "drizzle-orm/d1";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import {
   articleIndex,
   type ArticleIndexEntry,

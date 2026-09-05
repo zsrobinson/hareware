@@ -20,11 +20,7 @@
 */
 
 import { card, type CardPage } from "~/lib/articles/card";
-import {
-  choicesFor,
-  MAX_CHOICES,
-  type AutocompleteChoice,
-} from "~/lib/articles/pick";
+import { choicesFor, type AutocompleteChoice } from "~/lib/articles/pick";
 import type { ArticleRow } from "~/lib/db/schema";
 import { EDITORIAL_BOARD_ROLE_ID } from "./config";
 

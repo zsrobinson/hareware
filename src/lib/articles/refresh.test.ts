@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { refreshFromNotion } from "./refresh";
-import { failed, misconfigured, ok, skipped } from "~/lib/automations/registry";
+import { failed, misconfigured, ok, skipped } from "~/lib/result";
 
 /*
   `refreshCommands` reaches D1 and discord, so these exercise

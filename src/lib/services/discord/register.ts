@@ -11,7 +11,7 @@
   definition of
 */
 
-import type { Result } from "~/lib/automations/registry";
+import type { Result } from "~/lib/result";
 import { hashCommands, type CommandPayload } from "./commands";
 import { DISCORD_APPLICATION_ID, GUILD_ID } from "./config";
 

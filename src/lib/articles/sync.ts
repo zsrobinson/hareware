@@ -10,13 +10,7 @@
 */
 
 import { notion } from "~/lib/services/notion/client";
-import {
-  failed,
-  misconfigured,
-  ok,
-  skipped,
-  type Result,
-} from "~/lib/automations/registry";
+import { failed, misconfigured, ok, skipped, type Result } from "~/lib/result";
 import { ARTICLES_DATA_SOURCE_ID, ARTICLE_PROPERTIES } from "./config";
 import { remove, replaceAll, upsert, type IndexEntry } from "./store";
 

@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 import { refreshChoices } from "~/lib/articles/choices";
-import { refreshCommands } from "~/lib/articles/refresh";
+import { onSchemaChanged } from "~/lib/articles/refresh";
 import { syncPage } from "~/lib/articles/sync";
 import {
   changedPage,
@@ -43,15 +43,13 @@ export const POST: APIRoute = async ({ request }) => {
     retry rather than a row that is quietly a day stale
   */
   if (schemaChanged(event)) {
-    const choices = await refreshChoices(env);
-    /* the options live in the command *registration*, so a new status reaches
-       an editor only once the surface is registered again */
-    const commands = await refreshCommands(env);
+    /* the same sequence the hourly rebuild runs, called rather than
+       reassembled: the pickers are read from the schema and then baked into the
+       command registration, and those two steps living in two places is how a
+       third one would reach only one of them */
+    const result = await onSchemaChanged(env, refreshChoices);
 
-    return outcome(`choices ${choices.outcome}, commands ${commands.outcome}`, [
-      choices.outcome,
-      commands.outcome,
-    ]);
+    return outcome(result.summary, [result.outcome]);
   }
 
   const pageId = changedPage(event);

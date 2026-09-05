@@ -17,6 +17,7 @@
 */
 
 import type { EasternNow } from "~/lib/eastern";
+import type { Result } from "~/lib/result";
 import type { Row } from "~/lib/log";
 import { REMINDER_HOUR, BOARD_CHANNEL_ID, SOCIAL_CHANNEL_ID } from "./config";
 import { sendMeetingReminder } from "./meeting";
@@ -32,24 +33,15 @@ export type AutomationId = "meeting" | "social";
  * recorded as `ok`, so a week of WordPress refusing the feed produced seven
  * green rows in the log ADR 0007 exists to prevent.
  */
-export type Outcome = Row["outcome"];
-
-export type Result = { outcome: Outcome; summary: string };
-
-export const ok = (summary: string): Result => ({ outcome: "ok", summary });
-export const skipped = (summary: string): Result => ({
-  outcome: "skipped",
-  summary,
-});
-export const misconfigured = (summary: string): Result => ({
-  outcome: "misconfigured",
-  summary,
-});
-/** for a failure the automation caught itself rather than threw */
-export const failed = (summary: string): Result => ({
-  outcome: "failed",
-  summary,
-});
+/*
+  re-exported rather than moved-and-repointed everywhere: `Result` is the
+  vocabulary every automation already speaks, and its definition belongs in
+  `~/lib/result` because six modules that are not automations — two of them
+  under `services/`, whose rule is that it knows nothing about this layer —
+  also speak it
+*/
+export type { Outcome, Result } from "~/lib/result";
+export { ok, skipped, misconfigured, failed } from "~/lib/result";
 
 export type Automation = {
   id: AutomationId;

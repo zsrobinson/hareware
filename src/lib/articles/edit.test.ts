@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { runEdit, type EditIO, type EditRequest } from "./edit";
 import type { Schema } from "./choices";
 import type { ArticlePage } from "./sync";
-import type { Result } from "~/lib/automations/registry";
+import type { Result } from "~/lib/result";
 import type { MemberMatch } from "./member";
 
 /*

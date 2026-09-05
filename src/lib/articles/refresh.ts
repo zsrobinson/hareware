@@ -12,7 +12,7 @@
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { syncMeta } from "~/lib/db/schema";
-import { failed, ok, skipped, type Result } from "~/lib/automations/registry";
+import { failed, ok, skipped, type Result } from "~/lib/result";
 import { buildCommands } from "~/lib/services/discord/commands";
 import { registerCommands } from "~/lib/services/discord/register";
 import { readChoices } from "./choices";
@@ -88,6 +88,60 @@ export async function refreshCommands(env: Env): Promise<Result> {
 }
 
 /**
+ * what a `data_source.schema_updated` event means, in one place.
+ *
+ * the pickers are read from the schema and then *baked into* the command
+ * registration, so a status added in notion reaches an editor only once the
+ * surface is registered again — two steps that are one fact. the webhook route
+ * assembled them by hand beside this file's own sequence, which is how a third
+ * step would have reached one caller and not the other.
+ */
+export async function onSchemaChanged(
+  env: Env,
+  refreshChoices: (env: Env) => Promise<Result>,
+): Promise<Result> {
+  return combine(await schemaSteps(env, refreshChoices));
+}
+
+/**
+ * the two steps a schema change needs, named, so that both callers report the
+ * same words and a third step reaches both of them
+ */
+async function schemaSteps(
+  env: Env,
+  refreshChoices: (env: Env) => Promise<Result>,
+): Promise<[string, Result][]> {
+  const choices = await refreshChoices(env);
+  const commands = await refreshCommands(env);
+
+  return [
+    ["choices", choices],
+    ["commands", commands],
+  ];
+}
+
+/**
+ * one line naming every step and its outcome, and `failed` if any of them was.
+ *
+ * a summary reading `ok` while one step did not run is the shape ADR 0007
+ * exists to prevent, and naming which step is what makes it actionable
+ */
+function combine(steps: [string, Result][]): Result {
+  const parts = steps.map(([name, result]) => `${name} ${result.outcome}`);
+  const broken = steps
+    .map(([, result]) => result)
+    .filter((r) => r.outcome === "failed" || r.outcome === "misconfigured");
+
+  if (broken.length > 0) {
+    return failed(
+      `${parts.join(", ")} — ${broken.map((r) => r.summary).join("; ")}`,
+    );
+  }
+
+  return ok(parts.join(", "));
+}
+
+/**
  * everything discord needs to know about notion, refreshed in order.
  *
  * order matters once and only here: the pickers are read from the schema
@@ -102,29 +156,12 @@ export async function refreshFromNotion(
   },
 ): Promise<Result> {
   const index = await work.rebuild(env);
-  const choices = await work.refreshChoices(env);
-  const commands = await refreshCommands(env);
 
-  const parts = [
-    `index ${index.outcome}`,
-    `choices ${choices.outcome}`,
-    `commands ${commands.outcome}`,
-  ];
-
-  /*
-    one failing step is the whole thing failing. a summary reading `ok` while
-    the index did not rebuild is the exact shape ADR 0007 exists to prevent —
-    and the detail of which step, because "the sync failed" is not actionable
-  */
-  const broken = [index, choices, commands].filter(
-    (r) => r.outcome === "failed" || r.outcome === "misconfigured",
-  );
-
-  if (broken.length > 0) {
-    return failed(
-      `${parts.join(", ")} — ${broken.map((r) => r.summary).join("; ")}`,
-    );
-  }
-
-  return ok(parts.join(", "));
+  /* the index in front of the steps the webhook also runs, flattened rather
+     than nested so both callers say the same words and a fourth step reaches
+     both of them */
+  return combine([
+    ["index", index],
+    ...(await schemaSteps(env, work.refreshChoices)),
+  ]);
 }

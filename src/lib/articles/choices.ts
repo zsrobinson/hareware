@@ -16,12 +16,7 @@ import { asc } from "drizzle-orm";
 import { notion } from "~/lib/services/notion/client";
 import { choiceOptions, type ChoiceOption } from "~/lib/db/schema";
 import { chunk } from "./store";
-import {
-  failed,
-  misconfigured,
-  ok,
-  type Result,
-} from "~/lib/automations/registry";
+import { failed, misconfigured, ok, type Result } from "~/lib/result";
 import {
   ARTICLES_DATA_SOURCE_ID,
   ARTICLE_PROPERTIES,

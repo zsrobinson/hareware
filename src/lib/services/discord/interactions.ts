@@ -24,7 +24,7 @@ import type { Actor, EditRequest, PickedUser } from "~/lib/articles/edit";
 import { choicesFor, type AutocompleteChoice } from "~/lib/articles/pick";
 import type { Intent } from "~/lib/articles/write";
 import type { ArticleRow } from "~/lib/db/schema";
-import type { Result } from "~/lib/automations/registry";
+import type { Result } from "~/lib/result";
 import { EDITORIAL_BOARD_ROLE_ID } from "./config";
 import { followUp } from "./follow-up";
 

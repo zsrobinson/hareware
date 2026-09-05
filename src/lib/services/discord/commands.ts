@@ -158,9 +158,16 @@ const SUBCOMMANDS: Subcommand[] = [
       },
       chooser(choices, "section", ARTICLE_PROPERTIES.section.name, false),
       {
+        type: USER,
+        name: "member",
+        description:
+          "Who wrote it. Added to Members if they are not there yet.",
+        options: [],
+      },
+      {
         type: STRING,
         name: "byline",
-        description: "The printed Byline. Defaults to your own name.",
+        description: "The printed Byline. Defaults to their name, else yours.",
         options: [],
       },
     ],

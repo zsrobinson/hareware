@@ -66,7 +66,15 @@ export type PickedUser = { discordId: string; displayName: string };
  */
 export type EditRequest =
   /** `/article new` */
-  | { kind: "create"; headline: string; section: string | null; byline: string }
+  | {
+      kind: "create";
+      headline: string;
+      section: string | null;
+      /** whoever the discord picker returned, or null when nobody was picked */
+      member: PickedUser | null;
+      /** the printed name, when the editor typed one */
+      byline: string | null;
+    }
   /** every subcommand that sets one property */
   | { kind: "property"; pageId: string; intent: Intent }
   /** `/article author` and `/article image-crew`, which write a pair */
@@ -139,7 +147,8 @@ async function attempt(
   }
 
   try {
-    if (request.kind === "create") return await create(io, schema, request);
+    if (request.kind === "create")
+      return await create(io, schema, request, actor);
 
     const page = await io.page(request.pageId);
 
@@ -164,6 +173,7 @@ async function create(
   io: EditIO,
   schema: Schema,
   request: Extract<EditRequest, { kind: "create" }>,
+  actor: Actor,
 ): Promise<Result> {
   /*
     ADR 0009: a new Article starts Approved — somebody typing a headline into
@@ -178,9 +188,23 @@ async function create(
     "approved",
   );
 
+  /*
+    the same resolution `/article author` uses, so picking a writer here
+    backfills or creates their Members row rather than leaving the relation
+    empty. without a picker the Byline is text and the relation stays empty,
+    which is what a pseudonym needs
+  */
+  const found = await resolve(io, request.member, actor);
+  if (found.status === "refused") return failed(found.reason);
+
+  /* ADR 0004: the printed Byline is always filled — the typed one, else the
+     member's name, else whoever ran the command */
+  const byline = request.byline ?? found.member?.name ?? actor.name;
+
   const planned = planCreate(schema, {
     headline: request.headline,
-    byline: request.byline,
+    byline,
+    authorIds: found.member ? [found.member.pageId] : [],
     status,
     section: request.section,
   });
@@ -193,8 +217,11 @@ async function create(
       ? ` (Notion has no "approved" option on ${ARTICLE_PROPERTIES.status.name} any more, so it was left unset)`
       : "";
 
+  const sentence = `Created **${request.headline}**${noted}. ${planned.plan.sentence}`;
+
+  // the roster changing is a fact an editor has to be told, every time
   return ok(
-    `Created **${request.headline}**${noted}. ${planned.plan.sentence}`,
+    found.note === undefined ? sentence : `${sentence} — ${found.note}`,
   );
 }
 

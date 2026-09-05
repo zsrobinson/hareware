@@ -472,3 +472,35 @@ test("every attempt is logged against the editor who made it", async () => {
   expect(seen.logged).toHaveLength(2);
   expect(seen.logged.every((row) => row.actor === "111")).toBe(true);
 });
+
+/*
+  the bug this exists for: the relation deduped and the printed byline did not.
+  running the same `also` twice — a slow follow-up, an editor who thought it had
+  not landed — left the relation correct and the byline reading "Bob and Bob",
+  which is exactly the pair ADR 0004 exists to keep in step coming apart
+*/
+test("crediting the same member twice does not print them twice", async () => {
+  const { io, seen } = spy({
+    page: async () =>
+      article({
+        "Author Byline": {
+          type: "rich_text",
+          rich_text: [{ plain_text: "Bay Hoffman" }],
+        },
+        Author: { type: "relation", relation: [{ id: "member-bay" }] },
+      }),
+    members: async (): Promise<MemberMatch> => ({
+      status: "matched",
+      member: { pageId: "member-bay", name: "Bay Hoffman", discordId: "222" },
+    }),
+  });
+
+  await runEdit(io, creditRequest({ also: true }), actor);
+
+  expect(seen.patched[0]!.body).toMatchObject({
+    properties: {
+      "Author Byline": { rich_text: [{ text: { content: "Bay Hoffman" } }] },
+      Author: { relation: [{ id: "member-bay" }] },
+    },
+  });
+});

@@ -106,6 +106,8 @@ test("option names keep notion's casing, traps included", () => {
 
 type Statement = { sql: string; params: unknown[] };
 
+const D1_MAX_VARIABLES = 100;
+
 function fakeD1(answer: (sql: string) => unknown[][] = () => []) {
   const statements: Statement[] = [];
 
@@ -133,6 +135,19 @@ function fakeD1(answer: (sql: string) => unknown[][] = () => []) {
       return prepared;
     },
     async batch(queries: unknown[]) {
+      /*
+        d1 binds at most a hundred variables to a query and refuses the
+        statement outright above that. a double that accepts any statement of
+        any size cannot fail the way the real thing does, which is why the
+        identical unchunked insert in `store.ts` was caught in production and
+        this one was not caught at all
+      */
+      for (const statement of statements) {
+        if (statement.params.length > D1_MAX_VARIABLES) {
+          throw new Error("D1_ERROR: too many SQL variables: SQLITE_ERROR");
+        }
+      }
+
       return queries.map(() => ({ results: [], success: true, meta: {} }));
     },
   };
@@ -238,4 +253,37 @@ test("an option is found in the schema whatever case it was asked for", () => {
 test("an option the club renamed is absent rather than invented", () => {
   expect(optionNamed(schema(), "Article Status", "in flight")).toBeNull();
   expect(optionNamed(schema(), "No Such Property", "approved")).toBeNull();
+});
+
+/*
+  the bug this exists for: the options went into one insert. a choice is three
+  columns against d1's hundred-variable ceiling, so thirty-four options across
+  the three pickers — a club adding one section — would have made every refresh
+  fail, frozen the stored options at yesterday's set, and left `refreshCommands`
+  happily re-registering a stale surface because `readChoices` still answered
+  with a non-empty list
+*/
+test("stores the options in statements d1 will accept", async () => {
+  const many = (name: string, kind: "status" | "select") => ({
+    type: kind,
+    [kind]: {
+      options: Array.from({ length: 20 }, (_, i) => ({ name: `${name} ${i}` })),
+    },
+  });
+
+  mockSchema(
+    schema({
+      "Article Status": many("Article Status", "status"),
+      "Image Status": many("Image Status", "status"),
+      Section: many("Section", "select"),
+    }),
+  );
+
+  const { db, statements } = fakeD1();
+  const result = await refreshChoices(env(db));
+
+  expect(result.outcome).toBe("ok");
+  for (const statement of statements) {
+    expect(statement.params.length).toBeLessThanOrEqual(100);
+  }
 });

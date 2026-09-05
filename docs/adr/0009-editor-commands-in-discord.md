@@ -169,5 +169,20 @@ states unpresentable, which mattered when Status was to be gated; it is not.
 
 ### Creating a Member row whenever the Discord ID does not match
 
-Rejected: 39 duplicates of people who already have article histories. Matching
-on name and backfilling the id is the same work done once, in the right place.
+Rejected as written. **Amended 2026-09-05:** an absent match now creates the row.
+
+The rejection was about _guessing_, and that part stands. Matching on name and
+backfilling the id still happens first, and it is still what keeps 39 duplicates
+of people who already have article histories from appearing.
+
+What changed is the case where nothing matches at all. Refusing there means an
+editor cannot credit a new writer without leaving Discord, which is the one
+thing these commands exist to avoid — and the row they would go and make by hand
+is the row HareWare would have made.
+
+The reasoning survives in why the other outcomes still refuse: `ambiguous` and
+`conflicted` are guesses and stay refused, and `linkable` writes the id onto the
+row it found rather than making a second one. Every outcome is stated in the
+reply — "created Sam Rivera in Members" — which is what the original objection
+was really protecting. Not that a row exists, but that one appears without
+anybody noticing.

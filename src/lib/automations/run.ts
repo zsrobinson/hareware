@@ -174,7 +174,7 @@ async function syncWithNotion(env: Env) {
       summary: result.summary,
     });
   } catch (error) {
-    /* this runs before the reminders and must never stop them: a stale picker
+    /* this runs after the reminders and must never disturb them: a stale picker
        is a better morning than a stale picker and no meeting reminder */
     console.error("[articles] sync failed", error);
 

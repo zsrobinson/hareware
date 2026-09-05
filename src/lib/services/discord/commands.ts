@@ -10,6 +10,10 @@
   have to be folded in here and re-registered when the schema changes
 */
 
+/* the property *names*, which are stable enough to name a subcommand after.
+   the values under them are not, and never appear here — see `chooser` */
+import { ARTICLE_PROPERTIES } from "~/lib/articles/config";
+
 /**
  * a select option read out of the notion schema.
  *
@@ -26,7 +30,7 @@ export type ChoiceInput = {
   position: number;
 };
 
-/** discord's option types, of which we so far use one */
+/** discord's option types */
 const SUB_COMMAND = 1;
 
 /** discord refuses a registration carrying a 26th choice on any one option */
@@ -102,6 +106,15 @@ type Subcommand = {
 
 /** discord's option type for a string */
 const STRING = 3;
+const BOOLEAN = 5;
+/**
+ * discord's native user picker.
+ *
+ * ADR 0009 credits people with this rather than a search over Members: the
+ * user always exists, the list is always current, and the interaction payload
+ * resolves their display name under `data.resolved`, so it costs no request
+ */
+const USER = 6;
 
 /**
  * the article picker, which every subcommand about one article takes first.
@@ -131,7 +144,151 @@ const SUBCOMMANDS: Subcommand[] = [
     description: "Everything Notion holds about one Article.",
     options: () => [articleOption()],
   },
+  {
+    name: "new",
+    description: "Start an Article in the tracker.",
+    options: (choices) => [
+      {
+        type: STRING,
+        name: "headline",
+        description: "The Headline. It can be changed later.",
+        options: [],
+        required: true,
+      },
+      chooser(choices, "section", ARTICLE_PROPERTIES.section.name, false),
+      {
+        type: STRING,
+        name: "byline",
+        description: "The printed Byline. Defaults to your own name.",
+        options: [],
+      },
+    ],
+  },
+  {
+    name: "headline",
+    description: "Rename an Article.",
+    options: () => [
+      articleOption(),
+      {
+        type: STRING,
+        name: "headline",
+        description: "The new Headline.",
+        options: [],
+        required: true,
+      },
+    ],
+  },
+  {
+    name: "status",
+    description: "Move an Article along.",
+    options: (choices) => [
+      articleOption(),
+      chooser(choices, "status", ARTICLE_PROPERTIES.status.name, true),
+    ],
+  },
+  {
+    name: "image-status",
+    description: "Say how far an Article's image has got.",
+    options: (choices) => [
+      articleOption(),
+      chooser(
+        choices,
+        "image-status",
+        ARTICLE_PROPERTIES.imageStatus.name,
+        true,
+      ),
+    ],
+  },
+  {
+    name: "section",
+    description: "Bounce an Article to another desk.",
+    options: (choices) => [
+      articleOption(),
+      chooser(choices, "section", ARTICLE_PROPERTIES.section.name, true),
+    ],
+  },
+  {
+    name: "publication-date",
+    description: "Set an Article's Publication Date, or clear it.",
+    options: () => [
+      articleOption(),
+      {
+        type: STRING,
+        name: "date",
+        description: "YYYY-MM-DD. Leave it out to clear the date.",
+        options: [],
+      },
+    ],
+  },
+  {
+    name: "author",
+    description: "Credit whoever wrote an Article.",
+    options: () => creditOptions("wrote it"),
+  },
+  {
+    name: "image-crew",
+    description: "Credit whoever made an Article's image.",
+    options: () => creditOptions("made the image"),
+  },
 ];
+
+/**
+ * a picker whose options are notion's, never ours.
+ *
+ * the subcommand's own name is dropped from the option name — `/article status
+ * status:` reads badly — but the *choices* are whatever the schema currently
+ * holds, which is why this takes them rather than closing over a constant. see
+ * ADR 0009: no notion value is typed into this repo
+ */
+function chooser(
+  choices: ChoiceInput[],
+  name: string,
+  property: string,
+  required: boolean,
+): CommandOption {
+  return {
+    type: STRING,
+    name,
+    description: `Which ${property}.`,
+    options: [],
+    choices: choicesFor(choices, property),
+    required,
+  };
+}
+
+/**
+ * the three options both credits take.
+ *
+ * every one of them optional: a credit is a printed Byline plus the Member
+ * behind it (ADR 0004) and an editor may be setting either half — a pseudonym
+ * is text with no new member, and a co-Byline is a member added to what is
+ * already there
+ */
+function creditOptions(did: string): CommandOption[] {
+  return [
+    articleOption(),
+    {
+      type: USER,
+      name: "member",
+      description: `Who ${did}. HareWare finds or creates their Members row.`,
+      options: [],
+    },
+    {
+      type: STRING,
+      name: "byline",
+      description: "The printed name, if it is not theirs.",
+      options: [],
+    },
+    {
+      /* "also", not "add": the editor is saying somebody else worked on this
+         too, and the word has to read that way beside a name */
+      type: BOOLEAN,
+      name: "also",
+      description: "Add to the existing credit instead of replacing it.",
+      options: [],
+    },
+  ];
+}
 
 /** the payload to register: `/article`, with everything notion currently offers */
 export function buildCommands(choices: ChoiceInput[]): CommandPayload {

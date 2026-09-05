@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import {
   dateValue,
   plan,
+  planCreate,
   planCredit,
   relationValue,
   richTextValue,
@@ -280,4 +281,69 @@ test("a credit's sentence names both halves and where each came from", () => {
   expect(sentence).toContain('Author Byline: "Zach" → "Zachary Robinson"');
   expect(sentence).toContain("member-9");
   expect(sentence).toContain("member-1");
+});
+
+/* ---- creating one ------------------------------------------------------- */
+
+test("a new article carries a headline, a byline and whatever else was given", () => {
+  const { properties, sentence } = planned(
+    planCreate(fullSchema, {
+      headline: "Looney's line",
+      byline: "Zachary Robinson",
+      status: "Approved",
+      section: "Rabbithole",
+    }),
+  );
+
+  expect(properties).toEqual({
+    Headline: titleValue("Looney's line"),
+    "Author Byline": richTextValue("Zachary Robinson"),
+    "Article Status": statusValue("Approved"),
+    Section: selectValue("Rabbithole"),
+  });
+  expect(sentence).toContain("Looney's line");
+  expect(sentence).toContain("Approved");
+});
+
+test("a new article without a section writes no section at all", () => {
+  /* an empty select is `null`, and `selectValue("")` is a value notion
+     rejects — leaving the property out is what "not chosen" looks like */
+  const { properties } = planned(
+    planCreate(fullSchema, {
+      headline: "Untitled thought",
+      byline: "Zachary Robinson",
+      status: null,
+      section: null,
+    }),
+  );
+
+  expect(Object.keys(properties).sort()).toEqual(["Author Byline", "Headline"]);
+});
+
+test("a new article is refused when notion is not sharing what it would write", () => {
+  expect(
+    planCreate(withoutAuthor, {
+      headline: "Looney's line",
+      byline: "Zachary Robinson",
+      status: null,
+      section: null,
+    }).status,
+  ).toBe("planned");
+
+  const withoutHeadline: Schema = {
+    properties: Object.fromEntries(
+      Object.entries(fullSchema.properties).filter(
+        ([name]) => name !== "Headline",
+      ),
+    ),
+  };
+
+  expect(
+    planCreate(withoutHeadline, {
+      headline: "Looney's line",
+      byline: "Zachary Robinson",
+      status: null,
+      section: null,
+    }).status,
+  ).toBe("refused");
 });

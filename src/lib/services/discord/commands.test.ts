@@ -162,3 +162,87 @@ test("the article picker is autocompleted, not a choice list", () => {
   expect(article!.choices).toBeUndefined();
   expect(article!.required).toBe(true);
 });
+
+/* the same picker, on every subcommand that names one Article */
+test("every subcommand about one Article autocompletes the picker", () => {
+  const picks = [
+    "show",
+    "headline",
+    "status",
+    "image-status",
+    "section",
+    "publication-date",
+    "author",
+    "image-crew",
+  ];
+
+  for (const name of picks) {
+    const subcommand = buildCommands([])[0]!.options!.find(
+      (option) => option.name === name,
+    );
+    const article = subcommand!.options!.find((o) => o.name === "article");
+
+    expect(article, `${name} has no article picker`).toBeDefined();
+    expect(article!.autocomplete, name).toBe(true);
+  }
+});
+
+/*
+  ADR 0009: adding a status in notion changes what discord offers without a
+  code change, and no notion value is ever typed into this repo — which is what
+  keeps `Not started` from becoming `Not Started` and being rejected with a 400
+  that reads like a bad id
+*/
+test("the three pickers offer notion's own options, in notion's order", () => {
+  const choices = [
+    { property: "Article Status", name: "Approved", position: 1 },
+    { property: "Article Status", name: "Backlog", position: 0 },
+    { property: "Image Status", name: "Not started", position: 0 },
+    { property: "Section", name: "Rabbithole", position: 0 },
+  ];
+
+  const options = (subcommand: string, option: string) =>
+    buildCommands(choices)[0]!
+      .options!.find((o) => o.name === subcommand)!
+      .options!.find((o) => o.name === option)!;
+
+  expect(options("status", "status").choices).toEqual([
+    { name: "Backlog", value: "Backlog" },
+    { name: "Approved", value: "Approved" },
+  ]);
+  expect(options("image-status", "image-status").choices).toEqual([
+    { name: "Not started", value: "Not started" },
+  ]);
+  expect(options("section", "section").choices).toEqual([
+    { name: "Rabbithole", value: "Rabbithole" },
+  ]);
+});
+
+test("a credit takes discord's own user picker, and `also` is a boolean", () => {
+  const author = buildCommands([])[0]!.options!.find(
+    (o) => o.name === "author",
+  );
+  const named = (name: string) =>
+    author!.options!.find((option) => option.name === name)!;
+
+  // type 6 is USER: the payload resolves the name, so it costs no request
+  expect(named("member").type).toBe(6);
+  expect(named("also").type).toBe(5);
+  expect(named("byline").type).toBe(3);
+
+  /* all three optional: a pseudonym is text with no member, and a co-Byline is
+     a member added to what is already there */
+  for (const name of ["member", "byline", "also"])
+    expect(named(name).required, name).toBeUndefined();
+});
+
+test("a new Article needs only a headline", () => {
+  const created = buildCommands([])[0]!.options!.find((o) => o.name === "new");
+  const required = created!
+    .options!.filter((option) => option.required)
+    .map((option) => option.name);
+
+  expect(required).toEqual(["headline"]);
+  // no article picker: there is nothing to pick yet
+  expect(created!.options!.some((o) => o.autocomplete)).toBe(false);
+});

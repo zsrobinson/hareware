@@ -167,6 +167,44 @@ export function matchMembers(
   return { status: "absent" };
 }
 
+/**
+ * writes a discord id onto an existing Members row.
+ *
+ * this is the backfill ADR 0009 is built around: 39 of 48 rows carry no id, so
+ * the common credit is a name match, and doing it here means the roster fills
+ * itself in as editors work rather than in somebody's afternoon
+ */
+export async function linkMember(
+  env: Env,
+  pageId: string,
+  patch: LinkPatch,
+): Promise<void> {
+  await notion(`pages/${pageId}`, env.NOTION_TOKEN!, patch, "PATCH");
+}
+
+/**
+ * a new Members row, for somebody the roster has never heard of.
+ *
+ * only ever reached from `absent` — never from `ambiguous` or `conflicted` —
+ * because creating a row on an uncertain match is exactly how a database
+ * acquires nine copies of one person. the caller says so in its reply
+ */
+export async function createMember(
+  env: Env,
+  name: string,
+  discordId: string,
+): Promise<Member> {
+  const page = (await notion(`pages`, env.NOTION_TOKEN!, {
+    parent: { type: "data_source_id", data_source_id: MEMBERS_DATA_SOURCE_ID },
+    properties: {
+      [MEMBER_PROPERTIES.name.name]: { title: [{ text: { content: name } }] },
+      ...linkPatch(discordId).properties,
+    },
+  })) as MemberPage;
+
+  return toMember(page);
+}
+
 /** every Members row. 48 of them, so one request unless the club triples */
 async function allMembers(token: string): Promise<MemberPage[]> {
   const pages: MemberPage[] = [];

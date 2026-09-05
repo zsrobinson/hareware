@@ -5,6 +5,7 @@ import {
   postedId,
   type InteractionDeps,
   type InteractionResponse,
+  type BodyResponse,
   type MessageResponse,
 } from "./interactions";
 import { EDITORIAL_BOARD_ROLE_ID } from "./config";
@@ -19,11 +20,11 @@ const IS_COMPONENTS_V2 = 1 << 15;
  * autocomplete answers with `choices` and no body, so the two shapes are a
  * union — this narrows it and fails loudly rather than reading `undefined`
  */
-function asMessage(reply: InteractionResponse | undefined): MessageResponse {
+function asMessage(reply: InteractionResponse | undefined): BodyResponse {
   if (!reply?.data || !("components" in reply.data))
     throw new Error("expected a message reply, got " + JSON.stringify(reply));
 
-  return reply as MessageResponse;
+  return reply as BodyResponse;
 }
 
 /** the choices of an autocomplete reply, same reason */
@@ -517,4 +518,315 @@ test("autocomplete with no reads wired up still answers", async () => {
 
   expect(reply!.type).toBe(AUTOCOMPLETE_RESULT);
   expect(asChoices(reply)).toEqual([]);
+});
+
+/* ---- the write commands ------------------------------------------------- */
+
+const DEFERRED = 5;
+
+/**
+ * deps that run the deferred work inline and await it.
+ *
+ * this is the whole reason `defer` is a dependency rather than a `waitUntil`
+ * call inside the handler: with it, every branch of a deferred write — the
+ * refusal, the throw, the follow-up discord rejected — is reachable in a test
+ * with no worker, no notion and no discord
+ */
+function writing(over: Partial<InteractionDeps> = {}) {
+  const seen = {
+    requests: [] as unknown[],
+    actors: [] as { id: string; name: string }[],
+    followed: [] as { applicationId: string; token: string; content: string }[],
+  };
+  const work: Promise<void>[] = [];
+
+  const deps: InteractionDeps = {
+    edit: async (request, actor) => {
+      seen.requests.push(request);
+      seen.actors.push(actor);
+      return "did the thing";
+    },
+    reply: async (applicationId, token, content) => {
+      seen.followed.push({ applicationId, token, content });
+      return { outcome: "ok", summary: "sent" };
+    },
+    defer: (run) => work.push(run()),
+    ...over,
+  };
+
+  return { deps, seen, settle: () => Promise.all(work) };
+}
+
+/** a command carrying the two things a follow-up needs */
+const writeCommand = (
+  subcommand: string,
+  options: Parameters<typeof command>[1] = [],
+  resolved?: {
+    members?: Record<string, { nick?: string | null }>;
+    users?: Record<
+      string,
+      { id?: string; username?: string; global_name?: string | null }
+    >;
+  },
+) => ({
+  ...command(subcommand, options),
+  application_id: "app-1",
+  token: "tok-1",
+  data: { ...command(subcommand, options).data, resolved },
+});
+
+test("a write defers, then follows up with what the edit said", async () => {
+  const { deps, seen, settle } = writing();
+
+  const reply = await handleInteraction(
+    writeCommand("status", [
+      { name: "article", value: "page-1" },
+      { name: "status", value: "Approved" },
+    ]),
+    deps,
+  );
+
+  // no body on a deferral, and the plain ephemeral flag rather than the v2 pair
+  expect(reply).toEqual({ type: DEFERRED, data: { flags: EPHEMERAL } });
+
+  await settle();
+
+  expect(seen.requests).toEqual([
+    {
+      kind: "property",
+      pageId: "page-1",
+      intent: { property: "status", option: "Approved" },
+    },
+  ]);
+  expect(seen.followed).toEqual([
+    { applicationId: "app-1", token: "tok-1", content: "did the thing" },
+  ]);
+});
+
+/*
+  the exact silent failure `docs/agents/silent-failures.md` names: an
+  acknowledged interaction left silent shows the editor "HareWare is thinking…"
+  forever, and they cannot tell a refused write from a slow one
+*/
+test("an edit that throws still follows up", async () => {
+  const { deps, seen, settle } = writing({
+    edit: async () => {
+      throw new Error("notion fell over");
+    },
+  });
+
+  await handleInteraction(
+    writeCommand("headline", [
+      { name: "article", value: "page-1" },
+      { name: "headline", value: "Looney's line" },
+    ]),
+    deps,
+  );
+  await settle();
+
+  expect(seen.followed).toHaveLength(1);
+  expect(seen.followed[0]!.content).toContain("error");
+});
+
+test("nowhere to run the work is refused inline rather than deferred", async () => {
+  const { deps } = writing({ defer: undefined });
+
+  const reply = asMessage(
+    await handleInteraction(
+      writeCommand("status", [
+        { name: "article", value: "page-1" },
+        { name: "status", value: "Approved" },
+      ]),
+      deps,
+    ),
+  );
+
+  expect(reply.type).toBe(4);
+  expect(text(reply)).toContain("Nothing was changed");
+});
+
+test("a headline the picker did not fill in is answered before deferring", async () => {
+  const { deps, seen } = writing();
+
+  const reply = asMessage(
+    await handleInteraction(
+      writeCommand("status", [{ name: "status", value: "Approved" }]),
+      deps,
+    ),
+  );
+
+  expect(reply.type).toBe(4);
+  expect(text(reply)).toContain("Pick an Article");
+  expect(seen.requests).toEqual([]);
+});
+
+/* ---- the date ----------------------------------------------------------- */
+
+test("a publication date that is not one is refused rather than written", async () => {
+  const { deps, seen } = writing();
+
+  for (const bad of [
+    "next tuesday",
+    "09/10/2026",
+    "2026-13-01",
+    "2026-02-31",
+  ]) {
+    const reply = asMessage(
+      await handleInteraction(
+        writeCommand("publication-date", [
+          { name: "article", value: "page-1" },
+          { name: "date", value: bad },
+        ]),
+        deps,
+      ),
+    );
+
+    expect(text(reply)).toContain("YYYY-MM-DD");
+  }
+
+  expect(seen.requests).toEqual([]);
+});
+
+test("a publication date with no date clears it", async () => {
+  const { deps, seen, settle } = writing();
+
+  await handleInteraction(
+    writeCommand("publication-date", [{ name: "article", value: "page-1" }]),
+    deps,
+  );
+  await settle();
+
+  expect(seen.requests).toEqual([
+    {
+      kind: "property",
+      pageId: "page-1",
+      intent: { property: "publicationDate", date: null },
+    },
+  ]);
+});
+
+test("a real date is passed through as notion writes it", async () => {
+  const { deps, seen, settle } = writing();
+
+  await handleInteraction(
+    writeCommand("publication-date", [
+      { name: "article", value: "page-1" },
+      { name: "date", value: "2026-09-10" },
+    ]),
+    deps,
+  );
+  await settle();
+
+  expect(seen.requests[0]).toMatchObject({
+    intent: { property: "publicationDate", date: "2026-09-10" },
+  });
+});
+
+/* ---- credits ------------------------------------------------------------ */
+
+test("the picked member's name comes out of the payload, nickname first", async () => {
+  /* ADR 0009: the interaction resolves the user, so crediting somebody costs
+     no discord request at all */
+  const { deps, seen, settle } = writing();
+
+  await handleInteraction(
+    writeCommand(
+      "author",
+      [
+        { name: "article", value: "page-1" },
+        { name: "member", value: "222" },
+        { name: "also", value: true },
+      ],
+      {
+        members: { "222": { nick: "Bay" } },
+        users: { "222": { username: "bayh", global_name: "Bay Hoffman" } },
+      },
+    ),
+    deps,
+  );
+  await settle();
+
+  expect(seen.requests).toEqual([
+    {
+      kind: "credit",
+      pageId: "page-1",
+      credit: "author",
+      member: { discordId: "222", displayName: "Bay" },
+      byline: null,
+      also: true,
+    },
+  ]);
+});
+
+test("no nickname falls back to the display name, then the handle", async () => {
+  const { deps, seen, settle } = writing();
+
+  await handleInteraction(
+    writeCommand(
+      "image-crew",
+      [
+        { name: "article", value: "page-1" },
+        { name: "member", value: "222" },
+      ],
+      { users: { "222": { username: "bayh", global_name: null } } },
+    ),
+    deps,
+  );
+  await settle();
+
+  expect(seen.requests[0]).toMatchObject({
+    credit: "image",
+    member: { displayName: "bayh" },
+    also: false,
+  });
+});
+
+test("a byline with no member is a credit request all the same", async () => {
+  const { deps, seen, settle } = writing();
+
+  await handleInteraction(
+    writeCommand("author", [
+      { name: "article", value: "page-1" },
+      { name: "byline", value: "Gale de Silva" },
+    ]),
+    deps,
+  );
+  await settle();
+
+  expect(seen.requests[0]).toMatchObject({
+    member: null,
+    byline: "Gale de Silva",
+  });
+});
+
+/* ---- creating ----------------------------------------------------------- */
+
+test("a new article takes the caller's name as its byline by default", async () => {
+  const { deps, seen, settle } = writing();
+
+  await handleInteraction(
+    writeCommand("new", [{ name: "headline", value: "Looney's line" }]),
+    deps,
+  );
+  await settle();
+
+  // ADR 0004: the printed Byline is always filled
+  expect(seen.requests).toEqual([
+    {
+      kind: "create",
+      headline: "Looney's line",
+      section: null,
+      byline: "Zachary",
+    },
+  ]);
+  expect(seen.actors).toEqual([{ id: "", name: "Zachary" }]);
+});
+
+test("a new article with no headline is refused before anything is written", async () => {
+  const { deps, seen } = writing();
+
+  const reply = asMessage(await handleInteraction(writeCommand("new"), deps));
+
+  expect(text(reply)).toContain("Headline");
+  expect(seen.requests).toEqual([]);
 });

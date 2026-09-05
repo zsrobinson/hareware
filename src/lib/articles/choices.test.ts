@@ -2,6 +2,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import {
   assertProperties,
   extractChoices,
+  optionNamed,
   readChoices,
   refreshChoices,
   type Schema,
@@ -221,4 +222,20 @@ test("every property the commands touch is checked, not only the pickers", () =>
       .map((property) => property.name)
       .sort(),
   );
+});
+
+/* ---- finding one option by name ----------------------------------------- */
+
+test("an option is found in the schema whatever case it was asked for", () => {
+  /* what reaches notion is notion's own spelling. asking for "approved" and
+     writing "Approved" is what keeps ADR 0009's rule — no notion value typed
+     into this repo — while still letting `/article new` start an Article
+     somewhere sensible */
+  expect(optionNamed(schema(), "Article Status", "approved")).toBe("Approved");
+  expect(optionNamed(schema(), "Section", "rabbithole")).toBe("Rabbithole");
+});
+
+test("an option the club renamed is absent rather than invented", () => {
+  expect(optionNamed(schema(), "Article Status", "in flight")).toBeNull();
+  expect(optionNamed(schema(), "No Such Property", "approved")).toBeNull();
 });

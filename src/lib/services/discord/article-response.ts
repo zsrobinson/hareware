@@ -4,7 +4,8 @@ import {
   textDisplay,
   type CommandMessage,
 } from "~/lib/services/discord/message";
-import { card, articleUrl } from "./article-card";
+import { card } from "./article-card";
+import { articleUrl } from "~/lib/articles/snapshot";
 import { ARTICLE_PROPERTIES } from "~/lib/articles/config";
 import type { ArticleChange, EditResult } from "~/lib/articles/edit";
 import type { ArticlePage } from "~/lib/articles/page";

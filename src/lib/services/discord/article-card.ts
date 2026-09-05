@@ -1,12 +1,12 @@
-/* The same Article snapshot for show, creation and edits. No reads or writes. */
-import { plainText } from "~/lib/services/notion/client";
+/* Draws an Article snapshot as a components v2 container. No reads or writes. */
 import {
   displayText,
   textDisplay,
   type Container,
 } from "~/lib/services/discord/message";
-import { ARTICLE_PROPERTIES, UNTITLED } from "~/lib/articles/config";
-import { optionName, type ArticlePage } from "~/lib/articles/page";
+import { UNTITLED } from "~/lib/articles/config";
+import { snapshot } from "~/lib/articles/snapshot";
+import type { ArticlePage } from "~/lib/articles/page";
 
 /** Notion supplies color names. RGB and Unicode are display approximations. */
 const PALETTE: Record<string, { accent: number; emoji: string }> = {
@@ -24,70 +24,31 @@ const PALETTE: Record<string, { accent: number; emoji: string }> = {
 const palette = (color?: string | null) =>
   PALETTE[color ?? "default"] ?? PALETTE.default!;
 
-// The existing card fields, in the All Articles view's relative order.
-const PROPERTIES = [
-  "authorByline",
-  "status",
-  "section",
-  "imageStatus",
-  "imageByline",
-  "publicationDate",
-] as const;
-
-/** Never turn remote text into an arbitrary link posted by the club's bot. */
-export function articleUrl(
-  page: Pick<ArticlePage, "id" | "url">,
-): string | undefined {
-  if (page.url) {
-    try {
-      const url = new URL(page.url);
-      if (
-        url.protocol === "https:" &&
-        !url.username &&
-        !url.password &&
-        /^(?:www\.|app\.)?notion\.so$|^(?:www\.|app\.)?notion\.com$/.test(
-          url.hostname,
-        ) &&
-        url.href.length <= 512
-      )
-        return url.href;
-    } catch {
-      /* Fall back to the canonical page id. */
-    }
-  }
-  const id = page.id.replaceAll("-", "");
-  return /^[a-f0-9]{32}$/i.test(id) ? `https://www.notion.so/${id}` : undefined;
-}
-
 export function card(page: ArticlePage): Container {
-  const property = (key: keyof typeof ARTICLE_PROPERTIES) =>
-    page.properties?.[ARTICLE_PROPERTIES[key].name];
-  const url = articleUrl(page);
-  if (!url) throw new Error("Article has no valid Notion link");
-  const title =
-    displayText(plainText(property("headline")?.title), 200) || UNTITLED;
-  const rows = PROPERTIES.map((key) => {
-    const value = property(key);
-    const raw =
-      key === "publicationDate"
-        ? value?.date?.start
-        : key === "authorByline" || key === "imageByline"
-          ? plainText(value?.rich_text)
-          : optionName(value);
+  const view = snapshot(page);
+  if (!view.url) throw new Error("Article has no valid Notion link");
+
+  const title = displayText(view.title, 200) || UNTITLED;
+  const rows = view.rows.map((row) => {
     const marker =
-      (key === "status" || key === "imageStatus") && raw
-        ? `${palette(value?.status?.color).emoji} `
-        : "";
-    return `**${ARTICLE_PROPERTIES[key].name}**: ${marker}${displayText(raw ?? "", 160) || "Not set"}`;
+      row.status && row.value ? `${palette(row.status.color).emoji} ` : "";
+    const value = displayText(row.value ?? "", 160) || "Not set";
+    return `**${row.label}**: ${marker}${value}`;
   });
+
   return {
     type: 17,
-    accent_color: palette(property("status")?.status?.color).accent,
+    accent_color: palette(view.accentColor).accent,
     components: [
       {
         type: 9,
         components: [textDisplay(`### ${title}`)],
-        accessory: { type: 2, style: 5, label: "Open in Notion", url },
+        accessory: {
+          type: 2,
+          style: 5,
+          label: "Open in Notion",
+          url: view.url,
+        },
       },
       textDisplay(rows.join("\n")),
     ],

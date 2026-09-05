@@ -1,6 +1,7 @@
 ---
 import { env } from "cloudflare:workers";
 import Dashboard from "~/layouts/dashboard.astro";
+import { directory } from "~/lib/actors";
 import { InvocationLog } from "~/components/invocation-log";
 import { viewerState } from "~/lib/admin";
 import { admitted } from "~/lib/admin-guard";
@@ -15,6 +16,11 @@ const who = admitted(Astro.locals);
 Astro.response.headers.set("cache-control", "private, no-store");
 
 const rows = env.DB ? await recent(env.DB, 500) : [];
+
+/* the ids in `actor` are resolved to the people they name here rather than in
+   the island, because the bot token that asks discord lives on the server and
+   the answer is the same for every reader of the page */
+const actors = await directory(rows.map((row) => row.actor));
 ---
 
 <Dashboard title="Invocation Log" viewer={viewerState(who)}>
@@ -24,6 +30,6 @@ const rows = env.DB ? await recent(env.DB, 500) : [];
       published, which is how it is told apart from a broken one.
     </p>
 
-    <InvocationLog rows={rows} client:load />
+    <InvocationLog rows={rows} actors={actors} client:load />
   </div>
 </Dashboard>

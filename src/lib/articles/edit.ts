@@ -28,7 +28,7 @@
   bindings and no token.
 */
 
-import { failed, ok, type Result } from "~/lib/automations/registry";
+import { failed, ok, type Result } from "~/lib/result";
 import { record } from "~/lib/log";
 import { assertProperties, optionNamed, type Schema } from "./choices";
 import { ARTICLE_PROPERTIES, ARTICLES_DATA_SOURCE_ID } from "./config";

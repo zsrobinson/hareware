@@ -14,12 +14,7 @@
   why in a `Result` rather than throwing into a background task nobody reads.
 */
 
-import {
-  failed,
-  misconfigured,
-  ok,
-  type Result,
-} from "~/lib/automations/registry";
+import { failed, misconfigured, ok, type Result } from "~/lib/result";
 
 /** discord rejects a message over 2000 characters outright */
 export const MAX_CONTENT = 2000;

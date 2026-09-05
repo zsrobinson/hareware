@@ -38,7 +38,7 @@ const POLICY = [
   who may be here, before anything renders. `~/lib/admin-guard` holds the
   decision; this only supplies astro's context to it
 */
-const admin = defineMiddleware((context, next) => guardAdmin(context, next));
+const admin = defineMiddleware(guardAdmin);
 
 const headers = defineMiddleware(async (_context, next) => {
   const response = await next();

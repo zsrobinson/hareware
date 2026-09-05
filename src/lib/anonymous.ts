@@ -9,23 +9,22 @@
 */
 
 /** whatever a page passed about the viewer, in the shape the layout sees it */
-export type Rendered = {
-  session?: unknown;
-  profile?: unknown;
-  admin?: boolean;
-} | null;
+export type Rendered = Record<string, unknown> | null;
 
-/** whether these props would put one member's details into the html */
+/**
+ * whether these props would put one member's details into the html.
+ *
+ * any field with a value counts, rather than a list of the fields there happen
+ * to be today. the list version is how this got caught out once already: it
+ * checked `session` while `admin` drew the editorial nav beside it. a shape
+ * that grows a field grows the guard with it, and the field that comes back
+ * one day — a role, a flag, whatever the nav needs next — is covered before
+ * anybody remembers this file exists
+ */
 export function personal(viewer: Rendered) {
   if (!viewer) return false;
 
-  /*
-    `admin` is no longer part of `ViewerState` — the nav shows every tool to
-    everybody, so nothing draws from it. it stays in the shape this checks
-    anyway: the day something puts a role back into a page's props, that page
-    should not be the one to discover this guard never looked
-  */
-  return Boolean(viewer.session ?? viewer.profile ?? viewer.admin);
+  return Object.values(viewer).some((value) => Boolean(value));
 }
 
 /** whether a cache that is not the visitor's own may hold this response */

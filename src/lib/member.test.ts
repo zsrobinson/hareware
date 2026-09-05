@@ -14,7 +14,7 @@ function mockDiscord(body: unknown, ok = true) {
     vi.fn(async () =>
       ok
         ? new Response(JSON.stringify(body))
-        : new Response("no", { status: 404 }),
+        : new Response(JSON.stringify({ code: 10007 }), { status: 404 }),
     ),
   );
 }
@@ -103,6 +103,37 @@ test("is absent when they have left the server", async () => {
   mockDiscord(null, false);
 
   expect(await guildMember(USER)).toEqual({ status: "absent" });
+});
+
+/*
+  the same 404 answers a guild we cannot see — a wrong GUILD_ID, or the bot
+  removed from the server. reading that as "they left" would print our own
+  misconfiguration on the refusal page as a fact about a member
+*/
+test("is unreachable when the 404 is about the guild, not the member", async () => {
+  workers.env.DISCORD_BOT_TOKEN = "bot";
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.stubGlobal(
+    "fetch",
+    /* 10004 is Unknown Guild */
+    vi.fn(
+      async () =>
+        new Response(JSON.stringify({ code: 10004 }), { status: 404 }),
+    ),
+  );
+
+  expect(await guildMember(USER)).toEqual({ status: "unreachable" });
+});
+
+test("is unreachable when a 404 carries no error code to read", async () => {
+  workers.env.DISCORD_BOT_TOKEN = "bot";
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response("<html>gateway</html>", { status: 404 })),
+  );
+
+  expect(await guildMember(USER)).toEqual({ status: "unreachable" });
 });
 
 /* a rate limit or a revoked token says nothing about whether they are here */

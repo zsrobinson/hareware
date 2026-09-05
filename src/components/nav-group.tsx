@@ -2,10 +2,13 @@ import { isActive, type NavItem } from "~/lib/nav";
 import { cn } from "~/lib/utils";
 
 /*
-  rendered three ways: statically inside the astro sidebar, inside the
-  client:idle island that reveals the editorial nav on cached pages, and inside
-  the mobile sheet. keeping it presentational — no hooks, no state — is what
-  lets the first of those ship no javascript at all
+  rendered two ways: statically inside the astro sidebar, and inside the mobile
+  sheet. keeping it presentational — no hooks, no state — is what lets the
+  first of those ship no javascript at all.
+
+  there was a third, an island that revealed the editorial nav on cached pages.
+  it went when the admin tools stopped being hidden from anyone: no group here
+  varies by who is looking any more, so the sidebar is markup on every page
 */
 export function NavGroup({
   items,

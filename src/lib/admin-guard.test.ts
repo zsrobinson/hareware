@@ -18,7 +18,7 @@ function mockDiscord(roles: string[] | null, ok = true) {
     vi.fn(async () =>
       ok
         ? new Response(JSON.stringify({ roles }))
-        : new Response("no", { status: 404 }),
+        : new Response(JSON.stringify({ code: 10007 }), { status: 404 }),
     ),
   );
 }

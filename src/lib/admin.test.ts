@@ -23,7 +23,7 @@ function mockDiscord(roles: string[] | null, ok = true) {
   const fetchMock = vi.fn(async () =>
     ok
       ? new Response(JSON.stringify({ roles }))
-      : new Response("not found", { status: 404 }),
+      : new Response(JSON.stringify({ code: 10007 }), { status: 404 }),
   );
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;

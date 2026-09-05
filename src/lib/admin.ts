@@ -17,6 +17,7 @@
 */
 
 import { getSessionSecret } from "./auth-config";
+import type { Denial } from "./denial";
 import { EDITORIAL_BOARD_ROLE_ID } from "./services/discord/config";
 import { guildMember, type Profile } from "./member";
 import { getSession, type Session } from "./session";
@@ -33,23 +34,6 @@ export type Viewer = {
   /** null when discord could not be reached, or they have left the server */
   profile: Profile | null;
 } & ({ admin: true; denial: null } | { admin: false; denial: Denial });
-
-/**
- * the four ways of not being allowed into the admin tools.
- *
- * they are separate because a member acts on each differently: sign in, ask
- * for the role, join the server, or come back in a minute. collapsing them is
- * what made a discord outage tell a board member their page did not exist
- */
-export type Denial =
-  /** no session cookie, or one that has expired */
-  | "signed-out"
-  /** signed in, in the server, without @Editorial Board */
-  | "no-role"
-  /** signed in, but not a member of the guild at all */
-  | "not-in-server"
-  /** discord did not answer, so we do not know either way */
-  | "unreachable";
 
 /**
  * the same thing as the nav islands take it, where signed-out is a value.
@@ -135,12 +119,3 @@ export async function editorialBoardMember(
   const who = await viewer(request);
   return who?.admin ? who.session : null;
 }
-
-/** the http status that goes with each refusal */
-export const DENIAL_STATUS: Record<Denial, number> = {
-  "signed-out": 401,
-  "no-role": 403,
-  "not-in-server": 403,
-  /* not 500: nothing here is broken, and a retry is the right advice */
-  unreachable: 503,
-};

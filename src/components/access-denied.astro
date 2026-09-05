@@ -1,13 +1,16 @@
 ---
 /*
-  what an admin page draws instead of itself, when whoever asked may not see it.
+  what an /admin route draws instead of itself, when whoever asked may not see
+  it.
 
-  one component rather than a message per page, because the four refusals are
-  properties of the viewer and not of the tool they were reaching for. the page
-  passes what it is called; everything else here is about them
+  everything that differs between the four refusals is in `~/lib/denial`, so
+  this file chooses nothing: it reads a row and renders it. the button used to
+  be a cascade here, which is why — a fifth denial would have fallen through it
+  to whatever the last branch happened to be, silently and in the one place
+  that is supposed to be telling the truth
 */
 import { buttonVariants } from "~/components/ui/button";
-import type { Denial } from "~/lib/admin";
+import { DENIALS, type Action, type Denial } from "~/lib/denial";
 import type { Profile } from "~/lib/member";
 
 type Props = {
@@ -20,49 +23,31 @@ type Props = {
 
 const { denial, profile, returnTo } = Astro.props;
 
-const authHref = `/auth/discord?${new URLSearchParams({ returnTo })}`;
-const signInHref = `/sign-in?${new URLSearchParams({ returnTo })}`;
-
 /* the handle is what a member recognises as themselves — and, when they are
    signed in as the wrong account, what tells them so */
 const you = profile ? `@${profile.username}` : "this account";
 
-const copy: Record<Denial, { title: string; body: string }> = {
-  "signed-out": {
-    title: "Sign in to see this",
-    body:
-      "The admin tools are for members of @Editorial Board. Sign in with " +
-      "Discord and we will bring you straight back here.",
-  },
-  "no-role": {
-    title: "You are not on the Editorial Board",
-    body:
-      `You are signed in as ${you}, which is a member of The Hare's Discord ` +
-      "but does not hold @Editorial Board. Ask an editor to add the role — " +
-      "the check runs on every page load, so this page works the moment they do.",
-  },
-  "not-in-server": {
-    title: "That account is not in the server",
-    body:
-      `You are signed in as ${you}, and Discord says that account is not a ` +
-      "member of The Hare's server. Ask an editor for an invite, or sign in " +
-      "with the account you use in the club.",
-  },
-  unreachable: {
-    title: "We could not check your access",
-    body:
-      "Discord did not answer when we asked which roles you hold, so we " +
-      "cannot tell whether you are on the Editorial Board. Nothing is wrong " +
-      "with your account. Try again in a moment.",
-  },
-};
-
-const { title, body } = copy[denial];
+const { title, body, action } = DENIALS[denial];
 
 /* the same buttons the rest of the app draws, rather than a second set of
    class strings that drift from them */
 const PRIMARY = buttonVariants({ size: "lg" });
 const QUIET = buttonVariants({ variant: "outline", size: "lg" });
+
+/** where each action goes. the labels sit beside them so both stay in step */
+const ACTIONS: Record<Action, { label: string; href: string }> = {
+  "sign-in": {
+    label: "Sign in with Discord",
+    href: `/auth/discord?${new URLSearchParams({ returnTo })}`,
+  },
+  retry: { label: "Try again", href: returnTo },
+  "switch-account": {
+    label: "Use a different account",
+    href: `/sign-in?${new URLSearchParams({ returnTo })}`,
+  },
+};
+
+const { label, href } = ACTIONS[action];
 ---
 
 <section class="mx-auto max-w-lg py-12">
@@ -70,27 +55,24 @@ const QUIET = buttonVariants({ variant: "outline", size: "lg" });
     Member access
   </p>
   <h2 class="font-display text-3xl leading-tight">{title}</h2>
-  <p class="text-muted-foreground mt-3 text-sm leading-6">{body}</p>
+  <p class="text-muted-foreground mt-3 text-sm leading-6">{body(you)}</p>
 
   <div class="mt-6 flex flex-wrap gap-2">
     {
-      denial === "signed-out" ? (
-        <a href={authHref} class={PRIMARY}>
-          Sign in with Discord
-        </a>
-      ) : denial === "unreachable" ? (
-        <a href={returnTo} class={PRIMARY}>
-          Try again
-        </a>
-      ) : (
-        /* signing in as somebody else means signing out first, which is a
-           POST — the same one the account menu makes */
+      /* signing in as somebody else means signing out first, and that is a
+         POST — the same one the account menu makes. the other two actions are
+         ordinary links */
+      action === "switch-account" ? (
         <form method="post" action="/auth/logout">
-          <input type="hidden" name="returnTo" value={signInHref} />
+          <input type="hidden" name="returnTo" value={href} />
           <button type="submit" class={QUIET}>
-            Use a different account
+            {label}
           </button>
         </form>
+      ) : (
+        <a href={href} class={PRIMARY}>
+          {label}
+        </a>
       )
     }
 

@@ -23,6 +23,10 @@
 */
 import type { Access, Viewer } from "./admin";
 
+/* the denial table is plain data and reaches nothing, so it is safe to hold
+   statically — it is only `~/lib/admin` that must stay behind the path check */
+import { DENIALS } from "./denial";
+
 /** everything under here is admin, including the bare path itself */
 export const ADMIN_PATH = "/admin";
 
@@ -94,7 +98,7 @@ export async function guardAdmin(context: GuardContext, next: Next) {
   if (!isAdminPath(context.url.pathname)) return next();
 
   /* deferred on purpose — see the note on the import at the top of this file */
-  const { adminAccess, DENIAL_STATUS } = await import("./admin");
+  const { adminAccess } = await import("./admin");
 
   const access = await adminAccess(context.request);
 
@@ -113,8 +117,20 @@ export async function guardAdmin(context: GuardContext, next: Next) {
   */
   const response = await next(REFUSAL_PATH);
 
+  /*
+    the status below is stamped onto whatever came back. if the refusal page
+    ever goes missing or throws, that would ship astro's error body wearing a
+    401 — a broken page reported as a refusal, which is the same class of lie
+    the rest of this file exists to stop
+  */
+  if (!response.ok) {
+    throw new Error(
+      `${REFUSAL_PATH} answered ${response.status} while refusing ${context.url.pathname}`,
+    );
+  }
+
   return new Response(response.body, {
-    status: DENIAL_STATUS[access.denial],
+    status: DENIALS[access.denial].status,
     headers: response.headers,
   });
 }

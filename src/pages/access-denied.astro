@@ -4,33 +4,28 @@
 
   the guard in `~/lib/admin-guard` rewrites to here rather than redirecting, so
   the address bar still holds the page they were sent to. it leaves the reason
-  in `locals.admission`, which is why this page never has to guess.
+  in `locals.admission`, which is why this page never has to guess — and never
+  works it out for itself: a second copy of that decision, on a route the guard
+  does not cover, is two answers to one question.
 
-  visited directly it works out the same answer for itself. that path is not a
-  real entry point, but a page that told a passer-by something untrue about
-  their own account would be the exact fault this whole change is about
+  so a direct visit is sent at the admin panel instead. the guard is above that
+  path, and will send them straight back here with a real admission — or let
+  them in, if it turns out they may be there
 */
 import Dashboard from "~/layouts/dashboard.astro";
 import AccessDenied from "~/components/access-denied.astro";
-import { adminAccess, DENIAL_STATUS, viewerState } from "~/lib/admin";
+import { viewerState } from "~/lib/admin";
 
-const admission = Astro.locals.admission ?? {
-  access: await adminAccess(Astro.request),
-  /* a direct visit was going nowhere in particular, so offer the panel */
-  returnTo: "/admin/automations",
-};
+const admission = Astro.locals.admission;
+
+if (!admission || admission.access.allowed) {
+  return Astro.redirect("/admin/automations");
+}
 
 const { access, returnTo } = admission;
 
-/*
-  somebody who may in fact be here has no business on this page, and arriving
-  means they typed the url. send them where they were trying to go
-*/
-if (access.allowed) return Astro.redirect(returnTo);
-
-/* the guard sets this too, and sets the same value. a direct visit has no
-   guard above it, so the page has to be right on its own */
-Astro.response.status = DENIAL_STATUS[access.denial];
+/* the guard sets the status on the response it hands back; this page only
+   renders the body. `DENIALS` is where the two agree — ~/lib/denial */
 
 /* it names the member back to them, so no cache may hold it */
 Astro.response.headers.set("cache-control", "private, no-store");

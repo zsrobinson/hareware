@@ -42,6 +42,25 @@ export type MemberLookup =
   /** discord did not answer, or we have no token to ask with */
   | { status: "unreachable" };
 
+/**
+ * discord's "Unknown Member". its siblings — 10004 Unknown Guild, 10013
+ * Unknown User — arrive with the same 404 status and mean something about us
+ * or the request rather than about their membership
+ */
+const UNKNOWN_MEMBER = 10007;
+
+/** the `code` out of discord's error body, or undefined if it had none */
+async function errorCode(response: Response) {
+  try {
+    const body = (await response.json()) as { code?: unknown };
+    return typeof body.code === "number" ? body.code : undefined;
+  } catch {
+    /* an error body that is not json tells us nothing, and "nothing" is not
+       evidence that somebody left */
+    return undefined;
+  }
+}
+
 /** discord's member object for somebody in the guild, or why we have none */
 export async function guildMember(userId: string): Promise<MemberLookup> {
   const token = env.DISCORD_BOT_TOKEN;
@@ -54,8 +73,24 @@ export async function guildMember(userId: string): Promise<MemberLookup> {
       { headers: { authorization: `Bot ${token}` } },
     );
 
-    // 404 is the ordinary answer for somebody who has left the server
-    if (response.status === 404) return { status: "absent" };
+    /*
+      a 404 is not one fact. discord answers it for a member who has left, and
+      for a guild it will not show us — a wrong GUILD_ID, or the bot removed
+      from the server. only the first is about them, and the refusal page says
+      "discord says that account is not a member" out loud, so guessing here
+      would print our own misconfiguration as a fact about a person.
+
+      the json error code is what tells them apart: 10007 is the member,
+      anything else is the guild or the request
+    */
+    if (response.status === 404) {
+      const code = await errorCode(response);
+
+      if (code === UNKNOWN_MEMBER) return { status: "absent" };
+
+      console.error("[member] discord 404 with error code", code);
+      return { status: "unreachable" };
+    }
 
     /* anything else — a rate limit, a revoked token, discord having a bad day
        — says nothing about whether they are a member */

@@ -15,7 +15,7 @@ should are answered by
 src/lib/
   services/{discord,notion,wordpress}/  how to talk to each outside system
   automations/                          what runs on a schedule
-  articles/                             the /article commands, and Notion's shapes
+  articles/                             Article behavior and Notion's shapes
   db/ log.ts                            the invocation record
   session · auth · admin · member       who is asking, and whether they may
 src/pages/api/                          the routes those answer
@@ -25,6 +25,10 @@ Three outside systems, and everything about talking to one lives in its folder:
 credentials, quirks, and the shapes it returns. **Nothing in `services/` knows
 what a reminder is**, so a watcher or a slash command can reach for the same
 client the automations use.
+
+Discord payloads and presentation stay in `services/discord`; Article behavior
+stays in `articles`. Dependencies point from the Discord adapter into Article
+modules, never back from Article modules into Discord.
 
 An automation is an entry in `src/lib/automations/registry.ts` — id, hour,
 channel, and the function that runs it — plus its module. The registry is what
@@ -95,3 +99,8 @@ CLI. See `docs/agents/issue-tracker.md`.
 
 Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See
 `docs/agents/domain.md`.
+
+### Code quality
+
+When adding or reorganizing modules, comments, or tests, follow
+`docs/agents/code-quality.md`.

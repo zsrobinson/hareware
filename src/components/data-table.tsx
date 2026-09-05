@@ -9,6 +9,7 @@ import {
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
+  type Column,
   type ColumnFiltersState,
   type ExpandedState,
   type FilterFn,
@@ -27,8 +28,8 @@ import {
   ChevronsLeftIcon,
   ChevronsRightIcon,
   ChevronsUpDownIcon,
+  FunnelIcon,
   ArrowUpIcon,
-  ChevronDownIcon,
   SlidersHorizontalIcon,
   XIcon,
 } from "lucide-react";
@@ -311,92 +312,7 @@ export function DataTable<T>({
           </kbd>
         </div>
 
-        {facets.map((facet) => {
-          const column = table.getColumn(facet.id);
-          if (!column) return null;
-
-          const counts = column.getFacetedUniqueValues();
-          const values = [...counts.keys()]
-            .filter((value): value is string => typeof value === "string")
-            .sort();
-          const chosen = new Set((column.getFilterValue() as string[]) ?? []);
-          const render = column.columnDef.meta?.renderFacet;
-
-          return (
-            <DropdownMenu key={facet.id}>
-              <DropdownMenuTrigger
-                render={<Button variant="outline" size="lg" />}
-              >
-                {facet.label}
-                {/* the values themselves while there is room for them: a
-                    button reading "Outcome 2" says only that something is
-                    hidden, and the point of the row is to say what */}
-                {chosen.size > 0 && (
-                  <span className="text-muted-foreground flex max-w-48 items-center gap-1 truncate text-xs">
-                    {chosen.size <= 2
-                      ? [...chosen].map((value) => (
-                          <span key={value}>
-                            {render ? render(value) : value}
-                          </span>
-                        ))
-                      : `${chosen.size} selected`}
-                  </span>
-                )}
-                <ChevronDownIcon className="size-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="start"
-                className="max-h-80 overflow-y-auto"
-              >
-                {values.map((value) => (
-                  <DropdownMenuCheckboxItem
-                    key={value}
-                    checked={chosen.has(value)}
-                    onCheckedChange={(on) => {
-                      const next = new Set(chosen);
-                      if (on) next.add(value);
-                      else next.delete(value);
-                      column.setFilterValue(next.size ? [...next] : undefined);
-                    }}
-                  >
-                    <span className="flex-1">
-                      {render ? render(value) : value}
-                    </span>
-                    <span className="text-muted-foreground ml-3 tabular-nums">
-                      {counts.get(value)}
-                    </span>
-                  </DropdownMenuCheckboxItem>
-                ))}
-                {chosen.size > 0 && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => column.setFilterValue(undefined)}
-                    >
-                      Clear {facet.label.toLowerCase()}
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          );
-        })}
-
         {toolbar?.(table)}
-
-        {narrowed && (
-          <Button
-            variant="ghost"
-            size="lg"
-            onClick={() => {
-              setColumnFilters([]);
-              setSearch("");
-            }}
-          >
-            <XIcon className="size-4" />
-            Clear
-          </Button>
-        )}
 
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -422,14 +338,71 @@ export function DataTable<T>({
         </DropdownMenu>
       </div>
 
+      {/* the filters live in the headers now, where the values they hide are.
+          a header has no room to say which ones, and a table quietly showing a
+          third of itself is the oldest trap in this kind of ui, so what is
+          narrowing it gets said here, once, and can be taken off here too */}
+      {narrowed && (
+        <div className="flex flex-wrap items-center gap-1.5 text-sm">
+          {search && (
+            <Chip onRemove={() => setSearch("")}>
+              <span className="text-muted-foreground">matching</span> {search}
+            </Chip>
+          )}
+
+          {columnFilters.map((filter) => {
+            const column = table.getColumn(filter.id);
+            const render = column?.columnDef.meta?.renderFacet;
+            const values = Array.isArray(filter.value)
+              ? (filter.value as string[])
+              : [];
+
+            return values.map((value) => (
+              <Chip
+                key={`${filter.id}:${value}`}
+                onRemove={() =>
+                  column?.setFilterValue(
+                    values.length > 1
+                      ? values.filter((it) => it !== value)
+                      : undefined,
+                  )
+                }
+              >
+                <span className="text-muted-foreground">
+                  {column ? label(column).toLowerCase() : filter.id}
+                </span>
+                {render ? render(value) : value}
+              </Chip>
+            ));
+          })}
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setColumnFilters([]);
+              setSearch("");
+            }}
+          >
+            Clear all
+          </Button>
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-lg border">
-        <Table>
+        <Table className="min-w-3xl table-fixed">
           <TableHeader>
             {table.getHeaderGroups().map((group) => (
               <TableRow key={group.id}>
-                {detail && <TableHead className="w-8" />}
+                {detail && <TableHead className="w-10" />}
                 {group.headers.map((header) => (
-                  <SortableHead key={header.id} header={header} />
+                  <ColumnHead
+                    key={header.id}
+                    header={header}
+                    faceted={facetIds.includes(
+                      header.column.id as Extract<keyof T, string>,
+                    )}
+                  />
                 ))}
               </TableRow>
             ))}
@@ -550,25 +523,49 @@ export function DataTable<T>({
   );
 }
 
+/** one active filter, said out loud and removable */
+function Chip({
+  children,
+  onRemove,
+}: {
+  children: ReactNode;
+  onRemove: () => void;
+}) {
+  return (
+    <span className="border-border flex items-center gap-1.5 rounded-full border py-0.5 pr-1 pl-2.5 text-xs">
+      {children}
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label="Remove this filter"
+        onClick={onRemove}
+      >
+        <XIcon />
+      </Button>
+    </span>
+  );
+}
+
 /**
- * a header that says it can be sorted, and which way it currently is.
+ * a column header: what it is called, which way it is sorted, and what it is
+ * filtered to.
  *
- * the old one drew the same two-headed arrow whether the column was sorted up,
- * down, or not at all, which is a control reporting none of its own state — a
- * table sorted oldest-first looked exactly like one sorted newest-first
+ * the filters used to be a row of dropdowns above the table, which meant
+ * reading a column and then looking somewhere else to narrow it. they belong
+ * on the column they act on — and the old row of them grew by one button for
+ * every facet, which is the toolbar this page nearly had
  */
-function SortableHead<T>({ header }: { header: Header<T, unknown> }) {
+function ColumnHead<T>({
+  header,
+  faceted,
+}: {
+  header: Header<T, unknown>;
+  faceted: boolean;
+}) {
   const column = header.column;
   const sorted = column.getIsSorted();
   const definition = column.columnDef.header;
-
-  const content = header.isPlaceholder
-    ? null
-    : flexRender(definition, header.getContext());
-
-  if (!column.getCanSort() || typeof definition !== "string") {
-    return <TableHead>{content}</TableHead>;
-  }
+  const sortable = column.getCanSort() && typeof definition === "string";
 
   const Icon =
     sorted === "asc"
@@ -586,21 +583,90 @@ function SortableHead<T>({ header }: { header: Header<T, unknown> }) {
             ? "descending"
             : "none"
       }
+      style={{ width: column.columnDef.size }}
       className="p-0"
     >
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-9 w-full justify-start rounded-none px-2 font-medium"
-        onClick={() => column.toggleSorting(sorted === "asc")}
-        title={`Sort by ${label(column).toLowerCase()}`}
-      >
-        {definition}
-        <Icon
-          className={cn("size-3.5", sorted ? "opacity-100" : "opacity-40")}
-        />
-      </Button>
+      <div className="flex items-center">
+        {sortable ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 flex-1 justify-start rounded-none px-2 font-medium"
+            onClick={() => column.toggleSorting(sorted === "asc")}
+            title={`Sort by ${label(column).toLowerCase()}`}
+          >
+            {definition}
+            <Icon
+              className={cn("size-3.5", sorted ? "opacity-100" : "opacity-40")}
+            />
+          </Button>
+        ) : (
+          <span className="flex-1 px-2 font-medium">
+            {header.isPlaceholder
+              ? null
+              : flexRender(definition, header.getContext())}
+          </span>
+        )}
+
+        {faceted && <FacetMenu column={column} />}
+      </div>
     </TableHead>
+  );
+}
+
+/** the values a column actually holds, counted, as a menu on the column */
+function FacetMenu<T>({ column }: { column: Column<T, unknown> }) {
+  const counts = column.getFacetedUniqueValues();
+  const values = [...counts.keys()]
+    .filter((value): value is string => typeof value === "string")
+    .sort();
+  const chosen = new Set((column.getFilterValue() as string[]) ?? []);
+  const render = column.columnDef.meta?.renderFacet;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="mr-1 shrink-0"
+            aria-label={`Filter by ${label(column).toLowerCase()}`}
+          />
+        }
+      >
+        <FunnelIcon
+          className={cn(chosen.size ? "fill-current" : "opacity-40")}
+        />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-80 overflow-y-auto">
+        {values.map((value) => (
+          <DropdownMenuCheckboxItem
+            key={value}
+            checked={chosen.has(value)}
+            onCheckedChange={(on) => {
+              const next = new Set(chosen);
+              if (on) next.add(value);
+              else next.delete(value);
+              column.setFilterValue(next.size ? [...next] : undefined);
+            }}
+          >
+            <span className="flex-1">{render ? render(value) : value}</span>
+            <span className="text-muted-foreground ml-3 tabular-nums">
+              {counts.get(value)}
+            </span>
+          </DropdownMenuCheckboxItem>
+        ))}
+        {chosen.size > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => column.setFilterValue(undefined)}>
+              Clear {label(column).toLowerCase()}
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -643,7 +709,7 @@ function Line<T>({
         )}
       >
         {detail && (
-          <TableCell className="w-8 pr-0 align-top">
+          <TableCell className="w-10 pr-0 align-top">
             <Button
               variant="ghost"
               size="icon-xs"

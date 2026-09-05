@@ -24,12 +24,5 @@ const actors = await directory(rows.map((row) => row.actor));
 ---
 
 <Dashboard title="Invocation Log" viewer={viewerState(who)}>
-  <div class="space-y-4">
-    <p class="text-muted-foreground text-sm">
-      Everything HareWare has done. A quiet morning shows a row saying nothing
-      published, which is how it is told apart from a broken one.
-    </p>
-
-    <InvocationLog rows={rows} actors={actors} client:load />
-  </div>
+  <InvocationLog rows={rows} actors={actors} client:load />
 </Dashboard>

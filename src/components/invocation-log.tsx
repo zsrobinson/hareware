@@ -11,8 +11,9 @@ import {
   TerminalIcon,
   TriangleAlertIcon,
   WrenchIcon,
+  XIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { cn } from "cn";
 import { DataTable } from "~/components/data-table";
 import { Badge } from "~/components/ui/badge";
@@ -20,7 +21,7 @@ import { Button } from "~/components/ui/button";
 import { useNow } from "~/components/now";
 import { setParams, useParam } from "~/components/url-state";
 import type { Directory } from "~/lib/actors";
-import { ago, enrich, type Enriched } from "~/lib/log-view";
+import { ago, enrich, needsAttention, type Enriched } from "~/lib/log-view";
 import type { Row } from "~/lib/log";
 
 /** the row as it crosses to the client: json has no Date and needs none */
@@ -34,13 +35,23 @@ export type LogRow = Row;
   something went wrong on its own
 */
 const OUTCOMES = {
-  ok: { variant: "secondary", icon: CheckIcon },
-  skipped: { variant: "outline", icon: MinusIcon },
-  misconfigured: { variant: "destructive", icon: WrenchIcon },
-  failed: { variant: "destructive", icon: TriangleAlertIcon },
+  ok: { variant: "secondary", icon: CheckIcon, tone: "" },
+  skipped: { variant: "outline", icon: MinusIcon, tone: "" },
+  /* somebody has to go and set something, which is not the same as something
+     having gone wrong on its own — so not the same red */
+  misconfigured: {
+    variant: "outline",
+    icon: WrenchIcon,
+    tone: "border-amber-500/40 text-amber-700 dark:text-amber-500",
+  },
+  failed: { variant: "destructive", icon: TriangleAlertIcon, tone: "" },
 } as const satisfies Record<
   string,
-  { variant: "secondary" | "outline" | "destructive"; icon: typeof CheckIcon }
+  {
+    variant: "secondary" | "outline" | "destructive";
+    icon: typeof CheckIcon;
+    tone: string;
+  }
 >;
 
 /** what fired it, which is most of what "is this my fault" comes down to */
@@ -51,24 +62,40 @@ const SOURCES = {
   command: { icon: TerminalIcon, said: "a slash command" },
 } as const satisfies Record<string, { icon: typeof ClockIcon; said: string }>;
 
+/*
+  what a transition is called, in the words somebody would use for it. "was ok"
+  described the previous row and left the reader to work out what that meant
+  about this one; a reminder that stopped arriving is the thing worth saying
+*/
+const CHANGES = {
+  broke: "started failing",
+  recovered: "recovered",
+  changed: "changed",
+} as const;
+
 function Outcome({ row }: { row: Enriched }) {
-  const { variant, icon: Icon } =
-    OUTCOMES[row.outcome as keyof typeof OUTCOMES] ?? OUTCOMES.failed;
+  const {
+    variant,
+    icon: Icon,
+    tone,
+  } = OUTCOMES[row.outcome as keyof typeof OUTCOMES] ?? OUTCOMES.failed;
 
   return (
-    <span className="flex items-center gap-1.5">
-      <Badge variant={variant}>
+    <span className="flex items-center gap-1.5 overflow-hidden">
+      <Badge variant={variant} className={tone}>
         <Icon data-icon="inline-start" />
         {row.outcome}
       </Badge>
-      {/* the row where something started going wrong, or stopped */}
-      {row.changed && (
+
+      {/* only ever on a cron row: the schedule is the thing that has a state
+          to change. see `enrich` */}
+      {row.change && (
         <Badge
           variant="ghost"
-          className="text-muted-foreground"
-          title={`the previous ${row.source} run of ${row.action} was ${row.before}`}
+          className="text-muted-foreground shrink"
+          title={`the scheduled ${row.action} before this one ended ${row.change.from}`}
         >
-          was {row.before}
+          {CHANGES[row.change.kind]}
         </Badge>
       )}
     </span>
@@ -174,163 +201,240 @@ function Actor({
   );
 }
 
-/** the whole of a row, for when the summary is the interesting part */
-function Detail({ row, actors }: { row: Enriched; actors: Directory }) {
-  const [said, setSaid] = useState<string | null>(null);
-
-  function copy(what: string, text: string) {
-    navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        setSaid(what);
-        setTimeout(() => setSaid(null), 1200);
-      })
-      .catch((error: unknown) => {
-        console.error("could not write to the clipboard", error);
-        setSaid("clipboard refused");
-      });
-  }
-
-  const profile = row.actor ? actors[row.actor] : undefined;
+/** a copy button that says whether it worked, and stops talking about it */
+function Copy({
+  what,
+  text,
+  icon,
+  children,
+}: {
+  what: string;
+  text: () => string;
+  icon: ReactNode;
+  children: string;
+}) {
+  const [done, setDone] = useState<boolean | null>(null);
 
   return (
-    <div className="grid gap-4 p-4 sm:grid-cols-[1fr_auto]">
-      <div className="space-y-3">
-        <div>
-          <Field>Summary</Field>
-          <p className="text-sm break-words">{row.summary}</p>
-        </div>
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => {
+        navigator.clipboard
+          .writeText(text())
+          .then(() => setDone(true))
+          .catch((error: unknown) => {
+            /* the clipboard refuses when the document is not focused or
+               permission was withheld, and silence would be the only sign */
+            console.error(`could not copy the ${what}`, error);
+            setDone(false);
+          })
+          .finally(() => setTimeout(() => setDone(null), 1200));
+      }}
+    >
+      {done === null ? icon : done ? <CheckIcon /> : <XIcon />}
+      {done === false ? "Refused" : children}
+    </Button>
+  );
+}
 
-        <div className="flex flex-wrap gap-x-8 gap-y-3">
-          <div>
-            <Field>Exactly</Field>
-            <p className="text-sm">
-              {EXACT.format(row.at * 1000)}{" "}
-              <span className="text-muted-foreground">ET</span>
-            </p>
-            <p className="text-muted-foreground font-mono text-xs">
-              {new Date(row.at * 1000).toISOString()} · {row.at}
-            </p>
-          </div>
+/**
+ * the runs of this action either side of this one.
+ *
+ * this is the part a row cannot show. "did it fail this morning" and "has it
+ * been failing all week" are different problems with the same row at the top,
+ * and the second one is the reason ADR 0007 asked for a log rather than an
+ * alert
+ */
+function History({ row, rows }: { row: Enriched; rows: Enriched[] }) {
+  const runs = rows
+    .filter((it) => it.action === row.action && it.source === row.source)
+    .sort((a, b) => a.at - b.at)
+    .slice(-16);
 
-          <div>
-            <Field>Fired by</Field>
-            <p className="text-sm">
-              {SOURCES[row.source as keyof typeof SOURCES]?.said ?? row.source}
-            </p>
-          </div>
+  if (runs.length < 2) return null;
 
-          {row.before && (
-            <div>
-              <Field>Previously</Field>
-              <p className="text-sm">
-                the run before this one ended {row.before}
-              </p>
-            </div>
-          )}
-        </div>
+  return (
+    <div>
+      <Field>
+        {runs.length} recent {row.source === "cron" ? "scheduled runs" : "uses"}
+      </Field>
+      <div className="mt-1 flex items-end gap-1">
+        {runs.map((run) => {
+          const { tone } = OUTCOMES[run.outcome as keyof typeof OUTCOMES] ?? {};
 
-        {row.actor && (
-          <div>
-            <Field>Actor</Field>
-            <div className="flex items-center gap-2">
-              <Actor id={row.actor} actors={actors} />
-              <span className="text-muted-foreground text-xs">
-                {profile ? `@${profile.username}` : "unresolved"} ·{" "}
-                <span className="font-mono">{row.actor}</span>
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="flex flex-wrap gap-2 sm:flex-col sm:items-stretch">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setParams({ row: String(row.id) });
-            copy("link", window.location.href);
-          }}
-        >
-          <LinkIcon />
-          Copy link
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => copy("json", JSON.stringify(row, null, 2))}
-        >
-          <CopyIcon />
-          Copy JSON
-        </Button>
-        <span className="text-muted-foreground self-center text-xs">
-          {said ? `copied the ${said}` : `row ${row.id}`}
-        </span>
+          return (
+            <span
+              key={run.id}
+              title={`${EXACT.format(run.at * 1000)} — ${run.outcome}`}
+              className={cn(
+                "h-5 w-2.5 rounded-xs",
+                run.outcome === "ok" && "bg-foreground/30",
+                run.outcome === "skipped" && "bg-foreground/10",
+                run.outcome === "misconfigured" && "bg-amber-500/60",
+                run.outcome === "failed" && "bg-destructive",
+                tone === undefined && "bg-muted",
+                run.id === row.id && "ring-foreground/60 h-6 ring-2",
+              )}
+            />
+          );
+        })}
       </div>
     </div>
   );
 }
 
-const Field = ({ children }: { children: string }) => (
+/** the room the row does not have, and the context it cannot hold */
+function Detail({
+  row,
+  rows,
+  actors,
+}: {
+  row: Enriched;
+  rows: Enriched[];
+  actors: Directory;
+}) {
+  const profile = row.actor ? actors[row.actor] : undefined;
+
+  return (
+    <div className="space-y-4 p-4">
+      <p className="text-sm break-words">{row.summary}</p>
+
+      <div className="flex flex-wrap gap-x-8 gap-y-3">
+        <div>
+          <Field>Exactly</Field>
+          <p className="text-sm">
+            {EXACT.format(row.at * 1000)}{" "}
+            <span className="text-muted-foreground">ET</span>
+          </p>
+          <p className="text-muted-foreground font-mono text-xs">
+            {new Date(row.at * 1000).toISOString()} · {row.at}
+          </p>
+        </div>
+
+        <div>
+          <Field>Fired by</Field>
+          <p className="text-sm">
+            {SOURCES[row.source as keyof typeof SOURCES]?.said ?? row.source}
+          </p>
+          {row.actor && (
+            <p className="text-muted-foreground text-xs">
+              {profile ? `@${profile.username}` : "not resolved"} ·{" "}
+              <span className="font-mono">{row.actor}</span>
+            </p>
+          )}
+        </div>
+
+        <History row={row} rows={rows} />
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Copy
+          what="link"
+          icon={<LinkIcon />}
+          text={() => {
+            setParams({ row: String(row.id) });
+            return window.location.href;
+          }}
+        >
+          Copy link
+        </Copy>
+        <Copy
+          what="json"
+          icon={<CopyIcon />}
+          text={() => JSON.stringify(row, null, 2)}
+        >
+          Copy JSON
+        </Copy>
+      </div>
+    </div>
+  );
+}
+
+const Field = ({ children }: { children: ReactNode }) => (
   <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
     {children}
   </p>
 );
 
 /*
-  the counts, and the fastest way to act on one. "three failed" is the first
-  thing anybody wants from this page and the click that follows it is always
-  the same click, so the number is the button
+  one number the page is willing to raise its voice about, and four it is not.
+
+  counting `failed` was counting two unrelated things: a section editor
+  mistyping an Article title into a slash command, and the social team's 8am
+  reminder never going out. the first is a person being told they made a
+  mistake — the reply already said so, to the person who needed to hear it —
+  and the second is the reason this page exists. a headline that adds them
+  together is a headline nobody can act on
 */
-function Overview({ table }: { table: Table<Enriched> }) {
-  const column = table.getColumn("outcome");
-  const counts = column?.getFacetedUniqueValues();
-  const chosen = new Set((column?.getFilterValue() as string[]) ?? []);
+function Overview({
+  table,
+  rows,
+}: {
+  table: Table<Enriched>;
+  rows: Enriched[];
+}) {
+  const outcome = table.getColumn("outcome");
+  const source = table.getColumn("source");
+  const counts = outcome?.getFacetedUniqueValues();
+
+  const wanting = rows.filter(needsAttention);
+  /* the filter that shows exactly what the number counted, and nothing else */
+  const showing =
+    (source?.getFilterValue() as string[] | undefined)?.length === 1 &&
+    (outcome?.getFilterValue() as string[] | undefined)?.length === 2;
 
   return (
-    <div className="flex flex-wrap gap-2">
-      {(Object.keys(OUTCOMES) as (keyof typeof OUTCOMES)[]).map((outcome) => {
-        const count = counts?.get(outcome) ?? 0;
-        const on = chosen.has(outcome);
-        const Icon = OUTCOMES[outcome].icon;
+    <div className="flex flex-wrap items-stretch gap-2">
+      <button
+        type="button"
+        aria-pressed={showing}
+        disabled={!wanting.length && !showing}
+        onClick={() => {
+          if (showing) {
+            source?.setFilterValue(undefined);
+            outcome?.setFilterValue(undefined);
+          } else {
+            source?.setFilterValue(["cron"]);
+            outcome?.setFilterValue(["failed", "misconfigured"]);
+          }
+        }}
+        className={cn(
+          "flex items-center gap-3 rounded-lg border px-4 py-2.5 text-left transition-colors",
+          showing && "bg-muted border-foreground/30",
+          wanting.length
+            ? "border-destructive/40 hover:bg-destructive/5"
+            : "hover:bg-muted/50",
+          !wanting.length && !showing && "opacity-70",
+        )}
+      >
+        {wanting.length ? (
+          <TriangleAlertIcon className="text-destructive size-5 shrink-0" />
+        ) : (
+          <CheckIcon className="text-muted-foreground size-5 shrink-0" />
+        )}
+        <span>
+          <span className="block leading-tight font-medium">
+            {wanting.length
+              ? `${wanting.length} unattended ${wanting.length === 1 ? "failure" : "failures"}`
+              : "Nothing unattended failed"}
+          </span>
+          <span className="text-muted-foreground text-xs">
+            scheduled runs that broke with nobody watching
+          </span>
+        </span>
+      </button>
 
-        return (
-          <button
-            key={outcome}
-            type="button"
-            aria-pressed={on}
-            disabled={!count && !on}
-            onClick={() => {
-              const next = new Set(chosen);
-              if (on) next.delete(outcome);
-              else next.add(outcome);
-              column?.setFilterValue(next.size ? [...next] : undefined);
-            }}
-            className={cn(
-              "flex min-w-24 flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors sm:flex-none",
-              on ? "border-foreground/30 bg-muted" : "hover:bg-muted/50",
-              !count && !on && "opacity-50",
-              outcome === "failed" && count > 0 && "border-destructive/40",
-            )}
-          >
-            <Icon
-              className={cn(
-                "size-4 shrink-0",
-                outcome === "failed" || outcome === "misconfigured"
-                  ? "text-destructive"
-                  : "text-muted-foreground",
-              )}
-            />
-            <span>
-              <span className="block text-lg leading-none font-medium tabular-nums">
-                {count}
-              </span>
-              <span className="text-muted-foreground text-xs">{outcome}</span>
+      <div className="text-muted-foreground ml-auto flex items-center gap-4 px-1 text-sm">
+        {(Object.keys(OUTCOMES) as (keyof typeof OUTCOMES)[]).map((it) => (
+          <span key={it} className="flex items-baseline gap-1.5">
+            <span className="text-foreground tabular-nums">
+              {counts?.get(it) ?? 0}
             </span>
-          </button>
-        );
-      })}
+            {it}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -376,12 +480,14 @@ export function InvocationLog({
       {
         accessorKey: "at",
         header: "When",
+        size: 150,
         meta: { label: "When" },
         cell: ({ row }) => <When at={row.original.at} />,
       },
       {
         accessorKey: "source",
         header: "Source",
+        size: 132,
         meta: { label: "Source" },
         filterFn: (row, id, value: string[]) =>
           value.includes(row.getValue(id) as string),
@@ -390,6 +496,7 @@ export function InvocationLog({
       {
         accessorKey: "action",
         header: "Action",
+        size: 190,
         meta: { label: "Action" },
         filterFn: (row, id, value: string[]) =>
           value.includes(row.getValue(id) as string),
@@ -402,6 +509,7 @@ export function InvocationLog({
       {
         accessorKey: "outcome",
         header: "Outcome",
+        size: 240,
         meta: { label: "Outcome" },
         filterFn: (row, id, value: string[]) =>
           value.includes(row.getValue(id) as string),
@@ -421,6 +529,7 @@ export function InvocationLog({
       {
         accessorKey: "actor",
         header: "Actor",
+        size: 180,
         meta: {
           label: "Actor",
           /* the dropdown lists ids, because that is what the column holds; it
@@ -483,7 +592,7 @@ export function InvocationLog({
       }}
       searchPlaceholder="Search the log…"
       empty="Nothing recorded yet."
-      overview={(table) => <Overview table={table} />}
+      overview={(table) => <Overview table={table} rows={data} />}
       toolbar={() => (
         <select
           aria-label="Time range"
@@ -500,10 +609,10 @@ export function InvocationLog({
           ))}
         </select>
       )}
-      detail={(row) => <Detail row={row} actors={actors} />}
-      /* the rows that changed something: the morning it broke, and the morning
-         it started working again */
-      rowAccent={(row) => row.changed && row.outcome !== "ok"}
+      detail={(row) => <Detail row={row} rows={data} actors={actors} />}
+      /* the same rule the headline counts by, so the marked rows and the
+         number above them can never disagree */
+      rowAccent={needsAttention}
     />
   );
 }

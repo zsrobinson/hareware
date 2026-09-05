@@ -17,8 +17,9 @@ import astro from "eslint-plugin-astro";
 import reactHooks from "eslint-plugin-react-hooks";
 import prettier from "eslint-config-prettier";
 import globals from "globals";
+import { defineConfig } from "eslint/config";
 
-export default tseslint.config(
+export default defineConfig(
   {
     /*
       generated or vendored, and not ours to fix. `src/components/ui` is shadcn

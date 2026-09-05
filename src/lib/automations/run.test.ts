@@ -52,6 +52,40 @@ test("the cron runs both at the automation hour", async () => {
   expect(social).toHaveBeenCalledOnce();
 });
 
+/*
+  the index syncs every minute, and the reminders are due when the eastern hour
+  matches — so without a check on which schedule woke us, every minute of 8am
+  would be a fresh 8am and the club would be pinged sixty times. messages can be
+  deleted; the pings they send cannot
+*/
+test("the minute cron never fires a reminder, even at the reminder hour", async () => {
+  const everyMinute = {
+    scheduledTime: Date.parse("2026-09-03T12:00:00Z"),
+    cron: "* * * * *",
+  } as ScheduledController;
+
+  await runScheduled(everyMinute, {} as Env);
+
+  expect(meeting).not.toHaveBeenCalled();
+  expect(social).not.toHaveBeenCalled();
+});
+
+test("nor does REMINDERS_IGNORE_HOUR turn the minute cron into sixty runs", async () => {
+  /* the switch ignores the hour, and must never ignore the schedule: it exists
+     to see a reminder without waiting for 8am, not to see sixty */
+  const everyMinute = {
+    scheduledTime: Date.parse("2026-09-03T15:00:00Z"),
+    cron: "* * * * *",
+  } as ScheduledController;
+
+  await runScheduled(everyMinute, {
+    REMINDERS_IGNORE_HOUR: "1",
+  } as unknown as Env);
+
+  expect(meeting).not.toHaveBeenCalled();
+  expect(social).not.toHaveBeenCalled();
+});
+
 test("the cron runs neither at any other hour", async () => {
   await runScheduled(NINE_AM, {} as Env);
   expect(meeting).not.toHaveBeenCalled();

@@ -80,10 +80,9 @@ test("an authoritative write wins even against a newer stored row", () => {
 test("an authoritative write wins a tie, because notion's clock has minutes", () => {
   const same = "2026-09-04T10:05:00.000Z";
   expect(wins(same, same, true)).toBe(true);
-  expect(wins(same, same, false)).toBe(false);
 });
 
-test("a webhook or rebuild applies only when strictly newer", () => {
+test("a webhook or rebuild is refused only when genuinely older", () => {
   expect(
     wins("2026-09-04T10:06:00.000Z", "2026-09-04T10:05:00.000Z", false),
   ).toBe(true);
@@ -271,4 +270,27 @@ test("an unreachable index reads as empty rather than throwing", async () => {
   const { db } = fakeD1(() => [], true);
 
   await expect(recent(db)).resolves.toEqual([]);
+});
+
+/*
+  the bug this exists for: `last_edited_time` has minute resolution, so a second
+  edit made in the same minute as the first carried the same timestamp — and a
+  "strictly newer" guard threw it away. somebody typing a headline in notion
+  watched discord hold the version from nine seconds earlier until the next
+  rebuild.
+
+  every non-authoritative write is a fresh fetch of the page rather than a delta
+  applied blind, so what it carries is current truth: accepting an equal
+  timestamp cannot write anything stale
+*/
+test("a second edit in the same minute still lands", () => {
+  const minute = "2026-09-05T16:24:00.000Z";
+
+  expect(wins(minute, minute, false)).toBe(true);
+});
+
+test("a genuinely older snapshot is still refused", () => {
+  expect(
+    wins("2026-09-05T16:23:00.000Z", "2026-09-05T16:24:00.000Z", false),
+  ).toBe(false);
 });

@@ -24,14 +24,15 @@ export type ArticleProperty = {
   title?: { plain_text: string }[] | null;
   rich_text?: { plain_text: string }[] | null;
   date?: { start?: string | null } | null;
-  status?: { name?: string | null } | null;
-  select?: { name?: string | null } | null;
+  status?: { name?: string | null; color?: string | null } | null;
+  select?: { name?: string | null; color?: string | null } | null;
   relation?: { id: string }[] | null;
 };
 
 /** a page as the Articles data source returns it */
 export type ArticlePage = {
   id: string;
+  url?: string;
   last_edited_time?: string;
   /* notion's two words for the same thing, depending on endpoint age */
   in_trash?: boolean;
@@ -62,6 +63,41 @@ export function optionName(property: ArticleProperty | undefined) {
 /** notion's id of every related page, or `[]` — see `assertProperties` */
 export function relationIds(property: ArticleProperty | undefined) {
   return (property?.relation ?? []).map((related) => related.id);
+}
+
+/** Whether Notion returned values that can confirm the named properties. */
+export function readableProperties(
+  page: ArticlePage,
+  properties: (keyof typeof ARTICLE_PROPERTIES)[],
+): boolean {
+  return properties.every((property) => {
+    const { name, type } = ARTICLE_PROPERTIES[property];
+    const value = page.properties?.[name];
+    if (!value || !Object.hasOwn(value, type)) return false;
+    switch (type) {
+      case "title":
+        return (
+          Array.isArray(value.title) &&
+          value.title.every((text) => typeof text.plain_text === "string")
+        );
+      case "rich_text":
+        return (
+          Array.isArray(value.rich_text) &&
+          value.rich_text.every((text) => typeof text.plain_text === "string")
+        );
+      case "relation":
+        return (
+          Array.isArray(value.relation) &&
+          value.relation.every((related) => typeof related.id === "string")
+        );
+      case "date":
+        return value.date === null || typeof value.date?.start === "string";
+      case "status":
+        return value.status === null || typeof value.status?.name === "string";
+      case "select":
+        return value.select === null || typeof value.select?.name === "string";
+    }
+  });
 }
 
 /**

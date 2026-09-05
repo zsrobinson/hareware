@@ -1,32 +1,6 @@
-/*
-  running one editor's change all the way through: read notion, plan it, write
-  it, index it, log it, and say what happened.
-
-  this is the half of a slash command that does not fit inside discord's three
-  seconds. `interactions.ts` turns an interaction into an `EditRequest` and
-  defers; this takes it from there and hands back the sentence the follow-up
-  sends. ADR 0009 has the shape.
-
-  three rules the whole file is built around.
-
-  **it never throws.** an editor is watching a spinner, and whatever goes wrong
-  has to arrive as words. every path below ends in a returned string, which is
-  what the caller PATCHes over "HareWare is thinking…".
-
-  **it reads the page live, first.** the reply and the log say what the value
-  changed *from*, which is what makes a command run against the wrong article
-  undoable rather than a mystery. the index is never read for this — ADR 0009
-  keeps it serving autocomplete and nothing else.
-
-  **it refuses rather than guesses.** a relation notion is not sharing, two
-  Members carrying one discord id, two rows answering to one name: each is
-  refused out loud, because writing through any of them destroys something
-  nobody can see.
-
-  everything outside — notion, D1, the log — arrives as `EditIO`, so every
-  branch here, including the ones that fail, is reachable from a test with no
-  bindings and no token.
-*/
+/* Run an Article edit against live Notion, preserve its returned page and
+   record the outcome. External calls stay behind EditIO so refusals, partial
+   writes and failed delivery can be tested without bindings. See ADR 0009. */
 
 import { failed, ok, type Result } from "~/lib/result";
 import { record } from "~/lib/log";
@@ -40,8 +14,12 @@ import {
   type Member,
   type MemberMatch,
 } from "./member";
-import { relationIds, type ArticlePage } from "./page";
+import { readableProperties, relationIds, type ArticlePage } from "./page";
 import {
+  changesSummary,
+  current,
+  sameValue,
+  type ArticleChange,
   plan,
   planCreate,
   planCredit,
@@ -69,10 +47,10 @@ export type EditRequest =
   | {
       kind: "create";
       headline: string;
-      section: string | null;
-      /** whoever the discord picker returned, or null when nobody was picked */
-      member: PickedUser | null;
-      /** the printed name, when the editor typed one */
+      section: string;
+      /** the Discord member who wrote it */
+      member: PickedUser;
+      /** a pseudonym to print instead of the member's name */
       byline: string | null;
     }
   /** every subcommand that sets one property */
@@ -82,13 +60,15 @@ export type EditRequest =
       kind: "credit";
       pageId: string;
       credit: "author" | "image";
-      /** whoever the discord picker returned, or null when only text changed */
-      member: PickedUser | null;
-      /** the printed name, when the editor typed one */
+      /** the Discord member behind the credit */
+      member: PickedUser;
+      /** a pseudonym to print instead of the member's name */
       byline: string | null;
       /** add to the credit that is there rather than replacing it */
       also: boolean;
-    };
+    }
+  /** `/article delete` moves the page to Notion's recoverable Trash */
+  | { kind: "delete"; pageId: string };
 
 /**
  * everything outside this module, as functions.
@@ -105,48 +85,78 @@ export type EditIO = {
   /** notion answers a PATCH with the whole updated page */
   patch: (pageId: string, body: PatchBody) => Promise<ArticlePage>;
   create: (body: PatchBody) => Promise<ArticlePage>;
+  trash: (pageId: string) => Promise<ArticlePage>;
   members: (discordId: string, displayName: string) => Promise<MemberMatch>;
   link: (memberPageId: string, patch: LinkPatch) => Promise<void>;
   addMember: (name: string, discordId: string) => Promise<Member>;
   log: (result: Result, actor: Actor) => Promise<void>;
 };
 
-/** what an editor is told when nothing else fits */
-const UNSAID = "HareWare finished but could not say what it did.";
+export type { ArticleChange } from "./write";
+export type EditResult =
+  | {
+      status: "created" | "updated" | "unchanged" | "deleted";
+      page: ArticlePage;
+      changes: ArticleChange[];
+      notes: string[];
+    }
+  | { status: "failed"; explanation: string; pageId?: string; notes: string[] };
 
-/**
- * one edit, start to finish. the sentence it returns is what discord shows.
- *
- * the log row is written here rather than by the caller because this is the
- * only place that knows both the outcome and what the value was before it —
- * ADR 0009 makes every mutation an Invocation, and a row carrying only the new
- * value cannot undo anything
- */
+export function editSummary(result: EditResult): string {
+  const summary =
+    result.status === "failed"
+      ? result.explanation
+      : result.status === "deleted"
+        ? "Moved article to Notion's Trash."
+        : `${result.status === "created" ? "Created article. " : result.status === "unchanged" ? "Unchanged. " : ""}${changesSummary(result.changes)}`;
+  return [summary, ...result.notes].join(" — ");
+}
+
+const refused = (explanation: string): EditResult => ({
+  status: "failed",
+  explanation,
+  notes: [],
+});
+
+/** Preserve the confirmed mutation even when recording its Invocation fails. */
 export async function runEdit(
   io: EditIO,
   request: EditRequest,
   actor: Actor,
-): Promise<string> {
+): Promise<EditResult> {
   const result = await attempt(io, request, actor);
-
-  await io.log(result, actor);
-
-  return result.summary || UNSAID;
+  if (result.status === "failed" && request.kind !== "create")
+    result.pageId = request.pageId;
+  try {
+    await io.log(
+      result.status === "failed"
+        ? failed(editSummary(result))
+        : ok(editSummary(result)),
+      actor,
+    );
+  } catch (error) {
+    console.error("[article] could not record edit", error);
+    result.notes.push("The invocation log could not be saved.");
+  }
+  return result;
 }
 
 async function attempt(
   io: EditIO,
   request: EditRequest,
   actor: Actor,
-): Promise<Result> {
-  let schema: Schema;
+): Promise<EditResult> {
   try {
-    schema = await io.schema();
-  } catch (error) {
-    return failed(`Notion did not answer with its schema: ${String(error)}`);
-  }
+    if (request.kind === "delete")
+      return await remove(io, await io.page(request.pageId));
 
-  try {
+    let schema: Schema;
+    try {
+      schema = await io.schema();
+    } catch (error) {
+      return refused(`Notion did not answer with its schema: ${String(error)}`);
+    }
+
     if (request.kind === "create")
       return await create(io, schema, request, actor);
 
@@ -163,8 +173,33 @@ async function attempt(
       `waitUntil` — is the spinner that never settles
     */
     console.error("[article] an edit did not complete", error);
-    return failed(`Notion refused that: ${String(error)}`);
+    return refused(
+      `The edit could not be confirmed: ${String(error)}. Check Notion and Members before retrying.`,
+    );
   }
+}
+
+async function remove(io: EditIO, page: ArticlePage): Promise<EditResult> {
+  let trashed: ArticlePage;
+  try {
+    trashed = await io.trash(page.id);
+  } catch (error) {
+    return {
+      status: "failed",
+      pageId: page.id,
+      explanation: `Moving the article to Notion's Trash could not be confirmed: ${String(error)}. Check Notion before retrying.`,
+      notes: [],
+    };
+  }
+  if (trashed.in_trash !== true)
+    return {
+      status: "failed",
+      pageId: trashed.id || page.id,
+      explanation:
+        "Moving the article to Notion's Trash could not be confirmed. Check Notion before retrying.",
+      notes: [],
+    };
+  return { status: "deleted", page: trashed, changes: [], notes: [] };
 }
 
 /* ---- the three behaviours ----------------------------------------------- */
@@ -174,7 +209,7 @@ async function create(
   schema: Schema,
   request: Extract<EditRequest, { kind: "create" }>,
   actor: Actor,
-): Promise<Result> {
+): Promise<EditResult> {
   /*
     ADR 0009: a new Article starts Approved — somebody typing a headline into
     an editor command has already decided to run it. the value is looked up in
@@ -191,38 +226,69 @@ async function create(
   /*
     the same resolution `/article author` uses, so picking a writer here
     backfills or creates their Members row rather than leaving the relation
-    empty. without a picker the Byline is text and the relation stays empty,
-    which is what a pseudonym needs
+    empty. a pseudonym changes only the printed text; the selected member still
+    records who wrote it
   */
   const found = await resolve(io, request.member, actor);
-  if (found.status === "refused") return failed(found.reason);
+  if (found.status === "refused") return refused(found.reason);
 
-  /* ADR 0004: the printed Byline is always filled — the typed one, else the
-     member's name, else whoever ran the command */
-  const byline = request.byline ?? found.member?.name ?? actor.name;
+  /* ADR 0004: the printed Byline is always filled. typed text is explicitly a
+     pseudonym; otherwise the selected member's name is frozen onto the row */
+  const byline = request.byline ?? found.member.name;
 
   const planned = planCreate(schema, {
     headline: request.headline,
     byline,
-    authorIds: found.member ? [found.member.pageId] : [],
+    authorIds: [found.member.pageId],
     status,
     section: request.section,
   });
-  if (planned.status === "refused") return failed(planned.reason);
+  if (planned.status === "refused")
+    return {
+      status: "failed",
+      explanation: planned.reason,
+      notes: found.note ? [found.note] : [],
+    };
 
-  await io.create({ properties: planned.plan.properties });
+  let page: ArticlePage;
+  try {
+    page = await io.create({ properties: planned.plan.properties });
+  } catch (error) {
+    return {
+      status: "failed",
+      explanation: `The article creation could not be confirmed: ${String(error)}. Check Notion before retrying.`,
+      notes: found.note ? [found.note] : [],
+    };
+  }
+
+  if (
+    !readableProperties(
+      page,
+      planned.plan.changes.map(({ property }) => property),
+    )
+  )
+    return {
+      status: "failed",
+      pageId: page.id,
+      explanation:
+        "Notion created the article but did not return all its properties. Open Notion to check it before making another article.",
+      notes: found.note ? [found.note] : [],
+    };
 
   const noted =
     status === null
-      ? ` (Notion has no "approved" option on ${ARTICLE_PROPERTIES.status.name} any more, so it was left unset)`
+      ? `Notion has no "approved" option on ${ARTICLE_PROPERTIES.status.name} any more, so it was left unset.`
       : "";
 
-  const sentence = `Created **${request.headline}**${noted}. ${planned.plan.sentence}`;
-
-  // the roster changing is a fact an editor has to be told, every time
-  return ok(
-    found.note === undefined ? sentence : `${sentence} — ${found.note}`,
-  );
+  return {
+    status: "created",
+    page,
+    changes: planned.plan.changes.map((change) => ({
+      ...change,
+      after: current(page, change.property),
+    })),
+    notes: [noted, found.note].filter((note): note is string => Boolean(note)),
+  };
 }
 
 /** the shared tail of a change: send it, and say what it did */
@@ -230,12 +296,65 @@ async function apply(
   io: EditIO,
   page: ArticlePage,
   planned: PlanResult,
-): Promise<Result> {
-  if (planned.status === "refused") return failed(planned.reason);
+): Promise<EditResult> {
+  if (planned.status === "refused") return refused(planned.reason);
+  if (
+    !readableProperties(
+      page,
+      planned.plan.changes.map(({ property }) => property),
+    )
+  )
+    return refused(
+      "Notion did not return the properties this edit needs, so HareWare wrote nothing to the article.",
+    );
 
-  await io.patch(page.id, { properties: planned.plan.properties });
+  if (
+    planned.plan.changes.every(({ before, after }) => sameValue(before, after))
+  )
+    return {
+      status: "unchanged",
+      page,
+      changes: planned.plan.changes,
+      notes: [],
+    };
 
-  return ok(planned.plan.sentence);
+  let updated: ArticlePage;
+  try {
+    updated = await io.patch(page.id, { properties: planned.plan.properties });
+  } catch (error) {
+    return {
+      status: "failed",
+      pageId: page.id,
+      explanation: `The article update could not be confirmed: ${String(error)}. Check Notion before retrying.`,
+      notes: [],
+    };
+  }
+  if (
+    !readableProperties(
+      updated,
+      planned.plan.changes.map(({ property }) => property),
+    )
+  )
+    return {
+      status: "failed",
+      pageId: updated.id || page.id,
+      explanation:
+        "Notion answered the write without all edited properties, so the result could not be confirmed. Check Notion before retrying.",
+      notes: [],
+    };
+  const confirmed = planned.plan.changes.map((change) => ({
+    ...change,
+    after: current(updated, change.property),
+  }));
+  const changes = confirmed.filter(
+    ({ before, after }) => !sameValue(before, after),
+  );
+  return {
+    status: changes.length ? "updated" : "unchanged",
+    page: updated,
+    changes: changes.length ? changes : confirmed,
+    notes: [],
+  };
 }
 
 async function credit(
@@ -244,7 +363,7 @@ async function credit(
   page: ArticlePage,
   request: Extract<EditRequest, { kind: "credit" }>,
   actor: Actor,
-): Promise<Result> {
+): Promise<EditResult> {
   const text =
     request.credit === "author"
       ? ARTICLE_PROPERTIES.authorByline
@@ -268,49 +387,48 @@ async function credit(
     pair.includes(miss.name),
   );
   if (unshared.length > 0)
-    return failed(
+    return refused(
       `Notion is not sharing ${unshared
         .map((miss) => `${miss.name} (${miss.found ?? "absent"})`)
         .join(", ")}, so HareWare will not write a credit it cannot read back.`,
+    );
+
+  if (
+    !readableProperties(
+      page,
+      request.credit === "author"
+        ? ["authorByline", "author"]
+        : ["imageByline", "imageCrew"],
+    )
+  )
+    return refused(
+      "Notion did not return both credit properties, so HareWare wrote nothing.",
     );
 
   const held = relationIds(page.properties?.[relation.name]);
   const printed = plainText(page.properties?.[text.name]?.rich_text).trim();
 
   const found = await resolve(io, request.member, actor);
-  if (found.status === "refused") return failed(found.reason);
+  if (found.status === "refused") return refused(found.reason);
 
-  if (!found.member && request.byline === null)
-    return failed(
-      `Give ${request.credit === "author" ? "an author" : "an image credit"}: a member, a byline, or both.`,
-    );
+  const name = request.byline ?? found.member.name;
 
-  const name = request.byline ?? found.member!.name;
-
-  /*
-    `also` appends. without a member the relation is carried through unchanged
-    rather than replaced with an empty list: changing a printed Byline to a
-    pseudonym must not quietly unlink the person it belongs to — ADR 0004 keeps
-    the two halves together, and dropping one of them is the drift it accepts
-    the denormalisation to avoid
-  */
+  /* `also` appends both the selected member and the printed credit. */
   /* already credited, so `also` has nothing to add. the relation deduped and
      the printed byline did not, which made a second run — a slow follow-up, an
      editor who thought it had not landed — write "Bob and Bob" while the
      relation stayed correct. the two halves ADR 0004 keeps together came apart,
      and only the printed one was wrong */
-  const already = found.member ? held.includes(found.member.pageId) : false;
+  const already = held.includes(found.member.pageId);
 
-  const memberIds = found.member
-    ? request.also
-      ? [...new Set([...held, found.member.pageId])]
-      : [found.member.pageId]
-    : held;
+  const memberIds = request.also
+    ? [...new Set([...held, found.member.pageId])]
+    : [found.member.pageId];
 
   const appending = request.also && printed !== "" && !already;
   const byline = appending
     ? `${printed} and ${name}`
-    : already
+    : request.also && already
       ? printed
       : name;
 
@@ -321,16 +439,20 @@ async function credit(
   });
 
   const result = await apply(io, page, planned);
-  if (result.outcome !== "ok" || found.note === undefined) return result;
-
-  // the roster changing is a fact an editor has to be told, every time
-  return ok(`${result.summary} — ${found.note}`);
+  if (found.note) result.notes.push(found.note);
+  if (result.status !== "failed") {
+    for (const change of result.changes) {
+      if (change.property === "author" || change.property === "imageCrew")
+        change.member = { id: found.member.pageId, name: found.member.name };
+    }
+  }
+  return result;
 }
 
 /* ---- who the picker pointed at ------------------------------------------ */
 
 type Resolved =
-  | { status: "resolved"; member: Member | null; note?: string }
+  | { status: "resolved"; member: Member; note?: string }
   | { status: "refused"; reason: string };
 
 /**
@@ -343,11 +465,9 @@ type Resolved =
  */
 async function resolve(
   io: EditIO,
-  picked: PickedUser | null,
+  picked: PickedUser,
   actor: Actor,
 ): Promise<Resolved> {
-  if (!picked) return { status: "resolved", member: null };
-
   const match = await io.members(picked.discordId, picked.displayName);
 
   switch (match.status) {
@@ -360,7 +480,7 @@ async function resolve(
       return {
         status: "resolved",
         member: match.member,
-        note: `linked <@${picked.discordId}> to **${match.member.name}** in Members`,
+        note: `Linked ${match.member.name} to their Discord account in Members.`,
       };
     }
 
@@ -370,7 +490,7 @@ async function resolve(
       return {
         status: "resolved",
         member: made,
-        note: `created **${made.name}** in Members`,
+        note: `Created ${made.name} in Members.`,
       };
     }
 
@@ -434,6 +554,14 @@ export function notionIO(env: Env): EditIO {
         },
         ...body,
       }) as Promise<ArticlePage>,
+
+    trash: (pageId) =>
+      notion(
+        `pages/${pageId}`,
+        token(),
+        { in_trash: true },
+        "PATCH",
+      ) as Promise<ArticlePage>,
 
     members: (discordId, displayName) =>
       resolveMember(env, discordId, displayName),

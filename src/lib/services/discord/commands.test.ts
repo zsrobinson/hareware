@@ -33,10 +33,35 @@ test("ping is a subcommand and takes no options", () => {
   expect(ping!.options).toEqual([]);
 });
 
-test("every subcommand carries a description discord will accept", () => {
-  for (const option of article().options) {
-    expect(option.description.length).toBeGreaterThan(0);
-    expect(option.description.length).toBeLessThanOrEqual(100);
+test("every registered command and option has a Discord-safe description", () => {
+  const command = article();
+  const descriptions = [
+    command.description,
+    ...command.options.flatMap((subcommand) => [
+      subcommand.description,
+      ...subcommand.options.map((option) => option.description),
+    ]),
+  ];
+
+  for (const description of descriptions) {
+    expect(description.length).toBeGreaterThan(0);
+    expect(description.length).toBeLessThanOrEqual(100);
+  }
+});
+
+test("required arguments precede optional ones as Discord requires", () => {
+  for (const subcommand of article().options) {
+    const firstOptional = subcommand.options.findIndex(
+      (option) => !option.required,
+    );
+    if (firstOptional === -1) continue;
+
+    expect(
+      subcommand.options
+        .slice(firstOptional)
+        .every((option) => !option.required),
+      subcommand.name,
+    ).toBe(true);
   }
 });
 
@@ -133,6 +158,7 @@ test("every subcommand about one Article autocompletes the picker", () => {
     "publication-date",
     "author",
     "image-crew",
+    "delete",
   ];
 
   for (const name of picks) {
@@ -189,19 +215,18 @@ test("a credit takes discord's own user picker, and `also` is a boolean", () => 
   expect(named("also").type).toBe(5);
   expect(named("byline").type).toBe(3);
 
-  /* all three optional: a pseudonym is text with no member, and a co-Byline is
-     a member added to what is already there */
-  for (const name of ["member", "byline", "also"])
+  expect(named("member").required).toBe(true);
+  for (const name of ["byline", "also"])
     expect(named(name).required, name).toBeUndefined();
 });
 
-test("a new Article needs only a headline", () => {
+test("a new article requires a headline, Discord member and section", () => {
   const created = buildCommands([])[0]!.options!.find((o) => o.name === "new");
   const required = created!
     .options!.filter((option) => option.required)
     .map((option) => option.name);
 
-  expect(required).toEqual(["headline"]);
+  expect(required).toEqual(["headline", "member", "section"]);
   // no article picker: there is nothing to pick yet
   expect(created!.options!.some((o) => o.autocomplete)).toBe(false);
 });

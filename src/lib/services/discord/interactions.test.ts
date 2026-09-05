@@ -10,7 +10,8 @@ import {
 } from "./interactions";
 import { EDITORIAL_BOARD_ROLE_ID } from "./config";
 import type { Article } from "~/lib/articles/page";
-import type { CardPage } from "~/lib/articles/card";
+import type { ArticlePage } from "~/lib/articles/page";
+import type { CommandMessage } from "./message";
 
 const IS_COMPONENTS_V2 = 1 << 15;
 
@@ -315,7 +316,7 @@ const row = (over: Partial<Article> = {}): Article => ({
 });
 
 /** a notion page as `/article show` reads one */
-const notionPage = (): CardPage => ({
+const notionPage = (): ArticlePage => ({
   id: "page-1",
   url: "https://notion.so/page-1",
   properties: {
@@ -535,7 +536,11 @@ function writing(over: Partial<InteractionDeps> = {}) {
   const seen = {
     requests: [] as unknown[],
     actors: [] as { id: string; name: string }[],
-    followed: [] as { applicationId: string; token: string; content: string }[],
+    followed: [] as {
+      applicationId: string;
+      token: string;
+      content: CommandMessage;
+    }[],
   };
   const work: Promise<void>[] = [];
 
@@ -543,7 +548,12 @@ function writing(over: Partial<InteractionDeps> = {}) {
     edit: async (request, actor) => {
       seen.requests.push(request);
       seen.actors.push(actor);
-      return "did the thing";
+      return {
+        status: "updated",
+        page: notionPage(),
+        changes: [{ property: "status", before: "Approved", after: "Written" }],
+        notes: [],
+      };
     },
     reply: async (applicationId, token, content) => {
       seen.followed.push({ applicationId, token, content });
@@ -597,9 +607,26 @@ test("a write defers, then follows up with what the edit said", async () => {
       intent: { property: "status", option: "Approved" },
     },
   ]);
-  expect(seen.followed).toEqual([
-    { applicationId: "app-1", token: "tok-1", content: "did the thing" },
-  ]);
+  expect(seen.followed).toHaveLength(1);
+  expect(seen.followed[0]).toMatchObject({
+    applicationId: "app-1",
+    token: "tok-1",
+  });
+  expect(seen.followed[0]!.content.components[0]).toEqual({
+    type: 10,
+    content: "Updated **Article Status** from **Approved** to **Written**.",
+  });
+});
+
+test("/article delete defers a request for the selected Article", async () => {
+  const { deps, seen, settle } = writing();
+  const reply = await handleInteraction(
+    writeCommand("delete", [{ name: "article", value: "page-7" }]),
+    deps,
+  );
+  expect(reply).toEqual({ type: DEFERRED, data: { flags: EPHEMERAL } });
+  await settle();
+  expect(seen.requests).toEqual([{ kind: "delete", pageId: "page-7" }]);
 });
 
 /*
@@ -624,7 +651,9 @@ test("an edit that throws still follows up", async () => {
   await settle();
 
   expect(seen.followed).toHaveLength(1);
-  expect(seen.followed[0]!.content).toContain("error");
+  expect(JSON.stringify(seen.followed[0]!.content)).toContain(
+    "could not confirm",
+  );
 });
 
 test("nowhere to run the work is refused inline rather than deferred", async () => {
@@ -780,48 +809,89 @@ test("no nickname falls back to the display name, then the handle", async () => 
   });
 });
 
-test("a byline with no member is a credit request all the same", async () => {
-  const { deps, seen, settle } = writing();
+test("a credit without a Discord member is refused before deferring", async () => {
+  const { deps, seen } = writing();
 
-  await handleInteraction(
-    writeCommand("author", [
-      { name: "article", value: "page-1" },
-      { name: "byline", value: "Gale de Silva" },
-    ]),
-    deps,
+  const reply = asMessage(
+    await handleInteraction(
+      writeCommand("author", [
+        { name: "article", value: "page-1" },
+        { name: "byline", value: "Gale de Silva" },
+      ]),
+      deps,
+    ),
   );
-  await settle();
 
-  expect(seen.requests[0]).toMatchObject({
-    member: null,
-    byline: "Gale de Silva",
-  });
+  expect(reply.type).toBe(4);
+  expect(seen.requests).toEqual([]);
 });
 
 /* ---- creating ----------------------------------------------------------- */
 
-test("a new article hands the byline fallback on rather than deciding it", async () => {
+test("a new article carries its selected member and optional pseudonym", async () => {
   const { deps, seen, settle } = writing();
 
   await handleInteraction(
-    writeCommand("new", [{ name: "headline", value: "Looney's line" }]),
+    writeCommand(
+      "new",
+      [
+        { name: "headline", value: "Looney's line" },
+        { name: "member", value: "222" },
+        { name: "section", value: "News" },
+        { name: "byline", value: "A Concerned Terrapin" },
+      ],
+      { users: { "222": { username: "bayh", global_name: "Bay Hoffman" } } },
+    ),
     deps,
   );
   await settle();
 
-  /* ADR 0004's always-filled Byline is `edit.ts`'s job now: it is the half
-     that knows whether the picked member resolved, and the member's name
-     comes before the caller's */
   expect(seen.requests).toEqual([
     {
       kind: "create",
       headline: "Looney's line",
-      section: null,
-      member: null,
-      byline: null,
+      section: "News",
+      member: { discordId: "222", displayName: "Bay Hoffman" },
+      byline: "A Concerned Terrapin",
     },
   ]);
   expect(seen.actors).toEqual([{ id: "", name: "Zachary" }]);
+});
+
+test("a new article without a Discord member is refused before deferring", async () => {
+  const { deps, seen } = writing();
+  const reply = asMessage(
+    await handleInteraction(
+      writeCommand("new", [
+        { name: "headline", value: "Looney's line" },
+        { name: "section", value: "News" },
+      ]),
+      deps,
+    ),
+  );
+
+  expect(reply.type).toBe(4);
+  expect(seen.requests).toEqual([]);
+});
+
+test("a new article without a section is refused before deferring", async () => {
+  const { deps, seen } = writing();
+  const reply = asMessage(
+    await handleInteraction(
+      writeCommand(
+        "new",
+        [
+          { name: "headline", value: "Looney's line" },
+          { name: "member", value: "222" },
+        ],
+        { users: { "222": { username: "bayh" } } },
+      ),
+      deps,
+    ),
+  );
+
+  expect(reply.type).toBe(4);
+  expect(seen.requests).toEqual([]);
 });
 
 test("a new article with no headline is refused before anything is written", async () => {
@@ -829,7 +899,7 @@ test("a new article with no headline is refused before anything is written", asy
 
   const reply = asMessage(await handleInteraction(writeCommand("new"), deps));
 
-  expect(text(reply)).toContain("Headline");
+  expect(text(reply).toLowerCase()).toContain("headline");
   expect(seen.requests).toEqual([]);
 });
 

@@ -1,5 +1,6 @@
+import { textMessage } from "./message";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { followUp, MAX_CONTENT, TOKEN_LIFETIME_MS } from "./follow-up";
+import { followUp, TOKEN_LIFETIME_MS } from "./follow-up";
 
 /**
  * the json body of the one request that was sent.
@@ -25,7 +26,11 @@ test("it patches the original deferred message", async () => {
   const fetchMock = vi.fn(async () => okResponse());
   vi.stubGlobal("fetch", fetchMock);
 
-  const result = await followUp(APPLICATION, TOKEN, "Set to Section Edited.");
+  const result = await followUp(
+    APPLICATION,
+    TOKEN,
+    textMessage("Set to Section Edited."),
+  );
 
   const [url, init] = fetchMock.mock.calls[0] as unknown as [
     string,
@@ -36,7 +41,9 @@ test("it patches the original deferred message", async () => {
   );
   expect(init.method).toBe("PATCH");
   expect(JSON.parse(init.body as string)).toEqual({
-    content: "Set to Section Edited.",
+    flags: 32768,
+    allowed_mentions: { parse: [] },
+    components: [{ type: 10, content: "Set to Section Edited." }],
   });
   expect(result.outcome).toBe("ok");
 });
@@ -45,7 +52,7 @@ test("it sends no authorization header, because the token is the credential", as
   const fetchMock = vi.fn(async () => okResponse());
   vi.stubGlobal("fetch", fetchMock);
 
-  await followUp(APPLICATION, TOKEN, "done");
+  await followUp(APPLICATION, TOKEN, textMessage("done"));
 
   const headers = (
     fetchMock.mock.calls[0] as unknown as [string, RequestInit]
@@ -64,10 +71,10 @@ test("empty content still sends a message rather than nothing", async () => {
   const fetchMock = vi.fn(async () => okResponse());
   vi.stubGlobal("fetch", fetchMock);
 
-  const result = await followUp(APPLICATION, TOKEN, "   ");
+  const result = await followUp(APPLICATION, TOKEN, textMessage("   "));
 
   const body = JSON.parse(sentBody(fetchMock));
-  expect(body.content.length).toBeGreaterThan(0);
+  expect(body.components[0].content.length).toBeGreaterThan(0);
   expect(result.outcome).toBe("ok");
 });
 
@@ -75,10 +82,10 @@ test("content longer than discord accepts is truncated rather than rejected", as
   const fetchMock = vi.fn(async () => okResponse());
   vi.stubGlobal("fetch", fetchMock);
 
-  await followUp(APPLICATION, TOKEN, "x".repeat(MAX_CONTENT + 500));
+  await followUp(APPLICATION, TOKEN, textMessage("x".repeat(5000)));
 
   const body = JSON.parse(sentBody(fetchMock));
-  expect(body.content.length).toBe(MAX_CONTENT);
+  expect(body.components[0].content.length).toBeLessThanOrEqual(900);
 });
 
 test("discord refusing the follow-up is a failed result, not a throw", async () => {
@@ -87,7 +94,7 @@ test("discord refusing the follow-up is a failed result, not a throw", async () 
     vi.fn(async () => new Response("Invalid Webhook Token", { status: 401 })),
   );
 
-  const result = await followUp(APPLICATION, TOKEN, "done");
+  const result = await followUp(APPLICATION, TOKEN, textMessage("done"));
 
   expect(result.outcome).toBe("failed");
   // whatever discord said goes in the log; an expired token reads as 401 here
@@ -103,7 +110,7 @@ test("an unreachable discord is a failed result, not a throw", async () => {
     }),
   );
 
-  const result = await followUp(APPLICATION, TOKEN, "done");
+  const result = await followUp(APPLICATION, TOKEN, textMessage("done"));
 
   expect(result.outcome).toBe("failed");
   expect(result.summary).toContain("network down");
@@ -113,8 +120,10 @@ test("a missing application id or token is misconfigured rather than a bad reque
   const fetchMock = vi.fn(async () => okResponse());
   vi.stubGlobal("fetch", fetchMock);
 
-  expect((await followUp("", TOKEN, "done")).outcome).toBe("misconfigured");
-  expect((await followUp(APPLICATION, "", "done")).outcome).toBe(
+  expect((await followUp("", TOKEN, textMessage("done"))).outcome).toBe(
+    "misconfigured",
+  );
+  expect((await followUp(APPLICATION, "", textMessage("done"))).outcome).toBe(
     "misconfigured",
   );
   // and nothing was sent to a url with an empty segment in it

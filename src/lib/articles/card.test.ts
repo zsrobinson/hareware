@@ -1,116 +1,111 @@
 import { expect, test } from "vitest";
-import { card, type CardPage } from "./card";
+import { card } from "./card";
+import { ARTICLE_PROPERTIES } from "./config";
+import type { ArticlePage } from "./page";
 
-/** a page as notion returns it, with every property an Article can carry */
-const page = (
-  properties: Record<string, unknown> = {},
-  url = "https://notion.so/page-1",
-): CardPage => ({
-  id: "page-1",
-  url,
+const page = (): ArticlePage => ({
+  id: "3d1be415-e24c-80c8-a14f-cf1fd9b7e48c",
+  url: "https://www.notion.so/3d1be415e24c80c8a14fcf1fd9b7e48c",
   properties: {
-    Headline: { type: "title", title: [{ plain_text: "Terps lose again" }] },
-    "Article Status": { type: "status", status: { name: "Written" } },
-    "Image Status": { type: "status", status: { name: "Unclaimed" } },
-    Section: { type: "select", select: { name: "News" } },
-    "Author Byline": {
-      type: "rich_text",
-      rich_text: [{ plain_text: "Sam R." }],
-    },
-    "Image Byline": {
-      type: "rich_text",
-      rich_text: [{ plain_text: "Ada L." }],
-    },
-    "Publication Date": { type: "date", date: { start: "2026-09-10" } },
-    ...properties,
+    Headline: { title: [{ plain_text: "Terps lose again" }] },
+    "Article Status": { status: { name: "Written", color: "red" } },
+    "Image Status": { status: { name: "In progress", color: "blue" } },
+    Section: { select: { name: "News", color: "default" } },
+    "Author Byline": { rich_text: [{ plain_text: "Sam R." }] },
+    "Image Byline": { rich_text: [] },
+    "Publication Date": { date: null },
   },
 });
 
-test("leads with the Headline", () => {
-  expect(card(page()).split("\n")[0]).toContain("Terps lose again");
-});
-
-test("shows every property the Article carries", () => {
-  const text = card(page());
-
-  expect(text).toContain("Article Status");
-  expect(text).toContain("Written");
-  expect(text).toContain("Image Status");
-  expect(text).toContain("Unclaimed");
-  expect(text).toContain("Section");
-  expect(text).toContain("News");
-  expect(text).toContain("Author Byline");
-  expect(text).toContain("Sam R.");
-  expect(text).toContain("Image Byline");
-  expect(text).toContain("Ada L.");
-  expect(text).toContain("Publication Date");
-  expect(text).toContain("2026-09-10");
-});
-
-test("links to the page in notion", () => {
-  expect(card(page())).toContain("https://notion.so/page-1");
-});
-
-/*
-  notion sends `null` for an empty property, not an absent key, and "absence
-  encoded as a falsy value" is how a card ends up reading "Section: undefined"
-*/
-test("a property notion sent as null loses its line", () => {
-  const text = card(page({ Section: { type: "select", select: null } }));
-
-  expect(text).not.toContain("Section");
-  expect(text).not.toContain("undefined");
-});
-
-test("a property missing from the page altogether loses its line", () => {
-  const bare = page();
-  delete bare.properties["Publication Date"];
-
-  expect(card(bare)).not.toContain("Publication Date");
-});
-
-test("an empty rich text property loses its line rather than showing blank", () => {
-  const text = card(
-    page({ "Author Byline": { type: "rich_text", rich_text: [] } }),
-  );
-
-  expect(text).not.toContain("Author Byline");
-});
-
-test("whitespace-only text counts as empty", () => {
-  const text = card(
-    page({
-      "Image Byline": { type: "rich_text", rich_text: [{ plain_text: "   " }] },
-    }),
-  );
-
-  expect(text).not.toContain("Image Byline");
-});
-
-/* a row often exists with nothing but a headline while somebody is typing it */
-test("renders an article with only a Headline", () => {
-  const text = card({
-    id: "page-1",
-    url: "https://notion.so/page-1",
-    properties: {
-      Headline: { type: "title", title: [{ plain_text: "Terps lose again" }] },
-    },
+test("the shared article card has the selected layout, Notion link, colors and property order", () => {
+  const rendered = card(page());
+  expect(rendered.type).toBe(17);
+  expect(rendered.accent_color).toBe(0xd44c47);
+  expect(rendered.components).toHaveLength(2);
+  expect(rendered.components[0]).toMatchObject({
+    type: 9,
+    accessory: { type: 2, style: 5, url: page().url },
   });
+  expect(JSON.stringify(rendered.components[0])).toContain("Terps lose again");
 
-  expect(text).toContain("Terps lose again");
-  expect(text).not.toContain("undefined");
-  expect(text).not.toContain("null");
+  const properties = JSON.stringify(rendered.components[1]);
+  const order = [
+    "authorByline",
+    "status",
+    "section",
+    "imageStatus",
+    "imageByline",
+    "publicationDate",
+  ] as const;
+  for (const key of order)
+    expect(properties.indexOf(ARTICLE_PROPERTIES[key].name)).toBeGreaterThan(
+      -1,
+    );
+  for (let index = 1; index < order.length; index++) {
+    expect(
+      properties.indexOf(ARTICLE_PROPERTIES[order[index]!]!.name),
+    ).toBeGreaterThan(
+      properties.indexOf(ARTICLE_PROPERTIES[order[index - 1]!]!.name),
+    );
+  }
 });
 
-test("names an article whose Headline is still empty", () => {
-  const text = card(page({ Headline: { type: "title", title: [] } }));
+test.each([
+  ["default", "⚪", 0x8a929e],
+  ["gray", "🔘", 0x9b9a97],
+  ["brown", "🟤", 0x9f6b53],
+  ["orange", "🟠", 0xd9730d],
+  ["yellow", "🟡", 0xcb912f],
+  ["green", "🟢", 0x448361],
+  ["blue", "🔵", 0x337ea9],
+  ["purple", "🟣", 0x9065b0],
+  ["pink", "🩷", 0xc14c8a],
+  ["red", "🔴", 0xd44c47],
+  ["future-color", "⚪", 0x8a929e],
+])(
+  "Notion color %s controls the accent and marker without recognizing the status name",
+  (color, emoji, accent) => {
+    const article = page();
+    article.properties["Article Status"] = {
+      status: { name: "Renamed option", color: String(color) },
+    };
+    const rendered = card(article);
+    expect(rendered.accent_color).toBe(accent);
+    expect(JSON.stringify(rendered)).toContain(`${emoji} Renamed option`);
+  },
+);
 
-  expect(text).toContain("Untitled");
+test("empty and missing properties remain visible; a missing URL uses the real page id", () => {
+  const article = page();
+  delete article.url;
+  article.properties = {};
+  const rendered = JSON.stringify(card(article));
+  expect(rendered).toContain("### Untitled");
+  expect(rendered).toContain("**Author Byline**: Not set");
+  expect(rendered).toContain("**Article Status**: Not set");
+  expect(rendered).toContain(
+    "https://www.notion.so/3d1be415e24c80c8a14fcf1fd9b7e48c",
+  );
 });
 
-test("says so rather than linking nowhere when notion sent no url", () => {
-  const text = card({ id: "page-1", properties: page().properties });
-
-  expect(text).not.toContain("](");
-  expect(text).toContain("Terps lose again");
+test("remote text cannot change the card's layout, create links or ping members", () => {
+  const article = page();
+  article.url = "https://notion.so.attacker.example/";
+  article.properties.Headline = {
+    title: [
+      {
+        plain_text: "@everyone <@&123> **bold**\n[click](https://example.com)",
+      },
+    ],
+  };
+  article.properties["Author Byline"] = {
+    rich_text: [{ plain_text: "x".repeat(5000) }],
+  };
+  const rendered = JSON.stringify(card(article));
+  expect(rendered).not.toContain("@everyone");
+  expect(rendered).not.toContain("<@&123>");
+  expect(rendered).not.toContain("attacker.example");
+  expect(rendered).not.toContain("[click](https://example.com)");
+  expect(rendered).toContain("…");
+  expect(rendered.length).toBeLessThan(3000);
 });

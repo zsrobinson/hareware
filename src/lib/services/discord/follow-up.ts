@@ -16,8 +16,7 @@
 
 import { failed, misconfigured, ok, type Result } from "~/lib/result";
 
-/** discord rejects a message over 2000 characters outright */
-export const MAX_CONTENT = 2000;
+import { IS_COMPONENTS_V2, textMessage, type CommandMessage } from "./message";
 
 /**
  * how long the interaction token is good for.
@@ -48,7 +47,7 @@ export function followUpUrl(applicationId: string, interactionToken: string) {
 export async function followUp(
   applicationId: string,
   interactionToken: string,
-  content: string,
+  message: CommandMessage,
 ): Promise<Result> {
   const missing = [
     !applicationId && "application id",
@@ -65,7 +64,7 @@ export async function followUp(
       `cannot follow up without the ${missing.join(" and ")}`,
     );
 
-  const said = content.trim().slice(0, MAX_CONTENT) || NOTHING_SAID;
+  const body = message.components.length ? message : textMessage(NOTHING_SAID);
 
   try {
     const response = await fetch(followUpUrl(applicationId, interactionToken), {
@@ -76,7 +75,11 @@ export async function followUp(
         reject the request — so its absence is the design and not an omission
       */
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ content: said }),
+      body: JSON.stringify({
+        ...body,
+        flags: IS_COMPONENTS_V2,
+        allowed_mentions: { parse: [] },
+      }),
     });
 
     if (!response.ok) {
@@ -88,7 +91,7 @@ export async function followUp(
       );
     }
 
-    return ok(`followed up on the interaction (${said.length} chars)`);
+    return ok("followed up on the interaction");
   } catch (error) {
     return failed(`could not reach discord to follow up: ${String(error)}`);
   }

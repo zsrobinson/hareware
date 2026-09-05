@@ -65,7 +65,9 @@ export function articleResponse(
       ? [
           ...(result.status === "created"
             ? ["Created article."]
-            : result.changes.map(receipt)),
+            : result.status === "deleted"
+              ? ["Moved article to Notion's Trash."]
+              : result.changes.map(receipt)),
           ...result.notes.map((note) => displayText(note, 200)),
         ]
       : [];
@@ -97,9 +99,11 @@ export function articleResponse(
       "status" in result
         ? result.status === "created"
           ? "Created article."
-          : result.status === "unchanged"
-            ? "Article is unchanged."
-            : "Updated article."
+          : result.status === "deleted"
+            ? "Moved article to Notion's Trash."
+            : result.status === "unchanged"
+              ? "Article is unchanged."
+              : "Updated article."
         : "Could not display the article.";
     const notes =
       "status" in result

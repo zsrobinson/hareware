@@ -40,6 +40,84 @@ test("every subcommand carries a description discord will accept", () => {
   }
 });
 
+test("command descriptions explain the editorial action and every argument", () => {
+  const command = article();
+  expect(command.description).toBe(
+    "Manage The Hare's Articles in Notion from Discord.",
+  );
+  expect(
+    Object.fromEntries(
+      command.options.map((option) => [option.name, option.description]),
+    ),
+  ).toEqual({
+    ping: "Check whether HareWare is online and see your Discord display name.",
+    show: "Show an Article's current details and open it in Notion.",
+    new: "Create an approved Article in Notion before writing begins.",
+    headline: "Change the headline of an existing Article.",
+    status: "Update an Article's progress through editing and publishing.",
+    "image-status": "Update the progress of an Article's image.",
+    section: "Move an Article to the Section responsible for editing it.",
+    "publication-date":
+      "Set or clear the date an Article is scheduled to publish.",
+    author: "Set or add the Article's writer and printed Author Byline.",
+    "image-crew": "Set or add the image creator and printed Image Byline.",
+    delete: "Move an Article to Notion's Trash, where it can be restored.",
+  });
+
+  const descriptions = command.options.flatMap((subcommand) => [
+    subcommand.description,
+    ...subcommand.options.map((option) => option.description),
+  ]);
+  expect(descriptions.every((description) => description.length <= 100)).toBe(
+    true,
+  );
+
+  const optionDescriptions = Object.fromEntries(
+    command.options.flatMap((subcommand) =>
+      subcommand.options.map((option) => [
+        `${subcommand.name}.${option.name}`,
+        option.description,
+      ]),
+    ),
+  );
+  expect(optionDescriptions).toEqual({
+    "show.article": "Choose an Article by typing part of its headline.",
+    "new.headline": "The working headline approved by the Section Editor.",
+    "new.section": "The Section responsible for editing the Article.",
+    "new.member":
+      "The Discord member writing the Article. Creates or links their Members row.",
+    "new.byline":
+      "The Author Byline to print. Defaults to the selected member, then you.",
+    "headline.article": "Choose an Article by typing part of its headline.",
+    "headline.headline": "The Article's new working or final headline.",
+    "status.article": "Choose an Article by typing part of its headline.",
+    "status.status": "The Article's new editorial or publishing status.",
+    "image-status.article": "Choose an Article by typing part of its headline.",
+    "image-status.image-status": "The image's new progress status.",
+    "section.article": "Choose an Article by typing part of its headline.",
+    "section.section": "The Section that should take over editing the Article.",
+    "publication-date.article":
+      "Choose an Article by typing part of its headline.",
+    "publication-date.date":
+      "Publication date in YYYY-MM-DD format. Leave blank to clear it.",
+    "author.article": "Choose an Article by typing part of its headline.",
+    "author.member":
+      "The Discord member who wrote the Article. Creates or links their Members row.",
+    "author.byline":
+      "The Author Byline to print, if different from the member's name.",
+    "author.also":
+      "Add this person to the existing credit instead of replacing it.",
+    "image-crew.article": "Choose an Article by typing part of its headline.",
+    "image-crew.member":
+      "The Discord member who made the image. Creates or links their Members row.",
+    "image-crew.byline":
+      "The Image Byline to print, if different from the member's name.",
+    "image-crew.also":
+      "Add this person to the existing credit instead of replacing it.",
+    "delete.article": "Choose an Article by typing part of its headline.",
+  });
+});
+
 /*
   notion is the source of truth for the interface, not just the data (ADR
   0009), so a choice's value is the option name verbatim — casing included.
@@ -133,6 +211,7 @@ test("every subcommand about one Article autocompletes the picker", () => {
     "publication-date",
     "author",
     "image-crew",
+    "delete",
   ];
 
   for (const name of picks) {

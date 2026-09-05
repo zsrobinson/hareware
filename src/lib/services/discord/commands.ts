@@ -127,7 +127,7 @@ const USER = 6;
 const articleOption = (): CommandOption => ({
   type: STRING,
   name: "article",
-  description: "Which Article. Start typing a headline or a byline.",
+  description: "Choose an Article by typing part of its headline.",
   options: [],
   required: true,
   autocomplete: true,
@@ -137,50 +137,57 @@ const SUBCOMMANDS: Subcommand[] = [
   {
     name: "ping",
     description:
-      "Check that HareWare is listening, and see who Discord says you are.",
+      "Check whether HareWare is online and see your Discord display name.",
     options: () => [],
   },
   {
     name: "show",
-    description: "Everything Notion holds about one Article.",
+    description: "Show an Article's current details and open it in Notion.",
     options: () => [articleOption()],
   },
   {
     name: "new",
-    description: "Start an Article in the tracker.",
+    description: "Create an approved Article in Notion before writing begins.",
     options: (choices) => [
       {
         type: STRING,
         name: "headline",
-        description: "The Headline. It can be changed later.",
+        description: "The working headline approved by the Section Editor.",
         options: [],
         required: true,
       },
-      chooser(choices, "section", ARTICLE_PROPERTIES.section.name, false),
+      chooser(
+        choices,
+        "section",
+        ARTICLE_PROPERTIES.section.name,
+        "The Section responsible for editing the Article.",
+        false,
+      ),
       {
         type: USER,
         name: "member",
         description:
-          "Who wrote it. Added to Members if they are not there yet.",
+          "The Discord member writing the Article. Creates or links their Members row.",
         options: [],
       },
       {
         type: STRING,
         name: "byline",
-        description: "The printed Byline. Defaults to their name, else yours.",
+        description:
+          "The Author Byline to print. Defaults to the selected member, then you.",
         options: [],
       },
     ],
   },
   {
     name: "headline",
-    description: "Rename an Article.",
+    description: "Change the headline of an existing Article.",
     options: () => [
       articleOption(),
       {
         type: STRING,
         name: "headline",
-        description: "The new Headline.",
+        description: "The Article's new working or final headline.",
         options: [],
         required: true,
       },
@@ -188,55 +195,74 @@ const SUBCOMMANDS: Subcommand[] = [
   },
   {
     name: "status",
-    description: "Move an Article along.",
+    description: "Update an Article's progress through editing and publishing.",
     options: (choices) => [
       articleOption(),
-      chooser(choices, "status", ARTICLE_PROPERTIES.status.name, true),
+      chooser(
+        choices,
+        "status",
+        ARTICLE_PROPERTIES.status.name,
+        "The Article's new editorial or publishing status.",
+        true,
+      ),
     ],
   },
   {
     name: "image-status",
-    description: "Say how far an Article's image has got.",
+    description: "Update the progress of an Article's image.",
     options: (choices) => [
       articleOption(),
       chooser(
         choices,
         "image-status",
         ARTICLE_PROPERTIES.imageStatus.name,
+        "The image's new progress status.",
         true,
       ),
     ],
   },
   {
     name: "section",
-    description: "Bounce an Article to another desk.",
+    description: "Move an Article to the Section responsible for editing it.",
     options: (choices) => [
       articleOption(),
-      chooser(choices, "section", ARTICLE_PROPERTIES.section.name, true),
+      chooser(
+        choices,
+        "section",
+        ARTICLE_PROPERTIES.section.name,
+        "The Section that should take over editing the Article.",
+        true,
+      ),
     ],
   },
   {
     name: "publication-date",
-    description: "Set an Article's Publication Date, or clear it.",
+    description: "Set or clear the date an Article is scheduled to publish.",
     options: () => [
       articleOption(),
       {
         type: STRING,
         name: "date",
-        description: "YYYY-MM-DD. Leave it out to clear the date.",
+        description:
+          "Publication date in YYYY-MM-DD format. Leave blank to clear it.",
         options: [],
       },
     ],
   },
   {
     name: "author",
-    description: "Credit whoever wrote an Article.",
-    options: () => creditOptions("wrote it"),
+    description: "Set or add the Article's writer and printed Author Byline.",
+    options: () => creditOptions("author"),
   },
   {
     name: "image-crew",
-    description: "Credit whoever made an Article's image.",
-    options: () => creditOptions("made the image"),
+    description: "Set or add the image creator and printed Image Byline.",
+    options: () => creditOptions("image"),
+  },
+  {
+    name: "delete",
+    description: "Move an Article to Notion's Trash, where it can be restored.",
+    options: () => [articleOption()],
   },
 ];
 
@@ -252,12 +278,13 @@ function chooser(
   choices: ChoiceInput[],
   name: string,
   property: string,
+  description: string,
   required: boolean,
 ): CommandOption {
   return {
     type: STRING,
     name,
-    description: `Which ${property}.`,
+    description,
     options: [],
     choices: choicesFor(choices, property),
     required,
@@ -272,19 +299,25 @@ function chooser(
  * is text with no new member, and a co-Byline is a member added to what is
  * already there
  */
-function creditOptions(did: string): CommandOption[] {
+function creditOptions(credit: "author" | "image"): CommandOption[] {
   return [
     articleOption(),
     {
       type: USER,
       name: "member",
-      description: `Who ${did}. HareWare finds or creates their Members row.`,
+      description:
+        credit === "author"
+          ? "The Discord member who wrote the Article. Creates or links their Members row."
+          : "The Discord member who made the image. Creates or links their Members row.",
       options: [],
     },
     {
       type: STRING,
       name: "byline",
-      description: "The printed name, if it is not theirs.",
+      description:
+        credit === "author"
+          ? "The Author Byline to print, if different from the member's name."
+          : "The Image Byline to print, if different from the member's name.",
       options: [],
     },
     {
@@ -292,7 +325,8 @@ function creditOptions(did: string): CommandOption[] {
          too, and the word has to read that way beside a name */
       type: BOOLEAN,
       name: "also",
-      description: "Add to the existing credit instead of replacing it.",
+      description:
+        "Add this person to the existing credit instead of replacing it.",
       options: [],
     },
   ];
@@ -303,7 +337,7 @@ export function buildCommands(choices: ChoiceInput[]): CommandPayload {
   return [
     {
       name: "article",
-      description: "Edit an Article in the tracker without leaving Discord.",
+      description: "Manage The Hare's Articles in Notion from Discord.",
       default_member_permissions: "0",
       options: SUBCOMMANDS.map((subcommand) => ({
         type: SUB_COMMAND,

@@ -56,6 +56,7 @@ test("a deferred edit renders the confirmed Notion page through the real respons
       return confirmed;
     },
     create: async () => confirmed,
+    trash: async () => ({ ...confirmed, in_trash: true }),
     members: async () => ({ status: "absent" }),
     link: async () => undefined,
     addMember: async (name, discordId) => ({

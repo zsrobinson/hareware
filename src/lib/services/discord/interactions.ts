@@ -414,6 +414,14 @@ const SUBCOMMANDS: Record<
     write(interaction, deps, (subcommand) =>
       crediting(interaction, subcommand, "image"),
     ),
+
+  delete: (interaction, deps) =>
+    write(interaction, deps, (subcommand) => {
+      const pageId = textOf(optionOf(subcommand, "article"));
+      return pageId
+        ? { request: { kind: "delete", pageId } }
+        : refuse("Pick an Article from the list HareWare offers.");
+    }),
 };
 
 /**

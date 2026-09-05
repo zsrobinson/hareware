@@ -58,6 +58,7 @@ const actor = { id: "111", name: "Zachary Robinson" };
 type Recorded = {
   patched: { pageId: string; body: unknown }[];
   created: unknown[];
+  trashed: string[];
   linked: { pageId: string; patch: unknown }[];
   made: { name: string; discordId: string }[];
   logged: { result: Result; actor: string }[];
@@ -87,6 +88,7 @@ function spy(over: Partial<EditIO> = {}) {
   const seen: Recorded = {
     patched: [],
     created: [],
+    trashed: [],
     linked: [],
     made: [],
     logged: [],
@@ -102,6 +104,10 @@ function spy(over: Partial<EditIO> = {}) {
     create: async (body) => {
       seen.created.push(body);
       return { ...returnedProperties(body), id: "page-new" };
+    },
+    trash: async (pageId) => {
+      seen.trashed.push(pageId);
+      return { ...article(), in_trash: true };
     },
     members: async () => ({ status: "absent" }) as MemberMatch,
     link: async (pageId, patch) => {
@@ -125,6 +131,36 @@ const setStatus: EditRequest = {
   pageId: "page-1",
   intent: { property: "status", option: "Approved" },
 };
+
+test("deleting moves the Article to Notion's Trash and keeps its returned page", async () => {
+  const returned = {
+    ...article(),
+    in_trash: true,
+    url: "https://notion.so/page-1",
+  };
+  const { io, seen } = spy({
+    trash: async (pageId) => {
+      seen.trashed.push(pageId);
+      return returned;
+    },
+  });
+
+  const result = await runEdit(io, { kind: "delete", pageId: "page-1" }, actor);
+
+  expect(result).toMatchObject({ status: "deleted", page: returned });
+  expect(seen.trashed).toEqual(["page-1"]);
+  expect(seen.logged[0]!.result).toMatchObject({
+    outcome: "ok",
+    summary: "Moved article to Notion's Trash.",
+  });
+});
+
+test("a trash response that does not confirm in_trash is uncertain", async () => {
+  const { io } = spy({ trash: async () => article() });
+  const result = await runEdit(io, { kind: "delete", pageId: "page-1" }, actor);
+  expect(result).toMatchObject({ status: "failed", pageId: "page-1" });
+  expect(editSummary(result)).toContain("could not be confirmed");
+});
 
 /* ---- a plain property change -------------------------------------------- */
 

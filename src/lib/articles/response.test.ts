@@ -57,6 +57,20 @@ test("creation shares the card and preserves member notes", () => {
   expect(message.components[1]).toEqual(articleResponse(page).components[0]);
 });
 
+test("deletion says the Article moved to Notion's recoverable Trash", () => {
+  const message = articleResponse({
+    status: "deleted",
+    page: { ...page, in_trash: true },
+    changes: [],
+    notes: [],
+  });
+  expect(message.components[0]).toEqual({
+    type: 10,
+    content: "Moved article to Notion's Trash.",
+  });
+  expect(message.components[1]).toEqual(articleResponse(page).components[0]);
+});
+
 test("relation changes use the resolved name and counts, never raw relation ids", () => {
   const message = JSON.stringify(
     articleResponse({

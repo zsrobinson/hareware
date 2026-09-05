@@ -618,6 +618,17 @@ test("a write defers, then follows up with what the edit said", async () => {
   });
 });
 
+test("/article delete defers a request for the selected Article", async () => {
+  const { deps, seen, settle } = writing();
+  const reply = await handleInteraction(
+    writeCommand("delete", [{ name: "article", value: "page-7" }]),
+    deps,
+  );
+  expect(reply).toEqual({ type: DEFERRED, data: { flags: EPHEMERAL } });
+  await settle();
+  expect(seen.requests).toEqual([{ kind: "delete", pageId: "page-7" }]);
+});
+
 /*
   the exact silent failure `docs/agents/silent-failures.md` names: an
   acknowledged interaction left silent shows the editor "HareWare is thinking…"

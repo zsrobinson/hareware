@@ -66,7 +66,9 @@ export type EditRequest =
       byline: string | null;
       /** add to the credit that is there rather than replacing it */
       also: boolean;
-    };
+    }
+  /** `/article delete` moves the page to Notion's recoverable Trash */
+  | { kind: "delete"; pageId: string };
 
 /**
  * everything outside this module, as functions.
@@ -83,6 +85,7 @@ export type EditIO = {
   /** notion answers a PATCH with the whole updated page */
   patch: (pageId: string, body: PatchBody) => Promise<ArticlePage>;
   create: (body: PatchBody) => Promise<ArticlePage>;
+  trash: (pageId: string) => Promise<ArticlePage>;
   members: (discordId: string, displayName: string) => Promise<MemberMatch>;
   link: (memberPageId: string, patch: LinkPatch) => Promise<void>;
   addMember: (name: string, discordId: string) => Promise<Member>;
@@ -92,7 +95,7 @@ export type EditIO = {
 export type { ArticleChange } from "./write";
 export type EditResult =
   | {
-      status: "created" | "updated" | "unchanged";
+      status: "created" | "updated" | "unchanged" | "deleted";
       page: ArticlePage;
       changes: ArticleChange[];
       notes: string[];
@@ -103,7 +106,9 @@ export function editSummary(result: EditResult): string {
   const summary =
     result.status === "failed"
       ? result.explanation
-      : `${result.status === "created" ? "Created article. " : result.status === "unchanged" ? "Unchanged. " : ""}${changesSummary(result.changes)}`;
+      : result.status === "deleted"
+        ? "Moved article to Notion's Trash."
+        : `${result.status === "created" ? "Created article. " : result.status === "unchanged" ? "Unchanged. " : ""}${changesSummary(result.changes)}`;
   return [summary, ...result.notes].join(" — ");
 }
 
@@ -154,6 +159,8 @@ async function attempt(
 
     const page = await io.page(request.pageId);
 
+    if (request.kind === "delete") return await remove(io, page);
+
     if (request.kind === "property")
       return await apply(io, page, plan(schema, page, request.intent));
 
@@ -169,6 +176,29 @@ async function attempt(
       `The edit could not be confirmed: ${String(error)}. Check Notion and Members before retrying.`,
     );
   }
+}
+
+async function remove(io: EditIO, page: ArticlePage): Promise<EditResult> {
+  let trashed: ArticlePage;
+  try {
+    trashed = await io.trash(page.id);
+  } catch (error) {
+    return {
+      status: "failed",
+      pageId: page.id,
+      explanation: `Moving the article to Notion's Trash could not be confirmed: ${String(error)}. Check Notion before retrying.`,
+      notes: [],
+    };
+  }
+  if (trashed.in_trash !== true)
+    return {
+      status: "failed",
+      pageId: trashed.id || page.id,
+      explanation:
+        "Moving the article to Notion's Trash could not be confirmed. Check Notion before retrying.",
+      notes: [],
+    };
+  return { status: "deleted", page: trashed, changes: [], notes: [] };
 }
 
 /* ---- the three behaviours ----------------------------------------------- */
@@ -538,6 +568,14 @@ export function notionIO(env: Env): EditIO {
         },
         ...body,
       }) as Promise<ArticlePage>,
+
+    trash: (pageId) =>
+      notion(
+        `pages/${pageId}`,
+        token(),
+        { in_trash: true },
+        "PATCH",
+      ) as Promise<ArticlePage>,
 
     members: (discordId, displayName) =>
       resolveMember(env, discordId, displayName),

@@ -26,14 +26,10 @@ export type Profile = {
 export type GuildMember = { roleIds: string[]; profile: Profile };
 
 /**
- * what asking discord about somebody came back as.
- *
- * "absent" and "unreachable" were both null once, because the only caller
- * turned either into `admin: false`. they are different facts, and a member
- * reads them differently: one means the club took the role away, the other
- * means we could not find out. saying the first when the second happened is a
- * lie that survives a retry — the shape `docs/agents/silent-failures.md` is
- * about
+ * What asking Discord about somebody came back as. "absent" and "unreachable"
+ * are separate because a member reads them differently: one means the club took
+ * the role away, the other that we could not find out. Saying the first when
+ * the second happened is a lie that survives a retry.
  */
 export type MemberLookup =
   | ({ status: "member" } & GuildMember)
@@ -43,9 +39,9 @@ export type MemberLookup =
   | { status: "unreachable" };
 
 /**
- * discord's "Unknown Member". its siblings — 10004 Unknown Guild, 10013
- * Unknown User — arrive with the same 404 status and mean something about us
- * or the request rather than about their membership
+ * Discord's "Unknown Member". Its siblings, 10004 Unknown Guild and 10013
+ * Unknown User, arrive with the same 404 and are about us, not their
+ * membership.
  */
 const UNKNOWN_MEMBER = 10007;
 
@@ -74,14 +70,10 @@ export async function guildMember(userId: string): Promise<MemberLookup> {
     );
 
     /*
-      a 404 is not one fact. discord answers it for a member who has left, and
-      for a guild it will not show us — a wrong GUILD_ID, or the bot removed
-      from the server. only the first is about them, and the refusal page says
-      "discord says that account is not a member" out loud, so guessing here
-      would print our own misconfiguration as a fact about a person.
-
-      the json error code is what tells them apart: 10007 is the member,
-      anything else is the guild or the request
+      A 404 is not one fact: Discord answers it both for a member who has left
+      and for a guild it will not show us, meaning a wrong GUILD_ID or the bot
+      removed. Only the first is about them, and the refusal page says so by
+      name, so the error code has to decide.
     */
     if (response.status === 404) {
       const code = await errorCode(response);
@@ -126,11 +118,8 @@ export async function guildMember(userId: string): Promise<MemberLookup> {
       profile: readProfile(userId, member),
     };
   } catch (error) {
-    /*
-      an outage denies rather than grants, because the caller reads this as
-      permission as well as identity — it just says so out loud now, rather
-      than passing for "not a member". see ~/lib/admin
-    */
+    /* An outage denies rather than grants: the caller reads this as permission
+       as well as identity. See ~/lib/admin. */
     console.error("[member] could not reach discord", error);
     return { status: "unreachable" };
   }

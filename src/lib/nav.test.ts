@@ -4,14 +4,9 @@ import { ADMIN_ROUTES, isAdminPath } from "./admin-routes";
 import { adminNav, isActive, toolsNav } from "./nav";
 
 /*
-  the admin tools sit at the top level beside the public ones, so nothing about
-  a url says which is which any more. `~/lib/admin-routes` is what says it, and
-  these hold the three lists that have to agree to it: the nav a member clicks,
-  the guard, and the pages on disk.
-
-  the prefix used to do this on its own — anything under /admin was guarded by
-  being there. this is what replaces it, and it is why the list is worth having
-  as its own module rather than as a field on the nav
+  Nothing about a url says which tools need the role, so `ADMIN_ROUTES` says it
+  and three things have to agree with it: the nav a member clicks, the guard,
+  and the pages on disk.
 */
 
 test("every admin tool in the sidebar is one the guard protects", () => {
@@ -39,14 +34,9 @@ test("every guarded route has a page to render", () => {
 });
 
 /*
-  the guard refuses whoever may not be here, but it is `admitted()` that turns
-  a missing admission into a fault somebody sees. a page that skips it renders
-  for anybody the guard let through and, if the route were ever dropped from
-  ADMIN_ROUTES, for everybody — quietly, which is the one outcome this whole
-  change exists to rule out.
-
-  AGENTS.md says a page added and forgotten fails loudly. this is what makes
-  that true rather than merely hoped for
+  `admitted()` is what turns a missing admission into a fault somebody sees, so
+  a page that skips it would serve quietly if its route ever fell off
+  ADMIN_ROUTES. AGENTS.md promises that fails loudly; this is why it does.
 */
 test("every admin page asks the guard who it is rendering for", () => {
   for (const route of ADMIN_ROUTES) {

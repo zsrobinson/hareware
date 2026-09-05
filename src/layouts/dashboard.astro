@@ -90,15 +90,12 @@ const collapsed = Astro.isPrerendered
         >
           {
             /*
-              on a phone the sidebar is the only thing that says what this is,
-              and it is behind a tap, so every page read as some anonymous
-              tool. the bar names the app and then the page, like a breadcrumb:
-              HareWare / Invocation Log. static markup, so it costs no
-              javascript and is there in the first paint.
-
-              the name gives way to the mark on a narrow screen. the mark
-              stays: it is the thing that matches the tab and the avatar in
-              discord, so it is what says whose tool this is
+              On a phone the sidebar is behind a tap, so the bar carries the
+              brand: HareWare / Invocation Log, where the page half opens the
+              menu. Static markup, so it is there in the first paint rather
+              than after the island hydrates. Below 400px the name gives way
+              and the mark stays, since the mark is what matches the browser
+              tab and the bot's avatar in Discord.
             */
           }
           <a

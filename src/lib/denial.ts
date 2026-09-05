@@ -1,28 +1,12 @@
 /*
-  the four ways of not being allowed into the admin tools, and everything that
-  differs between them, in one table.
-
-  they were spread over three places for a while: the status map here, a copy
-  map in the refusal component, and a cascade in the same file choosing which
-  button to draw. three exhaustive lists is two too many — the cascade was the
-  dangerous one, because a fifth denial added to the type would have fallen
-  through it silently to whatever the last branch happened to be, while the
-  other two would at least have failed to compile.
-
-  a denial that needs a new field adds it here and the component reads it. a
-  denial that needs a new *shape* of action adds a variant to `Action`, which
-  is a value rather than a branch, so the component keeps rendering data.
-
-  no runtime dependencies on purpose: `~/lib/admin-guard` is in the module
-  graph of every route, and this is what it reads to set a status
+  The four refusals and everything that differs between them, in one table, so
+  a denial added to the type cannot fall through a branch somewhere and pick up
+  another's button. Imports nothing: the guard reads it to set a status.
 */
 
 /**
- * why somebody may not see the admin tools.
- *
- * they are separate because a member acts on each differently: sign in, ask
- * for the role, join the server, or come back in a minute. collapsing them is
- * what made a discord outage tell a board member their page did not exist
+ * Why somebody may not see the admin tools. Separate because a member acts on
+ * each differently, and because a Discord outage must not read as a refusal.
  */
 export type Denial =
   /** no session cookie, or one that has expired */
@@ -63,11 +47,8 @@ export const DENIALS: Record<Denial, DenialCopy> = {
   },
 
   "no-role": {
-    /*
-      it does not say how to get the role. the board is the board, and an
-      earlier draft that said "ask an editor to add it" read as though the
-      answer were a favour somebody could do you
-    */
+    /* it does not say how to get the role: the board is the board, and
+       offering a way to ask reads as though it were a favour */
     status: 403,
     title: "This tool is for the Editorial Board",
     body: (you) => `You are signed in as ${you}, who is not on the board.`,

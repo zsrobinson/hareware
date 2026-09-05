@@ -1,13 +1,8 @@
 ---
 /*
-  what an admin tool draws instead of itself, when whoever asked may not see
-  it.
-
-  everything that differs between the four refusals is in `~/lib/denial`, so
-  this file chooses nothing: it reads a row and renders it. the button used to
-  be a cascade here, which is why — a fifth denial would have fallen through it
-  to whatever the last branch happened to be, silently and in the one place
-  that is supposed to be telling the truth
+  What an admin tool draws instead of itself. Everything that differs between
+  the four refusals lives in `~/lib/denial`, so this reads a row and renders it
+  rather than choosing anything.
 */
 import Message from "~/components/message.astro";
 import { DENIALS, type Action, type Denial } from "~/lib/denial";

@@ -32,14 +32,10 @@ export function SidebarSheet({
   return (
     <Sheet>
       {/*
-        the whole header is the control on a phone, not a bare icon beside a
-        heading that does nothing. it names where you are and carries a
-        chevron, so the way to everything else is the most obvious thing on the
-        screen rather than a glyph you have to already know about
+        The page name is the control on a phone, so the way to everything else
+        is the most obvious thing on the screen rather than a glyph. It shrinks
+        rather than pushing the chevron off the bar.
       */}
-      {/* the brand sits to the left of this, so the trigger starts at the page
-          name and shrinks from there: on a narrow screen the title truncates
-          rather than pushing the chevron off the bar */}
       <SheetTrigger
         className="text-foreground hover:bg-accent inline-flex h-8 min-w-0 items-center gap-1 rounded-md px-1.5 md:hidden"
         aria-label={`${title}. Open navigation`}

@@ -22,11 +22,8 @@ function mockDiscord(roles: string[] | null, ok = true) {
   );
 }
 
-/*
-  astro's context and `next`, small enough to assert against. `next` records
-  what it was asked to render, which is the thing a page-level test could not
-  see: whether the guard sent the request on, or somewhere else entirely
-*/
+/* Astro's context, with a `next` that records what it was asked to render:
+   whether the guard sent the request on, or somewhere else entirely. */
 function context(path: string, cookie?: string) {
   const url = new URL(`https://hareware.test${path}`);
   const request = new Request(url, {
@@ -90,11 +87,8 @@ test("lets a board member through to the page they asked for", async () => {
   expect(locals.admission?.access.allowed).toBe(true);
 });
 
-/*
-  the four refusals, end to end: the status a browser sees, and the page it is
-  sent to. asserting the status here rather than in a page is what makes the
-  mapping load-bearing — delete it and this fails
-*/
+/* The four refusals end to end: the status a browser sees, and the page it is
+   sent to. Delete the status mapping and this goes red. */
 test.each([
   ["signed-out", 401, undefined],
   ["no-role", 403, ["something-else"]],

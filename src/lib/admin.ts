@@ -1,19 +1,8 @@
 /*
-  who may reach the admin tools.
-
-  membership of @Editorial Board is checked against discord on every request
-  rather than captured at sign-in, so a role removed in discord takes effect
-  immediately. that costs one request per page view, and ADR 0007 records why
-  it was judged worth it for the surface holding the invocation log.
-
-  that same request carries the member's nickname and avatar, so identity comes
-  back with it rather than being kept anywhere — see ~/lib/member
-
-  a refusal here says which of the four things went wrong, rather than the
-  blanket 404 this used to answer with. ADR 0007's amendment of 2026-09-04 has
-  the reasoning: the routes and the role gating them are not a secret, and
-  pretending the page does not exist mostly succeeded in confusing the members
-  it was meant to serve
+  Who may reach the admin tools. @Editorial Board is checked against Discord on
+  every request rather than captured at sign-in, so losing the role takes effect
+  immediately; the same request carries the profile, so identity is never
+  stored. A refusal names which of four things is wrong. ADR 0007 for both.
 */
 
 import { getSessionSecret } from "./auth-config";

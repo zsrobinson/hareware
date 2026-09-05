@@ -6,9 +6,8 @@ import type { ViewerState } from "./admin";
   mobile drawer that contains one. they would otherwise each ask
   /api/session.json and could disagree.
 
-  the nav used to be in that list, and is not any more — every tool is shown to
-  everybody and the admin pages refuse in person, so nothing about which links
-  to draw depends on this.
+  the nav is not in that list: every tool is shown to everybody and the admin
+  pages refuse in person, so nothing about which links to draw depends on this.
 
   one snapshot with three states, not three module variables with a shared
   boolean. the old shape published `session` from a page that had one while

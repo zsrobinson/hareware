@@ -74,8 +74,8 @@ function AccountMenu({
         {signedIn ? (
           /*
             a <button> sizes to its own text even as a flex container, where an
-            <a> fills the row — so without these the one item that is a button
-            highlighted a different width from the ones that are links
+            <a> fills the row. both widths are needed for this item to
+            highlight the same width as the links beside it
           */
           <form
             method="post"
@@ -165,8 +165,8 @@ export function SidebarAccount({
             "flex h-9 min-w-0 flex-1 items-center justify-center gap-2 rounded-md bg-[#5865F2] text-sm font-medium text-white transition-colors hover:bg-[#4752c4]",
             /*
               the rail stacks this row, and `flex-1` in a column grows down
-              rather than across, so the button stretched into a tall blue
-              slab. at rail width it is a square with the mark in it
+              rather than across, which would leave a tall blue slab. at rail
+              width this is a square with the mark in it
             */
             !inSheet &&
               "group-data-[state=collapsed]/shell:size-9 group-data-[state=collapsed]/shell:flex-none",

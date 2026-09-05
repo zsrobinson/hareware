@@ -21,8 +21,8 @@ const { viewer, pathname, returnTo } = Astro.props;
 >
   {
     /* shadcn's sidebar header: one square mark, the name beside it, and the
-      name is what goes when the rail narrows. the mark is 1:1 so it survives
-      that — the old wordmark was 4:1 and would have been four pixels tall */
+      name is what goes when the rail narrows. the mark has to be 1:1 to
+      survive that: a wide wordmark scaled to the rail is unreadable */
   }
   <a
     href="/"
@@ -46,10 +46,10 @@ const { viewer, pathname, returnTo } = Astro.props;
     <NavGroup items={toolsNav} pathname={pathname} label="Public tools" />
 
     {
-      /* everybody sees these, signed in or not. the pages themselves refuse,
-         and say why — so the nav has nothing to hide and nothing to ask
-         /api/session.json for, which is what let this become static markup on
-         a cached page too. ADR 0007, amended 2026-09-04 */
+      /* Everybody sees these, signed in or not: the pages refuse and say why,
+         so the nav has nothing to hide and nothing to ask
+         /api/session.json for, which is what keeps it static markup even on a
+         cached page. ADR 0007. */
     }
     <NavGroup items={adminNav} pathname={pathname} label="Admin tools" />
   </nav>

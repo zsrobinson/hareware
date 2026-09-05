@@ -1,16 +1,9 @@
 ---
 /*
-  what an admin tool renders when whoever asked may not see it.
-
-  the guard in `~/lib/admin-guard` rewrites to here rather than redirecting, so
-  the address bar still holds the page they were sent to. it leaves the reason
-  in `locals.admission`, which is why this page never has to guess — and never
-  works it out for itself: a second copy of that decision, on a route the guard
-  does not cover, is two answers to one question.
-
-  so a direct visit is sent at the admin panel instead. the guard is above that
-  path, and will send them straight back here with a real admission — or let
-  them in, if it turns out they may be there
+  What an admin tool renders when whoever asked may not see it. The guard
+  rewrites here and leaves the reason in `locals.admission`, so this page never
+  works the answer out for itself: a direct visit goes to a guarded route
+  instead, and comes back with a real admission.
 */
 import Dashboard from "~/layouts/dashboard.astro";
 import AccessDenied from "~/components/access-denied.astro";
@@ -24,10 +17,8 @@ if (!admission || admission.access.allowed) {
 
 const { access, returnTo } = admission;
 
-/* the guard sets the status on the response it hands back; this page only
-   renders the body. `DENIALS` is where the two agree — ~/lib/denial */
-
-/* it names the member back to them, so no cache may hold it */
+/* Names the member back to them, so no cache may hold it. The guard sets the
+   status; this page only renders the body. */
 Astro.response.headers.set("cache-control", "private, no-store");
 ---
 

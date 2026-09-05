@@ -1,12 +1,12 @@
 /* The same Article snapshot for show, creation and edits. No reads or writes. */
-import { notion, plainText } from "~/lib/services/notion/client";
+import { plainText } from "~/lib/services/notion/client";
 import {
   displayText,
   textDisplay,
   type Container,
 } from "~/lib/services/discord/message";
-import { ARTICLE_PROPERTIES, UNTITLED } from "./config";
-import { optionName, type ArticlePage } from "./page";
+import { ARTICLE_PROPERTIES, UNTITLED } from "~/lib/articles/config";
+import { optionName, type ArticlePage } from "~/lib/articles/page";
 
 /** Notion supplies color names. RGB and Unicode are display approximations. */
 const PALETTE: Record<string, { accent: number; emoji: string }> = {
@@ -92,11 +92,4 @@ export function card(page: ArticlePage): Container {
       textDisplay(rows.join("\n")),
     ],
   };
-}
-
-export async function readArticle(
-  pageId: string,
-  token: string,
-): Promise<ArticlePage> {
-  return (await notion(`pages/${pageId}`, token)) as ArticlePage;
 }

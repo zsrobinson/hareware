@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import { suggestions, MAX_CHOICE_NAME, quality } from "./pick";
-import type { Article } from "./page";
+import { suggestions } from "./article-picker";
+import type { Article } from "~/lib/articles/page";
 
 const row = (over: Partial<Article> = {}): Article => ({
   pageId: "page-1",
@@ -46,7 +46,7 @@ test("an untitled row still gets a name", () => {
 test("a very long headline is cut rather than taking the dropdown down", () => {
   const [choice] = suggestions([row({ headline: "x".repeat(300) })]);
 
-  expect(choice!.name.length).toBeLessThanOrEqual(MAX_CHOICE_NAME);
+  expect(choice!.name.length).toBeLessThanOrEqual(100);
   expect(choice!.name.endsWith("…")).toBe(true);
 });
 
@@ -61,39 +61,55 @@ test("never offers a 26th choice", () => {
 /* ---- matching ----------------------------------------------------------- */
 
 test("finds a headline by a word inside it", () => {
-  expect(quality("Local perv excited to leer", "leer")).toBeGreaterThan(0);
+  expect(
+    suggestions([row({ headline: "Local perv excited to leer" })], "leer"),
+  ).toHaveLength(1);
 });
 
 test("ignores case, accents and punctuation", () => {
   /* headlines carry curly quotes and em dashes nobody types into a picker */
-  expect(quality("“Terps’ loss — again”", "terps loss")).toBeGreaterThan(0);
-  expect(quality("Café society", "cafe")).toBeGreaterThan(0);
+  expect(
+    suggestions([row({ headline: "“Terps’ loss — again”" })], "terps loss"),
+  ).toHaveLength(1);
+  expect(suggestions([row({ headline: "Café society" })], "cafe")).toHaveLength(
+    1,
+  );
 });
 
 test("forgives a dropped letter", () => {
   // the whole of the fuzziness: a subsequence, in order
-  expect(quality("Ellicott Hall Stolen", "elicott")).toBeGreaterThan(0);
+  expect(
+    suggestions([row({ headline: "Ellicott Hall Stolen" })], "elicott"),
+  ).toHaveLength(1);
 });
 
 test("refuses letters that are not there in order", () => {
-  expect(quality("Terps lose again", "zebra")).toBe(0);
-  expect(quality("Terps lose again", "again terps")).toBe(0);
+  const rows = [row({ headline: "Terps lose again" })];
+  expect(suggestions(rows, "zebra")).toHaveLength(0);
+  expect(suggestions(rows, "again terps")).toHaveLength(0);
 });
 
 test("an empty query matches everything", () => {
   /* a picker that has only just opened is not a search, and answering it with
      nothing is how this looked broken for an evening */
-  expect(quality("anything at all", "")).toBeGreaterThan(0);
   expect(suggestions([row(), row({ pageId: "b" })], "")).toHaveLength(2);
 });
 
 test("ranks a better match above a worse one", () => {
-  const start = quality("Looney's patrons banned", "looney");
-  const word = quality("McDonalds to ban Looney's patrons", "looney");
-  const loose = quality("Long or nearly every word", "looney");
+  const choices = suggestions(
+    [
+      row({ pageId: "loose", headline: "Long or nearly every word" }),
+      row({ pageId: "word", headline: "McDonalds to ban Looney's patrons" }),
+      row({ pageId: "start", headline: "Looney's patrons banned" }),
+    ],
+    "looney",
+  );
 
-  expect(start).toBeGreaterThan(word);
-  expect(word).toBeGreaterThan(loose);
+  expect(choices.map((choice) => choice.value)).toEqual([
+    "start",
+    "word",
+    "loose",
+  ]);
 });
 
 /* ---- ranking ------------------------------------------------------------ */

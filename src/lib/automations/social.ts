@@ -8,7 +8,7 @@ import {
 } from "~/lib/services/discord/post-message";
 import { easternNow, type EasternNow } from "~/lib/eastern";
 import { failed, misconfigured, ok, skipped, type Result } from "./registry";
-import { postedId } from "~/lib/services/discord/interactions";
+import { postedId } from "~/lib/services/discord/posted-button";
 import { toArticleSlug } from "~/lib/services/wordpress/article-url";
 import { getRecentArticles } from "~/lib/services/wordpress/get-recent-articles";
 import { HAREWARE_ORIGIN, SOCIAL_CHANNEL_ID, SOCIAL_ROLE_IDS } from "./config";

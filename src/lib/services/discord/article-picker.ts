@@ -14,12 +14,12 @@
   headline.
 */
 
-import { UNTITLED } from "./config";
-import type { Article } from "./page";
-import { MAX_CHOICES } from "~/lib/services/discord/commands";
+import { UNTITLED } from "~/lib/articles/config";
+import type { Article } from "~/lib/articles/page";
+import { MAX_CHOICES } from "./commands";
 
 /** discord rejects the whole response over this, per choice name */
-export const MAX_CHOICE_NAME = 100;
+const MAX_CHOICE_NAME = 100;
 
 export type AutocompleteChoice = { name: string; value: string };
 
@@ -31,7 +31,7 @@ export type AutocompleteChoice = { name: string; value: string };
  * week, so recency decides between two comparable matches and the tiers only
  * keep a genuinely better match above a worse one.
  */
-export function quality(headline: string, query: string): number {
+function quality(headline: string, query: string): number {
   if (!query) return 1;
 
   const text = fold(headline);

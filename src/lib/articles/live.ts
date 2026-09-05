@@ -123,3 +123,10 @@ export async function search(token: string, text: string): Promise<Article[]> {
     token,
   );
 }
+
+export async function readArticle(
+  token: string,
+  pageId: string,
+): Promise<ArticlePage> {
+  return (await notion(`pages/${pageId}`, token)) as ArticlePage;
+}

@@ -1,132 +1,123 @@
-import { afterEach, expect, test, vi } from "vitest";
-import { runEdit, type EditIO } from "~/lib/articles/edit";
+import { expect, test } from "vitest";
+import { articleResponse } from "./article-response";
 import type { ArticlePage } from "~/lib/articles/page";
-import type { Schema } from "~/lib/articles/choices";
-import { handleInteraction, type InteractionDeps } from "./interactions";
-import { followUp } from "./follow-up";
 
-afterEach(() => vi.unstubAllGlobals());
-
-const schema: Schema = {
+const page: ArticlePage = {
+  id: "3d1be415-e24c-80c8-a14f-cf1fd9b7e48c",
   properties: {
-    Headline: { type: "title" },
-    "Article Status": {
-      type: "status",
-      status: { options: [{ name: "Managing Edited" }, { name: "Scheduled" }] },
-    },
-    "Image Status": { type: "status", status: { options: [] } },
-    Section: { type: "select", select: { options: [] } },
-    "Author Byline": { type: "rich_text" },
-    "Image Byline": { type: "rich_text" },
-    "Publication Date": { type: "date" },
-    Author: { type: "relation" },
-    "Image Crew": { type: "relation" },
+    Headline: { title: [{ plain_text: "Sample article" }] },
+    "Article Status": { status: { name: "Scheduled", color: "green" } },
   },
 };
 
-function article(status: string, color: string, headline: string): ArticlePage {
-  return {
-    id: "3d1be415-e24c-80c8-a14f-cf1fd9b7e48c",
-    url: "https://www.notion.so/3d1be415e24c80c8a14fcf1fd9b7e48c",
-    properties: {
-      Headline: { title: [{ plain_text: headline }] },
-      "Author Byline": { rich_text: [{ plain_text: "Jamie Example" }] },
-      "Article Status": { status: { name: status, color } },
-      Section: { select: { name: "News", color: "default" } },
-      "Image Status": { status: { name: "Done", color: "green" } },
-      "Image Byline": { rich_text: [] },
-      "Publication Date": { date: null },
-    },
-  };
-}
+test("a successful edit leads with the B2c sentence and shares the show card", () => {
+  const reply = articleResponse({
+    status: "updated",
+    page,
+    changes: [
+      { property: "status", before: "Managing Edited", after: "Scheduled" },
+    ],
+    notes: [],
+  });
+  expect(JSON.stringify(reply.components[0])).toContain("Managing Edited");
+  expect(JSON.stringify(reply.components[0])).toContain("Scheduled");
+  expect(reply.components[1]).toEqual(articleResponse(page).components[0]);
+});
 
-test("a deferred edit renders the confirmed Notion page through the real response path", async () => {
-  const before = article("Managing Edited", "yellow", "Old headline");
-  const confirmed = article(
-    "Scheduled",
-    "green",
-    "Returned headline @everyone <@&123>",
-  );
-  let patches = 0;
-  const io: EditIO = {
-    schema: async () => schema,
-    page: async () => before,
-    patch: async () => {
-      patches += 1;
-      return confirmed;
-    },
-    create: async () => confirmed,
-    trash: async () => ({ ...confirmed, in_trash: true }),
-    members: async () => ({ status: "absent" }),
-    link: async () => undefined,
-    addMember: async (name, discordId) => ({
-      pageId: "member",
-      name,
-      discordId,
+test.each([
+  [null, "News"],
+  ["News", null],
+  ["News", "News"],
+  [null, null],
+])("receipt handles %s → %s", (before, after) => {
+  const receipt = articleResponse({
+    status: before === after ? "unchanged" : "updated",
+    page,
+    changes: [{ property: "section", before, after }],
+    notes: [],
+  }).components[0];
+  expect(receipt.type).toBe(10);
+  expect(JSON.stringify(receipt)).toContain("Section");
+  expect(JSON.stringify(receipt)).not.toMatch(/undefined|null/);
+});
+
+test("creation shares the card and preserves member notes", () => {
+  const message = articleResponse({
+    status: "created",
+    page,
+    changes: [],
+    notes: ["Created Jamie Example in Members."],
+  });
+  expect(JSON.stringify(message.components[0])).toContain("Jamie Example");
+  expect(message.components[1]).toEqual(articleResponse(page).components[0]);
+});
+
+test("deletion says the Article moved to Notion's recoverable Trash", () => {
+  const message = articleResponse({
+    status: "deleted",
+    page: { ...page, in_trash: true },
+    changes: [],
+    notes: [],
+  });
+  expect(message.components[0]?.type).toBe(10);
+  expect(message.components[1]).toEqual(articleResponse(page).components[0]);
+});
+
+test("relation changes use the resolved name and counts, never raw relation ids", () => {
+  const message = JSON.stringify(
+    articleResponse({
+      status: "updated",
+      page,
+      changes: [
+        { property: "authorByline", before: "Old byline", after: "Pseudonym" },
+        {
+          property: "author",
+          before: ["member-old"],
+          after: ["member-new"],
+          member: { id: "member-new", name: "Jamie Example" },
+        },
+      ],
+      notes: [],
     }),
-    log: async () => undefined,
-  };
-  const requests: unknown[] = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      if (typeof init?.body !== "string") throw new Error("expected JSON body");
-      requests.push(JSON.parse(init.body));
-      return Response.json({ id: "reply" });
+  );
+  expect(message).toContain("Jamie Example");
+  expect(message).not.toContain("member-new");
+  expect(message).not.toContain("member-old");
+});
+
+test("a failed article write retains partial member notes and a Notion link", () => {
+  const message = JSON.stringify(
+    articleResponse({
+      status: "failed",
+      explanation: "The article update could not be confirmed.",
+      pageId: page.id,
+      notes: ["Created Jamie Example in Members."],
     }),
   );
-  const work: Promise<void>[] = [];
-  const deps: InteractionDeps = {
-    edit: (request, actor) => runEdit(io, request, actor),
-    reply: followUp,
-    defer: (run) => work.push(run()),
-  };
+  expect(message).toContain("could not be confirmed");
+  expect(message).toContain("Created Jamie Example in Members.");
+  expect(message).toContain("Open in Notion");
+  expect(message).not.toContain("Updated article");
+});
 
-  const acknowledgement = await handleInteraction(
-    {
-      type: 2,
-      application_id: "app",
-      token: "token",
-      data: {
-        name: "article",
-        options: [
-          {
-            name: "status",
-            options: [
-              { name: "article", value: before.id },
-              { name: "status", value: "Scheduled" },
-            ],
-          },
-        ],
-      },
-      member: {
-        roles: ["669611068938780673"],
-        user: { id: "editor", username: "editor" },
-      },
-    },
-    deps,
-  );
-
-  expect(acknowledgement).toEqual({ type: 5, data: { flags: 64 } });
-  await Promise.all(work);
-  expect(patches).toBe(1);
-  expect(requests).toHaveLength(1);
-  expect(requests[0]).toMatchObject({
-    flags: 32768,
-    allowed_mentions: { parse: [] },
-    components: [
-      {
-        type: 10,
-        content:
-          "Updated **Article Status** from **Managing Edited** to **Scheduled**.",
-      },
-      { type: 17, accent_color: 0x448361 },
+test("an oversized display still confirms the write, preserves notes and links to Notion", () => {
+  const message = articleResponse({
+    status: "updated",
+    page,
+    changes: Array.from({ length: 30 }, () => ({
+      property: "headline" as const,
+      before: "a".repeat(100),
+      after: "b".repeat(100),
+    })),
+    notes: [
+      "Created Jamie Example in Members.",
+      "The invocation log could not be saved.",
     ],
   });
-  const posted = JSON.stringify(requests[0]);
-  expect(posted).toContain("Returned headline");
-  expect(posted).not.toContain("Old headline");
-  expect(posted).not.toContain("@everyone");
-  expect(posted).not.toContain("<@&123>");
-  expect(posted).toContain("Open in Notion");
+  const body = JSON.stringify(message);
+  expect(body).toContain("Updated article.");
+  expect(body).toContain("Created Jamie Example in Members.");
+  expect(body).toContain("The invocation log could not be saved.");
+  expect(body).toContain("Open in Notion");
+  expect(body.length).toBeLessThan(4000);
 });

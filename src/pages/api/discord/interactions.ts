@@ -3,8 +3,7 @@ import type { APIRoute } from "astro";
 import { record } from "~/lib/log";
 import { DISCORD_PUBLIC_KEY } from "~/lib/services/discord/config";
 import { handleInteraction } from "~/lib/services/discord/interactions";
-import { recentArticles, search } from "~/lib/articles/live";
-import { readArticle } from "~/lib/articles/card";
+import { readArticle, recentArticles, search } from "~/lib/articles/live";
 import { notionIO, runEdit } from "~/lib/articles/edit";
 import { verifyInteraction } from "~/lib/services/discord/verify";
 
@@ -51,7 +50,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       ? (text) => search(env.NOTION_TOKEN!, text)
       : undefined,
     page: env.NOTION_TOKEN
-      ? (pageId) => readArticle(pageId, env.NOTION_TOKEN!)
+      ? (pageId) => readArticle(env.NOTION_TOKEN!, pageId)
       : undefined,
 
     /*

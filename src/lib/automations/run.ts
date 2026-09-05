@@ -1,6 +1,6 @@
 import { easternNow, type EasternNow } from "~/lib/eastern";
 import { record } from "~/lib/log";
-import { refreshCommands } from "~/lib/articles/refresh";
+import { refreshCommands } from "~/lib/services/discord/refresh-commands";
 import { reportFailure } from "./alert";
 import {
   AUTOMATIONS,

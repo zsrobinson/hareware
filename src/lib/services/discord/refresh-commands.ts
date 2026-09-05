@@ -14,11 +14,15 @@
   the stored hash to disagree with what was actually up there.
 */
 
-import { buildCommands } from "~/lib/services/discord/commands";
-import { registerCommands } from "~/lib/services/discord/register";
+import { buildCommands } from "./commands";
+import { registerCommands } from "./register";
 import { failed, misconfigured, type Result } from "~/lib/result";
-import { assertProperties, extractChoices, fetchSchema } from "./choices";
-import { CHOICE_PROPERTIES } from "./config";
+import {
+  assertProperties,
+  extractChoices,
+  fetchSchema,
+} from "~/lib/articles/choices";
+import { CHOICE_PROPERTIES } from "~/lib/articles/config";
 
 /**
  * reads the schema and puts the surface it implies on discord.

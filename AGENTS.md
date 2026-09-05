@@ -15,9 +15,10 @@ should are answered by
 src/lib/
   services/{discord,notion,wordpress}/  how to talk to each outside system
   automations/                          what runs on a schedule
+  articles/                             the /article commands, and Notion's shapes
   db/ log.ts                            the invocation record
   session · auth · admin · member       who is asking, and whether they may
-src/pages/api/                          the routes those two answer
+src/pages/api/                          the routes those answer
 ```
 
 Three outside systems, and everything about talking to one lives in its folder:

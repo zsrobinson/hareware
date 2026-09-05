@@ -12,7 +12,7 @@
 */
 
 import type { Result } from "~/lib/result";
-import { hashCommands, type CommandPayload } from "./commands";
+import type { CommandPayload } from "./commands";
 import { DISCORD_APPLICATION_ID, GUILD_ID } from "./config";
 
 /**
@@ -22,9 +22,7 @@ import { DISCORD_APPLICATION_ID, GUILD_ID } from "./config";
  * cannot store the hash of a surface discord never received — which would
  * suppress every later attempt and leave the stale commands up for good
  */
-export type RegisterResult =
-  | (Result & { outcome: "ok"; hash: string })
-  | (Result & { outcome: "skipped" | "misconfigured" | "failed" });
+export type RegisterResult = Result;
 
 /**
  * registers the payload unless it is the one already up there.
@@ -40,17 +38,7 @@ export type RegisterResult =
 export async function registerCommands(
   env: Env,
   payload: CommandPayload,
-  previousHash?: string,
 ): Promise<RegisterResult> {
-  const hash = await hashCommands(payload);
-
-  if (previousHash === hash) {
-    return {
-      outcome: "skipped",
-      summary: "commands unchanged; nothing registered",
-    };
-  }
-
   const token = env.DISCORD_BOT_TOKEN;
   if (!token) {
     return {
@@ -90,7 +78,6 @@ export async function registerCommands(
     return {
       outcome: "ok",
       summary: `registered ${payload.length} command(s) on the guild`,
-      hash,
     };
   } catch (error) {
     return {

@@ -68,31 +68,71 @@ happens on the `data_source.schema_updated` webhook, and again on the hourly
 cron regardless — the webhook for speed, the cron for truth. A hash of the
 computed registration is stored so an unchanged schema re-registers nothing.
 
-### An index in D1, serving autocomplete and nothing else
+### The picker reads Notion, and holds it for ten seconds
 
-**Amended 2026-09-05: the picker reads Notion directly, and the index is what
-catches it when that read is slow.**
+**Amended 2026-09-05. The D1 index this section described has been deleted.**
 
-The index was built on the assumption that autocomplete could not ask Notion on
-every keystroke. That is still true of a whole-table read — 139 rows is two
-requests and about 1.2 seconds — but a **recency-sorted hundred is one request
-and about 0.7 seconds**, against Discord's hard three. One request per keystroke
-sits at Notion's budget of roughly three a second rather than double it.
+Picking an Article by name needs a search on every keystroke, and Notion cannot
+express a fuzzy one — so the candidates have to be here, in memory, to be
+matched. The question was only ever where they come from.
 
-What forced the change is that a cache fed by webhooks is never "immediately".
-Notion's delivery is documented as "most within a minute, up to five", and
-measured here it was nine seconds once and sixty-five the next. An editor who
-renames a Headline and opens the picker is not waiting on our sync; they are
-waiting on Notion's delivery, and that is not a number anybody can plan around.
+An index in D1 was the first answer, kept current by three writers: a webhook, a
+write-through from each command, and an hourly rebuild. It cost a version guard
+to reconcile them, and that guard discarded a second edit made in the same minute
+as the first, because `last_edited_time` has minute resolution. An editor
+renaming a Headline watched Discord hold the old one. The deeper problem is that
+a cache fed by webhooks is never "immediately": Notion documents delivery as most
+within a minute and up to five, and measured here it was nine seconds once and
+sixty-five the next.
 
-So the picker asks Notion first, with a 1.4 second deadline, and falls back to
-the index. Live when Notion is quick, a rebuild-cadence stale when it is not,
-and never an empty dropdown — which is what the index was really for.
+So Notion is read directly. The numbers this rests on, all measured:
 
-The rebuild stays **hourly**. It briefly ran every minute, which is 400,000 row
-writes a day against D1's free hundred thousand: the index would have gone quiet
-part-way through every afternoon, silently, which is the failure this whole
-document exists to avoid. It corrects drift; it is not what anybody waits on.
+|                                 |                                            |
+| ------------------------------- | ------------------------------------------ |
+| 100 most recent, sorted         | 1 request, ~0.7s (one 2.0s outlier)        |
+| the whole corpus                | 2 requests, ~1.2s — and growing every year |
+| a `contains` search             | 1 request, ~0.5s                           |
+| Discord's autocomplete deadline | 3.0s, hard, cannot be deferred             |
+| Notion's budget                 | ~3 requests a second                       |
+
+The hundred most recently edited is one request, and sorted by recency it is
+what anybody is plausibly reaching for. Matching happens locally, so a dropped
+letter or the wrong word order still finds it. When nothing matches — the
+Article is older than the hundred — Notion is asked for a substring match, which
+is coarser and deliberately a last resort.
+
+Reading the **whole** corpus and matching all of it was considered and rejected:
+139 rows is two requests today and an unbounded number in five years, and the
+club expects this to outlive everyone currently in it.
+
+#### The snapshot, and what it assumes
+
+A module-scope variable holds the last read for ten seconds. It exists for
+Notion's rate limit and not for speed: without it, six keystrokes are six
+requests at roughly three a second, and two editors typing at once would be
+refused. The assumptions, stated so they can be checked later:
+
+- **Isolates stay warm across a few seconds of typing.** Cloudflare keeps one
+  alive between requests, so the keystrokes of one editor almost always share it.
+  If that is ever false the cost is one extra 0.7s read — latency, never a wrong
+  answer. The snapshot can be absent; it cannot be incorrect.
+- **The snapshot is shared between everyone an isolate serves.** Safe here: the
+  Article list is not per-person, and the `@Editorial Board` check runs before
+  anything reads it.
+- **Several isolates hold independent copies**, each at most ten seconds old.
+- **Ten seconds is a burst of typing and little else.** The next time somebody
+  opens the picker they get Notion, not this.
+- **The Cache API is the upgrade** if isolate churn ever shows up in the logs:
+  per-colo, free, shared across isolates — and unavailable on `workers.dev`
+  subdomains, which is worth knowing before reaching for it.
+
+#### What is left in D1
+
+The invocation log, and nothing else. `choice_options` and `sync_meta` went with
+the index: the schema is read and the command surface registered in the same
+invocation, so the options never needed to outlive it, and re-registering hourly
+costs twenty-four of Discord's two hundred daily registrations — cheaper than a
+stored hash that could disagree with what is actually up there.
 
 ### Members is keyed by Discord user, and fills itself in
 

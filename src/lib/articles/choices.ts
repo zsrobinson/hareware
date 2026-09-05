@@ -1,6 +1,10 @@
 /*
   what the pickers offer, read out of notion's own schema.
 
+  nothing here stores anything. the schema is read and the command surface is
+  registered in the same invocation, so the options never need to outlive it —
+  a D1 table used to sit between the two halves and was pure ceremony.
+
   no status, section or image status is written down in this repo. adding one
   is something the club does in notion, and the commands re-register from what
   is read here — which is also why the casing traps (`Not started`, not
@@ -11,26 +15,12 @@
   problem, and keeping it that way is what lets this be tested without one.
 */
 
-import { drizzle } from "drizzle-orm/d1";
-import { asc } from "drizzle-orm";
 import { notion } from "~/lib/services/notion/client";
-import { choiceOptions, type ChoiceOption } from "~/lib/db/schema";
-import { chunk } from "./store";
-import { failed, misconfigured, ok, type Result } from "~/lib/result";
 import {
   ARTICLES_DATA_SOURCE_ID,
   ARTICLE_PROPERTIES,
   CHOICE_PROPERTIES,
 } from "./config";
-
-/**
- * how many picker options go in one insert.
- *
- * a choice is three columns against d1's hundred-variable ceiling, so
- * thirty-three is the true limit — which the three pickers are one added
- * section away from reaching
- */
-const CHOICE_CHUNK = 20;
 
 /** a data source's schema, as much of it as we read */
 export type Schema = {
@@ -45,6 +35,9 @@ export type Schema = {
 };
 
 /** a property the schema does not have in the shape we expect */
+/** one option a picker offers, in notion's own order */
+export type ChoiceOption = { property: string; name: string; position: number };
+
 export type MissingProperty = {
   name: string;
   expected: string;
@@ -136,92 +129,4 @@ export function fetchSchema(token: string): Promise<Schema> {
     `data_sources/${ARTICLES_DATA_SOURCE_ID}`,
     token,
   ) as Promise<Schema>;
-}
-
-/**
- * re-reads the schema and stores what the pickers should offer.
- *
- * every refusal below leaves the stored options exactly as they were, which is
- * the right failure: yesterday's picker is a small annoyance and an empty one
- * is a command nobody can run.
- */
-export async function refreshChoices(env: Env): Promise<Result> {
-  const missing = [!env.NOTION_TOKEN && "NOTION_TOKEN", !env.DB && "DB"].filter(
-    Boolean,
-  );
-  if (missing.length > 0)
-    return misconfigured(`article choices unset: ${missing.join(", ")}`);
-
-  let schema: Schema;
-  try {
-    schema = await fetchSchema(env.NOTION_TOKEN!);
-  } catch (error) {
-    /* a Result, not a throw: the webhook route and `?sync=1` answer with what
-       this returns, and an exception reaches them as a 500 page */
-    console.error("[articles] could not read the schema", error);
-    return failed(`notion refused the schema: ${String(error)}`);
-  }
-
-  const absent = assertProperties(schema);
-  if (absent.length > 0)
-    return misconfigured(
-      `notion is not sharing: ${absent
-        .map((miss) => `${miss.name} (${miss.found ?? "absent"})`)
-        .join(", ")}`,
-    );
-
-  const choices = extractChoices(schema);
-  /* a picker with no options is not a schema change anybody made; it is a read
-     that half worked, and writing it would empty a command's choices */
-  const empty = CHOICE_PROPERTIES.filter(
-    (property) => !choices.some((choice) => choice.property === property),
-  );
-  if (empty.length > 0)
-    return failed(`no options came back for ${empty.join(", ")}`);
-
-  try {
-    const client = drizzle(env.DB!);
-
-    /*
-      one batch, so a delete that lands without its insert is not an empty
-      picker — and chunked, because d1 binds at most a hundred variables to a
-      query and a choice is three of them. thirty-four options across the three
-      pickers is enough to break an unchunked insert, which is a club adding
-      one section away. the identical bug was fixed in `store.ts` and the fix
-      was not carried across
-    */
-    await client.batch([
-      client.delete(choiceOptions),
-      ...chunk(choices, CHOICE_CHUNK).map((part) =>
-        client.insert(choiceOptions).values(part),
-      ),
-    ]);
-  } catch (error) {
-    console.error("[articles] could not store the choices", error);
-    return failed("could not store the article choices");
-  }
-
-  return ok(
-    `stored ${choices.length} choices for ${CHOICE_PROPERTIES.length} pickers`,
-  );
-}
-
-/**
- * the stored options, in the order a picker should show them.
- *
- * grouped by property and ordered by notion's own position within each. an
- * unreachable index answers with nothing, the same as a refresh that has never
- * run — the caller has a registration to build either way and both mean "we do
- * not know what to offer"
- */
-export async function readChoices(db: D1Database): Promise<ChoiceOption[]> {
-  try {
-    return await drizzle(db)
-      .select()
-      .from(choiceOptions)
-      .orderBy(asc(choiceOptions.property), asc(choiceOptions.position));
-  } catch (error) {
-    console.error("[articles] could not read the choices", error);
-    return [];
-  }
 }

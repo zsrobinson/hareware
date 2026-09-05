@@ -16,7 +16,7 @@
 */
 
 import { UNTITLED } from "./config";
-import type { ArticleRow } from "~/lib/db/schema";
+import type { Article } from "./page";
 import { MAX_CHOICES } from "~/lib/services/discord/commands";
 
 /** discord rejects the whole response over this, per choice name */
@@ -94,10 +94,7 @@ function fold(value: string): string {
  * noise — an editor picking an article already knows which one they mean, and
  * the card they get answers everything else.
  */
-export function suggestions(
-  rows: ArticleRow[],
-  query = "",
-): AutocompleteChoice[] {
+export function suggestions(rows: Article[], query = ""): AutocompleteChoice[] {
   return rows
     .map((row) => ({ row, score: quality(row.headline, query) }))
     .filter((scored) => scored.score > 0)
@@ -106,7 +103,7 @@ export function suggestions(
     .map(({ row }) => ({ name: nameFor(row), value: row.pageId }));
 }
 
-type Scored = { row: ArticleRow; score: number };
+type Scored = { row: Article; score: number };
 
 /**
  * a better match first, and among comparable matches the most recently edited.
@@ -135,7 +132,7 @@ function byScoreThenRecency(a: Scored, b: Scored): number {
  * gets a word rather than nothing — and the hard cut at the end is what stops
  * a 200-character headline taking the dropdown down with it.
  */
-function nameFor(row: ArticleRow): string {
+function nameFor(row: Article): string {
   const headline = row.headline.trim() || UNTITLED;
 
   return headline.length <= MAX_CHOICE_NAME

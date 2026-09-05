@@ -131,12 +131,12 @@ like a form submission, and a request carrying no content type at all counts —
 without that header the answer is `403 Cross-site POST form submissions are
 forbidden`, from Astro rather than from this route.
 
-| Parameter                        | What it does                                     |
-| -------------------------------- | ------------------------------------------------ |
-| `?only=meeting` / `?only=social` | Fire one rather than both                        |
-| `?dry=1`                         | Report what each would post, without posting it  |
-| `?silent=1`                      | Post, but notify nobody                          |
-| `?sync=1`                        | Refresh the article index instead; fires nothing |
+| Parameter                        | What it does                                        |
+| -------------------------------- | --------------------------------------------------- |
+| `?only=meeting` / `?only=social` | Fire one rather than both                           |
+| `?dry=1`                         | Report what each would post, without posting it     |
+| `?silent=1`                      | Post, but notify nobody                             |
+| `?sync=1`                        | Re-register the commands from Notion; fires nothing |
 
 The response is a line per reminder saying what it did. It is a `POST` because
 it posts to Discord, and the secret travels in a header rather than the URL,
@@ -149,9 +149,9 @@ pings properly — which means an unqualified trigger posts to
 parameters exist because that is easy to forget, and they apply to one request
 rather than standing until somebody removes them.
 
-`?sync=1` is the exception to all of that. It refreshes the article index, the
-picker options and the registered command surface, and returns **without firing
-a reminder** — a caller forcing a resync is not asking to ping the club. Use it
+`?sync=1` is the exception to all of that. It re-reads Notion's schema and
+registers the command surface it implies, and returns **without firing a
+reminder** — a caller forcing a resync is not asking to ping the club. Use it
 when a change to the sync needs exercising rather than waiting up to an hour for
 the next tick.
 
@@ -224,12 +224,13 @@ The command's choices for Article Status, Section and Image Status come from
 Notion's schema, so **adding or removing a status is something the club does in
 Notion** and nothing here has to change. Discord bakes those choices into the
 registration rather than resolving them when somebody opens the picker, so the
-surface is registered again when the schema moves — on Notion's webhook, and
-hourly regardless.
+surface is registered again every hour. Discord allows two hundred
+registrations a day and this uses twenty-four, which is why it simply re-registers
+rather than remembering what it last sent.
 
 ### Setting it up
 
-Three things, and only the first two are one-time.
+Two things, both one-time.
 
 **1. Grant the role.** Commands register with `default_member_permissions: "0"`,
 which hides them from everybody. In **Server Settings → Integrations → HareWare
@@ -239,39 +240,22 @@ That override is a default and not the boundary: anyone who reaches the command
 another way is still refused at runtime, ephemerally. It survives later
 registrations, so this is done once.
 
-**2. Subscribe to Notion's webhooks.** In the integration's settings, add a
-subscription pointing at `https://hareware.zsrobinson.com/api/notion/webhook`
-and subscribe to the page and data-source events.
-
-Notion posts a one-time `verification_token` to that URL, which the route logs
-rather than stores — an unverified request has no business writing config. Read
-it out of `npx wrangler tail hareware`, then set it:
-
-```sh
-npx wrangler versions secret put NOTION_WEBHOOK_SECRET
-```
-
-The endpoint has to be live before the subscription can be created, so this
-necessarily happens after a deploy rather than before one. **Changing the URL
-later means deleting and recreating the subscription**, which issues a new
-token.
-
-**3. Keep Members shared with the integration.** Notion omits a relation
+**2. Keep Members shared with the integration.** Notion omits a relation
 property from a schema entirely when it cannot reach the target, and its value
 then reads back as `[]` rather than as missing. Lose that access and an author
 write looks like it succeeded against an empty field. The code refuses rather
 than writes, but the failure is silent from Notion's side.
 
-### The index
+### How the picker stays current
 
-Autocomplete reads a copy of the Articles database in D1 rather than asking
-Notion on every keystroke — not for speed (Notion answers in about half a
-second) but for the rate limit, which is roughly three requests a second across
-everything HareWare does.
+Autocomplete reads Notion directly — the hundred most recently edited Articles,
+one request — and matches them here, because Notion cannot express a fuzzy
+search. A snapshot is held in the Worker's memory for ten seconds so that a
+burst of keystrokes costs one request rather than six; Notion allows about
+three a second.
 
-Nothing reads that copy to decide what to write. Every command re-reads its page
-from Notion first, so a stale row can only ever mean a stale label in a
-dropdown.
+Nothing is cached in a database. There was an index in D1, kept current by a
+webhook, a write-through and an hourly rebuild, and ADR 0009 records why it went.
 
 ## Moving an automation to another channel
 

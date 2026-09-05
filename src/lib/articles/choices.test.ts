@@ -3,8 +3,6 @@ import {
   assertProperties,
   extractChoices,
   optionNamed,
-  readChoices,
-  refreshChoices,
   type Schema,
 } from "./choices";
 import { ARTICLE_PROPERTIES } from "./config";
@@ -102,129 +100,6 @@ test("option names keep notion's casing, traps included", () => {
   expect(choices[0]!.name).toBe("Not started");
 });
 
-/* ---- the wrappers ------------------------------------------------------- */
-
-type Statement = { sql: string; params: unknown[] };
-
-const D1_MAX_VARIABLES = 100;
-
-function fakeD1(answer: (sql: string) => unknown[][] = () => []) {
-  const statements: Statement[] = [];
-
-  const client = {
-    prepare(sql: string) {
-      const statement: Statement = { sql, params: [] };
-      statements.push(statement);
-
-      const prepared = {
-        bind(...params: unknown[]) {
-          statement.params = params;
-          return prepared;
-        },
-        async all() {
-          return { results: answer(sql), success: true, meta: {} };
-        },
-        async raw() {
-          return answer(sql);
-        },
-        async run() {
-          return { success: true, meta: {} };
-        },
-      };
-
-      return prepared;
-    },
-    async batch(queries: unknown[]) {
-      /*
-        d1 binds at most a hundred variables to a query and refuses the
-        statement outright above that. a double that accepts any statement of
-        any size cannot fail the way the real thing does, which is why the
-        identical unchunked insert in `store.ts` was caught in production and
-        this one was not caught at all
-      */
-      for (const statement of statements) {
-        if (statement.params.length > D1_MAX_VARIABLES) {
-          throw new Error("D1_ERROR: too many SQL variables: SQLITE_ERROR");
-        }
-      }
-
-      return queries.map(() => ({ results: [], success: true, meta: {} }));
-    },
-  };
-
-  return { db: client as unknown as D1Database, statements };
-}
-
-const mockSchema = (body: unknown) =>
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => new Response(JSON.stringify(body))),
-  );
-
-const env = (db: D1Database) =>
-  ({ NOTION_TOKEN: "notion-token", DB: db }) as unknown as Env;
-
-test("a refresh writes the options it read", async () => {
-  const { db, statements } = fakeD1();
-  mockSchema(schema());
-
-  const result = await refreshChoices(env(db));
-
-  expect(result.outcome).toBe("ok");
-  const written = statements.map((s) => s.sql.toLowerCase());
-  expect(written.some((sql) => sql.startsWith("delete"))).toBe(true);
-  expect(written.some((sql) => sql.startsWith("insert"))).toBe(true);
-});
-
-test("a refresh refuses to write when a property is missing", async () => {
-  const { db, statements } = fakeD1();
-  const withoutAuthor = schema();
-  delete withoutAuthor.properties["Author"];
-  mockSchema(withoutAuthor);
-
-  const result = await refreshChoices(env(db));
-
-  expect(result.outcome).toBe("misconfigured");
-  expect(result.summary).toContain("Author");
-  expect(statements).toEqual([]);
-});
-
-test("a refresh refuses a property that came back with no options at all", async () => {
-  const { db, statements } = fakeD1();
-  mockSchema(schema({ Section: { type: "select", select: { options: [] } } }));
-
-  const result = await refreshChoices(env(db));
-
-  expect(result.outcome).toBe("failed");
-  expect(result.summary).toContain("Section");
-  expect(statements).toEqual([]);
-});
-
-test("a refresh with no notion token does not report success", async () => {
-  const { db } = fakeD1();
-
-  const result = await refreshChoices({ DB: db } as unknown as Env);
-  expect(result.outcome).toBe("misconfigured");
-  expect(result.summary).toContain("NOTION_TOKEN");
-});
-
-test("readChoices asks for them in notion's order and never throws", async () => {
-  const { db, statements } = fakeD1();
-
-  await readChoices(db);
-  expect(statements[0]!.sql.toLowerCase()).toContain("order by");
-
-  const broken = {
-    prepare() {
-      throw new Error("d1 is unreachable");
-    },
-  } as unknown as D1Database;
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
-  await expect(readChoices(broken)).resolves.toEqual([]);
-  expect(error).toHaveBeenCalled();
-  error.mockRestore();
-});
-
 test("every property the commands touch is checked, not only the pickers", () => {
   // the pickers are three properties; the data-loss guard is about all nine
   const empty = { properties: {} };
@@ -248,42 +123,4 @@ test("an option is found in the schema whatever case it was asked for", () => {
      somewhere sensible */
   expect(optionNamed(schema(), "Article Status", "approved")).toBe("Approved");
   expect(optionNamed(schema(), "Section", "rabbithole")).toBe("Rabbithole");
-});
-
-test("an option the club renamed is absent rather than invented", () => {
-  expect(optionNamed(schema(), "Article Status", "in flight")).toBeNull();
-  expect(optionNamed(schema(), "No Such Property", "approved")).toBeNull();
-});
-
-/*
-  the bug this exists for: the options went into one insert. a choice is three
-  columns against d1's hundred-variable ceiling, so thirty-four options across
-  the three pickers — a club adding one section — would have made every refresh
-  fail, frozen the stored options at yesterday's set, and left `refreshCommands`
-  happily re-registering a stale surface because `readChoices` still answered
-  with a non-empty list
-*/
-test("stores the options in statements d1 will accept", async () => {
-  const many = (name: string, kind: "status" | "select") => ({
-    type: kind,
-    [kind]: {
-      options: Array.from({ length: 20 }, (_, i) => ({ name: `${name} ${i}` })),
-    },
-  });
-
-  mockSchema(
-    schema({
-      "Article Status": many("Article Status", "status"),
-      "Image Status": many("Image Status", "status"),
-      Section: many("Section", "select"),
-    }),
-  );
-
-  const { db, statements } = fakeD1();
-  const result = await refreshChoices(env(db));
-
-  expect(result.outcome).toBe("ok");
-  for (const statement of statements) {
-    expect(statement.params.length).toBeLessThanOrEqual(100);
-  }
 });

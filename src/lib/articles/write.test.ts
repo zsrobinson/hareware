@@ -11,7 +11,7 @@ import {
   titleValue,
 } from "./write";
 import type { Schema } from "./choices";
-import type { ArticlePage } from "./sync";
+import type { ArticlePage } from "./page";
 
 /*
   a schema notion is sharing fully. built from the real property names rather

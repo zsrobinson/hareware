@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { buildCommands, hashCommands } from "./commands";
+import { buildCommands } from "./commands";
 import { registerCommands } from "./register";
 import { DISCORD_APPLICATION_ID, GUILD_ID } from "./config";
 
@@ -40,40 +40,10 @@ test("puts the whole surface on the guild, as the bot", async () => {
   expect(JSON.parse(init!.body as string)).toEqual(payload);
 });
 
-test("reports the hash of what it registered, for the next tick to compare", async () => {
-  mockDiscord();
-
-  const result = await registerCommands(env, payload);
-
-  expect(result.outcome === "ok" && result.hash).toBe(
-    await hashCommands(payload),
-  );
-});
-
-/*
-  discord allows 200 guild registrations a day and the cron re-registers every
-  hour whether or not the notion schema moved
-*/
-test("registers nothing when the payload is unchanged", async () => {
-  const fetchMock = mockDiscord();
-  const previous = await hashCommands(payload);
-
-  const result = await registerCommands(env, payload, previous);
-
-  expect(fetchMock).not.toHaveBeenCalled();
-  expect(result.outcome).toBe("skipped");
-  /*
-    only a registration that happened carries a hash to store. a skipped tick
-    that handed one back would let a caller write a hash for a surface discord
-    never received
-  */
-  expect("hash" in result).toBe(false);
-});
-
 test("registers again when the payload changed", async () => {
   const fetchMock = mockDiscord();
 
-  const result = await registerCommands(env, payload, "an-older-hash");
+  const result = await registerCommands(env, payload);
 
   expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(result.outcome).toBe("ok");
@@ -127,11 +97,3 @@ test("never throws into a cron tick", async () => {
   the hash is what suppresses the next registration. storing it after a failed
   PUT would leave the stale surface up and never try again
 */
-test("a failed registration hands back no hash to store", async () => {
-  mockDiscord(false);
-
-  const result = await registerCommands(env, payload);
-
-  expect(result.outcome).not.toBe("ok");
-  expect("hash" in result).toBe(false);
-});

@@ -47,7 +47,7 @@ export type EditRequest =
   | {
       kind: "create";
       headline: string;
-      section: string | null;
+      section: string;
       /** the Discord member who wrote it */
       member: PickedUser;
       /** a pseudonym to print instead of the member's name */

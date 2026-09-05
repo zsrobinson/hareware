@@ -837,6 +837,7 @@ test("a new article carries its selected member and optional pseudonym", async (
       [
         { name: "headline", value: "Looney's line" },
         { name: "member", value: "222" },
+        { name: "section", value: "News" },
         { name: "byline", value: "A Concerned Terrapin" },
       ],
       { users: { "222": { username: "bayh", global_name: "Bay Hoffman" } } },
@@ -849,7 +850,7 @@ test("a new article carries its selected member and optional pseudonym", async (
     {
       kind: "create",
       headline: "Looney's line",
-      section: null,
+      section: "News",
       member: { discordId: "222", displayName: "Bay Hoffman" },
       byline: "A Concerned Terrapin",
     },
@@ -861,7 +862,30 @@ test("a new article without a Discord member is refused before deferring", async
   const { deps, seen } = writing();
   const reply = asMessage(
     await handleInteraction(
-      writeCommand("new", [{ name: "headline", value: "Looney's line" }]),
+      writeCommand("new", [
+        { name: "headline", value: "Looney's line" },
+        { name: "section", value: "News" },
+      ]),
+      deps,
+    ),
+  );
+
+  expect(reply.type).toBe(4);
+  expect(seen.requests).toEqual([]);
+});
+
+test("a new article without a section is refused before deferring", async () => {
+  const { deps, seen } = writing();
+  const reply = asMessage(
+    await handleInteraction(
+      writeCommand(
+        "new",
+        [
+          { name: "headline", value: "Looney's line" },
+          { name: "member", value: "222" },
+        ],
+        { users: { "222": { username: "bayh" } } },
+      ),
       deps,
     ),
   );

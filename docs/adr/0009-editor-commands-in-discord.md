@@ -153,6 +153,10 @@ optional Byline argument is specifically a pseudonym for that selected member.
 Legacy rows without a relation can still be repaired directly in Notion, but a
 Discord command never creates another one.
 
+Creating an Article also requires its Section. The workflow already requires a
+section editor's approval before the row is created, and leaving Section empty
+would discard information the editor necessarily had when approving it.
+
 At the time of writing, **9 of 48 Members carry a Discord ID**. Creating a row
 whenever the id does not match would have produced a duplicate for each of the
 other 39. So a miss falls back to matching the Member's Name, normalised, and

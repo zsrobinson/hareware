@@ -314,16 +314,14 @@ test("a new article carries a headline, a byline and whatever else was given", (
   expect(changesSummary(changes)).toContain("Approved");
 });
 
-test("a new article without a section writes no section at all", () => {
-  /* an empty select is `null`, and `selectValue("")` is a value notion
-     rejects — leaving the property out is what "not chosen" looks like */
+test("a new article always writes its section", () => {
   const { properties } = planned(
     planCreate(fullSchema, {
       headline: "Untitled thought",
       byline: "Zachary Robinson",
       authorIds: ["member-1"],
       status: null,
-      section: null,
+      section: "News",
     }),
   );
 
@@ -331,6 +329,7 @@ test("a new article without a section writes no section at all", () => {
     "Author",
     "Author Byline",
     "Headline",
+    "Section",
   ]);
 });
 
@@ -344,7 +343,7 @@ test("a new article crediting a member is refused when Author is unshared", () =
       byline: "Zachary Robinson",
       authorIds: ["member-1"],
       status: null,
-      section: null,
+      section: "Rabbithole",
     }).status,
   ).toBe("refused");
 });
@@ -364,7 +363,7 @@ test("a new article is refused when notion is not sharing what it would write", 
       byline: "Zachary Robinson",
       authorIds: ["member-1"],
       status: null,
-      section: null,
+      section: "Rabbithole",
     }).status,
   ).toBe("refused");
 });

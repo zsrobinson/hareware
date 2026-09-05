@@ -169,7 +169,7 @@ const SUBCOMMANDS: Subcommand[] = [
         "section",
         ARTICLE_PROPERTIES.section.name,
         "The section responsible for editing the article.",
-        false,
+        true,
       ),
       {
         type: STRING,

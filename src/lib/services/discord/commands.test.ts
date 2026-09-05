@@ -220,13 +220,13 @@ test("a credit takes discord's own user picker, and `also` is a boolean", () => 
     expect(named(name).required, name).toBeUndefined();
 });
 
-test("a new article requires a headline and its Discord member", () => {
+test("a new article requires a headline, Discord member and section", () => {
   const created = buildCommands([])[0]!.options!.find((o) => o.name === "new");
   const required = created!
     .options!.filter((option) => option.required)
     .map((option) => option.name);
 
-  expect(required).toEqual(["headline", "member"]);
+  expect(required).toEqual(["headline", "member", "section"]);
   // no article picker: there is nothing to pick yet
   expect(created!.options!.some((o) => o.autocomplete)).toBe(false);
 });

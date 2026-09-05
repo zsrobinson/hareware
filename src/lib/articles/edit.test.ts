@@ -303,7 +303,7 @@ test("a renamed approved option is said out loud rather than sent to notion", as
     {
       kind: "create",
       headline: "Looney's line",
-      section: null,
+      section: "Rabbithole",
       member: { discordId: "222", displayName: "Bay Hoffman" },
       byline: null,
     },
@@ -327,7 +327,7 @@ test("a new article credits the member the picker returned, creating the row", a
     {
       kind: "create",
       headline: "Looney's line",
-      section: null,
+      section: "Rabbithole",
       member: { discordId: "222", displayName: "Bay Hoffman" },
       byline: null,
     },
@@ -354,7 +354,7 @@ test("a typed byline on a new article beats the picked member's name", async () 
     {
       kind: "create",
       headline: "Looney's line",
-      section: null,
+      section: "Rabbithole",
       member: { discordId: "222", displayName: "Bay Hoffman" },
       byline: "A Concerned Terrapin",
     },
@@ -710,7 +710,7 @@ test("a linked Member remains in the result when article creation fails", async 
     {
       kind: "create",
       headline: "A headline",
-      section: null,
+      section: "Rabbithole",
       member: { discordId: "222", displayName: "Bay Hoffman" },
       byline: null,
     },
@@ -746,7 +746,7 @@ test("an incomplete creation response keeps the new article link without inventi
       {
         kind: "create",
         headline: "A headline",
-        section: null,
+        section: "Rabbithole",
         member: { discordId: "222", displayName: "Bay Hoffman" },
         byline: null,
       },

@@ -347,12 +347,15 @@ const SUBCOMMANDS: Record<
       const member = picked(interaction, subcommand, "member");
       if (!member)
         return refuse("Choose the Discord member writing the article.");
+      const section = textOf(optionOf(subcommand, "section"));
+      if (!section)
+        return refuse("Choose the section responsible for the article.");
 
       return {
         request: {
           kind: "create",
           headline,
-          section: textOf(optionOf(subcommand, "section")) || null,
+          section,
           member,
           /* Optional text is a pseudonym; edit.ts otherwise freezes the
              selected member's name into the printed Byline. */

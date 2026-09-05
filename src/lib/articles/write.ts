@@ -245,8 +245,8 @@ export type NewArticle = {
   authorIds: string[];
   /** notion's own spelling, resolved from the schema, or null if it is gone */
   status: string | null;
-  /** null when the editor did not pick one */
-  section: string | null;
+  /** notion's own spelling for the section responsible for the article */
+  section: string;
 };
 
 /**
@@ -254,9 +254,7 @@ export type NewArticle = {
  *
  * a create rather than a change, so there is nothing to say it changed *from*
  * — but it goes through the same refusal as everything else, scoped to the
- * properties it would actually write. an unchosen section is left out of the
- * body entirely: `null` and `{ select: { name: "" } }` are both values notion
- * treats as a write, and neither is what "the editor did not pick one" means
+ * properties it would actually write.
  */
 export function planCreate(
   schema: Schema,
@@ -267,7 +265,7 @@ export function planCreate(
 
   const writing: PropertyKey[] = ["headline", "authorByline", "author"];
   if (status !== null) writing.push("status");
-  if (section !== null) writing.push("section");
+  writing.push("section");
 
   const reason = refusal(schema, writing);
   if (reason) return { status: "refused", reason };
@@ -282,9 +280,7 @@ export function planCreate(
         [name("authorByline")]: richTextValue(byline),
         [name("author")]: relationValue(authorIds),
         ...(status === null ? {} : { [name("status")]: statusValue(status) }),
-        ...(section === null
-          ? {}
-          : { [name("section")]: selectValue(section) }),
+        [name("section")]: selectValue(section),
       },
       changes: writing.map((property) => ({
         property,

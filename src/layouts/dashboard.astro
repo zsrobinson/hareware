@@ -13,14 +13,13 @@ type Props = {
   title: string;
   /*
     who is looking, for a page the cdn does not cache. one prop rather than
-    three: a page that passed `session` and forgot `profile` rendered an id
-    where a name belongs, and one that passed `session` and forgot `admin` hid
-    the editorial nav on its own admin page
-  */
-  /*
-    a page that sets `s-maxage` passes nothing: its html goes to everyone, so
-    the account panel asks /api/session.json for itself instead. that is the
-    only thing left that varies by who is looking — the nav no longer does
+    two: a page that passed `session` and forgot `profile` rendered a raw
+    discord id where a name belongs.
+
+    a page that sets `s-maxage` passes nothing at all: its html goes to
+    everyone, so the account panel asks /api/session.json for itself instead.
+    that panel is the only thing left that varies by who is looking, because
+    the nav no longer does
   */
   viewer?: ViewerState | null;
 };
@@ -89,6 +88,40 @@ const collapsed = Astro.isPrerendered
         <header
           class="bg-background relative z-20 flex h-12 shrink-0 items-center gap-1 border-b px-3"
         >
+          {
+            /*
+              on a phone the sidebar is the only thing that says what this is,
+              and it is behind a tap, so every page read as some anonymous
+              tool. the bar names the app and then the page, like a breadcrumb:
+              HareWare / Invocation Log. static markup, so it costs no
+              javascript and is there in the first paint.
+
+              the name gives way to the mark on a narrow screen. the mark
+              stays: it is the thing that matches the tab and the avatar in
+              discord, so it is what says whose tool this is
+            */
+          }
+          <a
+            href="/"
+            class="hover:bg-accent -ml-1 flex shrink-0 items-center gap-1.5 rounded-md p-1 transition-colors md:hidden"
+            aria-label="HareWare, home"
+          >
+            <img
+              src="/bot-logo.svg"
+              alt=""
+              width="24"
+              height="24"
+              class="size-6 shrink-0 rounded"
+            />
+            <span class="hidden text-sm font-semibold min-[400px]:inline"
+              >HareWare</span
+            >
+          </a>
+
+          <span class="text-foreground/25 shrink-0 md:hidden" aria-hidden="true"
+            >/</span
+          >
+
           <SidebarSheet
             client:media="(max-width: 767px)"
             pathname={Astro.url.pathname}

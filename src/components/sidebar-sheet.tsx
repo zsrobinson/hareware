@@ -1,4 +1,4 @@
-import { ChevronDownIcon, PanelLeftIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 import { NavGroup } from "~/components/nav-group";
 import { SidebarAccount } from "~/components/sidebar-account";
 import {
@@ -37,11 +37,13 @@ export function SidebarSheet({
         chevron, so the way to everything else is the most obvious thing on the
         screen rather than a glyph you have to already know about
       */}
+      {/* the brand sits to the left of this, so the trigger starts at the page
+          name and shrinks from there: on a narrow screen the title truncates
+          rather than pushing the chevron off the bar */}
       <SheetTrigger
-        className="text-foreground hover:bg-accent -ml-1 inline-flex h-8 max-w-[calc(100vw-6rem)] min-w-0 items-center gap-1.5 rounded-md px-2 md:hidden"
+        className="text-foreground hover:bg-accent inline-flex h-8 min-w-0 items-center gap-1 rounded-md px-1.5 md:hidden"
         aria-label={`${title}. Open navigation`}
       >
-        <PanelLeftIcon className="text-foreground/70 size-4 shrink-0" />
         <span className="truncate text-sm font-medium">{title}</span>
         <ChevronDownIcon className="text-foreground/50 size-3.5 shrink-0" />
       </SheetTrigger>

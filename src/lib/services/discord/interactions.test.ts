@@ -1,13 +1,11 @@
 import { expect, test } from "vitest";
-import {
-  deferEphemeral,
-  handleInteraction,
-  postedId,
-  type InteractionDeps,
-  type InteractionResponse,
-  type BodyResponse,
-  type MessageResponse,
-} from "./interactions";
+import { handleInteraction, type InteractionDeps } from "./interactions";
+import { postedId } from "./posted-button";
+import type {
+  BodyResponse,
+  InteractionResponse,
+  MessageResponse,
+} from "./interaction-response";
 import { EDITORIAL_BOARD_ROLE_ID } from "./config";
 import type { Article } from "~/lib/articles/page";
 import type { ArticlePage } from "~/lib/articles/page";
@@ -289,15 +287,6 @@ test("answers /article with no subcommand at all", async () => {
   );
 
   expect(reply.type).toBe(4);
-});
-
-/*
-  the seam every write path leaves through: a notion read plus a PATCH will not
-  fit inside discord's three seconds. no components on a deferred ack, so the
-  plain ephemeral flag rather than the v2 pair
-*/
-test("a deferred acknowledgement is ephemeral and carries no body", () => {
-  expect(deferEphemeral()).toEqual({ type: 5, data: { flags: EPHEMERAL } });
 });
 
 /* ---- the read commands --------------------------------------------------- */

@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { refreshCommands } from "./refresh";
-import { ARTICLE_PROPERTIES } from "./config";
+import { refreshCommands } from "./refresh-commands";
+import { ARTICLE_PROPERTIES } from "~/lib/articles/config";
 
 afterEach(() => vi.restoreAllMocks());
 

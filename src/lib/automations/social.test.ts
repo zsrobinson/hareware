@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { sendSocialPing } from "./social";
 import { SOCIAL_ROLE_IDS } from "./config";
-import { postedId } from "~/lib/services/discord/interactions";
+import { postedId } from "~/lib/services/discord/posted-button";
 
 const env = { DISCORD_BOT_TOKEN: "bot-token" } as unknown as Env;
 

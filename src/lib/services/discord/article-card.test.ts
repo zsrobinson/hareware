@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
-import { card } from "./card";
-import { ARTICLE_PROPERTIES } from "./config";
-import type { ArticlePage } from "./page";
+import { card } from "./article-card";
+import { ARTICLE_PROPERTIES } from "~/lib/articles/config";
+import type { ArticlePage } from "~/lib/articles/page";
 
 const page = (): ArticlePage => ({
   id: "3d1be415-e24c-80c8-a14f-cf1fd9b7e48c",

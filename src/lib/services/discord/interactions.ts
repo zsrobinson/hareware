@@ -1,28 +1,21 @@
 /*
-  what happens when somebody presses a button on one of our messages, runs one
-  of our slash commands, or types into one of their pickers.
+  Routes verified Discord interactions: button presses, slash commands, and the
+  pickers editors type into.
 
-  a button press is one request and one reply, with nothing fetched in between:
-  discord hands us the message the button belongs to and the member who pressed
-  it, and we hand back the message with that button changed. that is why it
-  needs no store — the message is the record of what has been posted — and why
-  discord's three-second deadline is never in play for it.
+  a button press needs no store — discord hands us the message the button
+  belongs to, so the message is itself the record of what has been posted, and
+  the three-second deadline is never in play.
 
   a command is not like that. anything that writes to notion will miss three
-  seconds, so those answer DEFER and follow up; `deferEphemeral()` below is that
-  seam. `/article ping` fetches nothing and answers inline, and the two read
-  commands fetch once and still answer inline.
-
-  autocomplete is the one that cannot defer at all — there is no such response
-  type — so its read is raced against a deadline and answers an empty dropdown
-  rather than nothing. the reads themselves arrive as `deps`, which is what
-  keeps this file testable without D1 or notion.
+  seconds, so those answer DEFER and follow up. autocomplete cannot defer at
+  all — there is no such response type — so its read is raced against a
+  deadline and answers an empty dropdown rather than nothing. the reads arrive
+  as `deps`, which is what keeps this file testable without D1 or notion.
 */
 
-import { articleResponse } from "~/lib/articles/response";
+import { articleResponse } from "./article-response";
 import {
   IS_COMPONENTS_V2,
-  textMessage,
   type CommandMessage,
   type Component,
 } from "./message";
@@ -32,23 +25,20 @@ import type {
   EditResult,
   PickedUser,
 } from "~/lib/articles/edit";
-import { suggestions, type AutocompleteChoice } from "~/lib/articles/pick";
+import { suggestions } from "./article-picker";
 import type { Intent } from "~/lib/articles/write";
 import type { Article, ArticlePage } from "~/lib/articles/page";
 import type { Result } from "~/lib/result";
 import { EDITORIAL_BOARD_ROLE_ID } from "./config";
 import { followUp } from "./follow-up";
-
-/**
- * an ephemeral reply: only the person who ran the command sees it, and it
- * disappears. every command reply is one — ADR 0009: the editor sees the
- * result, the channel sees nothing.
- *
- * discord takes both flags together, so a components v2 body has to carry the
- * v2 bit as well or discord rejects the response outright
- */
-const EPHEMERAL = 64;
-const EPHEMERAL_V2 = EPHEMERAL | IS_COMPONENTS_V2;
+import {
+  deferEphemeral,
+  ephemeral,
+  type AutocompleteResponse,
+  type InteractionResponse,
+  type MessageResponse,
+} from "./interaction-response";
+import { POSTED_PREFIX, togglePosted } from "./posted-button";
 
 /** interaction types, of which we answer four */
 const PING = 1;
@@ -58,17 +48,8 @@ const APPLICATION_COMMAND_AUTOCOMPLETE = 4;
 
 /** response types */
 const PONG = 1;
-const CHANNEL_MESSAGE_WITH_SOURCE = 4;
-const DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE = 5;
 const UPDATE_MESSAGE = 7;
 const APPLICATION_COMMAND_AUTOCOMPLETE_RESULT = 8;
-
-const BUTTON = 2;
-const SUCCESS_STYLE = 3;
-const DANGER_STYLE = 4;
-
-/** discord truncates nothing for us; a button label over 80 chars is rejected */
-const MAX_LABEL = 80;
 
 /**
  * how long the whole autocomplete answer gets.
@@ -81,14 +62,6 @@ const AUTOCOMPLETE_BUDGET_MS = 2000;
 
 /** below this a substring search matches most of the corpus, so it is not run */
 const MIN_SEARCH = 2;
-
-/** the prefix on every custom_id this file put on a message */
-export const POSTED_PREFIX = "posted:";
-
-/** a custom_id must be unique within a message and at most 100 characters */
-export function postedId(slug: string) {
-  return `${POSTED_PREFIX}${slug}`.slice(0, 100);
-}
 
 /**
  * an option as discord sends it back, which is not the option as we registered
@@ -191,38 +164,6 @@ export type InteractionDeps = {
   timeoutMs?: number;
 };
 
-/** a reply carrying a message: everything but autocomplete */
-export type MessageResponse = {
-  type: number;
-  /** absent on a pong, which is a bare acknowledgement */
-  data?: {
-    flags: number;
-    /** absent on a deferral, which carries no body at all */
-    components?: Component[];
-    allowed_mentions?: { parse: string[] };
-  };
-};
-
-/**
- * a reply that carries a body, which is every reply but a deferral and a pong.
- *
- * the distinction is real rather than a convenience: discord rejects a
- * deferred response that carries `components`, and rejects a message response
- * that does not
- */
-export type BodyResponse = MessageResponse & {
-  data: { flags: number; components: Component[] };
-};
-
-/** the dropdown, which carries choices instead of a body and takes no flags */
-export type AutocompleteResponse = {
-  type: number;
-  data: { choices: AutocompleteChoice[] };
-};
-
-/** the reply to send discord, or undefined for an interaction we do not handle */
-export type InteractionResponse = MessageResponse | AutocompleteResponse;
-
 export async function handleInteraction(
   interaction: Interaction,
   deps: InteractionDeps = {},
@@ -252,50 +193,6 @@ export async function handleInteraction(
   }
 
   return undefined;
-}
-
-/**
- * an ephemeral message, in components v2 because everything else here is.
- *
- * both flags: the ephemeral bit alone with a `components` body is a response
- * discord refuses, which reaches the editor as "HareWare didn't respond in
- * time" — the same shape of failure a button missing its custom_id causes
- */
-export function ephemeral(content: string | CommandMessage): BodyResponse {
-  const { components } =
-    typeof content === "string" ? textMessage(content) : content;
-
-  return {
-    type: CHANNEL_MESSAGE_WITH_SOURCE,
-    data: { flags: EPHEMERAL_V2, components, allowed_mentions: { parse: [] } },
-  };
-}
-
-/**
- * "HareWare is thinking", and the seam every write path leaves through.
- *
- * discord kills an interaction that is not answered within three seconds, and
- * a notion read plus a PATCH does not fit — so a subcommand that writes returns
- * this, and the caller then does the work and PATCHes
- * `/webhooks/{application}/{token}/messages/@original` with the outcome.
- *
- * whatever does that work must say something on every path, including the ones
- * that fail. an interaction acknowledged and then left silent is exactly the
- * failure `docs/agents/silent-failures.md` is about: the editor sees a spinner
- * settle into nothing and has no way to tell a refused write from a slow one.
- *
- * nothing returns this yet: both read commands fetch once and fit inline, and
- * acknowledging a read we could simply answer would mean owning a follow-up
- * that can itself go quiet.
- *
- * no components: a deferred acknowledgement carries no body, so this takes the
- * plain ephemeral flag rather than the v2 pair
- */
-export function deferEphemeral() {
-  return {
-    type: DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-    data: { flags: EPHEMERAL },
-  };
 }
 
 /** the subcommand discord was asked for: `/article ping` arrives as "ping" */
@@ -832,50 +729,4 @@ async function within(rows: Promise<Article[]>, ms: number) {
 function who(interaction: Interaction): string {
   const user = interaction.member?.user ?? interaction.user;
   return user?.global_name || user?.username || "someone";
-}
-
-/**
- * the same components with one button toggled.
- *
- * only the button whose custom_id matches changes, so a message listing five
- * articles keeps the other four alone. nothing is disabled: this is a checkbox
- * discord makes us draw as a button, and a checkbox that cannot be unticked is
- * a trap for whoever presses the wrong row.
- *
- * the custom_id stays. an interactive button — anything but a link — is invalid
- * without one, and discord rejects the entire response rather than the single
- * component, which surfaces to whoever pressed it as "HareWare didn't respond
- * in time"
- */
-function togglePosted(
-  components: Component[],
-  id: string,
-  name: string,
-): Component[] {
-  return components.map((component) => {
-    if (!component.components) return component;
-
-    return {
-      ...component,
-      components: component.components.map((child) => {
-        if (child.type !== BUTTON || child.custom_id !== id) return child;
-
-        /*
-          the current state is read off the button itself rather than stored
-          anywhere — green means it has been posted, so pressing it un-posts.
-          un-posting drops the name with it; who posted something that is no
-          longer posted is not a fact worth keeping
-        */
-        const posted = child.style === SUCCESS_STYLE;
-
-        return posted
-          ? { ...child, style: DANGER_STYLE, label: "Not posted" }
-          : {
-              ...child,
-              style: SUCCESS_STYLE,
-              label: `Posted by ${name}`.slice(0, MAX_LABEL),
-            };
-      }),
-    };
-  });
 }

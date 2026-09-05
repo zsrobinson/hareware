@@ -4,7 +4,7 @@ import { editorialBoardMember } from "~/lib/admin";
 import { easternNow } from "~/lib/eastern";
 import { ALL, runAutomations, type Which } from "~/lib/automations/run";
 import { automation } from "~/lib/automations/registry";
-import { refreshCommands } from "~/lib/articles/refresh";
+import { refreshCommands } from "~/lib/services/discord/refresh-commands";
 
 export const prerender = false;
 

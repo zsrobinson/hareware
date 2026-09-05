@@ -1,17 +1,12 @@
 /*
-  the command surface, as data.
-
-  one command — `/article` — with a subcommand per property, per ADR 0009.
-  nothing here talks to discord or to notion: this builds the registration
-  payload and hashes it, and `register.ts` is what puts it on the guild.
+  Builds `/article` registration data from Notion's current choices.
 
   discord bakes an option's choices into the *registration* rather than
   resolving them when somebody opens the picker, so the choices notion offers
-  have to be folded in here and re-registered when the schema changes
+  have to be folded in here and re-registered when the schema changes —
+  `refresh-commands.ts` is what does that, and `register.ts` is what puts the
+  payload on the guild.
 */
-
-/* the property *names*, which are stable enough to name a subcommand after.
-   the values under them are not, and never appear here — see `chooser` */
 import { ARTICLE_PROPERTIES } from "~/lib/articles/config";
 
 /**
@@ -30,10 +25,7 @@ export type ChoiceInput = {
   position: number;
 };
 
-/** discord's option types */
 const SUB_COMMAND = 1;
-
-/** discord refuses a registration carrying a 26th choice on any one option */
 /** discord will not show a 26th choice, in a registration or an autocomplete */
 export const MAX_CHOICES = 25;
 
@@ -105,7 +97,6 @@ type Subcommand = {
   options: (choices: ChoiceInput[]) => CommandOption[];
 };
 
-/** discord's option type for a string */
 const STRING = 3;
 const BOOLEAN = 5;
 /**

@@ -4,10 +4,11 @@ import {
   textDisplay,
   type CommandMessage,
 } from "~/lib/services/discord/message";
-import { card, articleUrl } from "./card";
-import { ARTICLE_PROPERTIES } from "./config";
-import type { ArticleChange, EditResult } from "./edit";
-import type { ArticlePage } from "./page";
+import { card } from "./article-card";
+import { articleUrl } from "~/lib/articles/snapshot";
+import { ARTICLE_PROPERTIES } from "~/lib/articles/config";
+import type { ArticleChange, EditResult } from "~/lib/articles/edit";
+import type { ArticlePage } from "~/lib/articles/page";
 
 const bold = (value: string) => `**${displayText(value, 100)}**`;
 

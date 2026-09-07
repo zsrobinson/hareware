@@ -1,5 +1,10 @@
 import { expect, test } from "vitest";
-import { ALUM_STATUS, alumOptionMissing } from "./config";
+import {
+  ALUM_STATUS,
+  DEFAULT_MEMBER_STATUS,
+  alumOptionMissing,
+  defaultStatus,
+} from "./config";
 
 /*
   the Status options are notion's, and the pickers read them live. This one
@@ -19,4 +24,27 @@ test("options that still hold the alum value are fine", () => {
 
 test("a renamed alum option is reported rather than silently ignored", () => {
   expect(alumOptionMissing(["Undergrad", "Grad", "Alumnus"])).toBe(true);
+});
+
+/*
+  a new member's status, which nobody at the kiosk is going to change. Notion
+  returns its options alum-first, so the default is the one thing here that may
+  not be read off the front of the list.
+*/
+
+test("a new member starts on Undergrad however notion orders its options", () => {
+  expect(defaultStatus(["Alum", "Undergrad", "Grad"])).toBe(
+    DEFAULT_MEMBER_STATUS,
+  );
+});
+
+test("a renamed Undergrad falls back to an option that still votes", () => {
+  expect(defaultStatus([ALUM_STATUS, "Undergraduate", "Grad"])).toBe(
+    "Undergraduate",
+  );
+});
+
+test("options holding nothing but alumni select nothing at all", () => {
+  expect(defaultStatus([ALUM_STATUS])).toBeNull();
+  expect(defaultStatus([])).toBeNull();
 });

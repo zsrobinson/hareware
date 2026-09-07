@@ -8,6 +8,7 @@ import {
   meetingLabel,
   offerableMeetings,
   searchCandidates,
+  shownName,
   type Candidate,
 } from "./kiosk";
 import type { ContributionRecord, MeetingRecord, Person } from "./records";
@@ -62,10 +63,10 @@ describe("searchCandidates", () => {
 });
 
 describe("distinguish", () => {
-  it("shows a domain rather than a whole address, which the room can see", () => {
+  it("shows the whole address, because two people share a domain", () => {
     expect(
       distinguish(candidate({ name: "Sam", email: "sam@terpmail.umd.edu" })),
-    ).toBe("@terpmail.umd.edu");
+    ).toBe("sam@terpmail.umd.edu");
   });
 
   it("says so when there is no email, because that row is the likely duplicate", () => {
@@ -77,7 +78,7 @@ describe("distinguish", () => {
       distinguish(
         candidate({ name: "Sam", email: "s@umd.edu", status: "Grad" }, 1),
       ),
-    ).toBe("@umd.edu · 1 contribution · Grad");
+    ).toBe("s@umd.edu · 1 contribution · Grad");
   });
 });
 
@@ -208,5 +209,33 @@ describe("initials", () => {
 
   it("has nothing to show for an empty name", () => {
     expect(initials("   ")).toBe("");
+  });
+});
+
+describe("shownName", () => {
+  const face = {
+    "1": {
+      username: "zsrobinson",
+      displayName: "Zach (EIC)",
+      avatarUrl: "https://cdn.discordapp.com/avatars/1.png",
+    },
+  };
+
+  it("prefers the discord handle where the row is linked", () => {
+    expect(
+      shownName(person({ name: "Zachary Robinson", discordId: "1" }), face),
+    ).toBe("zsrobinson");
+  });
+
+  it("falls back to the notion name where nothing is linked", () => {
+    expect(shownName(person({ name: "Zachary Robinson" }), face)).toBe(
+      "Zachary Robinson",
+    );
+  });
+
+  it("falls back where the guild read did not resolve the id", () => {
+    expect(shownName(person({ name: "Sam Lee", discordId: "2" }), face)).toBe(
+      "Sam Lee",
+    );
   });
 });

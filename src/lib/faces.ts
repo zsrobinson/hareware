@@ -11,7 +11,7 @@
 import { guildMembers, type Profile } from "./member";
 
 /** what a face needs to draw. the url is discord's cdn, never proxied here */
-export type Face = { avatarUrl: string; displayName: string };
+export type Face = { avatarUrl: string; displayName: string; username: string };
 
 /** ids to faces, keyed by discord user id */
 export type Faces = Record<string, Face>;
@@ -32,6 +32,7 @@ export async function faces(
       found[id] = {
         avatarUrl: profile.avatarUrl,
         displayName: profile.displayName,
+        username: profile.username,
       };
     }
   }

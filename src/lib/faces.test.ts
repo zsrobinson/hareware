@@ -18,6 +18,7 @@ test("a member is drawn with the url the guild read resolved", async () => {
   expect(await faces(["1"], guild)).toEqual({
     "1": {
       displayName: "zach",
+      username: "zach",
       avatarUrl: "https://cdn.discordapp.com/avatars/zach.png",
     },
   });

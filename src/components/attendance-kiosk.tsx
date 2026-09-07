@@ -23,8 +23,10 @@ import {
   indistinguishable,
   meetingLabel,
   searchCandidates,
+  shownName,
   type Candidate,
 } from "~/lib/members/kiosk";
+import { defaultStatus } from "~/lib/members/config";
 import type { MeetingRecord, Person } from "~/lib/members/records";
 import { notify } from "~/lib/notify";
 import { postJson } from "~/lib/post-json";
@@ -64,10 +66,11 @@ async function save(meetingId: string, memberIds: string[]): Promise<void> {
 async function createPerson(
   name: string,
   email: string,
+  status: string | null,
 ): Promise<{ pageId: string; name: string; email: string }> {
   const { pageId } = await postJson<{ pageId?: string }>(
     "/api/members/create",
-    { name, email },
+    { name, email, ...(status ? { status } : {}) },
   );
 
   /* a member with no id would be one the list could not remove again, so it is
@@ -81,9 +84,7 @@ const dayOf = (meeting: MeetingRecord) => meeting.date.slice(0, 10);
 
 /** the date the calendar holds, then the name with its own date taken off */
 const describe = (meeting: MeetingRecord) =>
-  `${dayOf(meeting)} ${meetingLabel(meeting.name) || "Untitled"}${
-    meeting.type ? ` (${meeting.type})` : ""
-  }`;
+  `${dayOf(meeting)} ${meetingLabel(meeting.name) || "Untitled"}`;
 
 /* the route's own message where there is one — notion's refusals say useful
    things, and everybody at this laptop holds @Editorial Board */
@@ -108,6 +109,9 @@ export function AttendanceKiosk({
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [newEmail, setNewEmail] = useState("");
+  /* Undergrad through `defaultStatus`, never the head of notion's options —
+     those currently begin with Alum, and an alum does not vote */
+  const [newStatus, setNewStatus] = useState(() => defaultStatus(statuses));
   const [editing, setEditing] = useState<Editing | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -133,6 +137,7 @@ export function AttendanceKiosk({
     setQuery(value);
     setActive(0);
     setNewEmail("");
+    setNewStatus(defaultStatus(statuses));
   }
 
   /* the next person is already reaching for the keyboard */
@@ -181,7 +186,7 @@ export function AttendanceKiosk({
 
     if (present.includes(candidate.person.pageId)) {
       /* they tapped because they were not sure it had registered */
-      notify.ok(`${candidate.person.name} was already signed in`);
+      notify.ok(`${shownName(candidate.person, faces)} was already signed in`);
       refocus();
       return;
     }
@@ -191,12 +196,13 @@ export function AttendanceKiosk({
        worked without scrolling past everybody who arrived before them */
     void commit(
       [candidate.person.pageId, ...present],
-      `${candidate.person.name} is signed in`,
+      `${shownName(candidate.person, faces)} is signed in`,
     );
   }
 
   function remove(pageId: string) {
-    const name = byId.get(pageId)?.person.name ?? "that row";
+    const person = byId.get(pageId)?.person;
+    const name = person ? shownName(person, faces) : "that row";
     void commit(
       present.filter((id) => id !== pageId),
       `Removed ${name}`,
@@ -222,14 +228,14 @@ export function AttendanceKiosk({
     setBusy(true);
 
     try {
-      const created = await createPerson(name, email);
+      const created = await createPerson(name, email, newStatus);
       const candidate: Candidate = {
         person: {
           pageId: created.pageId,
           name: created.name,
           email: created.email,
           discordId: null,
-          status: null,
+          status: newStatus,
         },
         contributions: 0,
       };
@@ -351,33 +357,23 @@ export function AttendanceKiosk({
 
                   return (
                     <li key={candidate.person.pageId}>
-                      {/*
-                          a div and not a button, because the chips inside it
-                          are buttons of their own and one cannot nest. the row
-                          is still the target for a tap and for Enter, which
-                          reaches it through the input's aria-activedescendant
-                        */}
-                      <div
+                      <button
+                        type="button"
                         id={`kiosk-match-${index}`}
                         role="option"
                         aria-selected={index === active}
-                        onClick={() => !busy && markPresent(candidate)}
+                        disabled={busy}
+                        onClick={() => markPresent(candidate)}
                         onMouseEnter={() => setActive(index)}
                         className={`hover:bg-muted flex w-full cursor-pointer items-center gap-3 p-3 text-left first:rounded-t-lg last:rounded-b-lg ${
                           busy ? "opacity-50" : ""
                         } ${index === active ? "bg-muted" : ""}`}
                       >
                         <div className="min-w-0 flex-1">
-                          <MemberEntry
-                            candidate={candidate}
-                            faces={faces}
-                            onEdit={(field) =>
-                              setEditing({
-                                field,
-                                person: candidate.person,
-                              })
-                            }
-                          />
+                          {/* a name and a count: every edit lives on the
+                              signed-in side, where the person is looking at
+                              their own row rather than scanning a list */}
+                          <MemberEntry candidate={candidate} faces={faces} />
                         </div>
 
                         {present.includes(candidate.person.pageId) && (
@@ -390,7 +386,7 @@ export function AttendanceKiosk({
                         )}
 
                         <PlusIcon className="text-muted-foreground size-5 shrink-0" />
-                      </div>
+                      </button>
                     </li>
                   );
                 })}
@@ -407,7 +403,7 @@ export function AttendanceKiosk({
               <div className="space-y-3 rounded-lg border p-4">
                 <p className="text-sm">
                   Nobody on the roster is called <strong>{query.trim()}</strong>{" "}
-                  yet.
+                  yet. Please use your full first and last name.
                 </p>
                 <div className="space-y-1.5">
                   <Label htmlFor="kiosk-email">Email</Label>
@@ -428,13 +424,33 @@ export function AttendanceKiosk({
                     Use your @terpmail.umd.edu or @umd.edu address.
                   </p>
                 </div>
+
+                <div className="space-y-1.5">
+                  <Label>Status</Label>
+                  {/* outline until it is the one chosen: this is a field
+                      almost nobody has to touch, and the default is right */}
+                  <div className="flex flex-wrap gap-2">
+                    {statuses.map((status) => (
+                      <Button
+                        key={status}
+                        type="button"
+                        variant={newStatus === status ? "secondary" : "outline"}
+                        aria-pressed={newStatus === status}
+                        onClick={() => setNewStatus(status)}
+                      >
+                        {status}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
                 <Button
                   className="h-12"
                   disabled={busy || !newEmail.trim()}
                   onClick={() => void addNewPerson()}
                 >
                   <PlusIcon className="size-4" />
-                  {busy ? "Adding…" : `Add ${query.trim()} and sign in`}
+                  {busy ? "Adding…" : "Add and sign in"}
                 </Button>
               </div>
             )}
@@ -460,8 +476,17 @@ export function AttendanceKiosk({
         ) : (
           <ul className="divide-y rounded-lg border">
             {present.map((pageId) => {
-              const candidate = byId.get(pageId);
-              const name = candidate?.person.name ?? "Someone not on this list";
+              const candidate = byId.get(pageId) ?? {
+                person: {
+                  pageId,
+                  name: "Someone not on this list",
+                  discordId: null,
+                  email: null,
+                  status: null,
+                },
+                contributions: 0,
+              };
+              const name = shownName(candidate.person, faces);
 
               return (
                 <li
@@ -469,23 +494,14 @@ export function AttendanceKiosk({
                   className="flex items-center gap-3 py-2 pr-2 pl-3"
                 >
                   <div className="min-w-0 flex-1">
-                    {/* the same row as the left column, minus the edits: two
-                        components meant two answers to "what do we know about
-                        this person" */}
+                    {/* every chip and every edit lives here: the person has
+                        tapped, and this is the one row they are looking at */}
                     <MemberEntry
-                      candidate={
-                        candidate ?? {
-                          person: {
-                            pageId,
-                            name,
-                            discordId: null,
-                            email: null,
-                            status: null,
-                          },
-                          contributions: 0,
-                        }
-                      }
+                      candidate={candidate}
                       faces={faces}
+                      onEdit={(field) =>
+                        setEditing({ field, person: candidate.person })
+                      }
                     />
                   </div>
                   {/* removing is possible only because `setAttendees` replaces
@@ -515,6 +531,7 @@ export function AttendanceKiosk({
         onSaved={replacePerson}
         guild={guild}
         statuses={statuses}
+        faces={faces}
       />
     </div>
   );

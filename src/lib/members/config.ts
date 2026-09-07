@@ -56,6 +56,31 @@ export const MEMBER_PROPERTIES = {
 export const ALUM_STATUS = "Alum";
 
 /**
+ * the status a new member gets before anybody chooses one.
+ *
+ * spelled out rather than taken from the head of Notion's options, because
+ * Notion currently returns them as `['Alum', 'Undergrad', 'Grad']` and
+ * defaulting to the first would file every person who signs themselves in at
+ * the kiosk as an alum — which `standing.ts` reads as ineligible to vote, with
+ * nothing on any screen to say so.
+ */
+export const DEFAULT_MEMBER_STATUS = "Undergrad";
+
+/**
+ * which of Notion's live options a new member starts on.
+ *
+ * `DEFAULT_MEMBER_STATUS` where Notion still has it, and otherwise the first
+ * option that is not the alum one: a renamed Undergrad must not become a
+ * default that disenfranchises. Options holding nothing but alumni select
+ * nothing at all rather than that.
+ */
+export function defaultStatus(options: string[]): string | null {
+  if (options.includes(DEFAULT_MEMBER_STATUS)) return DEFAULT_MEMBER_STATUS;
+
+  return options.find((option) => option !== ALUM_STATUS) ?? null;
+}
+
+/**
  * what to offer when Notion's schema could not be read.
  *
  * a fallback, not the vocabulary. `ALUM_STATUS` is spelled through the

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 import type { EditableField } from "~/components/member-entry";
 import { Button } from "~/components/ui/button";
 import {
@@ -12,6 +12,8 @@ import {
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { normaliseName } from "~/lib/articles/member";
+import type { Faces } from "~/lib/faces";
+import { shownName } from "~/lib/members/kiosk";
 import { notify } from "~/lib/notify";
 import type { Person } from "~/lib/members/records";
 import { postJson } from "~/lib/post-json";
@@ -46,6 +48,8 @@ type Props = {
   guild: GuildOption[];
   /** notion's own Status options, read from the schema on every page load */
   statuses: string[];
+  /** discord profiles, so a linked row is titled by the handle the room knows */
+  faces: Faces;
 };
 
 export function MemberEditDialog({
@@ -54,6 +58,7 @@ export function MemberEditDialog({
   onSaved,
   guild,
   statuses,
+  faces,
 }: Props) {
   return (
     <Dialog open={editing !== null} onOpenChange={(open) => !open && onClose()}>
@@ -66,6 +71,7 @@ export function MemberEditDialog({
             onSaved={onSaved}
             guild={guild}
             statuses={statuses}
+            faces={faces}
           />
         )}
       </DialogContent>
@@ -79,8 +85,10 @@ function Body({
   onSaved,
   guild,
   statuses,
+  faces,
 }: Props & { editing: Editing }) {
   const { field, person } = editing;
+  const called = shownName(person, faces);
   const [busy, setBusy] = useState(false);
   const [discordId, setDiscordId] = useState(person.discordId ?? "");
   const [query, setQuery] = useState("");
@@ -128,10 +136,8 @@ function Body({
     return (
       <>
         <DialogHeader>
-          <DialogTitle>{person.name}'s status</DialogTitle>
-          <DialogDescription>
-            Where {person.name} stands with the university. Alumni do not vote.
-          </DialogDescription>
+          <DialogTitle>{called}'s status</DialogTitle>
+          <DialogDescription>Alumni do not vote.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap gap-2">
           {statuses.map((status) => (
@@ -159,13 +165,24 @@ function Body({
   }
 
   if (field === "email") {
+    const next = email.trim();
+    const ready = !busy && Boolean(next) && next !== person.email;
+    const submit = () => {
+      if (ready) {
+        void save(
+          "/api/members/email",
+          { email: next },
+          { ...person, email: next },
+        );
+      }
+    };
+
     return (
       <>
         <DialogHeader>
-          <DialogTitle>{person.name}'s email</DialogTitle>
+          <DialogTitle>{called}'s email</DialogTitle>
           <DialogDescription>
-            Use an @terpmail.umd.edu or @umd.edu address. It is what matches
-            this row to a Discord application later.
+            Use your @terpmail.umd.edu or @umd.edu address.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-1.5">
@@ -176,6 +193,7 @@ function Body({
             autoFocus
             value={email}
             onChange={(event) => setEmail(event.target.value)}
+            onKeyDown={onEnter(submit)}
             placeholder="you@terpmail.umd.edu"
             className="h-12 text-base"
             autoComplete="off"
@@ -185,19 +203,7 @@ function Body({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            disabled={busy || !email.trim() || email.trim() === person.email}
-            onClick={() =>
-              void save(
-                "/api/members/email",
-                { email: email.trim() },
-                {
-                  ...person,
-                  email: email.trim(),
-                },
-              )
-            }
-          >
+          <Button disabled={!ready} onClick={submit}>
             {busy ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>
@@ -206,14 +212,23 @@ function Body({
   }
 
   const chosen = guild.find((one) => one.id === discordId) ?? null;
+  const ready = !busy && chosen !== null && chosen.id !== person.discordId;
+  const link = () => {
+    if (ready) {
+      void save(
+        "/api/members/discord",
+        { discordId },
+        { ...person, discordId },
+      );
+    }
+  };
 
   return (
     <>
       <DialogHeader>
-        <DialogTitle>{person.name}'s Discord</DialogTitle>
+        <DialogTitle>{called}'s Discord</DialogTitle>
         <DialogDescription>
-          Search the server and pick yourself. This is what links your name here
-          to what you post there.
+          Search the server and pick yourself.
         </DialogDescription>
       </DialogHeader>
 
@@ -224,6 +239,7 @@ function Body({
           autoFocus
           value={query}
           onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={onEnter(link)}
           placeholder="Start typing…"
           className="h-12 text-base"
           autoComplete="off"
@@ -262,22 +278,25 @@ function Body({
         <Button variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button
-          disabled={busy || !chosen || chosen.id === person.discordId}
-          onClick={() =>
-            void save(
-              "/api/members/discord",
-              { discordId },
-              {
-                ...person,
-                discordId,
-              },
-            )
-          }
-        >
-          {busy ? "Linking…" : chosen ? `Link ${chosen.displayName}` : "Link"}
+        <Button disabled={!ready} onClick={link}>
+          {busy ? "Linking…" : chosen ? `Link ${chosen.username}` : "Link"}
         </Button>
       </DialogFooter>
     </>
   );
+}
+
+/**
+ * Enter on a text field presses the modal's save button.
+ *
+ * these are one-field forms in a dialog rather than a `<form>`, so nothing
+ * submits them by default and everybody at the kiosk types their address and
+ * hits Enter
+ */
+function onEnter(submit: () => void) {
+  return (event: KeyboardEvent) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    submit();
+  };
 }

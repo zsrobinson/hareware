@@ -3,25 +3,26 @@ import {
   GraduationCapIcon,
   MailIcon,
   PenLineIcon,
-  PencilIcon,
 } from "lucide-react";
 import { MemberFace } from "~/components/member-face";
 import { Badge } from "~/components/ui/badge";
 import type { Faces } from "~/lib/faces";
-import type { Candidate } from "~/lib/members/kiosk";
+import { shownName, type Candidate } from "~/lib/members/kiosk";
 import { plural } from "~/lib/utils";
 
 /*
-  one person, drawn the same way on both halves of the kiosk.
+  one person, drawn either as an offer to tap or as a row already signed in.
 
-  the left column edits and the right column does not, and that is the only
-  difference — a second component for the signed-in list is how the two drifted
-  the last time, with an "add email" affordance on one side and nothing on the
-  other for the same missing field.
+  the two halves of the kiosk want different amounts of them. The typeahead is
+  a list somebody is scanning for their own name mid-queue, so it carries a
+  face, that name and how much they have written, and nothing else. Every
+  detail and every edit lives on the signed-in side, where the person has
+  already tapped and is looking at their own row.
 
-  a chip is only drawn for something the row *has*, with one exception: where
-  the chip is the affordance to supply what is missing, which exists only on
-  the editable side. Nothing here deletes anything to make a chip go away
+  `onEdit` is what says which of the two this is. A chip is only drawn for
+  something the row *has*, with one exception: where the chip is the affordance
+  to supply what is missing. Nothing here deletes anything to make a chip go
+  away
 */
 
 /** the properties a chip can open a modal for */
@@ -30,14 +31,20 @@ export type EditableField = "discord" | "email" | "status";
 type Props = {
   candidate: Candidate;
   faces: Faces;
-  /** absent on the read-only side, where the same chips are plain labels */
+  /** absent in the typeahead, which shows a name and a count and no chips */
   onEdit?: (field: EditableField) => void;
 };
 
 export function MemberEntry({ candidate, faces, onEdit }: Props) {
   const { person, contributions } = candidate;
   const face = person.discordId ? faces[person.discordId] : undefined;
-  const domain = person.email?.split("@")[1];
+
+  const credits = contributions > 0 && (
+    <Badge variant="secondary">
+      <PenLineIcon />
+      {plural(contributions, "contribution")}
+    </Badge>
+  );
 
   return (
     <div className="flex min-w-0 items-center gap-3">
@@ -49,50 +56,41 @@ export function MemberEntry({ candidate, faces, onEdit }: Props) {
       />
 
       <div className="min-w-0 space-y-1">
-        <div className="truncate font-medium">{person.name}</div>
+        <div className="truncate font-medium">{shownName(person, faces)}</div>
 
-        <div className="flex flex-wrap items-center gap-1">
-          <Chip
-            icon={AtSignIcon}
-            /* the server nickname where we have it: it is what the room calls
-               each other, and a snowflake tells nobody anything */
-            label={face?.displayName ?? (person.discordId ? "Discord" : null)}
-            missing="Add Discord"
-            onEdit={onEdit && (() => onEdit("discord"))}
-          />
-          <Chip
-            icon={MailIcon}
-            /* the domain and not the address: this screen faces a room, and
-               the terpmail/gmail split is the whole of what it has to separate */
-            label={domain ? `@${domain}` : null}
-            missing="Add email"
-            onEdit={onEdit && (() => onEdit("email"))}
-          />
-          <Chip
-            icon={GraduationCapIcon}
-            label={person.status}
-            missing="Set status"
-            onEdit={onEdit && (() => onEdit("status"))}
-          />
-          {contributions > 0 && (
-            <Badge variant="secondary">
-              <PenLineIcon />
-              {plural(contributions, "contribution")}
-            </Badge>
-          )}
-        </div>
+        {onEdit ? (
+          <div className="flex flex-wrap items-center gap-1">
+            <Chip
+              icon={AtSignIcon}
+              /* the server nickname where we have it: the name above is
+                 already the handle, and a snowflake tells nobody anything */
+              label={face?.displayName ?? (person.discordId ? "Discord" : null)}
+              missing="Add Discord"
+              onEdit={() => onEdit("discord")}
+            />
+            <Chip
+              icon={MailIcon}
+              label={person.email}
+              missing="Add email"
+              onEdit={() => onEdit("email")}
+            />
+            <Chip
+              icon={GraduationCapIcon}
+              label={person.status}
+              missing="Set status"
+              onEdit={() => onEdit("status")}
+            />
+            {credits}
+          </div>
+        ) : (
+          credits && <div className="flex items-center gap-1">{credits}</div>
+        )}
       </div>
     </div>
   );
 }
 
-/**
- * one property, as a chip.
- *
- * a value nobody may edit and no value at all render as nothing: a row of
- * chips reading "no email on file · no status" is noise on a screen a queue is
- * standing in front of, and the reconciler is where absences get worked
- */
+/** one property, as a chip that opens its modal */
 function Chip({
   icon: Icon,
   label,
@@ -102,36 +100,16 @@ function Chip({
   icon: typeof AtSignIcon;
   label: string | null;
   missing: string;
-  onEdit?: () => void;
+  onEdit: () => void;
 }) {
-  if (!onEdit) {
-    return label ? (
-      <Badge variant="outline">
-        <Icon />
-        {label}
-      </Badge>
-    ) : null;
-  }
-
   return (
     <Badge
       variant={label ? "outline" : "ghost"}
       className="hover:bg-muted cursor-pointer"
-      render={
-        <button
-          type="button"
-          onClick={(event) => {
-            /* the whole row signs somebody in, so a chip has to stop the click
-               before it reaches the row it is sitting in */
-            event.stopPropagation();
-            onEdit();
-          }}
-        />
-      }
+      render={<button type="button" onClick={onEdit} />}
     >
       <Icon />
       {label ?? missing}
-      <PencilIcon className="opacity-60" />
     </Badge>
   );
 }

@@ -12,6 +12,7 @@
   the room and makes them different enough to tell apart.
 */
 
+import type { Faces } from "~/lib/faces";
 import { normaliseName } from "~/lib/articles/member";
 import { plural } from "~/lib/utils";
 import type { ContributionRecord, MeetingRecord, Person } from "./records";
@@ -47,20 +48,18 @@ export function contributionCounts(
 /**
  * the short line under a name that tells two people apart.
  *
- * an email domain rather than the whole address: the room can see this screen,
- * and `zach@terpmail.umd.edu` on a projector is more of somebody's address
- * than they agreed to when they signed in. the domain is enough to separate a
- * terpmail from a gmail, which is the split that actually occurs.
+ * the whole address rather than its domain: two people with one name and one
+ * domain are the pair this has to separate, and `@terpmail.umd.edu` twice
+ * separates nothing.
  *
  * a person with neither an email nor a credit gets "no email on file", which
  * is deliberately a slightly uncomfortable thing to read: it is the row most
- * likely to be a duplicate, and the reconciler is where it gets fixed
+ * likely to be a duplicate
  */
 export function distinguish(candidate: Candidate): string {
   const parts: string[] = [];
 
-  const domain = candidate.person.email?.split("@")[1];
-  parts.push(domain ? `@${domain}` : "no email on file");
+  parts.push(candidate.person.email ?? "no email on file");
 
   if (candidate.contributions > 0) {
     parts.push(plural(candidate.contributions, "contribution"));
@@ -222,4 +221,17 @@ export function initials(name: string): string {
   const last = parts[parts.length - 1]![0]!;
 
   return (parts.length === 1 ? first : first + last).toUpperCase();
+}
+
+/**
+ * what to call somebody on screen.
+ *
+ * their Discord username wherever the row is linked and the guild read
+ * resolved it: the two names usually agree, and where they do not the handle
+ * is the one the room recognises. Matching still runs on the Notion name, so
+ * this changes nothing about who a search finds
+ */
+export function shownName(person: Person, faces: Faces): string {
+  const face = person.discordId ? faces[person.discordId] : undefined;
+  return face?.username ?? person.name;
 }

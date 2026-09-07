@@ -14,7 +14,13 @@
 */
 
 import { env } from "cloudflare:workers";
-import { requireText, rosterRoute } from "~/lib/members/api";
+import {
+  BadRequest,
+  optionalText,
+  requireText,
+  rosterRoute,
+} from "~/lib/members/api";
+import { statusOptions } from "~/lib/members/roster";
 import { createMember } from "~/lib/members/write";
 
 export const prerender = false;
@@ -23,9 +29,25 @@ export const POST = rosterRoute(
   (body) => ({
     name: requireText(body, "name"),
     email: requireText(body, "email"),
+    status: optionalText(body, "status"),
   }),
-  async ({ name, email }) => {
-    const pageId = await createMember(env, { name, email });
+  async ({ name, email, status }) => {
+    /* checked against the live options for the reason `status.ts` gives: a
+       notion select accepts a name it has never seen and adds it */
+    if (status) {
+      const options = await statusOptions(env.NOTION_TOKEN!);
+      if (!options.includes(status)) {
+        throw new BadRequest(
+          `${status} is not one of the statuses Notion has: ${options.join(", ")}`,
+        );
+      }
+    }
+
+    const pageId = await createMember(env, {
+      name,
+      email,
+      ...(status ? { status } : {}),
+    });
 
     return {
       summary: `created a Members row for ${name} from the kiosk`,

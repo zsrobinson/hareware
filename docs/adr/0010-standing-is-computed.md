@@ -189,9 +189,18 @@ eligible by a route the rule plainly did not intend.
 `~/lib/automations/config` matches the start of a meeting's title because the
 database has no property distinguishing its kinds, and the constant carries a
 note that a select property would be more robust and that this is the constant
-to delete on the day someone adds one. This is that day. Magazine design
-sessions are left without a type of their own; they are not a kind of meeting
-anyone counts.
+to delete on the day someone adds one. This is that day — almost.
+
+The reminder now reads `Type`, and the prefix survives as a **fallback for
+untyped rows only**. Every Meetings row that existed when `Type` was added has
+it empty, so deleting the prefix match outright would have stopped the reminder
+finding anything, silently, on the first morning after deploy. `Type` wins
+wherever it is set, including when it says no — a General Body meeting titled
+"Editorial Board social" no longer pings the board. Once every row carries a
+`Type`, the fallback and the constant can both go.
+
+Magazine design sessions are left without a type of their own; they are not a
+kind of meeting anyone counts.
 
 ### Attendance is entered on a kiosk, and the kiosk creates people
 
@@ -238,6 +247,14 @@ matches a row with no id, a name that nearly matches — is left untouched for
 the reconciler, because those are exactly the cases where a wrong guess makes
 two people out of one. This mirrors ADR 0009's rule that an ambiguous match
 asks rather than guesses; the cron simply has nobody to ask, so it defers.
+
+"Nearly matches" is its own outcome, `similar`, and it is deliberately not a
+link. `normaliseName` keeps "Matthew" and "Mathew" apart on purpose, because a
+matcher loose enough to join them joins real members too — but it is equally
+not safe to _create_ over one, since that makes the duplicate the reconciler
+exists to catch. So a name within one keystroke of an existing row stops the
+cron and asks a person. The asymmetry is the point: a false positive costs one
+click, and a false negative costs somebody their vote.
 
 Creating rows unattended is what keeps the kiosk useful: a person who applies on
 Monday autocompletes at Wednesday's meeting without anyone having opened the

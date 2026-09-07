@@ -1,6 +1,11 @@
 import { expect, test } from "vitest";
 import type { Application } from "~/lib/services/discord/join-requests";
-import { duplicates, resolveApplication, safeToCreate } from "./match";
+import {
+  duplicates,
+  nearName,
+  resolveApplication,
+  safeToCreate,
+} from "./match";
 import type { Person } from "./standing";
 
 function person(over: Partial<Person> = {}): Person {
@@ -228,4 +233,62 @@ test("a roster with nothing repeated has no duplicates", () => {
       }),
     ]),
   ).toEqual([]);
+});
+
+/* the cron would otherwise create the duplicate the reconciler exists to
+   prevent, and a duplicate splits attendance and can cost somebody a vote */
+test("a name one keystroke away is withheld from the cron rather than created", () => {
+  const resolution = resolveApplication(
+    [person({ name: "Mathew Reyes", email: null })],
+    application({ name: "Matthew Reyes", email: "matt@terpmail.umd.edu" }),
+  );
+
+  expect(resolution.status).toBe("similar");
+  expect(safeToCreate([resolution])).toEqual([]);
+});
+
+test("a near name is not linkable, because one edit is not certainty", () => {
+  const resolution = resolveApplication(
+    [person({ name: "Mathew Reyes", email: null })],
+    application({ name: "Matthew Reyes", email: null }),
+  );
+
+  expect(resolution.status).not.toBe("linkable");
+});
+
+test("an exact match still wins over a near one", () => {
+  const resolution = resolveApplication(
+    [
+      person({ pageId: "p1", name: "Bay Hoffman", email: null }),
+      person({ pageId: "p2", name: "Bay Hofman", email: null }),
+    ],
+    application({ email: null }),
+  );
+
+  expect(resolution.status).toBe("linkable");
+  if (resolution.status === "linkable")
+    expect(resolution.person.pageId).toBe("p1");
+});
+
+test("names further apart than one edit are still new", () => {
+  const resolution = resolveApplication(
+    [person({ name: "Ada Vance", email: null })],
+    application({ name: "Bay Hoffman", email: null }),
+  );
+
+  expect(resolution.status).toBe("new");
+});
+
+test("one edit is one edit, whether inserted, deleted or substituted", () => {
+  expect(nearName("matthew", "mathew")).toBe(true);
+  expect(nearName("mathew", "matthew")).toBe(true);
+  expect(nearName("reyes", "reyez")).toBe(true);
+  expect(nearName("bay hoffman", "bay hoffmann")).toBe(true);
+});
+
+test("two edits are too many, and an identical name is not 'near'", () => {
+  expect(nearName("matthew", "mathews")).toBe(false);
+  expect(nearName("bay", "bay")).toBe(false);
+  expect(nearName("", "bay")).toBe(false);
+  expect(nearName("ada vance", "bay hoffman")).toBe(false);
 });

@@ -16,29 +16,51 @@
 
 import { env } from "cloudflare:workers";
 import { rosterRoute } from "~/lib/members/api";
-import { easternNow } from "~/lib/eastern";
-import { markGroupSynced } from "~/lib/members/group";
+import { approvedApplications } from "~/lib/services/discord/join-requests";
+import {
+  groupWatermark,
+  markGroupSynced,
+  pendingForGroup,
+} from "~/lib/members/group";
 
 export const prerender = false;
 
 export const POST = rosterRoute(
-  /* no body: the date is the server's, not the browser's. a clock an hour
-     behind on somebody's laptop would set a watermark that hides the people
-     approved in between, and they are the ones this list exists to catch */
+  /* no body. what was pasted is re-derived here rather than reported by the
+     browser: a page left open while three more people applied would otherwise
+     mark them done without anybody having seen their addresses */
   () => ({}),
   async () => {
     if (!env.DB) {
       throw new Error("the watermark has nowhere to live: D1 is not bound");
     }
+    if (!env.DISCORD_BOT_TOKEN) {
+      throw new Error(
+        "DISCORD_BOT_TOKEN is not set, so there is nothing to mark",
+      );
+    }
 
-    /* eastern rather than utc, because the day this is compared against is an
-       application's `applied`, which is the day the club would say it was */
-    const today = easternNow(new Date()).date;
-    await markGroupSynced(env.DB, today);
+    const applications = await approvedApplications(env.DISCORD_BOT_TOKEN);
+    const pending = pendingForGroup(applications, await groupWatermark(env.DB));
+
+    if (pending.length === 0) {
+      return { summary: "the google group was already up to date" };
+    }
+
+    /*
+      the newest `applied` day among the addresses that were actually listed —
+      NOT today. Today's date would claim credit for applications that have not
+      arrived yet, and the next run would start after them, which is the silent
+      omission ADR 0010 refuses a cursor over.
+
+      `pendingForGroup` sorts oldest first, so the last one is the newest
+    */
+    const at = pending[pending.length - 1]!.applied;
+    await markGroupSynced(env.DB, at);
 
     return {
-      summary: `marked the google group synced as of ${today}`,
-      data: { at: today },
+      summary: `marked ${pending.length} google group ${pending.length === 1 ? "address" : "addresses"} added, up to ${at}`,
+      data: { at, count: pending.length },
     };
   },
 );

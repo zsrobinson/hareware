@@ -23,6 +23,7 @@ import {
 } from "~/lib/services/notion/client";
 import { easternDayWindow, startsOn } from "~/lib/services/notion/dates";
 import { easternTime, type EasternNow } from "~/lib/eastern";
+import { MEETING_PROPERTIES } from "~/lib/members/config";
 import { misconfigured, ok, skipped, type Result } from "./registry";
 import {
   BOARD_CHANNEL_ID,
@@ -95,6 +96,9 @@ export async function sendMeetingReminder(
  * the window-plus-predicate shape is not optional — `easternDayWindow` explains
  * why asking Notion for one day does not work
  */
+/** the `Type` a meeting must carry for the board reminder to claim it */
+const BOARD_MEETING_TYPE = "Editorial Board";
+
 async function findTodaysMeeting(
   token: string,
   source: string,
@@ -107,12 +111,38 @@ async function findTodaysMeeting(
     const start = page.properties[property]?.date?.start;
     if (start === undefined || !startsOn(start, date)) return false;
 
-    // titles carry stray trailing spaces, so compare a trimmed lowercase form
-    return title(page)
-      .trim()
-      .toLowerCase()
-      .startsWith(MEETING_TITLE_PREFIX.toLowerCase());
+    return isBoardMeeting(page);
   });
+}
+
+/**
+ * whether a meeting row is an editorial board meeting.
+ *
+ * ADR 0010 added a `Type` select to Meetings, which is what this should read
+ * and now does. The title prefix survives as a **fallback for untyped rows**
+ * only, because every row that existed when `Type` was added has it empty:
+ * deleting the prefix match outright would have stopped the reminder finding
+ * anything, silently, on the morning after deploy — which is the failure
+ * `docs/agents/silent-failures.md` is about.
+ *
+ * so `Type` wins wherever it is set, and the prefix answers only for rows
+ * nobody has typed yet. Once the Meetings database has a `Type` on every row,
+ * the fallback and `MEETING_TITLE_PREFIX` can both go, and nothing else needs
+ * to change.
+ */
+function isBoardMeeting(page: NotionPage): boolean {
+  const type = page.properties[MEETING_PROPERTIES.type.name]?.select?.name;
+
+  /* an explicitly typed row is answered by its type, including when the answer
+     is no — a General Body meeting whose title happens to begin "Editorial
+     Board" must not ping the board */
+  if (type) return type === BOARD_MEETING_TYPE;
+
+  // titles carry stray trailing spaces, so compare a trimmed lowercase form
+  return title(page)
+    .trim()
+    .toLowerCase()
+    .startsWith(MEETING_TITLE_PREFIX.toLowerCase());
 }
 
 /**

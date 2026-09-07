@@ -28,6 +28,9 @@ export type NotionProperty = {
   title?: { plain_text: string }[];
   rich_text?: { plain_text: string }[];
   date?: { start: string } | null;
+  /* the meeting reminder reads Meetings' `Type` to tell a board meeting from a
+     general body one — see ADR 0010 */
+  select?: { name?: string | null } | null;
 };
 
 export class NotionError extends Error {}

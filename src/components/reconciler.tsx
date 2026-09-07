@@ -168,8 +168,15 @@ export function Reconciler({
       one.status === "linkable",
   );
   const ambiguous = resolutions.filter(
-    (one): one is Extract<Resolution, { status: "ambiguous" | "conflicted" }> =>
-      one.status === "ambiguous" || one.status === "conflicted",
+    (
+      one,
+    ): one is Extract<
+      Resolution,
+      { status: "ambiguous" | "conflicted" | "similar" }
+    > =>
+      one.status === "ambiguous" ||
+      one.status === "conflicted" ||
+      one.status === "similar",
   );
 
   const emails = group.pending
@@ -219,7 +226,7 @@ export function Reconciler({
 
       <Section
         title="Applications nobody can decide automatically"
-        why="Several rows could be this person, or more than one row already carries their Discord ID. These have no button: the right action is to look at the rows in Notion, merge or correct them, and reload. Guessing here is the failure this whole design exists to avoid."
+        why="Several rows could be this person, or one is a keystroke away from their name, or more than one row already carries their Discord ID. These have no button: the right action is to look at the rows in Notion, merge or correct them, and reload. Guessing here is the failure this whole design exists to avoid — and a `similar` row is here rather than created because a duplicate splits somebody's attendance and can cost them a vote."
         count={ambiguous.length}
       >
         <div className="divide-y rounded-lg border">

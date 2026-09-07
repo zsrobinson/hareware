@@ -42,6 +42,16 @@ export type Resolution =
     }
   /** several id-less rows could be — a person picks */
   | { status: "ambiguous"; application: Application; people: Person[] }
+  /**
+   * nothing matches, but an id-less row is one keystroke away from matching.
+   *
+   * not linkable — `normaliseName` deliberately keeps "Matthew" and "Mathew"
+   * apart, because a matcher loose enough to join them joins real members too.
+   * But it is not safe to *create* over either: doing so makes exactly the
+   * duplicate the reconciler exists to catch, and a duplicate splits somebody's
+   * attendance and can cost them a vote. So the cron stops and a person decides
+   */
+  | { status: "similar"; application: Application; people: Person[] }
   /** nothing matches at all, so a new row is safe */
   | { status: "new"; application: Application }
   /** more than one row carries this snowflake, which is never safe to act on */
@@ -115,7 +125,57 @@ export function resolveApplication(
     };
   }
 
+  const similar = name
+    ? free.filter((person) => nearName(normaliseName(person.name), name))
+    : [];
+
+  if (similar.length > 0)
+    return { status: "similar", application, people: similar };
+
   return { status: "new", application };
+}
+
+/**
+ * whether two normalised names differ by at most one keystroke.
+ *
+ * used only to *withhold* a create, never to link: a false positive costs
+ * somebody one click on the reconciler, where a false negative costs a member
+ * their vote. That asymmetry is why the threshold is loose here and strict in
+ * `resolveApplication`'s equality check above.
+ *
+ * one edit, not two. "Matthew"/"Mathew" and "Reyes"/"Reyez" are the misspellings
+ * that actually happen when somebody types their own name at a kiosk; two edits
+ * starts joining unrelated short names
+ */
+export function nearName(a: string, b: string): boolean {
+  if (!a || !b || a === b) return false;
+  if (Math.abs(a.length - b.length) > 1) return false;
+
+  return editDistanceWithin(a, b, 1);
+}
+
+/**
+ * whether `a` and `b` are within `max` edits, without computing the full
+ * distance — the matrix is wasted work when the answer is a yes/no at one.
+ *
+ * walks both strings together and, at the first difference, tries the three
+ * edits that could repair it. `max` is a parameter only so the recursion can
+ * spend one and recurse; callers pass 1
+ */
+function editDistanceWithin(a: string, b: string, max: number): boolean {
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i += 1;
+
+  if (i === a.length && i === b.length) return true;
+  if (max === 0) return false;
+
+  /* a substitution, a deletion from `a`, and a deletion from `b` — the three
+     single edits that can reconcile a first difference */
+  return (
+    editDistanceWithin(a.slice(i + 1), b.slice(i + 1), max - 1) ||
+    editDistanceWithin(a.slice(i + 1), b.slice(i), max - 1) ||
+    editDistanceWithin(a.slice(i), b.slice(i + 1), max - 1)
+  );
 }
 
 export function resolveApplications(

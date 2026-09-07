@@ -126,15 +126,28 @@ const columns: ColumnDef<Standing, unknown>[] = [
     accessorFn: (row) => row.person.name,
     header: sortable("Name"),
     meta: { csvHeader: "name" },
+    /* the email has its own column below, so it is not repeated here */
     cell: ({ row }) => (
-      <div className="min-w-40 space-y-1">
-        <div className="font-medium">{row.original.person.name}</div>
-        {row.original.person.email && (
-          <div className="text-muted-foreground text-xs">
-            {row.original.person.email}
-          </div>
-        )}
-      </div>
+      <div className="min-w-40 font-medium">{row.original.person.name}</div>
+    ),
+  },
+  /*
+    its own column, not only the line under the name.
+
+    the export is the club's whole TerpLink integration and the source of the
+    addresses for the Google Group, and a `data-table` csv is built from column
+    accessors — an email rendered only inside the name cell's jsx is invisible
+    to it, so the file would carry names and no way to reach anybody
+  */
+  {
+    id: "email",
+    accessorFn: (row) => row.person.email ?? "",
+    header: sortable("Email"),
+    meta: { csvHeader: "email" },
+    cell: ({ row }) => (
+      <span className="text-muted-foreground text-xs">
+        {row.original.person.email ?? "—"}
+      </span>
     ),
   },
   {

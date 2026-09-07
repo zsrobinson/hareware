@@ -114,7 +114,10 @@ export async function syncApplications(
 }
 
 /** the resolutions a person has to decide, grouped by why */
-type Deferred = Record<"linkable" | "ambiguous" | "conflicted", number>;
+type Deferred = Record<
+  "linkable" | "similar" | "ambiguous" | "conflicted",
+  number
+>;
 
 /**
  * what the cron would not touch.
@@ -124,7 +127,12 @@ type Deferred = Record<"linkable" | "ambiguous" | "conflicted", number>;
  * and growing number in the log line that never goes down
  */
 function deferred(resolutions: Resolution[]): Deferred {
-  const counts: Deferred = { linkable: 0, ambiguous: 0, conflicted: 0 };
+  const counts: Deferred = {
+    linkable: 0,
+    similar: 0,
+    ambiguous: 0,
+    conflicted: 0,
+  };
 
   for (const resolution of resolutions) {
     if (resolution.status in counts)
@@ -143,11 +151,13 @@ function deferred(resolutions: Resolution[]): Deferred {
  * `{linkable: 2}` does not answer that
  */
 function leftovers(waiting: Deferred): string {
-  const total = waiting.linkable + waiting.ambiguous + waiting.conflicted;
+  const total =
+    waiting.linkable + waiting.similar + waiting.ambiguous + waiting.conflicted;
   if (total === 0) return "Nothing is waiting on the reconciler.";
 
   const why = [
     waiting.linkable && `${waiting.linkable} to link`,
+    waiting.similar && `${waiting.similar} near an existing name`,
     waiting.ambiguous && `${waiting.ambiguous} ambiguous`,
     waiting.conflicted && `${waiting.conflicted} conflicted`,
   ].filter(Boolean);

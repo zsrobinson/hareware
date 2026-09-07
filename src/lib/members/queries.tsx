@@ -83,6 +83,15 @@ function client() {
  */
 let cache: QueryClient | undefined;
 
+/**
+ * the errors already toasted about.
+ *
+ * module scope for the same reason the client is: both outlive the mounted
+ * tree, so a ref would forget on every navigation and say it again. Weak so a
+ * collected error takes its entry with it
+ */
+const reported = new WeakSet<object>();
+
 function sharedClient() {
   return (cache ??= client());
 }
@@ -107,6 +116,20 @@ export function useRosterQuery<T extends object>(
   key: QueryKey,
   path: string,
   initialData: T,
+  /**
+   * whether `initialData` actually describes *this* key.
+   *
+   * react query installs `initialData` under whatever key has no entry yet, so
+   * a key that varies — the kiosk's, which carries the pinned meeting — would
+   * otherwise be seeded with the page's opening snapshot and, with no
+   * `initialDataUpdatedAt`, treated as fresh for a whole `staleTime`. Switching
+   * meetings then showed the previous meeting's answer for a minute, which is
+   * the bug varying the key was meant to fix.
+   *
+   * false stamps the seed as already stale, so it still paints without a
+   * loading flash and re-reads immediately
+   */
+  seeded = true,
 ): T {
   const { data, isError, error } = useQuery({
     queryKey: key,
@@ -128,20 +151,26 @@ export function useRosterQuery<T extends object>(
       return said;
     },
     initialData,
+    ...(seeded ? {} : { initialDataUpdatedAt: 0 }),
   });
 
   /*
     a failed refetch leaves the last good answer on screen, which is the right
     thing to show and the wrong thing to show *silently*: on the reconciler,
     the page somebody opens the morning of an election, a stale screen and a
-    fresh one look identical. so it says so once per failure
+    fresh one look identical. so it says so once per failure.
+
+    once per *failure*, not once per mount. the client outlives the tree now,
+    so a failed query keeps its error in the cache and every navigation back to
+    the page would otherwise toast again about a failure from minutes ago
   */
   useEffect(() => {
-    if (isError) {
-      notify.failed(
-        `Could not refresh: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
+    if (!isError || !error || reported.has(error)) return;
+
+    reported.add(error);
+    notify.failed(
+      `Could not refresh: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }, [isError, error]);
 
   return data;
@@ -150,10 +179,11 @@ export function useRosterQuery<T extends object>(
 /**
  * edits the cached answer in place, without a read.
  *
- * for the one case a refetch cannot cover: a row the person at the laptop just
- * created or corrected has to be on screen before notion has been asked again.
- * Paired with `useRefresh` rather than used instead of it, so the optimistic
- * shape is replaced by notion's own within the same interaction
+ * for the one case a read cannot cover in time: a row the person at the laptop
+ * just created or corrected has to be on screen before notion is asked again.
+ * The kiosk uses this alone, deliberately. Pairing it with `useRefresh` there
+ * spent three notion requests to be told what the page had just written, and
+ * redrew a screen somebody is queueing at while it did
  */
 export function usePatch<T>(key: QueryKey) {
   const queries = useQueryClient();

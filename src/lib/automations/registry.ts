@@ -60,8 +60,16 @@ export type Automation = {
    * means "this one reaches nobody", which `channelLabel` says out loud
    */
   channelId?: string;
-  /** the hour it runs, eastern */
-  hour: number;
+  /**
+   * the hour it runs, eastern, or `"hourly"` for every tick.
+   *
+   * the reminders are a time of day. the application sync is not: ADR 0010
+   * has it creating a row so somebody who applied on monday autocompletes at
+   * wednesday's meeting, and a fixed hour meant an application approved on
+   * wednesday afternoon waited until thursday morning, which is the case the
+   * whole section is written around
+   */
+  hour: number | "hourly";
   run: (env: Env, eastern: EasternNow) => Promise<Result>;
 };
 
@@ -92,7 +100,7 @@ export const AUTOMATIONS: Automation[] = [
     name: "Member applications",
     description:
       "Creates a Members row for each approved Discord application that matches nobody already on the roster. Posts nothing; anything ambiguous is left for the reconciler.",
-    hour: REMINDER_HOUR,
+    hour: "hourly",
     run: syncApplications,
   },
 ];
@@ -103,7 +111,9 @@ export function automation(id: string): Automation | undefined {
 }
 
 /** "8am", the way the panel says it */
-export function hourLabel(hour: number) {
+export function hourLabel(hour: number | "hourly") {
+  if (hour === "hourly") return "every hour";
+
   const suffix = hour < 12 ? "am" : "pm";
   const twelve = hour % 12 === 0 ? 12 : hour % 12;
   return `${twelve}${suffix}`;

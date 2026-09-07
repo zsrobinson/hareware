@@ -69,7 +69,6 @@ type Props = {
   guild: GuildOption[];
 };
 
-/** the whole attendee list, written over the meeting's relation */
 /**
  * writes the list and answers with what notion actually holds.
  *
@@ -128,20 +127,17 @@ export function AttendanceKiosk(props: Props) {
 
 function Kiosk({ initial, today, faces, guild }: Props) {
   /*
-    the roster comes from the query and the attendee list does not.
+    nothing here re-reads notion during a session.
 
-    `present` is local and optimistic on purpose: the person who just tapped is
-    standing at the laptop, and a refetch between their tap and the list moving
-    is a wait the room watches. Everything a *write* changes about who is on
-    the roster — a member created, an email or a status corrected — invalidates
-    this query instead, so those stop needing a reload without putting a round
-    trip in the queue's way
-  */
-  /*
-    the meeting the read is pinned to. it starts as the one the page opened on
-    and moves when somebody switches, so the key and the path move with it:
-    the route decides which meetings are offerable *around* this one, and a
-    constant key meant every refetch after a switch answered about the old one
+    `present` is local and optimistic: the person who just tapped is standing
+    at the laptop, and a round trip between their tap and the list moving is a
+    wait the room watches. A write that changes the roster, a member created or
+    a chip corrected, is patched into the cache instead of refetched, for the
+    same reason. Notion is read again on the next mount.
+
+    `pinned` is the meeting the read is keyed to. It starts as the one the page
+    opened on and moves when somebody switches, so the key and the path move
+    together: the route decides which meetings are offerable around it
   */
   const [pinned, setPinned] = useState(initial.openingId ?? "");
 
@@ -151,6 +147,9 @@ function Kiosk({ initial, today, faces, guild }: Props) {
       pinned ? `&meeting=${encodeURIComponent(pinned)}` : ""
     }`,
     initial,
+    /* the seed describes the meeting the page opened on and no other, so a
+       switch re-reads rather than showing the last one for a staleTime */
+    pinned === (initial.openingId ?? ""),
   );
 
   const patchRoster = usePatch<KioskData>(rosterKeys.kiosk(pinned));
@@ -258,7 +257,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
       return;
     }
 
-    /* onto the front of the list. by the end of a general body meeting this is
+    /* onto the list. by the end of a general body meeting this is
        forty rows, and the person who just tapped has to be able to see that it
        worked without scrolling past everybody who arrived before them */
     void commit(
@@ -308,14 +307,13 @@ function Kiosk({ initial, today, faces, guild }: Props) {
         email: created.email,
         discordId: null,
         status: newStatus,
-        /* nobody has written anything under a row created a second ago, and
-           the refetch below replaces this with notion's own count anyway */
+        /* nobody has written anything under a row created a second ago */
         contributions: 0,
       };
 
       /* into the roster on screen too, so a second person with the same name
          later this evening is disambiguated against them rather than matched
-         to them, and re-read so the row is notion's rather than ours */
+         to them */
       /* no refetch. the patch above is the whole answer for a row created a
          second ago, and re-reading costs three notion requests and a visible
          redraw of a page somebody is queueing at */

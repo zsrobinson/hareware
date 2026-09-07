@@ -47,7 +47,10 @@ export async function runScheduled(controller: ScheduledController, env: Env) {
   const due = new Set(
     hourly
       ? AUTOMATIONS.filter(
-          (a) => a.hour === eastern.hour || env.REMINDERS_IGNORE_HOUR,
+          (a) =>
+            a.hour === "hourly" ||
+            a.hour === eastern.hour ||
+            env.REMINDERS_IGNORE_HOUR,
         ).map((a) => a.id)
       : [],
   );

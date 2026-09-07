@@ -258,3 +258,17 @@ test("writes no row for a dry run, which posted nothing", async () => {
   // widened outcomes exist to make, undone
   expect(record).not.toHaveBeenCalled();
 });
+
+/*
+  the sync is not a time of day. ADR 0010 has it creating a row so somebody who
+  applied on monday autocompletes at wednesday's meeting, and a fixed hour meant
+  an application approved on wednesday afternoon waited until thursday morning,
+  which is the case that section is written around
+*/
+test("an hourly automation runs on a tick that is not the reminder hour", async () => {
+  await runScheduled(NINE_AM, {} as Env);
+
+  expect(applications).toHaveBeenCalledOnce();
+  expect(meeting).not.toHaveBeenCalled();
+  expect(social).not.toHaveBeenCalled();
+});

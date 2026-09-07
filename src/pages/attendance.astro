@@ -7,18 +7,7 @@ import { admitted } from "~/lib/admin-guard";
 import { easternNow } from "~/lib/eastern";
 import { faces } from "~/lib/faces";
 import { guildMembers } from "~/lib/member";
-import {
-  contributionCounts,
-  defaultMeeting,
-  offerableMeetings,
-} from "~/lib/members/kiosk";
-import {
-  contributions,
-  meetings,
-  people,
-  statusOptions,
-} from "~/lib/members/roster";
-import { FALLBACK_MEMBER_STATUSES } from "~/lib/members/config";
+import { kioskData } from "~/lib/members/views";
 
 /* Reaching this page is the permission: the guard already refused anybody it
    would not admit, and its lookup knows what to call them. */
@@ -28,7 +17,10 @@ const who = admitted(Astro.locals);
    domain. nothing may cache any of it */
 Astro.response.headers.set("cache-control", "private, no-store");
 
-const token = env.NOTION_TOKEN;
+/* eastern, and fixed here rather than worked out again on every refetch: this
+   laptop is open all evening, and a "today" that rolled over at midnight would
+   move the meeting select off the meeting the room is signing into */
+const today = easternNow(new Date()).date;
 
 /*
   the roster and the calendar, read once when the laptop is set down.
@@ -37,53 +29,31 @@ const token = env.NOTION_TOKEN;
   fit in one payload, and a kiosk in a room with student wifi must keep working
   when the network does not. Every tap after this costs exactly one write.
 
-  the articles are read only to say "3 contributions" beside a name — which is
-  what tells two people sharing one apart, and per ADR 0010 that is the
-  disambiguation this screen may not do without.
-
-  the Status options come from notion's schema rather than a list in this
-  repository, so renaming one is an edit in notion and nothing else
+  `kioskData` is also what `/api/members/kiosk` answers, so this is the
+  island's `initialData` — first paint is server-rendered, and creating or
+  correcting somebody re-reads it in place instead of asking the room to
+  reload. It bounds its own concurrency: five notion requests fired in one tick
+  is over the budget before any of them has answered
 */
-const [roster, calendar, credits, notionStatuses] = token
-  ? await Promise.all([
-      people(token),
-      meetings(token),
-      contributions(token),
-      statusOptions(token).catch(() => [] as string[]),
-    ])
-  : [[], [], [], []];
-
-const statuses = notionStatuses.length
-  ? notionStatuses
-  : FALLBACK_MEMBER_STATUSES;
-
-const counts = contributionCounts(credits);
-const candidates = roster.map((person) => ({
-  person,
-  contributions: counts.get(person.pageId) ?? 0,
-}));
-
-const today = easternNow(new Date()).date;
-
-/* the param wins over today's meeting so a reload mid-meeting comes back to
-   the one the room is signing into */
-const asked = Astro.url.searchParams.get("meeting");
-const chosen = calendar.find((meeting) => meeting.pageId === asked);
-const opening = chosen ?? defaultMeeting(calendar, today);
-
-/* the past month and everything ahead, plus whatever `?meeting=` named: a
-   semester of history in one select is where a mis-tap files tonight's room
-   against a meeting last spring */
-const offered = offerableMeetings(calendar, today, opening?.pageId ?? null);
+const data = await kioskData(
+  env,
+  today,
+  /* the param wins over today's meeting so a reload mid-meeting comes back to
+     the one the room is signing into */
+  Astro.url.searchParams.get("meeting"),
+);
 
 /*
   one request for the whole guild, read twice: once for the pictures beside a
   name, and once for the Discord chip's autocomplete. A member the kiosk cannot
-  draw falls back to their initials, which is also what a missing token gets
+  draw falls back to their initials, which is also what a missing token gets.
+
+  discord rather than notion, and unchanged by any write this page makes, so it
+  stays a page prop rather than joining the query the kiosk refetches
 */
 const guild = await guildMembers();
 const rosterFaces = await faces(
-  roster.map((person) => person.discordId),
+  data.candidates.map((candidate) => candidate.person.discordId),
   async () => guild,
 );
 const guildOptions = [...guild].map(([id, profile]) => ({
@@ -95,14 +65,12 @@ const guildOptions = [...guild].map(([id, profile]) => ({
 
 <Dashboard title="Attendance" viewer={viewerState(who)}>
   {
-    token ? (
+    env.NOTION_TOKEN ? (
       <AttendanceKiosk
-        meetings={offered}
-        candidates={candidates}
-        initialMeetingId={opening?.pageId ?? null}
+        initial={data}
+        today={today}
         faces={rosterFaces}
         guild={guildOptions}
-        statuses={statuses}
         client:load
       />
     ) : (

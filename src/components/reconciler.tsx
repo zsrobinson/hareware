@@ -22,9 +22,16 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import { Textarea } from "~/components/ui/textarea";
-import type { Duplicate, Resolution } from "~/lib/members/match";
+import type { Resolution } from "~/lib/members/match";
 import { postJson } from "~/lib/post-json";
 import type { Person } from "~/lib/members/records";
+import {
+  RosterQueries,
+  rosterKeys,
+  useRefresh,
+  useRosterQuery,
+} from "~/lib/members/queries";
+import type { ReconcilerData } from "~/lib/members/views";
 import type { Application } from "~/lib/services/discord/join-requests";
 
 /*
@@ -37,24 +44,12 @@ import type { Application } from "~/lib/services/discord/join-requests";
   look final until it is empty. The reconciler is run *before* the vote.
 */
 
-type GroupState = {
-  /** the ISO day somebody last pasted into the group, or null if never */
-  watermark: string | null;
-  /** everyone approved since, in the order they applied */
-  pending: Application[];
-  /** the addresses that are not terpmail or umd, flagged by `isExternalAddress` */
-  external: string[];
-};
-
-type Props = {
-  resolutions: Resolution[];
-  duplicates: Duplicate[];
-  /** rows whose `Status` select is empty — the one field a person maintains */
-  unknownStatus: Person[];
-  /** notion's own Status options, so renaming one there needs no deploy here */
-  statuses: string[];
-  group: GroupState;
-};
+/**
+ * the page's own server-side read, which seeds the query and is then replaced
+ * by it. `/api/members/reconciler` answers the same type from the same
+ * function, so what a refetch shows cannot differ in shape from first paint
+ */
+type Props = { initial: ReconcilerData };
 
 function Section({
   title,
@@ -112,13 +107,28 @@ function Applicant({ application }: { application: Application }) {
   );
 }
 
-export function Reconciler({
-  resolutions,
-  duplicates,
-  unknownStatus,
-  statuses,
-  group,
-}: Props) {
+export function Reconciler({ initial }: Props) {
+  return (
+    <RosterQueries>
+      <Sections initial={initial} />
+    </RosterQueries>
+  );
+}
+
+function Sections({ initial }: Props) {
+  const { resolutions, duplicates, unknownStatus, statuses, group } =
+    useRosterQuery(rosterKeys.reconciler(), "/api/members/reconciler", initial);
+
+  /*
+    every action on this page changes what the *other* sections should say:
+    linking an application can resolve a duplicate, and merging two rows takes
+    an entry out of the list of members with no status. So each of them
+    re-reads the whole page's answer rather than crossing off the row it
+    touched, which is what used to leave an editor with a stale screen and a
+    reload
+  */
+  const refresh = useRefresh(rosterKeys.reconciler());
+
   /* what each row has been told about itself. a row that has been acted on
      stays on screen saying so rather than vanishing: this page is worked
      through top to bottom, and a list that reorders itself under somebody
@@ -136,6 +146,7 @@ export function Reconciler({
     try {
       const { summary } = await run();
       setSaid((prev) => ({ ...prev, [key]: summary ?? "Done." }));
+      await refresh();
     } catch (thrown) {
       setSaid((prev) => ({
         ...prev,
@@ -172,7 +183,7 @@ export function Reconciler({
     <div className="space-y-10">
       <Section
         title="Applications"
-        why="What the hourly sync would not decide on its own. A Link button means one row matches; without one, several rows could be this person and the fix is to correct them in Notion and reload."
+        why="What the hourly sync would not decide on its own. A Link button means one row matches; without one, several rows could be this person, and the fix is to correct them in Notion."
         count={linkable.length + ambiguous.length}
       >
         <div className="divide-y rounded-lg border">

@@ -17,6 +17,12 @@
   button for an editor is a page whose button anybody can `fetch` — the check
   belongs on the server side of every one of these, exactly as ADR 0007 has it
   for the admin pages themselves.
+
+  the GET routes the islands refetch through are behind the same `admission`
+  as the mutations, and deliberately behind the *same function* rather than the
+  same rule written twice. The reads answer with the roster: every name, email
+  and discord id the club has. A gate re-implemented beside the one that works
+  is how the copy that is wrong ends up on the route nobody was watching.
 */
 
 import { env } from "cloudflare:workers";
@@ -51,6 +57,61 @@ export type MutationResult = {
 export class BadRequest extends Error {}
 
 /**
+ * whether the caller may be here, and who they are if so.
+ *
+ * a union rather than a nullable member: "not admitted" carries the response
+ * that refuses them, so a route cannot hold half the answer and reach past it.
+ * Every route below `~/pages/api/members`, read or write, starts here
+ */
+export type Admission =
+  { admitted: true; actor: string } | { admitted: false; refusal: Response };
+
+export async function admission(request: Request): Promise<Admission> {
+  const member = await editorialBoardMember(request);
+
+  /* the same answer the admin pages give: for anybody who may not be here,
+     this route does not exist */
+  if (!member) {
+    return {
+      admitted: false,
+      refusal: new Response("not found", {
+        status: 404,
+        headers: { "cache-control": "private, no-store" },
+      }),
+    };
+  }
+
+  return { admitted: true, actor: member.discordUserId };
+}
+
+/**
+ * a GET route the islands refetch through after a mutation.
+ *
+ * these answer the shapes in `~/lib/members/views`, which the pages also hand
+ * down as `initialData`, so arriving at a page costs no second request and
+ * every write updates what is on screen without a reload.
+ *
+ * nothing is written and nothing is logged. An Invocation records what a
+ * person did to the roster, and re-reading it is not one of those — a row per
+ * refetch would bury the merges the log exists to show
+ */
+export function rosterRead<T>(
+  load: (request: Request) => Promise<T>,
+): APIRoute {
+  return async ({ request }) => {
+    const who = await admission(request);
+    if (!who.admitted) return who.refusal;
+
+    try {
+      return json(await load(request), 200);
+    } catch (thrown) {
+      const why = thrown instanceof Error ? thrown.message : String(thrown);
+      return json({ error: why }, 500);
+    }
+  };
+}
+
+/**
  * a POST route that mutates the roster.
  *
  * `parse` validates the decoded body and throws `BadRequest` with a message
@@ -67,15 +128,8 @@ export function rosterRoute<Input>(
   run: (input: Input, actor: string) => Promise<MutationResult>,
 ): APIRoute {
   return async ({ request }) => {
-    const member = await editorialBoardMember(request);
-    /* the same answer the admin pages give: for anybody who may not be here,
-       this route does not exist */
-    if (!member) {
-      return new Response("not found", {
-        status: 404,
-        headers: { "cache-control": "private, no-store" },
-      });
-    }
+    const who = await admission(request);
+    if (!who.admitted) return who.refusal;
 
     let input: Input;
     try {
@@ -87,14 +141,14 @@ export function rosterRoute<Input>(
     }
 
     try {
-      const { summary, data } = await run(input, member.discordUserId);
+      const { summary, data } = await run(input, who.actor);
 
       await record(env.DB, {
         source: "button",
         action: ACTION,
         outcome: "ok",
         summary,
-        actor: member.discordUserId,
+        actor: who.actor,
       });
 
       return json({ ok: true, summary, ...(data ?? {}) }, 200);
@@ -106,7 +160,7 @@ export function rosterRoute<Input>(
         action: ACTION,
         outcome: "failed",
         summary: `roster edit failed: ${why}`,
-        actor: member.discordUserId,
+        actor: who.actor,
       });
 
       /*

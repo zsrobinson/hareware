@@ -10,6 +10,7 @@
 */
 
 import { env } from "cloudflare:workers";
+import { sendPatiently } from "./rate-limit";
 import { GUILD_ID } from "./services/discord/config";
 
 /** what the ui draws. never what it decides anything from */
@@ -64,9 +65,15 @@ export async function guildMember(userId: string): Promise<MemberLookup> {
   if (!token) return { status: "unreachable" };
 
   try {
-    const response = await fetch(
-      `https://discord.com/api/v10/guilds/${GUILD_ID}/members/${userId}`,
-      { headers: { authorization: `Bot ${token}` } },
+    /* this runs in the middleware on every gated request, so a 429 refuses
+       somebody who is a member. waited out rather than read as an answer */
+    const response = await sendPatiently(
+      () =>
+        fetch(
+          `https://discord.com/api/v10/guilds/${GUILD_ID}/members/${userId}`,
+          { headers: { authorization: `Bot ${token}` } },
+        ),
+      "discord member lookup",
     );
 
     /*
@@ -141,9 +148,13 @@ export async function guildMembers(): Promise<Map<string, Profile>> {
   if (!token) return new Map();
 
   try {
-    const response = await fetch(
-      `https://discord.com/api/v10/guilds/${GUILD_ID}/members?limit=${EVERYBODY}`,
-      { headers: { authorization: `Bot ${token}` } },
+    const response = await sendPatiently(
+      () =>
+        fetch(
+          `https://discord.com/api/v10/guilds/${GUILD_ID}/members?limit=${EVERYBODY}`,
+          { headers: { authorization: `Bot ${token}` } },
+        ),
+      "discord member list",
     );
 
     if (!response.ok) {

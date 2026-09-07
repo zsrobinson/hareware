@@ -11,6 +11,9 @@
   means. that belongs to whatever is asking.
 */
 
+import { mapLimit } from "~/lib/map-limit";
+import { sendPatiently } from "~/lib/rate-limit";
+
 // https://developers.notion.com/reference/versioning — pinned explicitly
 // rather than omitted, since an unpinned request rides whatever the account's
 // default happens to be and can change shape without warning
@@ -40,7 +43,12 @@ export class NotionError extends Error {}
  *
  * the method is inferred from the body — a read has none — with `method` there
  * for the one case that breaks the rule: updating a page is a `PATCH` with a
- * body, and sending it as a `POST` creates a second page rather than failing
+ * body, and sending it as a `POST` creates a second page rather than failing.
+ *
+ * every caller in the codebase goes through here, so a 429 is waited out here
+ * and nowhere else. `sendPatiently` is a retry and not a queue: it keeps a
+ * burst that crossed the budget from reaching a page as an error, while
+ * `together` below is what keeps the burst from happening
  */
 export async function notion(
   path: string,
@@ -48,15 +56,20 @@ export async function notion(
   body?: unknown,
   method?: "POST" | "PATCH",
 ) {
-  const response = await fetch(`https://api.notion.com/v1/${path}`, {
-    method: method ?? (body ? "POST" : "GET"),
-    headers: {
-      authorization: `Bearer ${token}`,
-      "notion-version": NOTION_VERSION,
-      "content-type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const response = await sendPatiently(
+    () =>
+      fetch(`https://api.notion.com/v1/${path}`, {
+        method: method ?? (body ? "POST" : "GET"),
+        headers: {
+          authorization: `Bearer ${token}`,
+          "notion-version": NOTION_VERSION,
+          "content-type": "application/json",
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      }),
+    /* the path names the call and carries no token */
+    `notion ${path}`,
+  );
 
   if (!response.ok) {
     // the status and body are safe to surface; the request headers are not
@@ -202,4 +215,40 @@ export function plainText(
   parts: { plain_text: string }[] | null | undefined,
 ): string {
   return (parts ?? []).map((part) => part.plain_text).join("");
+}
+
+/**
+ * how many notion reads a page may have in flight at once.
+ *
+ * the budget is about three requests a second per integration, and two lanes
+ * rather than three because the reads in a lane are not one request each:
+ * `contributions()` pages twice back to back and `queryAll` will page further
+ * as the article corpus grows, so two lanes already produce three or four
+ * requests in a second. The retry in `notion()` above is the backstop; this is
+ * the thing that keeps it from being needed
+ */
+const LANES = 2;
+
+/** the tasks' results, in the order the tasks were given */
+type Results<T extends readonly (() => Promise<unknown>)[]> = {
+  -readonly [K in keyof T]: Awaited<ReturnType<T[K]>>;
+};
+
+/**
+ * runs notion reads concurrently, but never more than `LANES` at once.
+ *
+ * `Promise.all` over a page's reads is what put five requests on the wire in
+ * one tick, which is above the budget before a single one has finished. This
+ * keeps them concurrent — serialising them would add a round trip per read to
+ * a page that is `no-store` and therefore re-read on every visit — and only
+ * bounds how many are in the air.
+ *
+ * takes thunks rather than promises: a promise handed in has already started,
+ * so a `Promise.all` renamed to this would look bounded and burst anyway
+ */
+export async function together<
+  const T extends readonly (() => Promise<unknown>)[],
+>(tasks: T): Promise<Results<T>> {
+  const done = await mapLimit([...tasks], LANES, (task) => task());
+  return done as Results<T>;
 }

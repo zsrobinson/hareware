@@ -10,6 +10,7 @@
   and it returns the whole history rather than only what is pending.
 */
 
+import { sendPatiently } from "~/lib/rate-limit";
 import { GUILD_ID } from "./config";
 
 /**
@@ -125,9 +126,12 @@ export async function approvedApplications(
     url.searchParams.set("limit", String(PAGE));
     if (before) url.searchParams.set("before", before);
 
-    const response = await fetch(url, {
-      headers: { authorization: `Bot ${token}` },
-    });
+    /* discord meters per route and answers 429 with the wait it wants; the
+       reconciler reads this on every visit and a 429 here took the page down */
+    const response = await sendPatiently(
+      () => fetch(url, { headers: { authorization: `Bot ${token}` } }),
+      "discord join requests",
+    );
 
     if (!response.ok) {
       /* the status and body are safe to surface; the token is not */

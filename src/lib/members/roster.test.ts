@@ -158,3 +158,37 @@ test("a cursor that says has_more but sends none stops rather than looping", asy
 
   await expect(people("token")).resolves.toEqual([]);
 });
+
+/*
+  the cap where it is actually needed.
+
+  `together` has its own test, and a helper can be perfectly tested while
+  nothing calls it: this is the one that goes red if `corpus` is written back
+  as a `Promise.all`. `/standing` reads all three databases on every visit, and
+  four notion requests in one tick is over the budget before any has answered.
+*/
+test("corpus never has more than two notion requests in flight", async () => {
+  let running = 0;
+  let most = 0;
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      running++;
+      most = Math.max(most, running);
+      await new Promise((done) => setTimeout(done, 5));
+      running--;
+
+      return new Response(JSON.stringify({ results: [], has_more: false }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }),
+  );
+
+  const { corpus } = await import("./roster");
+  await corpus("secret");
+
+  expect(most).toBeLessThanOrEqual(2);
+  expect(most).toBeGreaterThan(1);
+});

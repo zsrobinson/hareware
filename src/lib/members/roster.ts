@@ -12,7 +12,12 @@
   bug can take in something an election rests on.
 */
 
-import { notion, plainText, queryAll } from "~/lib/services/notion/client";
+import {
+  notion,
+  plainText,
+  queryAll,
+  together,
+} from "~/lib/services/notion/client";
 import {
   ARTICLES_DATA_SOURCE_ID,
   ARTICLE_PROPERTIES,
@@ -159,14 +164,16 @@ export type Corpus = {
  * all three databases, concurrently.
  *
  * they share nothing and the page needs all three, so serialising them would
- * add two round trips to every question an editor asks. four notion requests
- * against a budget of three a second is comfortable
+ * add two round trips to every question an editor asks. `together` is what
+ * keeps that from becoming a burst: these are four requests rather than three,
+ * because `contributions` pages, and four in one tick is over notion's budget
+ * before any of them has answered
  */
 export async function corpus(token: string): Promise<Corpus> {
-  const [read, met, wrote] = await Promise.all([
-    people(token),
-    meetings(token),
-    contributions(token),
+  const [read, met, wrote] = await together([
+    () => people(token),
+    () => meetings(token),
+    () => contributions(token),
   ]);
 
   return { people: read, meetings: met, contributions: wrote };

@@ -53,7 +53,7 @@ export const POST = rosterRoute(
       resolution.person.pageId !== pageId
     ) {
       throw new BadRequest(
-        `that application now resolves to ${resolution.status}, so it is not safe to link — reload the reconciler`,
+        `that application now resolves to ${resolution.status}, so it is not safe to link. The page has been re-read; look at it again`,
       );
     }
 

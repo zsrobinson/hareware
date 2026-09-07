@@ -27,6 +27,14 @@ import {
   type Candidate,
 } from "~/lib/members/kiosk";
 import { defaultStatus } from "~/lib/members/config";
+import {
+  RosterQueries,
+  rosterKeys,
+  usePatch,
+  useRefresh,
+  useRosterQuery,
+} from "~/lib/members/queries";
+import type { KioskData } from "~/lib/members/views";
 import type { MeetingRecord, Person } from "~/lib/members/records";
 import { notify } from "~/lib/notify";
 import { postJson } from "~/lib/post-json";
@@ -45,17 +53,22 @@ import { withParam } from "~/lib/search-params";
 */
 
 type Props = {
-  /** already narrowed to the window, newest first */
-  meetings: MeetingRecord[];
-  candidates: Candidate[];
-  /** the meeting the page opened on: the `meeting` search param, else today's */
-  initialMeetingId: string | null;
+  /**
+   * the page's own server-side read: the meetings on offer, the roster with
+   * its contribution counts, the meeting to open on, and notion's statuses.
+   *
+   * `/api/members/kiosk` answers the same type from the same function, so this
+   * seeds the query and every later read replaces it in place. Creating
+   * somebody or correcting a row re-reads this rather than asking the room to
+   * reload the laptop
+   */
+  initial: KioskData;
+  /** `today` in eastern, fixed by the page so an evening does not roll over */
+  today: string;
   /** discord pictures for the roster, from one request for the whole guild */
   faces: Faces;
   /** the same request's members, for the Discord chip's autocomplete */
   guild: GuildOption[];
-  /** notion's Status options, read from the schema rather than spelled here */
-  statuses: string[];
 };
 
 /** the whole attendee list, written over the meeting's relation */
@@ -91,20 +104,43 @@ const describe = (meeting: MeetingRecord) =>
 const reason = (thrown: unknown) =>
   thrown instanceof Error ? thrown.message : String(thrown);
 
-export function AttendanceKiosk({
-  meetings,
-  candidates,
-  initialMeetingId,
-  faces,
-  guild,
-  statuses,
-}: Props) {
-  const [meetingId, setMeetingId] = useState(initialMeetingId ?? "");
-  const [roster, setRoster] = useState(candidates);
+export function AttendanceKiosk(props: Props) {
+  return (
+    <RosterQueries>
+      <Kiosk {...props} />
+    </RosterQueries>
+  );
+}
+
+function Kiosk({ initial, today, faces, guild }: Props) {
+  /*
+    the roster comes from the query and the attendee list does not.
+
+    `present` is local and optimistic on purpose: the person who just tapped is
+    standing at the laptop, and a refetch between their tap and the list moving
+    is a wait the room watches. Everything a *write* changes about who is on
+    the roster — a member created, an email or a status corrected — invalidates
+    this query instead, so those stop needing a reload without putting a round
+    trip in the queue's way
+  */
+  const { meetings, candidates, openingId, statuses } = useRosterQuery(
+    rosterKeys.kiosk(),
+    `/api/members/kiosk?today=${encodeURIComponent(today)}${
+      initial.openingId
+        ? `&meeting=${encodeURIComponent(initial.openingId)}`
+        : ""
+    }`,
+    initial,
+  );
+
+  const refreshRoster = useRefresh(rosterKeys.kiosk());
+  const patchRoster = usePatch<KioskData>(rosterKeys.kiosk());
+
+  const [meetingId, setMeetingId] = useState(openingId ?? "");
   const [present, setPresent] = useState<string[]>(
     () =>
-      meetings.find((meeting) => meeting.pageId === initialMeetingId)
-        ?.attendeeIds ?? [],
+      meetings.find((meeting) => meeting.pageId === openingId)?.attendeeIds ??
+      [],
   );
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -121,13 +157,15 @@ export function AttendanceKiosk({
 
   const byId = useMemo(
     () =>
-      new Map(roster.map((candidate) => [candidate.person.pageId, candidate])),
-    [roster],
+      new Map(
+        candidates.map((candidate) => [candidate.person.pageId, candidate]),
+      ),
+    [candidates],
   );
 
   const matches = useMemo(
-    () => searchCandidates(roster, query),
-    [roster, query],
+    () => searchCandidates(candidates, query),
+    [candidates, query],
   );
 
   /* the query and the highlighted offer only ever move together: the list
@@ -209,15 +247,23 @@ export function AttendanceKiosk({
     );
   }
 
-  /** the roster row this page holds, replaced after a chip was edited */
+  /**
+   * the row as it now is, on screen before notion is asked again.
+   *
+   * the edit is written into the cache and then re-read: the person is looking
+   * at their own chip and the change has to land immediately, but notion is
+   * what the list actually means, so the optimistic shape does not survive
+   */
   function replacePerson(person: Person) {
-    setRoster((current) =>
-      current.map((candidate) =>
+    patchRoster((current) => ({
+      ...current,
+      candidates: current.candidates.map((candidate) =>
         candidate.person.pageId === person.pageId
           ? { ...candidate, person }
           : candidate,
       ),
-    );
+    }));
+    void refreshRoster();
   }
 
   async function addNewPerson() {
@@ -240,9 +286,14 @@ export function AttendanceKiosk({
         contributions: 0,
       };
 
-      /* into the local roster too, so a second person with the same name later
-         this evening is disambiguated against them rather than matched to them */
-      setRoster((current) => [...current, candidate]);
+      /* into the roster on screen too, so a second person with the same name
+         later this evening is disambiguated against them rather than matched
+         to them, and re-read so the row is notion's rather than ours */
+      patchRoster((current) => ({
+        ...current,
+        candidates: [...current.candidates, candidate],
+      }));
+      void refreshRoster();
       changeQuery("");
 
       await commit(

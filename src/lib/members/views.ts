@@ -110,6 +110,16 @@ export type GroupState = {
   pending: Application[];
   /** the addresses that are not terpmail or umd, flagged by `isExternalAddress` */
   external: string[];
+  /**
+   * applicants the group cannot reach at all.
+   *
+   * an application with no email is in neither the paste list nor the flagged
+   * addresses, and the watermark advances past it either way. Filtering the
+   * empties out before flagging them is exactly the silent omission the
+   * watermark's own rule exists to prevent, so they are carried here and named
+   * on the page
+   */
+  unreachable: Application[];
 };
 
 export type ReconcilerData = {
@@ -176,6 +186,7 @@ export async function reconcilerData(env: ViewEnv): Promise<ReconcilerData> {
         .map((application) => application.email)
         .filter((email): email is string => Boolean(email))
         .filter((email) => isExternalAddress(email)),
+      unreachable: pending.filter((application) => !application.email?.trim()),
     },
     liveStatuses: options.live,
     alumMissing: options.alumMissing,

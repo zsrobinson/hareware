@@ -78,3 +78,53 @@ test("a candidate carries the count notion computed for their row", async () => 
 
   expect(data.candidates.map((person) => person.contributions)).toEqual([4]);
 });
+
+/*
+  the group export's silent omission, pinned.
+
+  filtering the blank addresses out before flagging them reads as tidy and puts
+  an applicant with no email in neither the paste list nor the flagged one,
+  while the watermark advances past them regardless. That is the loss the
+  watermark's own "a harmless repeat beats a silent omission" rule exists to
+  prevent, so they are named instead
+*/
+test("an applicant with no email is named rather than filtered away", async () => {
+  const { reconcilerData } = await import("./views");
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (String(url).includes("discord.com")) {
+        return new Response(
+          JSON.stringify({
+            guild_join_requests: [
+              {
+                id: "1",
+                created_at: "2026-09-04T00:00:00.000Z",
+                user_id: "u1",
+                user: { username: "noemail" },
+                form_responses: [
+                  { label: "What's your full name?", response: "Ada Vance" },
+                  { label: "What's your email?", response: "" },
+                ],
+              },
+            ],
+          }),
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ results: [], has_more: false, properties: {} }),
+      );
+    }),
+  );
+
+  const data = await reconcilerData({
+    NOTION_TOKEN: "secret",
+    DISCORD_BOT_TOKEN: "bot",
+  } as never);
+
+  expect(data.group.pending).toHaveLength(1);
+  expect(data.group.external).toEqual([]);
+  expect(data.group.unreachable.map((one) => one.name)).toEqual(["Ada Vance"]);
+});

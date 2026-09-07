@@ -370,6 +370,28 @@ function Sections({ initial }: Props) {
                 </div>
               )}
 
+              {group.unreachable.length > 0 && (
+                <div className="border-destructive/50 bg-destructive/10 space-y-1 rounded-lg border p-3 text-sm">
+                  <div className="flex items-center gap-2 font-medium">
+                    <AlertTriangleIcon className="size-4" />
+                    {group.unreachable.length}{" "}
+                    {group.unreachable.length === 1 ? "person" : "people"} with
+                    no email
+                  </div>
+                  <p className="text-muted-foreground">
+                    Their application left it blank, so nothing below reaches
+                    them. Ask them for an address and add it to their row.
+                  </p>
+                  <ul className="list-inside list-disc">
+                    {group.unreachable.map((application) => (
+                      <li key={application.id}>
+                        {application.name ?? application.username}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <label className="sr-only" htmlFor="group-blob">
                 Emails to paste into the group
               </label>

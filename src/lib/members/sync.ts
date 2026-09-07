@@ -19,6 +19,7 @@
 
 import type { EasternNow } from "~/lib/eastern";
 import { misconfigured, ok, skipped, type Result } from "~/lib/result";
+import { record } from "~/lib/log";
 import { plural } from "~/lib/utils";
 import { approvedApplications } from "~/lib/services/discord/join-requests";
 import { resolveApplications, safeToCreate, type Resolution } from "./match";
@@ -106,6 +107,18 @@ export async function syncApplications(
     if (created > 0) await pause(BETWEEN_WRITES_MS);
     await createFromApplication(env, application);
     created += 1;
+
+    /*
+      one row per member, not one per run. ADR 0010 asks the log to answer
+      where a given row came from, and a summary saying "created 3" cannot:
+      it names a count, and the question is about a person
+    */
+    await record(env.DB, {
+      source: "cron",
+      action: "roster-edit",
+      outcome: "ok",
+      summary: `created a Members row for ${application.name ?? application.username} from their application`,
+    });
   }
 
   return ok(

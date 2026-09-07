@@ -138,18 +138,24 @@ function Kiosk({ initial, today, faces, guild }: Props) {
     this query instead, so those stop needing a reload without putting a round
     trip in the queue's way
   */
+  /*
+    the meeting the read is pinned to. it starts as the one the page opened on
+    and moves when somebody switches, so the key and the path move with it:
+    the route decides which meetings are offerable *around* this one, and a
+    constant key meant every refetch after a switch answered about the old one
+  */
+  const [pinned, setPinned] = useState(initial.openingId ?? "");
+
   const { meetings, candidates, openingId, statuses } = useRosterQuery(
-    rosterKeys.kiosk(),
+    rosterKeys.kiosk(pinned),
     `/api/members/kiosk?today=${encodeURIComponent(today)}${
-      initial.openingId
-        ? `&meeting=${encodeURIComponent(initial.openingId)}`
-        : ""
+      pinned ? `&meeting=${encodeURIComponent(pinned)}` : ""
     }`,
     initial,
   );
 
-  const refreshRoster = useRefresh(rosterKeys.kiosk());
-  const patchRoster = usePatch<KioskData>(rosterKeys.kiosk());
+  const refreshRoster = useRefresh(rosterKeys.kiosk(pinned));
+  const patchRoster = usePatch<KioskData>(rosterKeys.kiosk(pinned));
 
   const [meetingId, setMeetingId] = useState(openingId ?? "");
   const [present, setPresent] = useState<string[]>(
@@ -157,6 +163,16 @@ function Kiosk({ initial, today, faces, guild }: Props) {
       meetings.find((meeting) => meeting.pageId === openingId)?.attendeeIds ??
       [],
   );
+  /*
+    what notion says about this meeting arrives two ways, and neither is an
+    effect syncing it into state: every write answers with the merged list and
+    `commit` puts that on screen, and switching meetings reseeds from the read.
+
+    a background union would need a third rule for removals, because a name
+    this screen just took off is a name the last read still has, and it would
+    put it back. ADR 0010 keeps one laptop at the front of the room; the server
+    merge is what makes a second one safe, not this
+  */
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [newEmail, setNewEmail] = useState("");
@@ -197,6 +213,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
 
   function switchMeeting(id: string) {
     setMeetingId(id);
+    setPinned(id);
     /* the new meeting's own attendees: carrying the current list across would
        file this room against a meeting it was not at */
     setPresent(meetings.find((one) => one.pageId === id)?.attendeeIds ?? []);

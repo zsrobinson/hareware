@@ -29,21 +29,15 @@ Astro.response.headers.set("cache-control", "private, no-store");
   statelessness is worth the round trip here. Fifty-one applications is one
   request.
 
-  the failure is caught rather than thrown: three of the four sections on this
-  page do not need discord at all, and the duplicates section in particular is
-  the one somebody opens the morning of an election. A page that 500s because
-  a bot token expired would take the merge tool down with it
-*/
-/*
   three reads sharing nothing — notion, discord and D1 — so they go out
   together. Awaited one after another they were three round trips on a page
   that is `no-store` and therefore re-read on every visit; the notion one alone
   is measured at about a second in `~/lib/articles/live`.
 
-  the discord failure is caught on its own member rather than thrown: three of
-  the four sections here do not need discord at all, and the duplicates section
-  in particular is the one somebody opens the morning of an election. A page
-  that 500s because a bot token expired would take the merge tool down with it
+  the discord failure is caught on its own member rather than thrown: most of
+  this page does not need discord, and the duplicates section is the one
+  somebody opens the morning of an election. A page that 500s because a bot
+  token expired would take the merge tool down with it
 */
 const notionToken = env.NOTION_TOKEN;
 
@@ -78,16 +72,15 @@ const external = pending
 <Dashboard title="Reconciler" viewer={viewerState(who)}>
   <div class="max-w-4xl space-y-6">
     <p class="text-muted-foreground text-sm">
-      Everything that needs a person, in one place. Run this before an election:
-      an unresolved duplicate splits somebody's attendance across two rows and
-      denies them a vote they earned.
+      Run this before an election. An unresolved duplicate splits somebody's
+      attendance across two rows and denies them a vote they earned.
     </p>
 
     {
       discordProblem && (
         <p class="border-destructive/50 bg-destructive/10 text-destructive rounded-lg border p-3 text-sm">
-          Applications could not be read, so the first two sections and the
-          Google Group list are empty: {discordProblem}
+          Applications could not be read, so that section and the Google Group
+          list are empty: {discordProblem}
         </p>
       )
     }

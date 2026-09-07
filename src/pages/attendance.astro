@@ -5,6 +5,7 @@ import { AttendanceKiosk } from "~/components/attendance-kiosk";
 import { viewerState } from "~/lib/admin";
 import { admitted } from "~/lib/admin-guard";
 import { easternNow } from "~/lib/eastern";
+import { faces } from "~/lib/faces";
 import { contributionCounts, defaultMeeting } from "~/lib/members/kiosk";
 import { contributions, meetings, people } from "~/lib/members/roster";
 
@@ -46,15 +47,23 @@ const calendarByDate = [...calendar]
   .sort((a, b) => b.date.localeCompare(a.date));
 
 const today = easternNow(new Date()).date;
-const opening = defaultMeeting(calendar, today);
+
+/* the param wins over today's meeting so a reload mid-meeting comes back to
+   the one the room is signing into */
+const asked = Astro.url.searchParams.get("meeting");
+const chosen = calendar.find((meeting) => meeting.pageId === asked);
+const opening = chosen ?? defaultMeeting(calendar, today);
+
+/* the whole guild in one request, narrowed to the roster: a member the kiosk
+   cannot draw is a ghost, which is also what a missing token gets */
+const rosterFaces = await faces(roster.map((person) => person.discordId));
 ---
 
 <Dashboard title="Attendance" viewer={viewerState(who)}>
-  <div class="mx-auto max-w-2xl space-y-4">
+  <div class="mx-auto max-w-5xl space-y-4">
     <p class="text-muted-foreground text-sm">
-      Leave this at the front of the room with the sidebar collapsed. People
-      type their own names; tapping one signs them in. Everything is written to
-      the meeting in Notion as it happens.
+      Leave this at the front of the room. People type their own names, and
+      Notion is written as it happens.
     </p>
 
     {
@@ -63,6 +72,7 @@ const opening = defaultMeeting(calendar, today);
           meetings={calendarByDate}
           candidates={candidates}
           initialMeetingId={opening?.pageId ?? null}
+          faces={rosterFaces}
           client:load
         />
       ) : (

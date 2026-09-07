@@ -125,6 +125,53 @@ export async function guildMember(userId: string): Promise<MemberLookup> {
   }
 }
 
+/** the guild in one request, which is what the list endpoint's cap allows */
+const EVERYBODY = 1000;
+
+/**
+ * every member of the guild, by user id.
+ *
+ * one request for the whole server rather than one per person, which is what
+ * makes a page of avatars affordable. It needs the Server Members privileged
+ * intent; without it discord answers 403, and every failure here is an empty
+ * map rather than a throw, because a page of names is still a page.
+ */
+export async function guildMembers(): Promise<Map<string, Profile>> {
+  const token = env.DISCORD_BOT_TOKEN;
+  if (!token) return new Map();
+
+  try {
+    const response = await fetch(
+      `https://discord.com/api/v10/guilds/${GUILD_ID}/members?limit=${EVERYBODY}`,
+      { headers: { authorization: `Bot ${token}` } },
+    );
+
+    if (!response.ok) {
+      console.error("[member] discord answered", response.status);
+      return new Map();
+    }
+
+    const members: unknown = await response.json();
+    if (!Array.isArray(members)) {
+      console.error("[member] the member list was not an array");
+      return new Map();
+    }
+
+    const profiles = new Map<string, Profile>();
+
+    for (const entry of members as Record<string, unknown>[]) {
+      const member = entry as Parameters<typeof readProfile>[1];
+      const userId = text(member.user?.id);
+      if (userId) profiles.set(userId, readProfile(userId, member));
+    }
+
+    return profiles;
+  } catch (error) {
+    console.error("[member] could not reach discord", error);
+    return new Map();
+  }
+}
+
 /** a string field from discord, kept only when it is a non-empty one */
 const text = (value: unknown) =>
   typeof value === "string" && value ? value : undefined;
@@ -134,7 +181,12 @@ function readProfile(
   member: {
     nick?: unknown;
     avatar?: unknown;
-    user?: { username?: unknown; global_name?: unknown; avatar?: unknown };
+    user?: {
+      id?: unknown;
+      username?: unknown;
+      global_name?: unknown;
+      avatar?: unknown;
+    };
   },
 ): Profile {
   const user = member.user ?? {};

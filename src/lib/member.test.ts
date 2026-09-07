@@ -4,9 +4,10 @@ import { GUILD_ID } from "./services/discord/config";
 const workers = vi.hoisted(() => ({ env: {} as Record<string, string> }));
 vi.mock("cloudflare:workers", () => workers);
 
-const { guildMember } = await import("./member");
+const { guildMember, guildMembers } = await import("./member");
 
 const USER = "342850506328117249";
+const CDN = "https://cdn.discordapp.com";
 
 function mockDiscord(body: unknown, ok = true) {
   vi.stubGlobal(
@@ -163,5 +164,61 @@ test("is unreachable without a bot token, without asking discord", async () => {
   vi.stubGlobal("fetch", fetchMock);
 
   expect(await guildMember(USER)).toEqual({ status: "unreachable" });
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+/* the whole guild in one request, which is what makes a page of avatars
+   affordable. the guild avatar wins over the account one, as it does per user */
+test("maps every id in the list to its avatar url", async () => {
+  workers.env.DISCORD_BOT_TOKEN = "bot";
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify([
+            { user: { id: "1", username: "zach", avatar: "abc" } },
+            {
+              user: { id: "2", username: "kai", avatar: "def" },
+              avatar: "a_g",
+            },
+            { user: { username: "nameless" } },
+          ]),
+        ),
+    ),
+  );
+
+  const guild = await guildMembers();
+
+  expect(guild.get("1")?.avatarUrl).toBe(`${CDN}/avatars/1/abc.png?size=64`);
+  expect(guild.get("2")?.avatarUrl).toBe(
+    `${CDN}/guilds/${GUILD_ID}/users/2/avatars/a_g.gif?size=64`,
+  );
+  /* an entry with no user id is dropped rather than keyed on undefined */
+  expect(guild.size).toBe(2);
+});
+
+test.each([
+  ["a 403 without the members intent", new Response("no", { status: 403 })],
+  ["a body that is not a list", new Response(JSON.stringify({}))],
+])(
+  "answers an empty guild for %s, so every row is a ghost",
+  async (_, reply) => {
+    workers.env.DISCORD_BOT_TOKEN = "bot";
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => reply),
+    );
+
+    expect(await guildMembers()).toEqual(new Map());
+  },
+);
+
+test("does not ask discord for the guild without a bot token", async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+
+  expect(await guildMembers()).toEqual(new Map());
   expect(fetchMock).not.toHaveBeenCalled();
 });

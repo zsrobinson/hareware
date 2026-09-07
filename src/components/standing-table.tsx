@@ -1,7 +1,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { AlertTriangleIcon, ArrowUpDownIcon } from "lucide-react";
+import { AlertTriangleIcon } from "lucide-react";
 import { useMemo, useState } from "react";
-import { DataTable } from "~/components/data-table";
+import { DataTable, sortable } from "~/components/data-table";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -13,6 +13,8 @@ import type { Corpus } from "~/lib/members/roster";
 import {
   PRESETS,
   standings,
+  type Combine,
+  type Met,
   type Preset,
   type Standing,
   type Thresholds,
@@ -23,8 +25,8 @@ import {
 
   everything below the form is recomputed in the browser. `standings()` is a
   pure function over rows the astro page already read, so changing a threshold
-  costs no request — which is why it was written that way, and why an editor
-  can sit with this page and try the numbers the constitution might mean.
+  costs no request, and an editor can sit with this page and try the numbers
+  the constitution might mean.
 
   three things this component refuses to do, all of them from ADR 0010:
 
@@ -36,20 +38,23 @@ import {
   - it refuses to look final while unresolved near-matches exist, because a
     duplicate *denies* eligibility: somebody who attended three meetings and
     was typo'd once holds two attendances on one row and one on another, and
-    fails a threshold they met. That warning is the most important thing on
-    this page and is deliberately impossible to scroll past.
+    fails a threshold they met.
 */
 
 /** the form, in the shape the inputs hold it: numbers are text while typing */
 type Form = {
   from: string;
   to: string;
-  /** empty means the clause is not part of the question — not "zero of them" */
+  /** empty means the clause is not part of the question, not "zero of them" */
   meetings: string;
   contributions: string;
   volunteer: string;
+  combine: Combine;
   currentStudentsOnly: boolean;
 };
+
+/** the preset chip for a form that matches none of them */
+const CUSTOM = "custom";
 
 /** `YYYY-MM-DD` this many months before a day, for a preset's default window */
 function monthsBefore(day: string, months: number): string {
@@ -71,8 +76,13 @@ function formFor(preset: Preset, today: string): Form {
     meetings: preset.thresholds.meetings?.toString() ?? "",
     contributions: preset.thresholds.contributions?.toString() ?? "",
     volunteer: preset.thresholds.volunteer?.toString() ?? "",
+    combine: preset.combine,
     currentStudentsOnly: preset.currentStudentsOnly,
   };
+}
+
+function same(a: Form, b: Form): boolean {
+  return (Object.keys(a) as (keyof Form)[]).every((key) => a[key] === b[key]);
 }
 
 /**
@@ -97,129 +107,130 @@ function thresholds(form: Form): Thresholds {
   };
 }
 
-/** a header that says it can be sorted, rather than leaving you to discover it */
-function sortable(label: string) {
-  const Header = ({
-    column,
-  }: {
-    column: {
-      toggleSorting: (d?: boolean) => void;
-      getIsSorted: () => false | string;
-    };
-  }) => (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="-ml-2 h-8"
-      onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-    >
-      {label}
-      <ArrowUpDownIcon className="size-3.5 opacity-60" />
-    </Button>
-  );
-  return Header;
-}
+/**
+ * the columns, which depend on how the clauses combine.
+ *
+ * under OR the count that satisfied a clause is bold, so the row says which
+ * one carried it. under AND every clause that was set had to pass, so there is
+ * nothing to single out
+ */
+function columnsFor(combine: Combine): ColumnDef<Standing, unknown>[] {
+  const bold = combine === "or";
 
-const columns: ColumnDef<Standing, unknown>[] = [
-  {
-    id: "name",
-    accessorFn: (row) => row.person.name,
-    header: sortable("Name"),
-    meta: { csvHeader: "name" },
-    /* the email has its own column below, so it is not repeated here */
-    cell: ({ row }) => (
-      <div className="min-w-40 font-medium">{row.original.person.name}</div>
-    ),
-  },
-  /*
-    its own column, not only the line under the name.
+  return [
+    {
+      id: "name",
+      accessorFn: (row) => row.person.name,
+      header: sortable("Name"),
+      meta: { csvHeader: "name" },
+      cell: ({ row }) => (
+        <div className="min-w-40 font-medium">{row.original.person.name}</div>
+      ),
+    },
+    /*
+      its own column, not only the line under the name.
 
-    the export is the club's whole TerpLink integration and the source of the
-    addresses for the Google Group, and a `data-table` csv is built from column
-    accessors — an email rendered only inside the name cell's jsx is invisible
-    to it, so the file would carry names and no way to reach anybody
-  */
-  {
-    id: "email",
-    accessorFn: (row) => row.person.email ?? "",
-    header: sortable("Email"),
-    meta: { csvHeader: "email" },
-    cell: ({ row }) => (
-      <span className="text-muted-foreground text-xs">
-        {row.original.person.email ?? "—"}
-      </span>
+      the export is the club's whole TerpLink integration and the source of the
+      addresses for the Google Group, and a `data-table` csv is built from
+      column accessors — an email rendered only inside the name cell's jsx is
+      invisible to it, so the file would carry names and no way to reach anybody
+    */
+    {
+      id: "email",
+      accessorFn: (row) => row.person.email ?? "",
+      header: sortable("Email"),
+      meta: { csvHeader: "email" },
+      cell: ({ row }) => (
+        <span className="text-muted-foreground text-xs">
+          {row.original.person.email ?? "—"}
+        </span>
+      ),
+    },
+    {
+      id: "qualifies",
+      /* a string, not a boolean: the faceted filter builds its options from the
+         values present and a checkbox column would offer `true` and `false` as
+         unlabelled entries */
+      accessorFn: (row) => (row.qualifies ? "Qualifies" : "Falls short"),
+      header: sortable("Qualifies"),
+      meta: { csvHeader: "qualifies" },
+      filterFn: (row, id, value: string[]) =>
+        value.includes(row.getValue(id) as string),
+      cell: ({ row }) => (
+        <div className="flex flex-wrap gap-1">
+          <Badge variant={row.original.qualifies ? "default" : "outline"}>
+            {row.original.qualifies ? "Qualifies" : "Falls short"}
+          </Badge>
+          {/* both flags are reasons an editor has something to do, so they are
+              beside the answer rather than in a column somebody has to widen */}
+          {row.original.excludedAsAlum && (
+            <Badge variant="secondary">Excluded as alum</Badge>
+          )}
+          {row.original.statusUnknown && (
+            <Badge variant="destructive">Status unknown</Badge>
+          )}
+        </div>
+      ),
+    },
+    count(
+      "meetings",
+      "General body",
+      (row) => row.meetings,
+      bold && "meetings",
     ),
-  },
-  {
-    id: "qualifies",
-    /* a string, not a boolean: the faceted filter builds its options from the
-       values present and a checkbox column would offer `true` and `false` as
-       unlabelled entries */
-    accessorFn: (row) => (row.qualifies ? "Qualifies" : "Falls short"),
-    header: sortable("Qualifies"),
-    meta: { csvHeader: "qualifies" },
-    filterFn: (row, id, value: string[]) =>
-      value.includes(row.getValue(id) as string),
-    cell: ({ row }) => (
-      <div className="flex flex-wrap gap-1">
-        <Badge variant={row.original.qualifies ? "default" : "outline"}>
-          {row.original.qualifies ? "Qualifies" : "Falls short"}
+    count(
+      "volunteer",
+      "Volunteer",
+      (row) => row.volunteer,
+      bold && "volunteer",
+    ),
+    count("articles", "Articles", (row) => row.articles),
+    count("images", "Images", (row) => row.images),
+    count(
+      "contributions",
+      "Contributions",
+      (row) => row.contributions,
+      bold && "contributions",
+    ),
+    {
+      id: "status",
+      accessorFn: (row) => row.person.status ?? "Unknown",
+      header: sortable("Status"),
+      meta: { csvHeader: "status" },
+      filterFn: (row, id, value: string[]) =>
+        value.includes(row.getValue(id) as string),
+      cell: ({ row }) => (
+        <Badge variant={row.original.person.status ? "outline" : "destructive"}>
+          {row.original.person.status ?? "Unknown"}
         </Badge>
-        {/* both flags are reasons an editor has something to do, so they are
-            beside the answer rather than in a column somebody has to widen */}
-        {row.original.excludedAsAlum && (
-          <Badge variant="secondary">Excluded as alum</Badge>
-        )}
-        {row.original.statusUnknown && (
-          <Badge variant="destructive">Status unknown</Badge>
-        )}
-      </div>
-    ),
-  },
-  {
-    id: "reasons",
-    accessorFn: (row) => row.reasons.join("; "),
-    header: "Reasons",
-    meta: { csvHeader: "reasons" },
-    cell: ({ row }) => (
-      <span className="text-muted-foreground">
-        {/* the em dash is the answer to "why did I fall short", so it is never
-            blank: an empty cell reads as missing data rather than as none */}
-        {row.original.reasons.join("; ") || "—"}
-      </span>
-    ),
-  },
-  count("meetings", "General body", (row) => row.meetings),
-  count("volunteer", "Volunteer", (row) => row.volunteer),
-  count("articles", "Articles", (row) => row.articles),
-  count("images", "Images", (row) => row.images),
-  count("contributions", "Contributions", (row) => row.contributions),
-  {
-    id: "status",
-    accessorFn: (row) => row.person.status ?? "Unknown",
-    header: sortable("Status"),
-    meta: { csvHeader: "status" },
-    filterFn: (row, id, value: string[]) =>
-      value.includes(row.getValue(id) as string),
-    cell: ({ row }) => (
-      <Badge variant={row.original.person.status ? "outline" : "destructive"}>
-        {row.original.person.status ?? "Unknown"}
-      </Badge>
-    ),
-  },
-];
+      ),
+    },
+  ];
+}
 
 function count(
   id: string,
   label: string,
   of: (row: Standing) => number,
+  /** the clause this count answers, when a met one should be emphasised */
+  clause: keyof Met | false = false,
 ): ColumnDef<Standing, unknown> {
   return {
     id,
     accessorFn: of,
     header: sortable(label),
     meta: { csvHeader: id },
-    cell: ({ row }) => <span className="tabular-nums">{of(row.original)}</span>,
+    cell: ({ row }) => (
+      <span
+        className={
+          clause && row.original.met[clause]
+            ? "font-semibold tabular-nums"
+            : "tabular-nums"
+        }
+      >
+        {of(row.original)}
+      </span>
+    ),
   };
 }
 
@@ -230,21 +241,20 @@ export function StandingTable({
   corpus: Corpus;
   today: string;
 }) {
-  const [presetId, setPresetId] = useState(PRESETS[0]!.id);
+  const [presetId, setPresetId] = useState<string>(PRESETS[0]!.id);
   const [form, setForm] = useState<Form>(() => formFor(PRESETS[0]!, today));
 
-  const set = (patch: Partial<Form>) =>
-    setForm((current) => ({ ...current, ...patch }));
-
   /*
-    choosing a preset fills the form and then lets go of it. The numbers stay
-    editable afterwards, and editing them does not clear the preset's name —
-    ADR 0010 is explicit that the rule belongs to whoever owns it rather than
-    to the code, so this is a starting point, not a mode
+    editing anything away from the chosen preset's values is what selects
+    Custom, so the chip always describes the question on screen. editing back
+    to a preset's values re-selects it
   */
-  function choose(preset: Preset) {
-    setPresetId(preset.id);
-    setForm(formFor(preset, today));
+  function set(patch: Partial<Form>) {
+    const next = { ...form, ...patch };
+    setForm(next);
+    setPresetId(
+      PRESETS.find((one) => same(next, formFor(one, today)))?.id ?? CUSTOM,
+    );
   }
 
   const rows = useMemo(
@@ -253,17 +263,19 @@ export function StandingTable({
         from: form.from,
         to: form.to,
         thresholds: thresholds(form),
+        combine: form.combine,
         currentStudentsOnly: form.currentStudentsOnly,
       }),
     [corpus, form],
   );
+
+  const columns = useMemo(() => columnsFor(form.combine), [form.combine]);
 
   /* recomputed from the same roster the table is drawn from, so the warning
      cannot disagree with what is on screen */
   const unresolved = useMemo(() => duplicates(corpus.people), [corpus.people]);
 
   const qualifying = rows.filter((row) => row.qualifies).length;
-  const preset = PRESETS.find((one) => one.id === presetId);
 
   return (
     <div className="space-y-4">
@@ -285,13 +297,8 @@ export function StandingTable({
             {unresolved.length === 1 ? "" : "es"}
           </div>
           <p className="text-sm">
-            {unresolved.length === 1
-              ? "One group of rows looks"
-              : "Some rows look"}{" "}
-            like the same person entered twice. A duplicate{" "}
-            <strong>denies</strong> eligibility rather than granting it —
-            attendance split across two rows fails a threshold the person
-            actually met — so the counts below may be short for{" "}
+            A duplicate <strong>denies</strong> eligibility, so the counts below
+            may be short for{" "}
             {unresolved.flatMap((group) => group.people).length} people. Resolve
             these before the vote.
           </p>
@@ -312,24 +319,36 @@ export function StandingTable({
         </div>
       )}
 
-      <div className="space-y-4 rounded-lg border p-4">
-        <div className="flex flex-wrap gap-2">
-          {PRESETS.map((one) => (
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label>Preset</Label>
+          <div className="flex flex-wrap gap-2">
+            {PRESETS.map((one) => (
+              <Button
+                key={one.id}
+                size="sm"
+                variant={one.id === presetId ? "default" : "outline"}
+                aria-pressed={one.id === presetId}
+                onClick={() => {
+                  setPresetId(one.id);
+                  setForm(formFor(one, today));
+                }}
+              >
+                {one.name}
+              </Button>
+            ))}
+            {/* selectable so the chip is not a state you can only fall into:
+                pressing it keeps the numbers and lets go of the preset */}
             <Button
-              key={one.id}
               size="sm"
-              variant={one.id === presetId ? "default" : "outline"}
-              aria-pressed={one.id === presetId}
-              onClick={() => choose(one)}
+              variant={presetId === CUSTOM ? "default" : "outline"}
+              aria-pressed={presetId === CUSTOM}
+              onClick={() => setPresetId(CUSTOM)}
             >
-              {one.name}
+              Custom
             </Button>
-          ))}
+          </div>
         </div>
-
-        {preset && (
-          <p className="text-muted-foreground text-sm">{preset.description}</p>
-        )}
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <div className="space-y-1.5">
@@ -373,28 +392,42 @@ export function StandingTable({
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
-          <Switch
-            id="standing-current"
-            checked={form.currentStudentsOnly}
-            onCheckedChange={(on) => set({ currentStudentsOnly: on })}
-          />
-          <Label htmlFor="standing-current">
-            Exclude alumni
-            <span className="text-muted-foreground font-normal">
-              — the constitution restricts voting to current members; the
-              masthead prints anyone who contributed
-            </span>
-          </Label>
+        <div className="flex flex-wrap items-center gap-6">
+          <div className="space-y-1.5">
+            <Label>Combine thresholds</Label>
+            <div className="flex gap-2">
+              {(
+                [
+                  ["or", "Any (OR)"],
+                  ["and", "All (AND)"],
+                ] as const
+              ).map(([value, label]) => (
+                <Button
+                  key={value}
+                  size="sm"
+                  variant={form.combine === value ? "default" : "outline"}
+                  aria-pressed={form.combine === value}
+                  onClick={() => set({ combine: value })}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 pt-5">
+            <Switch
+              id="standing-current"
+              checked={form.currentStudentsOnly}
+              onCheckedChange={(on) => set({ currentStudentsOnly: on })}
+            />
+            <Label htmlFor="standing-current">Exclude alumni</Label>
+          </div>
         </div>
 
         <p className="text-muted-foreground text-sm">
-          {/* the clauses are an OR, and a form of three boxes reads like an AND
-              unless it says otherwise */}
-          A person qualifies by meeting <strong>any one</strong> of the
-          thresholds above. An empty box is a clause that is not asked about —
-          not a threshold of zero. {qualifying} of {rows.length} people qualify
-          between {form.from} and {form.to}.
+          {qualifying} of {rows.length} qualify between {form.from} and{" "}
+          {form.to}.
         </p>
       </div>
 

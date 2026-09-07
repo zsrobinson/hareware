@@ -13,6 +13,7 @@ const masthead = PRESETS.find((p) => p.id === "masthead")!;
 const VOTING: Criteria = {
   ...YEAR,
   thresholds: voting.thresholds,
+  combine: voting.combine,
   currentStudentsOnly: true,
 };
 
@@ -156,6 +157,7 @@ test("an alum is on the masthead, because that question is not about standing", 
     {
       ...YEAR,
       thresholds: masthead.thresholds,
+      combine: masthead.combine,
       currentStudentsOnly: false,
     },
     person({ status: "Alum" }),
@@ -196,6 +198,7 @@ test("an omitted clause is never met, however large the count", () => {
   const standing = only([meeting(), meeting(), meeting()], [], {
     ...YEAR,
     thresholds: { contributions: 2 },
+    combine: "or",
     currentStudentsOnly: true,
   });
 
@@ -207,6 +210,7 @@ test("thresholds with no clauses at all qualify nobody", () => {
   const standing = only([meeting(), meeting(), meeting()], [article()], {
     ...YEAR,
     thresholds: {},
+    combine: "or",
     currentStudentsOnly: false,
   });
 
@@ -236,4 +240,72 @@ test("everybody is returned, qualifying first and then by name", () => {
 test("attendance at somebody else's meeting is not yours", () => {
   const standing = only([meeting({ attendeeIds: ["p2"] })]);
   expect(standing.meetings).toBe(0);
+});
+
+test("both presets combine their clauses with OR", () => {
+  expect(PRESETS.map((p) => p.combine)).toEqual(["or", "or"]);
+});
+
+const ALL: Criteria = { ...VOTING, combine: "and" };
+
+test("under AND, meeting one clause of three is not enough", () => {
+  const standing = only([meeting(), meeting(), meeting()], [], ALL);
+
+  expect(standing.met.meetings).toBe(true);
+  expect(standing.qualifies).toBe(false);
+});
+
+test("under AND, every clause that is set has to pass", () => {
+  const standing = only(
+    [meeting(), meeting(), meeting(), meeting({ type: "Volunteer Event" })],
+    [article(), article()],
+    ALL,
+  );
+
+  expect(standing.qualifies).toBe(true);
+});
+
+test("under AND, a clause nobody asked about is not part of the question", () => {
+  const standing = only([], [article()], {
+    ...YEAR,
+    thresholds: { contributions: 1 },
+    combine: "and",
+    currentStudentsOnly: false,
+  });
+
+  expect(standing.meetings).toBe(0);
+  expect(standing.qualifies).toBe(true);
+});
+
+test("no clauses at all qualify nobody under AND either", () => {
+  const standing = only([meeting(), meeting(), meeting()], [article()], {
+    ...YEAR,
+    thresholds: {},
+    combine: "and",
+    currentStudentsOnly: false,
+  });
+
+  expect(standing.qualifies).toBe(false);
+});
+
+test("an alum is still excluded when the clauses combine with AND", () => {
+  const standing = only(
+    [meeting(), meeting(), meeting(), meeting({ type: "Volunteer Event" })],
+    [article(), article()],
+    ALL,
+    person({ status: "Alum" }),
+  );
+
+  expect(standing.excludedAsAlum).toBe(true);
+  expect(standing.qualifies).toBe(false);
+});
+
+test("met names the clauses that passed, including under AND", () => {
+  const standing = only([meeting({ type: "Volunteer Event" })], [], ALL);
+
+  expect(standing.met).toEqual({
+    meetings: false,
+    contributions: false,
+    volunteer: true,
+  });
 });

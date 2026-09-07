@@ -1,12 +1,18 @@
 import {
   AlertTriangleIcon,
   CheckIcon,
+  ChevronDownIcon,
   CopyIcon,
   ExternalLinkIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "~/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -23,14 +29,10 @@ import type { Person } from "~/lib/members/records";
 import type { Application } from "~/lib/services/discord/join-requests";
 
 /*
-  everything that needs a human, on one page.
-
-  four sections and one rule between them: nothing here acts on a guess. Every
-  decision on this page is one the unattended cron deliberately declined to
-  make — an application whose email lands on an id-less row, two rows that
-  might be one person, a status that only a person knows — because a wrong
-  guess at any of them makes two people out of one, and under ADR 0010 that
-  costs somebody their vote rather than merely looking untidy.
+  everything that needs a human, on one page. one rule between the sections:
+  nothing here acts on a guess. Every decision is one the unattended cron
+  declined to make, because a wrong guess makes two people out of one, and
+  under ADR 0010 that costs somebody their vote.
 
   the duplicates section is why the standing page links here and refuses to
   look final until it is empty. The reconciler is run *before* the vote.
@@ -53,6 +55,8 @@ type Props = {
   group: GroupState;
 };
 
+/* a section with nothing waiting starts folded: this page is worked top to
+   bottom, and the sections that need somebody are the ones with a count */
 function Section({
   title,
   why,
@@ -65,16 +69,17 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-3">
-      <div className="space-y-1">
-        <h2 className="flex items-center gap-2 text-lg font-medium">
-          {title}
-          <Badge variant={count > 0 ? "default" : "outline"}>{count}</Badge>
-        </h2>
+    <Collapsible defaultOpen={count > 0} render={<section />}>
+      <CollapsibleTrigger className="flex w-full items-center gap-2 text-left">
+        <ChevronDownIcon className="text-muted-foreground size-4 transition-transform data-[panel-open]:rotate-180" />
+        <h2 className="text-lg font-medium">{title}</h2>
+        <Badge variant={count > 0 ? "default" : "outline"}>{count}</Badge>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-3 pt-3">
         <p className="text-muted-foreground text-sm">{why}</p>
-      </div>
-      {children}
-    </section>
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -164,12 +169,14 @@ export function Reconciler({
   return (
     <div className="space-y-10">
       <Section
-        title="Applications that can be linked"
-        why="An application whose email or name lands on exactly one row with no Discord ID. The hourly sync leaves these alone on purpose: it creates rows only where nothing at all matches, because everything else is where a wrong guess makes two people out of one."
-        count={linkable.length}
+        title="Applications"
+        why="What the hourly sync would not decide on its own. A Link button means one row matches; without one, several rows could be this person and the fix is to correct them in Notion and reload."
+        count={linkable.length + ambiguous.length}
       >
         <div className="divide-y rounded-lg border">
-          {linkable.length === 0 && <Empty>Nothing waiting.</Empty>}
+          {linkable.length + ambiguous.length === 0 && (
+            <Empty>Nothing waiting.</Empty>
+          )}
           {linkable.map((one) => {
             const key = `link:${one.application.id}`;
             return (
@@ -199,16 +206,6 @@ export function Reconciler({
               </div>
             );
           })}
-        </div>
-      </Section>
-
-      <Section
-        title="Applications nobody can decide automatically"
-        why="Several rows could be this person, or one is a keystroke away from their name, or more than one row already carries their Discord ID. These have no button: the right action is to look at the rows in Notion, merge or correct them, and reload. Guessing here is the failure this whole design exists to avoid — and a `similar` row is here rather than created because a duplicate splits somebody's attendance and can cost them a vote."
-        count={ambiguous.length}
-      >
-        <div className="divide-y rounded-lg border">
-          {ambiguous.length === 0 && <Empty>Nothing waiting.</Empty>}
           {ambiguous.map((one) => (
             <div key={one.application.id} className="space-y-2 p-4">
               <div className="flex flex-wrap items-center gap-2">
@@ -229,7 +226,7 @@ export function Reconciler({
 
       <Section
         title="Rows that look like the same person twice"
-        why="A duplicate denies eligibility rather than granting it: attendance split across two rows fails a threshold the person actually met. Merging is destructive and cannot be undone from here — the row you keep survives with its own name and status, and gains the other's articles, images and attendance."
+        why="Attendance split across two rows fails a threshold the person met. Merging cannot be undone from here: the row you keep gains the other's articles, images and attendance."
         count={duplicates.length}
       >
         <div className="divide-y rounded-lg border">
@@ -284,7 +281,7 @@ export function Reconciler({
 
       <Section
         title="Members with no status"
-        why="The one field in this design nobody can derive. Graduation year is deliberately not recorded, so nothing can nag about this — but an empty status is never a disqualification either: the standing page flags these people rather than denying them."
+        why="The one field nothing can derive. An empty status is not a disqualification; the standing page flags these people rather than denying them."
         count={unknownStatus.length}
       >
         <div className="divide-y rounded-lg border">
@@ -327,14 +324,14 @@ export function Reconciler({
 
       <Section
         title="Google Group"
-        why="The group cannot be read or written by software, so this is an export with a watermark rather than a sync. Paste the block below into the group's bulk-add field, then say it is done — that moves the watermark. Adding somebody twice is a no-op to Google, so a watermark that drifts is harmless."
+        why="The group cannot be written by software. Paste this into its bulk-add field, then say it is done."
         count={emails.length}
       >
         <div className="space-y-3 rounded-lg border p-4">
           <p className="text-muted-foreground text-sm">
             {group.watermark
               ? `Last done ${group.watermark}.`
-              : "Never done — this is everybody who has ever been approved."}
+              : "Never done. This is everybody ever approved."}
           </p>
 
           {emails.length === 0 ? (

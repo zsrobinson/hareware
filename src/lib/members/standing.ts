@@ -16,7 +16,7 @@ import type { MeetingType } from "./config";
 import type { ContributionRecord, MeetingRecord, Person } from "./records";
 
 /**
- * the thresholds, as an OR over three independent clauses.
+ * the thresholds, as three independent clauses.
  *
  * each is the *minimum* that satisfies its clause. an omitted clause is not
  * part of the question — the masthead asks about contributions and says
@@ -36,12 +36,22 @@ export type Thresholds = {
   volunteer?: number;
 };
 
+export type Combine = "and" | "or";
+
 /** the question, in full */
 export type Criteria = {
   /** inclusive `YYYY-MM-DD` bounds */
   from: string;
   to: string;
   thresholds: Thresholds;
+  /**
+   * how the clauses that are set combine.
+   *
+   * `"or"` is the constitution's rule and the default every preset uses. an
+   * omitted clause is not part of the question in either mode, so `"and"`
+   * requires every clause that is set and ignores the ones that are not
+   */
+  combine: Combine;
   /**
    * whether an `Alum` is excluded regardless of what they did.
    *
@@ -51,6 +61,9 @@ export type Criteria = {
    */
   currentStudentsOnly: boolean;
 };
+
+/** the clauses of a `Thresholds`, and whether each was satisfied */
+export type Met = Record<keyof Thresholds, boolean>;
 
 /** what one person did in the window, and whether it was enough */
 export type Standing = {
@@ -62,6 +75,8 @@ export type Standing = {
   /** articles + images, which is what the contribution clause tests */
   contributions: number;
   qualifies: boolean;
+  /** which clauses they met, so the page can point at the counts that answer */
+  met: Met;
   /** the clauses they met, in the words the page prints */
   reasons: string[];
   /** excluded by `currentStudentsOnly` despite meeting a clause */
@@ -189,7 +204,7 @@ type Counts = {
 };
 
 function score(person: Person, criteria: Criteria, counts: Counts): Standing {
-  const { thresholds, currentStudentsOnly } = criteria;
+  const { thresholds, combine, currentStudentsOnly } = criteria;
 
   /*
     an image credit counts the same as writing, per ADR 0010, so the clause
@@ -199,13 +214,30 @@ function score(person: Person, criteria: Criteria, counts: Counts): Standing {
   */
   const contributions = counts.articles + counts.images;
 
+  const met: Met = {
+    meetings: satisfies(counts.meetings, thresholds.meetings),
+    contributions: satisfies(contributions, thresholds.contributions),
+    volunteer: satisfies(counts.volunteer, thresholds.volunteer),
+  };
+
   const reasons: string[] = [];
-  if (met(counts.meetings, thresholds.meetings))
+  if (met.meetings)
     reasons.push(plural(counts.meetings, "general body meeting"));
-  if (met(contributions, thresholds.contributions))
-    reasons.push(plural(contributions, "contribution"));
-  if (met(counts.volunteer, thresholds.volunteer))
-    reasons.push(plural(counts.volunteer, "volunteer event"));
+  if (met.contributions) reasons.push(plural(contributions, "contribution"));
+  if (met.volunteer) reasons.push(plural(counts.volunteer, "volunteer event"));
+
+  /*
+    under "and", a clause nobody set is still not part of the question, so the
+    test is over the clauses present rather than over all three — otherwise the
+    masthead, which sets one, could never be answered conjunctively at all
+  */
+  const asked = (["meetings", "contributions", "volunteer"] as const).filter(
+    (clause) => thresholds[clause] !== undefined,
+  );
+  const enough =
+    combine === "and"
+      ? asked.length > 0 && asked.every((clause) => met[clause])
+      : reasons.length > 0;
 
   const excludedAsAlum = currentStudentsOnly && person.status === "Alum";
 
@@ -213,7 +245,8 @@ function score(person: Person, criteria: Criteria, counts: Counts): Standing {
     person,
     ...counts,
     contributions,
-    qualifies: reasons.length > 0 && !excludedAsAlum,
+    qualifies: enough && !excludedAsAlum,
+    met,
     reasons,
     excludedAsAlum,
     statusUnknown: person.status === null,
@@ -221,7 +254,7 @@ function score(person: Person, criteria: Criteria, counts: Counts): Standing {
 }
 
 /** an omitted threshold is not a clause, so it is never met */
-function met(count: number, threshold: number | undefined): boolean {
+function satisfies(count: number, threshold: number | undefined): boolean {
   return threshold !== undefined && count >= threshold;
 }
 
@@ -229,8 +262,8 @@ function met(count: number, threshold: number | undefined): boolean {
 export type Preset = {
   id: string;
   name: string;
-  description: string;
   thresholds: Thresholds;
+  combine: Combine;
   currentStudentsOnly: boolean;
   /** how far back the window reaches by default */
   months: number;
@@ -248,18 +281,16 @@ export const PRESETS: Preset[] = [
   {
     id: "voting",
     name: "Voting eligibility",
-    description:
-      "The constitution: within the past year, 3 general body meetings, or 2 contributions, or 1 volunteer event. Alumni excluded.",
     thresholds: { meetings: 3, contributions: 2, volunteer: 1 },
+    combine: "or",
     currentStudentsOnly: true,
     months: 12,
   },
   {
     id: "masthead",
     name: "Masthead",
-    description:
-      "Anyone who wrote or shot anything published in the past year, alumni included.",
     thresholds: { contributions: 1 },
+    combine: "or",
     currentStudentsOnly: false,
     months: 12,
   },

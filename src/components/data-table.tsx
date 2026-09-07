@@ -15,6 +15,9 @@ import {
 } from "@tanstack/react-table";
 import download from "downloadjs";
 import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  ArrowUpDownIcon,
   ChevronDownIcon,
   DownloadIcon,
   SlidersHorizontalIcon,
@@ -46,6 +49,45 @@ import {
   it knows nothing about invocations — the columns are passed in — so the next
   thing worth listing does not need a second one of these
 */
+
+/**
+ * a header that says it can be sorted, and which way it currently is.
+ *
+ * here rather than in each table, so the arrow means the same thing on every
+ * one of them. the column is typed structurally because a `HeaderContext` is
+ * generic in the row type and this has to sit in any table's columns
+ */
+export function sortable(label: string) {
+  const Header = ({
+    column,
+  }: {
+    column: {
+      toggleSorting: (d?: boolean) => void;
+      getIsSorted: () => false | string;
+    };
+  }) => {
+    const sorted = column.getIsSorted();
+    const Arrow =
+      sorted === "asc"
+        ? ArrowUpIcon
+        : sorted === "desc"
+          ? ArrowDownIcon
+          : ArrowUpDownIcon;
+
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="-ml-2 h-8"
+        onClick={() => column.toggleSorting(sorted === "asc")}
+      >
+        {label}
+        <Arrow className={sorted ? "size-3.5" : "size-3.5 opacity-60"} />
+      </Button>
+    );
+  };
+  return Header;
+}
 
 export type FacetedFilter = {
   /*

@@ -19,16 +19,11 @@ import { together } from "~/lib/services/notion/client";
 import { approvedApplications } from "~/lib/services/discord/join-requests";
 import type { Application } from "~/lib/services/discord/join-requests";
 import { groupWatermark, isExternalAddress, pendingForGroup } from "./group";
-import {
-  contributionCounts,
-  defaultMeeting,
-  offerableMeetings,
-  type Candidate,
-} from "./kiosk";
+import { defaultMeeting, offerableMeetings } from "./kiosk";
 import { duplicates, resolveApplications } from "./match";
 import type { Duplicate, Resolution } from "./match";
 import type { MeetingRecord, Person } from "./records";
-import { contributions, meetings, people, statusOptions } from "./roster";
+import { meetings, people, statusOptions } from "./roster";
 import { alumOptionMissing, FALLBACK_MEMBER_STATUSES } from "./config";
 
 /** the bindings these reads need, so nothing here reaches for a global */
@@ -61,7 +56,10 @@ async function statuses(token: string | undefined) {
 export type KioskData = {
   /** already narrowed to the window, newest first */
   meetings: MeetingRecord[];
-  candidates: Candidate[];
+  /* the roster itself: a Person carries the all-time contribution count the
+     picker disambiguates with, read from notion's `Contributions` formula
+     rather than from the article corpus */
+  candidates: Person[];
   /** the meeting to open on: `asked` where it exists, else today's */
   openingId: string | null;
   statuses: string[];
@@ -84,16 +82,12 @@ export async function kioskData(
     return { meetings: [], candidates: [], openingId: null, statuses: [] };
   }
 
-  const [roster, calendar, credits, options] = await together([
+  const [roster, calendar, options] = await together([
     () => people(token),
     () => meetings(token),
-    /* read only to say "3 contributions" beside a name, which per ADR 0010 is
-       the disambiguation this screen may not do without */
-    () => contributions(token),
     () => statuses(token),
   ]);
 
-  const counts = contributionCounts(credits);
   const chosen = calendar.find((meeting) => meeting.pageId === asked);
   const opening = chosen ?? defaultMeeting(calendar, today);
 
@@ -102,10 +96,7 @@ export async function kioskData(
        semester of history in one select is where a mis-tap files tonight's
        room against a meeting last spring */
     meetings: offerableMeetings(calendar, today, opening?.pageId ?? null),
-    candidates: roster.map((person) => ({
-      person,
-      contributions: counts.get(person.pageId) ?? 0,
-    })),
+    candidates: roster,
     openingId: opening?.pageId ?? null,
     statuses: options.offered,
   };

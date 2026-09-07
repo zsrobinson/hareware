@@ -28,13 +28,11 @@ const ROSTER = {
   meetings: [],
   candidates: [
     {
-      person: {
-        pageId: "p1",
-        name: "Bay Hoffman",
-        discordId: "574376763006648349",
-        email: "bay@terpmail.umd.edu",
-        status: "Undergrad",
-      },
+      pageId: "p1",
+      name: "Bay Hoffman",
+      discordId: "574376763006648349",
+      email: "bay@terpmail.umd.edu",
+      status: "Undergrad",
       contributions: 3,
     },
   ],

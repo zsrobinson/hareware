@@ -29,6 +29,7 @@ test("a Members row reads into a Person", () => {
     discordId: "574376763006648349",
     email: "bay@terpmail.umd.edu",
     status: "Undergrad",
+    contributions: 0,
   });
 });
 
@@ -41,6 +42,57 @@ test("an empty Discord ID reads as null, never as an empty string", () => {
   });
 
   expect(person.discordId).toBeNull();
+});
+
+/*
+  the all-time count notion computes as `prop("Articles Count") +
+  prop("Images Count")`, so a screen that only wants the total does not read
+  every article the club has published to work it out
+*/
+test("the Contributions formula reads as its number", () => {
+  const person = toPerson({
+    id: "p1",
+    properties: {
+      Name: title("Ada"),
+      Contributions: {
+        type: "formula",
+        formula: { type: "number", number: 3 },
+      },
+    },
+  });
+
+  expect(person.contributions).toBe(3);
+});
+
+/* a property the integration cannot read is omitted from the payload entirely,
+   and a badge reading "NaN contributions" is the loud end of a quiet problem */
+test("a missing Contributions property counts as none rather than NaN", () => {
+  const person = toPerson({ id: "p1", properties: { Name: title("Ada") } });
+
+  expect(person.contributions).toBe(0);
+});
+
+test("a Contributions formula that is not a number counts as none", () => {
+  const empty = toPerson({
+    id: "p1",
+    properties: {
+      Name: title("Ada"),
+      Contributions: {
+        type: "formula",
+        formula: { type: "number", number: null },
+      },
+    },
+  });
+  const wrongType = toPerson({
+    id: "p2",
+    properties: {
+      Name: title("Bay"),
+      Contributions: { type: "formula", formula: { type: "string" } },
+    },
+  });
+
+  expect(empty.contributions).toBe(0);
+  expect(wrongType.contributions).toBe(0);
 });
 
 test("a missing email and a missing status are null rather than absent", () => {

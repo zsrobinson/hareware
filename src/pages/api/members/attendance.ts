@@ -1,33 +1,52 @@
 /*
   who was in the room, written onto a meeting.
 
-  the kiosk sends the whole list every time rather than the one person it just
-  added, because `setAttendees` replaces the relation — see its note on why
-  appending cannot express the one edit a kiosk needs, which is removing
-  somebody signed in by mistake. The consequence to keep in mind is that two
-  officers with the kiosk open on two laptops would overwrite each other; ADR
-  0010 puts one laptop at the front of the room, and that is the reason this is
-  allowed to be last-write-wins.
+  the device sends what it wants the list to be AND what it knew when somebody
+  tapped, and the merge happens here against notion rather than in the browser.
+  Sending only the wanted list is how a second device erases the first: two
+  laptops each holding the same two names add one person apiece, and whoever
+  writes second deletes the other's addition, silently.
+
+  ADR 0010 still puts one laptop at the front of the room. This exists because
+  a second writer arrives without anybody deciding it should: a refresh, a
+  second tab, a phone opened to check something.
 */
 
 import { env } from "cloudflare:workers";
-import { requireList, requireText, rosterRoute } from "~/lib/members/api";
-import { setAttendees } from "~/lib/members/write";
+import {
+  optionalList,
+  requireList,
+  requireText,
+  rosterRoute,
+} from "~/lib/members/api";
+import { knownOrSafe } from "~/lib/members/attendance";
+import { recordAttendance } from "~/lib/members/write";
+import { plural } from "~/lib/utils";
 
 export const prerender = false;
 
 export const POST = rosterRoute(
   (body) => ({
     meetingId: requireText(body, "meetingId"),
-    /* an empty list is valid and means "everybody signed in was a mistake" */
+    /* an empty list is valid and means "everybody I knew about was a mistake" */
     memberIds: requireList(body, "memberIds"),
+    /* optional so a caller that omits it can only add, never remove */
+    known: optionalList(body, "known"),
   }),
-  async ({ meetingId, memberIds }) => {
-    await setAttendees(env, meetingId, memberIds);
+  async ({ meetingId, memberIds, known }) => {
+    const attendees = await recordAttendance(
+      env,
+      meetingId,
+      knownOrSafe(known),
+      memberIds,
+    );
 
     return {
-      summary: `recorded ${memberIds.length} attendee${memberIds.length === 1 ? "" : "s"} for a meeting`,
-      data: { memberIds },
+      summary: `recorded ${plural(attendees.length, "attendee")} for a meeting`,
+      /* the merged list, not the one that was sent: the device may have been
+         missing somebody another device signed in, and this is how it finds
+         out without a reload */
+      data: { memberIds: attendees },
     };
   },
 );

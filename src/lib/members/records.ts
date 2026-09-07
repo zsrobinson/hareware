@@ -26,6 +26,16 @@ export type Person = {
     value any rule depends on is `ALUM_STATUS`
   */
   status: string | null;
+  /*
+    articles plus image credits, all time, as notion's `Contributions` formula
+    computes it. Zero where the property is missing or not a number, because a
+    roster row that cannot be counted is a row with nothing to show, not a NaN
+    on the kiosk.
+
+    all time is the only thing it can be. `standing.ts` counts contributions
+    inside a window and has to keep reading articles for it
+  */
+  contributions: number;
 };
 
 /** a Meetings row, reduced likewise */

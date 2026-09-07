@@ -19,6 +19,7 @@ import {
   MEMBERS_DATA_SOURCE_ID,
   MEMBER_PROPERTIES,
 } from "./config";
+import { mergeAttendance } from "./attendance";
 import type { Person } from "./records";
 
 /** what a Members row is made of, in notion's write shapes */
@@ -125,10 +126,9 @@ export async function linkApplication(
 /**
  * who attended a meeting, written onto the meeting.
  *
- * the relation is replaced rather than appended to, so the caller sends the
- * whole list. Appending would make a correction impossible — removing somebody
- * signed in by mistake is the one edit a kiosk needs and an append-only write
- * cannot express it.
+ * the raw write, replacing the relation. Prefer `recordAttendance` below:
+ * this one believes whatever it is handed, so a caller working from a stale
+ * list deletes whatever it did not know about.
  *
  * `Attendees` is two-way, so notion mirrors this onto each member's
  * `Attendance` and neither side has to be written twice
@@ -152,6 +152,68 @@ export async function setAttendees(
     },
     "PATCH",
   );
+}
+
+/**
+ * the attendees a meeting currently has, straight from notion.
+ *
+ * read immediately before a write rather than trusted from the page, because
+ * the point of reading it is to see what another device did since the page
+ * loaded
+ */
+export async function currentAttendees(
+  env: Env,
+  meetingPageId: string,
+): Promise<string[]> {
+  const page = (await notion(`pages/${meetingPageId}`, env.NOTION_TOKEN!)) as {
+    properties?: Record<string, { relation?: { id: string }[] | null }>;
+  };
+
+  const property = page.properties?.[MEETING_PROPERTIES.attendees.name];
+
+  /*
+    a relation the integration cannot reach is omitted from the schema and
+    reads back as `[]`, which is indistinguishable from an empty meeting. That
+    difference matters here: merging against a phantom empty list would delete
+    everybody who was already signed in
+  */
+  if (!property) {
+    throw new Error(
+      "the meeting's Attendees relation is not readable, so who is already signed in cannot be preserved",
+    );
+  }
+
+  return (property.relation ?? []).map((related) => related.id);
+}
+
+/**
+ * signs people in and out without deleting what another device did.
+ *
+ * `known` is the list the device held when somebody tapped and `wanted` is
+ * what it wants; the difference is the intent, and everything else in notion
+ * is somebody else's work. See `~/lib/members/attendance` for why a plain
+ * replacement loses attendance silently, and ADR 0010 for why one laptop is
+ * still the plan even so.
+ *
+ * not a transaction. notion has none, so two devices writing inside the same
+ * round trip can still interleave. This narrows the window from the length of
+ * a meeting to the length of one request, which is the difference between a
+ * loss that is likely and one that needs two people to tap in the same second
+ */
+export async function recordAttendance(
+  env: Env,
+  meetingPageId: string,
+  known: string[],
+  wanted: string[],
+): Promise<string[]> {
+  const merged = mergeAttendance(
+    await currentAttendees(env, meetingPageId),
+    known,
+    wanted,
+  );
+
+  await setAttendees(env, meetingPageId, merged);
+  return merged;
 }
 
 /** the relations a merge has to carry across */

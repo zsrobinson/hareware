@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  contributionCounts,
   defaultMeeting,
   distinguish,
   indistinguishable,
@@ -10,9 +9,8 @@ import {
   searchCandidates,
   discordHandle,
   shownName,
-  type Candidate,
 } from "./kiosk";
-import type { ContributionRecord, MeetingRecord, Person } from "./records";
+import type { MeetingRecord, Person } from "./records";
 
 function person(over: Partial<Person> & { name: string }): Person {
   return {
@@ -20,12 +18,13 @@ function person(over: Partial<Person> & { name: string }): Person {
     discordId: null,
     email: null,
     status: null,
+    contributions: 0,
     ...over,
   };
 }
 
 const candidate = (over: Partial<Person> & { name: string }, credits = 0) =>
-  ({ person: person(over), contributions: credits }) satisfies Candidate;
+  person({ ...over, contributions: credits });
 
 function meeting(date: string, name = date): MeetingRecord {
   return { pageId: name, name, date, type: "General Body", attendeeIds: [] };
@@ -44,7 +43,7 @@ describe("searchCandidates", () => {
   });
 
   it("ranks a prefix match above an infix one", () => {
-    expect(searchCandidates(roster, "ann").map((c) => c.person.name)).toEqual([
+    expect(searchCandidates(roster, "ann").map((c) => c.name)).toEqual([
       "Ann Marie Diaz",
       "Joanna Reed",
     ]);
@@ -126,31 +125,6 @@ describe("defaultMeeting", () => {
   it("is null when nothing has happened yet", () => {
     expect(defaultMeeting([meeting("2026-12-01")], "2026-09-07")).toBeNull();
     expect(defaultMeeting([], "2026-09-07")).toBeNull();
-  });
-});
-
-describe("contributionCounts", () => {
-  it("counts a byline and an image credit alike, per ADR 0010", () => {
-    const articles: ContributionRecord[] = [
-      {
-        pageId: "a",
-        headline: "one",
-        date: "2026-01-01",
-        authorIds: ["sam"],
-        imageCrewIds: ["ada"],
-      },
-      {
-        pageId: "b",
-        headline: "two",
-        date: "2026-02-01",
-        authorIds: ["sam"],
-        imageCrewIds: ["sam"],
-      },
-    ];
-
-    /* credited on both sides of one article legitimately counts twice */
-    expect(contributionCounts(articles).get("sam")).toBe(3);
-    expect(contributionCounts(articles).get("ada")).toBe(1);
   });
 });
 

@@ -24,7 +24,6 @@ import {
   meetingLabel,
   searchCandidates,
   shownName,
-  type Candidate,
 } from "~/lib/members/kiosk";
 import { defaultStatus } from "~/lib/members/config";
 import {
@@ -54,8 +53,8 @@ import { withParam } from "~/lib/search-params";
 
 type Props = {
   /**
-   * the page's own server-side read: the meetings on offer, the roster with
-   * its contribution counts, the meeting to open on, and notion's statuses.
+   * the page's own server-side read: the meetings on offer, the roster, the
+   * meeting to open on, and notion's statuses.
    *
    * `/api/members/kiosk` answers the same type from the same function, so this
    * seeds the query and every later read replaces it in place. Creating
@@ -72,8 +71,24 @@ type Props = {
 };
 
 /** the whole attendee list, written over the meeting's relation */
-async function save(meetingId: string, memberIds: string[]): Promise<void> {
-  await postJson("/api/members/attendance", { meetingId, memberIds });
+/**
+ * writes the list and answers with what notion actually holds.
+ *
+ * `known` is what this device had before the tap. The route merges against
+ * notion rather than replacing, so another device's sign-ins survive, and the
+ * answer carries them back here
+ */
+async function save(
+  meetingId: string,
+  known: string[],
+  wanted: string[],
+): Promise<string[]> {
+  const { memberIds } = await postJson<{ memberIds?: string[] }>(
+    "/api/members/attendance",
+    { meetingId, memberIds: wanted, known },
+  );
+
+  return memberIds ?? wanted;
 }
 
 async function createPerson(
@@ -156,10 +171,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
   const meeting = meetings.find((one) => one.pageId === meetingId) ?? null;
 
   const byId = useMemo(
-    () =>
-      new Map(
-        candidates.map((candidate) => [candidate.person.pageId, candidate]),
-      ),
+    () => new Map(candidates.map((person) => [person.pageId, person])),
     [candidates],
   );
 
@@ -208,7 +220,9 @@ function Kiosk({ initial, today, faces, guild }: Props) {
     setBusy(true);
 
     try {
-      await save(meetingId, next);
+      /* the merged list, which may hold somebody another device signed in
+         while this one was open */
+      setPresent(await save(meetingId, before, next));
       notify.ok(say);
     } catch (thrown) {
       setPresent(before);
@@ -219,12 +233,12 @@ function Kiosk({ initial, today, faces, guild }: Props) {
     }
   }
 
-  function markPresent(candidate: Candidate) {
+  function markPresent(person: Person) {
     changeQuery("");
 
-    if (present.includes(candidate.person.pageId)) {
+    if (present.includes(person.pageId)) {
       /* they tapped because they were not sure it had registered */
-      notify.ok(`${shownName(candidate.person)} was already signed in`);
+      notify.ok(`${shownName(person)} was already signed in`);
       refocus();
       return;
     }
@@ -233,13 +247,13 @@ function Kiosk({ initial, today, faces, guild }: Props) {
        forty rows, and the person who just tapped has to be able to see that it
        worked without scrolling past everybody who arrived before them */
     void commit(
-      [candidate.person.pageId, ...present],
-      `${shownName(candidate.person)} is signed in`,
+      [person.pageId, ...present],
+      `${shownName(person)} is signed in`,
     );
   }
 
   function remove(pageId: string) {
-    const person = byId.get(pageId)?.person;
+    const person = byId.get(pageId);
     const name = person ? shownName(person) : "that row";
     void commit(
       present.filter((id) => id !== pageId),
@@ -257,10 +271,8 @@ function Kiosk({ initial, today, faces, guild }: Props) {
   function replacePerson(person: Person) {
     patchRoster((current) => ({
       ...current,
-      candidates: current.candidates.map((candidate) =>
-        candidate.person.pageId === person.pageId
-          ? { ...candidate, person }
-          : candidate,
+      candidates: current.candidates.map((one) =>
+        one.pageId === person.pageId ? person : one,
       ),
     }));
     void refreshRoster();
@@ -275,14 +287,14 @@ function Kiosk({ initial, today, faces, guild }: Props) {
 
     try {
       const created = await createPerson(name, email, newStatus);
-      const candidate: Candidate = {
-        person: {
-          pageId: created.pageId,
-          name: created.name,
-          email: created.email,
-          discordId: null,
-          status: newStatus,
-        },
+      const added: Person = {
+        pageId: created.pageId,
+        name: created.name,
+        email: created.email,
+        discordId: null,
+        status: newStatus,
+        /* nobody has written anything under a row created a second ago, and
+           the refetch below replaces this with notion's own count anyway */
         contributions: 0,
       };
 
@@ -291,7 +303,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
          to them, and re-read so the row is notion's rather than ours */
       patchRoster((current) => ({
         ...current,
-        candidates: [...current.candidates, candidate],
+        candidates: [...current.candidates, added],
       }));
       void refreshRoster();
       changeQuery("");
@@ -396,25 +408,24 @@ function Kiosk({ initial, today, faces, guild }: Props) {
                 role="listbox"
                 className="divide-y rounded-lg border"
               >
-                {matches.map((candidate, index) => {
+                {matches.map((person, index) => {
                   /* insisted on rather than merely shown when another offer
                        reads identically: that pair is not a choice anybody can
                        make correctly */
                   const clash = matches.some(
                     (other) =>
-                      other !== candidate &&
-                      indistinguishable(other, candidate),
+                      other !== person && indistinguishable(other, person),
                   );
 
                   return (
-                    <li key={candidate.person.pageId}>
+                    <li key={person.pageId}>
                       <button
                         type="button"
                         id={`kiosk-match-${index}`}
                         role="option"
                         aria-selected={index === active}
                         disabled={busy}
-                        onClick={() => markPresent(candidate)}
+                        onClick={() => markPresent(person)}
                         onMouseEnter={() => setActive(index)}
                         className={`hover:bg-muted flex w-full cursor-pointer items-center gap-3 p-3 text-left first:rounded-t-lg last:rounded-b-lg ${
                           busy ? "opacity-50" : ""
@@ -424,10 +435,10 @@ function Kiosk({ initial, today, faces, guild }: Props) {
                           {/* a name and a count: every edit lives on the
                               signed-in side, where the person is looking at
                               their own row rather than scanning a list */}
-                          <MemberEntry candidate={candidate} faces={faces} />
+                          <MemberEntry person={person} faces={faces} />
                         </div>
 
-                        {present.includes(candidate.person.pageId) && (
+                        {present.includes(person.pageId) && (
                           <Badge variant="secondary">already in</Badge>
                         )}
                         {clash && (
@@ -527,17 +538,15 @@ function Kiosk({ initial, today, faces, guild }: Props) {
         ) : (
           <ul className="divide-y rounded-lg border">
             {present.map((pageId) => {
-              const candidate = byId.get(pageId) ?? {
-                person: {
-                  pageId,
-                  name: "Someone not on this list",
-                  discordId: null,
-                  email: null,
-                  status: null,
-                },
+              const person = byId.get(pageId) ?? {
+                pageId,
+                name: "Someone not on this list",
+                discordId: null,
+                email: null,
+                status: null,
                 contributions: 0,
               };
-              const name = shownName(candidate.person);
+              const name = shownName(person);
 
               return (
                 <li
@@ -548,11 +557,9 @@ function Kiosk({ initial, today, faces, guild }: Props) {
                     {/* every chip and every edit lives here: the person has
                         tapped, and this is the one row they are looking at */}
                     <MemberEntry
-                      candidate={candidate}
+                      person={person}
                       faces={faces}
-                      onEdit={(field) =>
-                        setEditing({ field, person: candidate.person })
-                      }
+                      onEdit={(field) => setEditing({ field, person })}
                     />
                   </div>
                   {/* removing is possible only because `setAttendees` replaces

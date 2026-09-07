@@ -39,12 +39,26 @@ type Property = {
   date?: { start?: string | null } | null;
   select?: { name?: string | null } | null;
   relation?: { id: string }[] | null;
+  formula?: { type?: string; number?: number | null } | null;
 };
 
 type Page = { id: string; properties: Record<string, Property> };
 
 function text(property: Property | undefined): string {
   return plainText(property?.title ?? property?.rich_text).trim();
+}
+
+/**
+ * a formula property's number, or 0 when it does not have one.
+ *
+ * notion answers a number formula as `{ formula: { type: "number", number } }`
+ * and a formula of any other type with no `number` at all — as does a property
+ * the integration cannot read. Counting those as zero keeps a bad schema off
+ * the screen as a missing badge rather than as `NaN contributions`
+ */
+function formulaNumber(property: Property | undefined): number {
+  const value = property?.formula?.number;
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function ids(property: Property | undefined): string[] {
@@ -66,6 +80,9 @@ export function toPerson(page: Page): Person {
       text(page.properties?.[MEMBER_PROPERTIES.discordId.name]) || null,
     email: email?.trim() || null,
     status: status?.trim() || null,
+    contributions: formulaNumber(
+      page.properties?.[MEMBER_PROPERTIES.contributions.name],
+    ),
   };
 }
 
@@ -130,6 +147,11 @@ export function toContribution(page: Page): ContributionRecord {
 
 /**
  * every published Article, filtered in notion rather than here.
+ *
+ * read by `standing.ts` alone, and it needs the dates: the counting there is
+ * over a window, which Members' `Contributions` formula cannot express. The
+ * kiosk's all-time badge comes from that formula instead, so this corpus is no
+ * longer read to draw a screen.
  *
  * an article with no Publication Date has not published and counts toward
  * nothing, and there are enough of those — the tracker holds pitches and

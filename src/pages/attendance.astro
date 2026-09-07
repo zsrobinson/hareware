@@ -32,8 +32,13 @@ const today = easternNow(new Date()).date;
   `kioskData` is also what `/api/members/kiosk` answers, so this is the
   island's `initialData` — first paint is server-rendered, and creating or
   correcting somebody re-reads it in place instead of asking the room to
-  reload. It bounds its own concurrency: five notion requests fired in one tick
-  is over the budget before any of them has answered
+  reload. It bounds its own concurrency, which is what keeps a burst of notion
+  requests in one tick from going over the budget before any has answered.
+
+  the contribution count beside a name comes from Members' `Contributions`
+  formula, read with the roster. This page used to read the whole published
+  article corpus for it — every article the club has ever run, growing by a
+  year every year, to render a badge
 */
 const data = await kioskData(
   env,
@@ -53,7 +58,7 @@ const data = await kioskData(
 */
 const guild = await guildMembers();
 const rosterFaces = await faces(
-  data.candidates.map((candidate) => candidate.person.discordId),
+  data.candidates.map((person) => person.discordId),
   async () => guild,
 );
 const guildOptions = [...guild].map(([id, profile]) => ({

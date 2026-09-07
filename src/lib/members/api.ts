@@ -201,6 +201,19 @@ export function optionalText(body: unknown, field: string): string | null {
 }
 
 /** a required array of strings — the attendee list, and nothing else so far */
+/** an optional array of strings; absent is different from empty and stays so */
+export function optionalList(
+  body: unknown,
+  field: string,
+): string[] | undefined {
+  const value = (body as Record<string, unknown> | null)?.[field];
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new BadRequest(`${field} must be a list of ids`);
+  }
+  return value as string[];
+}
+
 export function requireList(body: unknown, field: string): string[] {
   const value = (body as Record<string, unknown> | null)?.[field];
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {

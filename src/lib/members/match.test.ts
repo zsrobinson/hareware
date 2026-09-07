@@ -15,6 +15,7 @@ function person(over: Partial<Person> = {}): Person {
     discordId: null,
     email: null,
     status: null,
+    contributions: 0,
     ...over,
   };
 }

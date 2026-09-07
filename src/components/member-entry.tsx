@@ -7,7 +7,8 @@ import {
 import { MemberFace } from "~/components/member-face";
 import { Badge } from "~/components/ui/badge";
 import type { Faces } from "~/lib/faces";
-import { discordHandle, shownName, type Candidate } from "~/lib/members/kiosk";
+import { discordHandle, shownName } from "~/lib/members/kiosk";
+import type { Person } from "~/lib/members/records";
 import { plural } from "~/lib/utils";
 
 /*
@@ -29,19 +30,17 @@ import { plural } from "~/lib/utils";
 export type EditableField = "discord" | "email" | "status";
 
 type Props = {
-  candidate: Candidate;
+  person: Person;
   faces: Faces;
   /** absent in the typeahead, which shows a name and a count and no chips */
   onEdit?: (field: EditableField) => void;
 };
 
-export function MemberEntry({ candidate, faces, onEdit }: Props) {
-  const { person, contributions } = candidate;
-
-  const credits = contributions > 0 && (
+export function MemberEntry({ person, faces, onEdit }: Props) {
+  const credits = person.contributions > 0 && (
     <Badge variant="secondary">
       <PenLineIcon />
-      {plural(contributions, "contribution")}
+      {plural(person.contributions, "contribution")}
     </Badge>
   );
 

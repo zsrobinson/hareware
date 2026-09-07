@@ -173,7 +173,13 @@ const collapsed = Astro.isPrerendered
       </div>
     </div>
 
-    <Toaster client:idle />
+    {
+      /* `client:load`, never `client:idle`: sonner's store notifies whoever is
+         subscribed and keeps no backlog, so a toast fired before this hydrated
+         is a message nobody ever sees. A notification that silently does not
+         arrive is the failure shape this repo keeps meeting */
+    }
+    <Toaster client:load />
 
     <script>
       /* the listener lives on document so it survives ClientRouter's swaps,

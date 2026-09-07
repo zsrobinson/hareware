@@ -149,6 +149,15 @@ export function standings(
   const attended = tally(inWindow, GENERAL_BODY);
   const volunteered = tally(inWindow, VOLUNTEER);
 
+  /*
+    counted from the articles, never from `person.contributions`.
+
+    Members carries a `Contributions` formula and it is tempting to read it
+    here instead of the corpus above — it is one property already in hand. It
+    is an all-time total. Every clause on this page is asked over `from`..`to`,
+    so substituting it would enfranchise anybody who ever contributed, in an
+    election, with the counts on screen looking entirely reasonable
+  */
   const wrote = new Map<string, number>();
   const shot = new Map<string, number>();
   for (const article of published) {

@@ -37,6 +37,15 @@ export const MEMBER_PROPERTIES = {
      as `{ email: "…" }` rather than a rich-text array */
   email: { name: "Email", type: "email" },
   status: { name: "Status", type: "select" },
+  /*
+    notion's own `prop("Articles Count") + prop("Images Count")`, read so the
+    kiosk can say "3 contributions" beside a name without this app reading the
+    whole article corpus for it.
+
+    all-time, and only ever that. a formula has no window, so it cannot answer
+    the question `standing.ts` asks — see the note there
+  */
+  contributions: { name: "Contributions", type: "formula" },
   /** the other side of Meetings' `Attendees` */
   attendance: { name: "Attendance", type: "relation" },
 } as const;

@@ -102,23 +102,32 @@ function Body({
       .slice(0, 8);
   }, [guild, query]);
 
-  /** `next` is the row as it will be, so the page behind the modal re-renders */
+  /**
+   * `next` is the row as it will be, so the page behind the modal re-renders,
+   * and `said` is what the person in front of it is told.
+   *
+   * the route's own summary is not echoed here. It is written for the
+   * invocation log, where saying which screen a change came from is the whole
+   * point of the row; the person who just typed their address knows where they
+   * are standing and wants to know only that it saved
+   */
   async function save(
     path: string,
     body: Record<string, string>,
     next: Person,
+    said: string,
   ) {
     setBusy(true);
 
     try {
-      const { summary } = await postJson<{ summary?: string }>(path, {
+      await postJson(path, {
         pageId: person.pageId,
         name: person.name,
         ...body,
       });
 
       onSaved(next);
-      notify.ok(summary ?? "Saved.");
+      notify.ok(said);
       onClose();
     } catch (thrown) {
       notify.failed(thrown instanceof Error ? thrown.message : String(thrown));
@@ -144,10 +153,8 @@ function Body({
                 void save(
                   "/api/members/status",
                   { status },
-                  {
-                    ...person,
-                    status,
-                  },
+                  { ...person, status },
+                  `Status set to ${status}`,
                 )
               }
             >
@@ -168,6 +175,7 @@ function Body({
           "/api/members/email",
           { email: next },
           { ...person, email: next },
+          "Email saved",
         );
       }
     };
@@ -214,6 +222,7 @@ function Body({
         "/api/members/discord",
         { discordId },
         { ...person, discordId },
+        chosen ? `Discord linked to @${chosen.username}` : "Discord linked",
       );
     }
   };

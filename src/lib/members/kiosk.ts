@@ -15,35 +15,7 @@
 import type { Faces } from "~/lib/faces";
 import { normaliseName } from "~/lib/articles/member";
 import { plural } from "~/lib/utils";
-import type { ContributionRecord, MeetingRecord, Person } from "./records";
-
-/**
- * a person as the kiosk offers them.
- *
- * carries what distinguishes two people sharing a name, because that is the
- * one thing the picker must never guess at — see ADR 0010, which makes the
- * same refusal ADR 0009 already makes for a byline
- */
-export type Candidate = {
-  person: Person;
-  /** how many articles and images they are credited on, all time */
-  contributions: number;
-};
-
-/** all-time credits per member page id, for the disambiguation hint */
-export function contributionCounts(
-  contributions: ContributionRecord[],
-): Map<string, number> {
-  const counts = new Map<string, number>();
-
-  for (const article of contributions) {
-    for (const id of [...article.authorIds, ...article.imageCrewIds]) {
-      counts.set(id, (counts.get(id) ?? 0) + 1);
-    }
-  }
-
-  return counts;
-}
+import type { MeetingRecord, Person } from "./records";
 
 /**
  * the short line under a name that tells two people apart.
@@ -56,16 +28,16 @@ export function contributionCounts(
  * is deliberately a slightly uncomfortable thing to read: it is the row most
  * likely to be a duplicate
  */
-export function distinguish(candidate: Candidate): string {
+export function distinguish(person: Person): string {
   const parts: string[] = [];
 
-  parts.push(candidate.person.email ?? "no email on file");
+  parts.push(person.email ?? "no email on file");
 
-  if (candidate.contributions > 0) {
-    parts.push(plural(candidate.contributions, "contribution"));
+  if (person.contributions > 0) {
+    parts.push(plural(person.contributions, "contribution"));
   }
 
-  if (candidate.person.status) parts.push(candidate.person.status);
+  if (person.status) parts.push(person.status);
 
   return parts.join(" · ");
 }
@@ -78,9 +50,9 @@ export function distinguish(candidate: Candidate): string {
  * not a pick a person can make correctly, and the kiosk says so instead of
  * letting somebody guess
  */
-export function indistinguishable(a: Candidate, b: Candidate): boolean {
+export function indistinguishable(a: Person, b: Person): boolean {
   return (
-    normaliseName(a.person.name) === normaliseName(b.person.name) &&
+    normaliseName(a.name) === normaliseName(b.name) &&
     distinguish(a) === distinguish(b)
   );
 }
@@ -102,26 +74,22 @@ export function indistinguishable(a: Candidate, b: Candidate): boolean {
  * wrong-person tap more likely, not less
  */
 export function searchCandidates(
-  candidates: Candidate[],
+  roster: Person[],
   query: string,
   limit = 8,
-): Candidate[] {
+): Person[] {
   const needle = normaliseName(query);
   if (!needle) return [];
 
-  return candidates
-    .map((candidate) => ({
-      candidate,
-      at: normaliseName(candidate.person.name).indexOf(needle),
+  return roster
+    .map((person) => ({
+      person,
+      at: normaliseName(person.name).indexOf(needle),
     }))
     .filter((scored) => scored.at >= 0)
-    .sort(
-      (a, b) =>
-        a.at - b.at ||
-        a.candidate.person.name.localeCompare(b.candidate.person.name),
-    )
+    .sort((a, b) => a.at - b.at || a.person.name.localeCompare(b.person.name))
     .slice(0, limit)
-    .map((scored) => scored.candidate);
+    .map((scored) => scored.person);
 }
 
 /**

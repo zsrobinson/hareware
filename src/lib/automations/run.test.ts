@@ -4,12 +4,19 @@ import { afterEach, expect, test, vi } from "vitest";
    nothing to do is `skipped`, not `ok` */
 const meeting = vi.fn(async () => ({ outcome: "ok", summary: "meeting ran" }));
 const social = vi.fn(async () => ({ outcome: "ok", summary: "social ran" }));
+const applications = vi.fn(async () => ({
+  outcome: "ok",
+  summary: "applications ran",
+}));
 
 vi.mock("./meeting", () => ({
   sendMeetingReminder: (...a: unknown[]) => meeting(...(a as [])),
 }));
 vi.mock("./social", () => ({
   sendSocialPing: (...a: unknown[]) => social(...(a as [])),
+}));
+vi.mock("~/lib/members/sync", () => ({
+  syncApplications: (...a: unknown[]) => applications(...(a as [])),
 }));
 
 const reportFailure = vi.fn<(...args: unknown[]) => Promise<void>>(
@@ -41,6 +48,7 @@ const eastern = { date: "2026-09-03", hour: 8, weekday: "Thursday" };
 afterEach(() => {
   meeting.mockClear();
   social.mockClear();
+  applications.mockClear();
   reportFailure.mockClear();
   record.mockClear();
   vi.restoreAllMocks();
@@ -134,6 +142,7 @@ test("runAutomations reports what each one did", async () => {
   expect(report).toEqual({
     "meeting-reminder": "meeting ran",
     "social-ping": "social ran",
+    "application-sync": "applications ran",
   });
 });
 
@@ -216,7 +225,7 @@ test("records the outcome the automation returned, not whether it threw", async 
   const outcomes = record.mock.calls.map(
     (c) => (c[1] as { outcome: string }).outcome,
   );
-  expect(outcomes).toEqual(["skipped", "misconfigured"]);
+  expect(outcomes).toEqual(["skipped", "misconfigured", "ok"]);
 });
 
 test("records who fired a manual run", async () => {

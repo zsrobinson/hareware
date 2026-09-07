@@ -1,0 +1,250 @@
+/*
+  the four writes this feature makes, and nothing else.
+
+  every one of them is separated from the decision that led to it: `match.ts`
+  works out what should happen and returns it, and these functions do it. That
+  is what lets the hard part be tested without a network, and it is also why
+  none of these check anything — by the time one is called, the checking is
+  done.
+
+  all four write Notion rather than D1. Attendance and identity are the records
+  an election rests on, and ADR 0010 keeps them somewhere a club member can
+  open and repair without this repository. Nothing here is mirrored anywhere.
+*/
+
+import { notion } from "~/lib/services/notion/client";
+import type { Application } from "~/lib/services/discord/join-requests";
+import {
+  MEETING_PROPERTIES,
+  MEMBERS_DATA_SOURCE_ID,
+  MEMBER_PROPERTIES,
+  type MemberStatus,
+} from "./config";
+import type { Person } from "./standing";
+
+/** what a Members row is made of, in notion's write shapes */
+type MemberFields = {
+  name?: string;
+  discordId?: string;
+  email?: string | null;
+  status?: MemberStatus;
+};
+
+/**
+ * notion's write shape for each property, built only for the fields given.
+ *
+ * an absent key leaves the property alone; an explicit `null` email clears it.
+ * the two are different operations and a patch that could not express both
+ * would make "we do not know their email" and "they have no email" the same
+ */
+function properties(fields: MemberFields): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+
+  if (fields.name !== undefined)
+    patch[MEMBER_PROPERTIES.name.name] = {
+      title: [{ text: { content: fields.name } }],
+    };
+
+  if (fields.discordId !== undefined)
+    patch[MEMBER_PROPERTIES.discordId.name] = {
+      rich_text: [{ text: { content: fields.discordId } }],
+    };
+
+  /* notion's native email property, which takes a bare string rather than a
+     rich-text array — the one property here that does */
+  if (fields.email !== undefined)
+    patch[MEMBER_PROPERTIES.email.name] = { email: fields.email || null };
+
+  if (fields.status !== undefined)
+    patch[MEMBER_PROPERTIES.status.name] = { select: { name: fields.status } };
+
+  return patch;
+}
+
+/** a new Members row */
+export async function createMember(
+  env: Env,
+  fields: MemberFields & { name: string },
+): Promise<string> {
+  const page = (await notion(`pages`, env.NOTION_TOKEN!, {
+    parent: { type: "data_source_id", data_source_id: MEMBERS_DATA_SOURCE_ID },
+    properties: properties(fields),
+  })) as { id: string };
+
+  return page.id;
+}
+
+/** a new row for somebody the roster has never heard of, from their application */
+export async function createFromApplication(
+  env: Env,
+  application: Application,
+): Promise<string> {
+  return createMember(env, {
+    /* their discord handle only if they left the name blank — which none of
+       the fifty-one applications measured for ADR 0010 did, but a row named
+       after a username is repairable and a row named `""` is invisible */
+    name: application.name || application.username,
+    discordId: application.discordId,
+    email: application.email,
+  });
+}
+
+/** changes to an existing row */
+export async function updateMember(
+  env: Env,
+  pageId: string,
+  fields: MemberFields,
+): Promise<void> {
+  await notion(
+    `pages/${pageId}`,
+    env.NOTION_TOKEN!,
+    { properties: properties(fields) },
+    "PATCH",
+  );
+}
+
+/**
+ * puts an application's identity onto an existing row.
+ *
+ * the email is written only when the row has none. someone who typed one
+ * address at the kiosk and applied with another has two real addresses, and
+ * the one already on the row is the one an editor put there
+ */
+export async function linkApplication(
+  env: Env,
+  person: Person,
+  application: Application,
+): Promise<void> {
+  await updateMember(env, person.pageId, {
+    discordId: application.discordId,
+    ...(person.email ? {} : { email: application.email }),
+  });
+}
+
+/**
+ * who attended a meeting, written onto the meeting.
+ *
+ * the relation is replaced rather than appended to, so the caller sends the
+ * whole list. Appending would make a correction impossible — removing somebody
+ * signed in by mistake is the one edit a kiosk needs and an append-only write
+ * cannot express it.
+ *
+ * `Attendees` is two-way, so notion mirrors this onto each member's
+ * `Attendance` and neither side has to be written twice
+ */
+export async function setAttendees(
+  env: Env,
+  meetingPageId: string,
+  memberPageIds: string[],
+): Promise<void> {
+  await notion(
+    `pages/${meetingPageId}`,
+    env.NOTION_TOKEN!,
+    {
+      properties: {
+        [MEETING_PROPERTIES.attendees.name]: {
+          /* deduplicated because notion accepts the same page twice and a
+             double-tap on the kiosk is the likeliest way it happens */
+          relation: [...new Set(memberPageIds)].map((id) => ({ id })),
+        },
+      },
+    },
+    "PATCH",
+  );
+}
+
+/** the relations a merge has to carry across */
+const MERGED_RELATIONS = ["Articles", "Images", "Attendance"] as const;
+
+type RelationProperty = { relation?: { id: string }[] | null };
+
+/**
+ * folds one duplicate row into another and archives the empty one.
+ *
+ * the riskiest write here, and the only destructive one, so it re-reads both
+ * rows rather than trusting what a page rendered minutes ago: a merge computed
+ * from a stale read would drop whatever was added in between, permanently and
+ * silently.
+ *
+ * the surviving row keeps its own name and status. It gains the other's
+ * relations, and its discord id and email only where it had none — a merge
+ * should never overwrite something an editor typed.
+ *
+ * order matters. The union is written to the survivor first and the duplicate
+ * archived second, so a failure between the two leaves a row that is merged
+ * but not yet tidied, rather than one whose history has been deleted.
+ */
+export async function mergeMembers(
+  env: Env,
+  keepId: string,
+  dropId: string,
+): Promise<void> {
+  if (keepId === dropId) return;
+
+  const token = env.NOTION_TOKEN!;
+  const [keep, drop] = (await Promise.all([
+    notion(`pages/${keepId}`, token),
+    notion(`pages/${dropId}`, token),
+  ])) as {
+    properties: Record<
+      string,
+      RelationProperty & {
+        email?: string | null;
+        rich_text?: { plain_text: string }[] | null;
+      }
+    >;
+  }[];
+
+  const union: Record<string, unknown> = {};
+  for (const name of MERGED_RELATIONS) {
+    const ids = new Set([
+      ...(keep!.properties?.[name]?.relation ?? []).map((r) => r.id),
+      ...(drop!.properties?.[name]?.relation ?? []).map((r) => r.id),
+    ]);
+
+    /*
+      a relation the integration cannot reach is omitted from the schema
+      entirely and reads back as `[]` — indistinguishable from empty unless
+      you check for the property itself. writing the union anyway would
+      silently delete every credit on the survivor
+    */
+    if (!keep!.properties?.[name] || !drop!.properties?.[name]) {
+      throw new Error(
+        `cannot merge: ${name} is not readable, so its contents cannot be preserved`,
+      );
+    }
+
+    union[name] = { relation: [...ids].map((id) => ({ id })) };
+  }
+
+  const keptId = text(keep!.properties?.[MEMBER_PROPERTIES.discordId.name]);
+  const droppedId = text(drop!.properties?.[MEMBER_PROPERTIES.discordId.name]);
+  const keptEmail = keep!.properties?.[MEMBER_PROPERTIES.email.name]?.email;
+  const droppedEmail = drop!.properties?.[MEMBER_PROPERTIES.email.name]?.email;
+
+  await notion(
+    `pages/${keepId}`,
+    token,
+    {
+      properties: {
+        ...union,
+        ...properties({
+          ...(keptId ? {} : droppedId ? { discordId: droppedId } : {}),
+          ...(keptEmail ? {} : droppedEmail ? { email: droppedEmail } : {}),
+        }),
+      },
+    },
+    "PATCH",
+  );
+
+  await notion(`pages/${dropId}`, token, { in_trash: true }, "PATCH");
+}
+
+function text(
+  property: { rich_text?: { plain_text: string }[] | null } | undefined,
+): string {
+  return (property?.rich_text ?? [])
+    .map((part) => part.plain_text)
+    .join("")
+    .trim();
+}

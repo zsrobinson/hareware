@@ -7,7 +7,7 @@
   graph of every route, including the prerendered ones node builds itself.
 */
 
-export const ADMIN_ROUTES = ["/automations", "/commands", "/log"] as const;
+export const ADMIN_ROUTES = ["/attendance", "/reconciler", "/standing", "/automations", "/commands", "/log"] as const;
 
 export type AdminRoute = (typeof ADMIN_ROUTES)[number];
 

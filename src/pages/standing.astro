@@ -1,0 +1,56 @@
+---
+import { env } from "cloudflare:workers";
+import Dashboard from "~/layouts/dashboard.astro";
+import { StandingTable } from "~/components/standing-table";
+import { viewerState } from "~/lib/admin";
+import { admitted } from "~/lib/admin-guard";
+import { easternNow } from "~/lib/eastern";
+import { corpus, type Corpus } from "~/lib/members/roster";
+
+/* Reaching this page is the permission: the guard already refused anybody it
+   would not admit, and its lookup knows what to call them. */
+const who = admitted(Astro.locals);
+
+/* this page names every member and what they did. ADR 0005 for the rule, ADR
+   0007 for why the admin surface is the sensitive one */
+Astro.response.headers.set("cache-control", "private, no-store");
+
+/*
+  all three databases read once, server-side, and handed to the island whole.
+
+  the island re-answers the question locally on every change to the form,
+  because `standings()` is pure — an editor trying "what if it were four
+  meetings" gets the answer without a round trip, and without the corpus
+  shifting under them between two attempts at the same question. that is why
+  `standing.ts` was written as a pure function and why this page reads rather
+  than queries
+*/
+const token = env.NOTION_TOKEN;
+const rows: Corpus | null = token ? await corpus(token) : null;
+
+/* eastern, because the window's ends are compared against notion dates the
+   club would name in its own timezone */
+const today = easternNow(new Date()).date;
+---
+
+<Dashboard title="Standing" viewer={viewerState(who)}>
+  <div class="space-y-4">
+    <p class="text-muted-foreground text-sm">
+      Who satisfies these thresholds between these two dates. Nothing here is
+      stored — it is counted from attendance and publication dates each time you
+      ask, so it is as right as those records are. Everybody is listed, not only
+      the people who qualify, because the question that gets asked is why
+      somebody fell short.
+    </p>
+
+    {
+      rows ? (
+        <StandingTable corpus={rows} today={today} client:load />
+      ) : (
+        <p class="text-destructive text-sm">
+          NOTION_TOKEN is not set, so there is nothing to count.
+        </p>
+      )
+    }
+  </div>
+</Dashboard>

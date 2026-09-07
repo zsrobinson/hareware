@@ -1,0 +1,75 @@
+---
+import { env } from "cloudflare:workers";
+import Dashboard from "~/layouts/dashboard.astro";
+import { AttendanceKiosk } from "~/components/attendance-kiosk";
+import { viewerState } from "~/lib/admin";
+import { admitted } from "~/lib/admin-guard";
+import { easternNow } from "~/lib/eastern";
+import { contributionCounts, defaultMeeting } from "~/lib/members/kiosk";
+import { contributions, meetings, people } from "~/lib/members/roster";
+
+/* Reaching this page is the permission: the guard already refused anybody it
+   would not admit, and its lookup knows what to call them. */
+const who = admitted(Astro.locals);
+
+/* the room can see this screen, and it lists everybody's name and email
+   domain. nothing may cache any of it */
+Astro.response.headers.set("cache-control", "private, no-store");
+
+const token = env.NOTION_TOKEN;
+
+/*
+  the roster and the calendar, read once when the laptop is set down.
+
+  the whole roster rather than a search endpoint per keystroke: fifty people
+  fit in one payload, and a kiosk in a room with student wifi must keep working
+  when the network does not. Every tap after this costs exactly one write.
+
+  the articles are read only to say "3 contributions" beside a name — which is
+  what tells two people sharing one apart, and per ADR 0010 that is the
+  disambiguation this screen may not do without
+*/
+const [roster, calendar, credits] = token
+  ? await Promise.all([people(token), meetings(token), contributions(token)])
+  : [[], [], []];
+
+const counts = contributionCounts(credits);
+const candidates = roster.map((person) => ({
+  person,
+  contributions: counts.get(person.pageId) ?? 0,
+}));
+
+/* newest first, because the picker's default is today's or the last one and
+   the override is almost always the one beside it */
+const calendarByDate = [...calendar]
+  .filter((meeting) => meeting.date)
+  .sort((a, b) => b.date.localeCompare(a.date));
+
+const today = easternNow(new Date()).date;
+const opening = defaultMeeting(calendar, today);
+---
+
+<Dashboard title="Attendance" viewer={viewerState(who)}>
+  <div class="mx-auto max-w-2xl space-y-4">
+    <p class="text-muted-foreground text-sm">
+      Leave this at the front of the room with the sidebar collapsed. People
+      type their own names; tapping one signs them in. Everything is written to
+      the meeting in Notion as it happens.
+    </p>
+
+    {
+      token ? (
+        <AttendanceKiosk
+          meetings={calendarByDate}
+          candidates={candidates}
+          initialMeetingId={opening?.pageId ?? null}
+          client:load
+        />
+      ) : (
+        <p class="text-destructive text-sm">
+          NOTION_TOKEN is not set, so attendance cannot be recorded.
+        </p>
+      )
+    }
+  </div>
+</Dashboard>

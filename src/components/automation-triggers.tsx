@@ -137,13 +137,23 @@ export function AutomationTriggers({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Run the {confirming?.name} automation?</DialogTitle>
+            {/* an automation with no channel reaches nobody, so the warning
+                that everyone will see it would be false — it still writes,
+                which is its own reason to ask first */}
             <DialogDescription>
-              This posts to{" "}
-              <strong>
-                {confirming && channelLabel(confirming.channelId)}
-              </strong>{" "}
-              and pings the role, exactly as it would in the morning. Everyone
-              in the channel sees it.
+              {confirming?.channelId ? (
+                <>
+                  This posts to{" "}
+                  <strong>{channelLabel(confirming.channelId)}</strong> and
+                  pings the role, exactly as it would in the morning. Everyone
+                  in the channel sees it.
+                </>
+              ) : (
+                <>
+                  This posts nothing, and makes the same changes it would in the
+                  morning. They are real.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

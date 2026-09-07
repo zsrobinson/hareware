@@ -1,0 +1,92 @@
+---
+import { env } from "cloudflare:workers";
+import Dashboard from "~/layouts/dashboard.astro";
+import { Reconciler } from "~/components/reconciler";
+import { viewerState } from "~/lib/admin";
+import { admitted } from "~/lib/admin-guard";
+import {
+  groupWatermark,
+  isExternalAddress,
+  pendingForGroup,
+} from "~/lib/members/group";
+import { duplicates, resolveApplications } from "~/lib/members/match";
+import { people } from "~/lib/members/roster";
+import { approvedApplications } from "~/lib/services/discord/join-requests";
+
+/* Reaching this page is the permission: the guard already refused anybody it
+   would not admit, and its lookup knows what to call them. */
+const who = admitted(Astro.locals);
+
+/* names, emails and discord ids, all on one screen. nothing may cache it */
+Astro.response.headers.set("cache-control", "private, no-store");
+
+/*
+  the roster and every approved application, read together.
+
+  all of the applications every time rather than the ones since a cursor: the
+  endpoint's ordering is not trustworthy and a stored cursor that slips past a
+  gap never revisits it — see `approvedApplications`, and ADR 0010 on why
+  statelessness is worth the round trip here. Fifty-one applications is one
+  request.
+
+  the failure is caught rather than thrown: three of the four sections on this
+  page do not need discord at all, and the duplicates section in particular is
+  the one somebody opens the morning of an election. A page that 500s because
+  a bot token expired would take the merge tool down with it
+*/
+const notionToken = env.NOTION_TOKEN;
+const roster = notionToken ? await people(notionToken) : [];
+
+let applications: Awaited<ReturnType<typeof approvedApplications>> = [];
+let discordProblem: string | null = null;
+
+if (env.DISCORD_BOT_TOKEN) {
+  try {
+    applications = await approvedApplications(env.DISCORD_BOT_TOKEN);
+  } catch (thrown) {
+    discordProblem = thrown instanceof Error ? thrown.message : String(thrown);
+  }
+} else {
+  discordProblem = "DISCORD_BOT_TOKEN is not set.";
+}
+
+const resolutions = resolveApplications(roster, applications);
+const nearMatches = duplicates(roster);
+const unknownStatus = roster.filter((person) => person.status === null);
+
+/* the watermark is a record of what a person did, and D1 holding it is exactly
+   what ADR 0007 permits there: authoritative over nothing */
+const watermark = env.DB ? await groupWatermark(env.DB) : null;
+const pending = pendingForGroup(applications, watermark);
+const external = pending
+  .map((application) => application.email)
+  .filter((email): email is string => Boolean(email))
+  .filter((email) => isExternalAddress(email));
+---
+
+<Dashboard title="Reconciler" viewer={viewerState(who)}>
+  <div class="max-w-4xl space-y-6">
+    <p class="text-muted-foreground text-sm">
+      Everything that needs a person, in one place. Run this before an election:
+      an unresolved duplicate splits somebody's attendance across two rows and
+      denies them a vote they earned.
+    </p>
+
+    {
+      discordProblem && (
+        <p class="border-destructive/50 bg-destructive/10 text-destructive rounded-lg border p-3 text-sm">
+          Applications could not be read, so the first two sections and the
+          Google Group list are empty: {discordProblem}
+        </p>
+      )
+    }
+
+    <Reconciler
+      resolutions={resolutions}
+      duplicates={nearMatches}
+      unknownStatus={unknownStatus}
+      group={{ watermark, pending, external }}
+      client:load
+    />
+  </div>
+</Dashboard>

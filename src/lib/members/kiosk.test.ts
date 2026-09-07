@@ -1,0 +1,150 @@
+import { describe, expect, it } from "vitest";
+import {
+  contributionCounts,
+  defaultMeeting,
+  distinguish,
+  indistinguishable,
+  searchCandidates,
+  type Candidate,
+} from "./kiosk";
+import type { ContributionRecord, MeetingRecord, Person } from "./standing";
+
+function person(over: Partial<Person> & { name: string }): Person {
+  return {
+    pageId: over.name,
+    discordId: null,
+    email: null,
+    status: null,
+    ...over,
+  };
+}
+
+const candidate = (over: Partial<Person> & { name: string }, credits = 0) =>
+  ({ person: person(over), contributions: credits }) satisfies Candidate;
+
+function meeting(date: string, name = date): MeetingRecord {
+  return { pageId: name, name, date, type: "General Body", attendeeIds: [] };
+}
+
+describe("searchCandidates", () => {
+  const roster = [
+    candidate({ name: "Joanna Reed" }),
+    candidate({ name: "Ann Marie Diaz" }),
+    candidate({ name: "Zoë O'Brien" }),
+  ];
+
+  it("offers nothing until something is typed", () => {
+    expect(searchCandidates(roster, "")).toEqual([]);
+    expect(searchCandidates(roster, "   ")).toEqual([]);
+  });
+
+  it("ranks a prefix match above an infix one", () => {
+    expect(searchCandidates(roster, "ann").map((c) => c.person.name)).toEqual([
+      "Ann Marie Diaz",
+      "Joanna Reed",
+    ]);
+  });
+
+  it("ignores case, accents and punctuation, which nobody types standing up", () => {
+    expect(searchCandidates(roster, "zoe obrien")).toHaveLength(1);
+    expect(searchCandidates(roster, "ZOE")).toHaveLength(1);
+  });
+
+  it("caps the list so the screen stays tappable", () => {
+    const many = Array.from({ length: 20 }, (_, i) =>
+      candidate({ name: `Sam ${i}` }),
+    );
+    expect(searchCandidates(many, "sam", 5)).toHaveLength(5);
+  });
+});
+
+describe("distinguish", () => {
+  it("shows a domain rather than a whole address, which the room can see", () => {
+    expect(
+      distinguish(candidate({ name: "Sam", email: "sam@terpmail.umd.edu" })),
+    ).toBe("@terpmail.umd.edu");
+  });
+
+  it("says so when there is no email, because that row is the likely duplicate", () => {
+    expect(distinguish(candidate({ name: "Sam" }))).toBe("no email on file");
+  });
+
+  it("counts contributions and names a status when there is one", () => {
+    expect(
+      distinguish(
+        candidate({ name: "Sam", email: "s@umd.edu", status: "Grad" }, 1),
+      ),
+    ).toBe("@umd.edu · 1 contribution · Grad");
+  });
+});
+
+describe("indistinguishable", () => {
+  it("is true for two rows a person could not choose between", () => {
+    expect(
+      indistinguishable(
+        candidate({ name: "Sam Lee" }),
+        candidate({ name: "sam lee" }),
+      ),
+    ).toBe(true);
+  });
+
+  it("is false once anything separates them", () => {
+    expect(
+      indistinguishable(
+        candidate({ name: "Sam Lee", email: "a@umd.edu" }),
+        candidate({ name: "Sam Lee" }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("defaultMeeting", () => {
+  it("picks today's meeting", () => {
+    const today = meeting("2026-09-07");
+    expect(defaultMeeting([meeting("2026-08-31"), today], "2026-09-07")).toBe(
+      today,
+    );
+  });
+
+  it("never opens on a future meeting, which would misfile tonight's room", () => {
+    const past = meeting("2026-08-31");
+    expect(defaultMeeting([past, meeting("2026-09-14")], "2026-09-07")).toBe(
+      past,
+    );
+  });
+
+  it("compares a timestamped date by its day", () => {
+    const timed = meeting("2026-09-07T19:00:00.000-04:00");
+    expect(defaultMeeting([timed], "2026-09-07")).toBe(timed);
+  });
+
+  it("is null when nothing has happened yet", () => {
+    expect(defaultMeeting([meeting("2026-12-01")], "2026-09-07")).toBeNull();
+    expect(defaultMeeting([], "2026-09-07")).toBeNull();
+  });
+});
+
+describe("contributionCounts", () => {
+  it("counts a byline and an image credit alike, per ADR 0010", () => {
+    const articles: ContributionRecord[] = [
+      {
+        pageId: "a",
+        headline: "one",
+        date: "2026-01-01",
+        authorIds: ["sam"],
+        imageCrewIds: ["ada"],
+      },
+      {
+        pageId: "b",
+        headline: "two",
+        date: "2026-02-01",
+        authorIds: ["sam"],
+        imageCrewIds: ["sam"],
+      },
+    ];
+
+    /* credited on both sides of one article legitimately counts twice */
+    expect(contributionCounts(articles).get("sam")).toBe(3);
+    expect(contributionCounts(articles).get("ada")).toBe(1);
+  });
+});

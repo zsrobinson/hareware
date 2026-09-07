@@ -80,3 +80,33 @@ test("a caller that says nothing about what it knew adds and never removes", () 
 test("a caller that does say what it knew keeps its removals", () => {
   expect(knownOrSafe(["a", "b"])).toEqual(["a", "b"]);
 });
+
+/*
+  order is part of the contract, not an accident.
+
+  the kiosk holds `present` in insertion order and reverses it to draw newest
+  first, so the merge has to keep the order notion's relation is already in and
+  put arrivals on the end. Returning them any other way put the person who just
+  signed in at the bottom of the list they were watching
+*/
+test("insertion order survives the merge, with arrivals last", () => {
+  expect(mergeAttendance(["a", "b"], ["a", "b"], ["a", "b", "c"])).toEqual([
+    "a",
+    "b",
+    "c",
+  ]);
+});
+
+test("another device's arrivals land after ours, not shuffled through them", () => {
+  const merged = mergeAttendance(["a", "b", "z"], ["a", "b"], ["a", "b", "c"]);
+
+  expect(merged).toEqual(["a", "b", "z", "c"]);
+  /* which is what the kiosk draws, newest first */
+  expect([...merged].reverse()).toEqual(["c", "z", "b", "a"]);
+});
+
+test("a removal does not reorder what is left", () => {
+  expect(mergeAttendance(["a", "b", "c"], ["a", "b", "c"], ["a", "c"])).toEqual(
+    ["a", "c"],
+  );
+});

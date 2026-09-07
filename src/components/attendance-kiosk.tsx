@@ -30,7 +30,6 @@ import {
   RosterQueries,
   rosterKeys,
   usePatch,
-  useRefresh,
   useRosterQuery,
 } from "~/lib/members/queries";
 import type { KioskData } from "~/lib/members/views";
@@ -154,7 +153,6 @@ function Kiosk({ initial, today, faces, guild }: Props) {
     initial,
   );
 
-  const refreshRoster = useRefresh(rosterKeys.kiosk(pinned));
   const patchRoster = usePatch<KioskData>(rosterKeys.kiosk(pinned));
 
   const [meetingId, setMeetingId] = useState(openingId ?? "");
@@ -264,7 +262,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
        forty rows, and the person who just tapped has to be able to see that it
        worked without scrolling past everybody who arrived before them */
     void commit(
-      [person.pageId, ...present],
+      [...present, person.pageId],
       `${shownName(person)} is signed in`,
     );
   }
@@ -281,9 +279,10 @@ function Kiosk({ initial, today, faces, guild }: Props) {
   /**
    * the row as it now is, on screen before notion is asked again.
    *
-   * the edit is written into the cache and then re-read: the person is looking
-   * at their own chip and the change has to land immediately, but notion is
-   * what the list actually means, so the optimistic shape does not survive
+   * written into the cache and not re-read. The route already validated what
+   * it wrote and answered with it, so a refetch would spend three notion
+   * requests to be told the same thing, and redraw a page somebody is
+   * queueing at while it did. The next mount reads notion again
    */
   function replacePerson(person: Person) {
     patchRoster((current) => ({
@@ -292,7 +291,6 @@ function Kiosk({ initial, today, faces, guild }: Props) {
         one.pageId === person.pageId ? person : one,
       ),
     }));
-    void refreshRoster();
   }
 
   async function addNewPerson() {
@@ -318,15 +316,17 @@ function Kiosk({ initial, today, faces, guild }: Props) {
       /* into the roster on screen too, so a second person with the same name
          later this evening is disambiguated against them rather than matched
          to them, and re-read so the row is notion's rather than ours */
+      /* no refetch. the patch above is the whole answer for a row created a
+         second ago, and re-reading costs three notion requests and a visible
+         redraw of a page somebody is queueing at */
       patchRoster((current) => ({
         ...current,
         candidates: [...current.candidates, added],
       }));
-      void refreshRoster();
       changeQuery("");
 
       await commit(
-        [created.pageId, ...present],
+        [...present, created.pageId],
         `${created.name} was added and is signed in`,
       );
     } catch (thrown) {
@@ -335,6 +335,17 @@ function Kiosk({ initial, today, faces, guild }: Props) {
       setBusy(false);
     }
   }
+
+  /*
+    newest first on screen, oldest first everywhere else.
+
+    `present` is insertion order, which is what notion's relation holds and
+    what `mergeAttendance` preserves when it appends another device's people.
+    Keeping one order and reversing it here means a reload shows the same list
+    as the tap did; prepending locally instead put the newest at the top until
+    the write answered, and then the server's order flipped it back
+  */
+  const signedIn = useMemo(() => [...present].reverse(), [present]);
 
   const listboxId = "kiosk-matches";
 
@@ -554,7 +565,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
           <p className="text-muted-foreground text-sm">Nobody yet.</p>
         ) : (
           <ul className="divide-y rounded-lg border">
-            {present.map((pageId) => {
+            {signedIn.map((pageId) => {
               const person = byId.get(pageId) ?? {
                 pageId,
                 name: "Someone not on this list",

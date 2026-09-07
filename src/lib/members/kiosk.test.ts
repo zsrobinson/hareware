@@ -8,6 +8,7 @@ import {
   meetingLabel,
   offerableMeetings,
   searchCandidates,
+  discordHandle,
   shownName,
   type Candidate,
 } from "./kiosk";
@@ -212,7 +213,7 @@ describe("initials", () => {
   });
 });
 
-describe("shownName", () => {
+describe("shownName and discordHandle", () => {
   const face = {
     "1": {
       username: "zsrobinson",
@@ -221,21 +222,29 @@ describe("shownName", () => {
     },
   };
 
-  it("prefers the discord handle where the row is linked", () => {
+  /* the handle names the linked account and belongs on the chip. as a title it
+     hid the name somebody walks up to the kiosk looking for */
+  it("titles a row with the notion name even when a discord row is linked", () => {
     expect(
-      shownName(person({ name: "Zachary Robinson", discordId: "1" }), face),
+      shownName(person({ name: "Zachary Robinson", discordId: "1" })),
+    ).toBe("Zachary Robinson");
+  });
+
+  it("gives the chip the discord handle where the row is linked", () => {
+    expect(
+      discordHandle(person({ name: "Zachary Robinson", discordId: "1" }), face),
     ).toBe("zsrobinson");
   });
 
-  it("falls back to the notion name where nothing is linked", () => {
-    expect(shownName(person({ name: "Zachary Robinson" }), face)).toBe(
-      "Zachary Robinson",
-    );
+  it("has no handle where nothing is linked", () => {
+    expect(
+      discordHandle(person({ name: "Zachary Robinson" }), face),
+    ).toBeNull();
   });
 
-  it("falls back where the guild read did not resolve the id", () => {
-    expect(shownName(person({ name: "Sam Lee", discordId: "2" }), face)).toBe(
-      "Sam Lee",
-    );
+  it("has no handle where the guild read did not resolve the id", () => {
+    expect(
+      discordHandle(person({ name: "Sam Lee", discordId: "2" }), face),
+    ).toBeNull();
   });
 });

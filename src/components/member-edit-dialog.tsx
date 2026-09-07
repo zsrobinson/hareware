@@ -12,7 +12,6 @@ import {
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { normaliseName } from "~/lib/articles/member";
-import type { Faces } from "~/lib/faces";
 import { shownName } from "~/lib/members/kiosk";
 import { notify } from "~/lib/notify";
 import type { Person } from "~/lib/members/records";
@@ -49,7 +48,6 @@ type Props = {
   /** notion's own Status options, read from the schema on every page load */
   statuses: string[];
   /** discord profiles, so a linked row is titled by the handle the room knows */
-  faces: Faces;
 };
 
 export function MemberEditDialog({
@@ -58,7 +56,6 @@ export function MemberEditDialog({
   onSaved,
   guild,
   statuses,
-  faces,
 }: Props) {
   return (
     <Dialog open={editing !== null} onOpenChange={(open) => !open && onClose()}>
@@ -71,7 +68,6 @@ export function MemberEditDialog({
             onSaved={onSaved}
             guild={guild}
             statuses={statuses}
-            faces={faces}
           />
         )}
       </DialogContent>
@@ -85,10 +81,9 @@ function Body({
   onSaved,
   guild,
   statuses,
-  faces,
 }: Props & { editing: Editing }) {
   const { field, person } = editing;
-  const called = shownName(person, faces);
+  const called = shownName(person);
   const [busy, setBusy] = useState(false);
   const [discordId, setDiscordId] = useState(person.discordId ?? "");
   const [query, setQuery] = useState("");

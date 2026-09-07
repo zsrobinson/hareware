@@ -186,7 +186,7 @@ export function AttendanceKiosk({
 
     if (present.includes(candidate.person.pageId)) {
       /* they tapped because they were not sure it had registered */
-      notify.ok(`${shownName(candidate.person, faces)} was already signed in`);
+      notify.ok(`${shownName(candidate.person)} was already signed in`);
       refocus();
       return;
     }
@@ -196,13 +196,13 @@ export function AttendanceKiosk({
        worked without scrolling past everybody who arrived before them */
     void commit(
       [candidate.person.pageId, ...present],
-      `${shownName(candidate.person, faces)} is signed in`,
+      `${shownName(candidate.person)} is signed in`,
     );
   }
 
   function remove(pageId: string) {
     const person = byId.get(pageId)?.person;
-    const name = person ? shownName(person, faces) : "that row";
+    const name = person ? shownName(person) : "that row";
     void commit(
       present.filter((id) => id !== pageId),
       `Removed ${name}`,
@@ -486,7 +486,7 @@ export function AttendanceKiosk({
                 },
                 contributions: 0,
               };
-              const name = shownName(candidate.person, faces);
+              const name = shownName(candidate.person);
 
               return (
                 <li
@@ -531,7 +531,6 @@ export function AttendanceKiosk({
         onSaved={replacePerson}
         guild={guild}
         statuses={statuses}
-        faces={faces}
       />
     </div>
   );

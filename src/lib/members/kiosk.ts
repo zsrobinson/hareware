@@ -226,12 +226,16 @@ export function initials(name: string): string {
 /**
  * what to call somebody on screen.
  *
- * their Discord username wherever the row is linked and the guild read
- * resolved it: the two names usually agree, and where they do not the handle
- * is the one the room recognises. Matching still runs on the Notion name, so
- * this changes nothing about who a search finds
+ * always the name on their Notion row. The Discord handle belongs on the
+ * Discord chip, where it says which account is linked; using it as the title
+ * hid the name the room is actually looking for
  */
-export function shownName(person: Person, faces: Faces): string {
+export function shownName(person: Person): string {
+  return person.name;
+}
+
+/** the linked Discord handle, for the chip that names the account */
+export function discordHandle(person: Person, faces: Faces): string | null {
   const face = person.discordId ? faces[person.discordId] : undefined;
-  return face?.username ?? person.name;
+  return face?.username ?? null;
 }

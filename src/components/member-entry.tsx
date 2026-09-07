@@ -7,7 +7,7 @@ import {
 import { MemberFace } from "~/components/member-face";
 import { Badge } from "~/components/ui/badge";
 import type { Faces } from "~/lib/faces";
-import { shownName, type Candidate } from "~/lib/members/kiosk";
+import { discordHandle, shownName, type Candidate } from "~/lib/members/kiosk";
 import { plural } from "~/lib/utils";
 
 /*
@@ -37,7 +37,6 @@ type Props = {
 
 export function MemberEntry({ candidate, faces, onEdit }: Props) {
   const { person, contributions } = candidate;
-  const face = person.discordId ? faces[person.discordId] : undefined;
 
   const credits = contributions > 0 && (
     <Badge variant="secondary">
@@ -56,15 +55,18 @@ export function MemberEntry({ candidate, faces, onEdit }: Props) {
       />
 
       <div className="min-w-0 space-y-1">
-        <div className="truncate font-medium">{shownName(person, faces)}</div>
+        <div className="truncate font-medium">{shownName(person)}</div>
 
         {onEdit ? (
           <div className="flex flex-wrap items-center gap-1">
             <Chip
               icon={AtSignIcon}
-              /* the server nickname where we have it: the name above is
-                 already the handle, and a snowflake tells nobody anything */
-              label={face?.displayName ?? (person.discordId ? "Discord" : null)}
+              /* the linked handle: the title above is their Notion name, and a
+                 snowflake tells nobody which account this is */
+              label={
+                discordHandle(person, faces) ??
+                (person.discordId ? "Discord" : null)
+              }
               missing="Add Discord"
               onEdit={() => onEdit("discord")}
             />

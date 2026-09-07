@@ -88,9 +88,11 @@ const columnsFor = (faces: Faces): ColumnDef<LogRow, unknown>[] => [
       const face = faces[actor];
       return (
         <span className="flex items-center gap-2 whitespace-nowrap">
+          {/* the id is not a name, so an unresolved actor gets the ghost
+              rather than initials made out of a snowflake */}
           <MemberFace
             discordId={actor}
-            name={face?.displayName ?? actor}
+            name={face?.displayName ?? ""}
             faces={faces}
           />
           <span className="text-muted-foreground">

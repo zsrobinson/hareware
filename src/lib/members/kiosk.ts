@@ -154,3 +154,72 @@ export function defaultMeeting(
 
   return dated[0]?.meeting ?? null;
 }
+
+/**
+ * a meeting's name without the date somebody typed into it.
+ *
+ * the calendar's rows are named "General Body Meeting 2026-09-08", and the
+ * kiosk shows the date in its own column already. Presentation only: notion is
+ * never rewritten, so a row whose name is nothing but a date keeps it rather
+ * than becoming blank
+ */
+export function meetingLabel(name: string): string {
+  const stripped = name.replace(/[\s–—-]*\d{4}-\d{2}-\d{2}\s*$/, "");
+  return stripped.trim() || name.trim();
+}
+
+/** how far back the picker reaches before somebody has to pass `?meeting=` */
+const WINDOW_MONTHS = 1;
+
+/** an ISO day some number of months before another, clamped by the calendar */
+function monthsBefore(day: string, months: number): string {
+  const at = new Date(`${day}T00:00:00Z`);
+  at.setUTCMonth(at.getUTCMonth() - months);
+  return at.toISOString().slice(0, 10);
+}
+
+/**
+ * the meetings worth offering, newest first.
+ *
+ * a semester of history in one select is a list nobody reads, and the row that
+ * gets tapped by accident is an old one — filing tonight's attendance against
+ * a meeting last spring, silently. So the picker holds the past month and
+ * everything ahead.
+ *
+ * `pinned` is the exception, and it is why this takes an argument rather than
+ * a date alone: `?meeting=` is how somebody backfills an old meeting on
+ * purpose, and a picker that dropped the meeting the page is currently showing
+ * would render a select with no selection and no way back to it
+ */
+export function offerableMeetings(
+  meetings: MeetingRecord[],
+  today: string,
+  pinned: string | null = null,
+): MeetingRecord[] {
+  const from = monthsBefore(today, WINDOW_MONTHS);
+
+  return meetings
+    .filter((meeting) => meeting.date)
+    .filter(
+      (meeting) =>
+        meeting.date.slice(0, 10) >= from || meeting.pageId === pinned,
+    )
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+/**
+ * the two letters an avatar falls back to when nothing is linked to Discord.
+ *
+ * first and last of what somebody typed, because middle names are common on a
+ * roster typed from applications and "MK" for Mary Kate Ellis is the wrong
+ * pair. A single name gets one letter rather than a doubled one
+ */
+export function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "";
+
+  const first = parts[0]![0]!;
+  const last = parts[parts.length - 1]![0]!;
+
+  return (parts.length === 1 ? first : first + last).toUpperCase();
+}

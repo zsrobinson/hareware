@@ -22,7 +22,6 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import { Textarea } from "~/components/ui/textarea";
-import { MEMBER_STATUSES, type MemberStatus } from "~/lib/members/config";
 import type { Duplicate, Resolution } from "~/lib/members/match";
 import { postJson } from "~/lib/post-json";
 import type { Person } from "~/lib/members/records";
@@ -52,11 +51,11 @@ type Props = {
   duplicates: Duplicate[];
   /** rows whose `Status` select is empty — the one field a person maintains */
   unknownStatus: Person[];
+  /** notion's own Status options, so renaming one there needs no deploy here */
+  statuses: string[];
   group: GroupState;
 };
 
-/* a section with nothing waiting starts folded: this page is worked top to
-   bottom, and the sections that need somebody are the ones with a count */
 function Section({
   title,
   why,
@@ -69,9 +68,11 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <Collapsible defaultOpen={count > 0} render={<section />}>
-      <CollapsibleTrigger className="flex w-full items-center gap-2 text-left">
-        <ChevronDownIcon className="text-muted-foreground size-4 transition-transform data-[panel-open]:rotate-180" />
+    <Collapsible defaultOpen render={<section />}>
+      <CollapsibleTrigger className="group flex w-full items-center gap-2 text-left">
+        {/* base-ui puts `data-panel-open` on the trigger, not on the icon
+            inside it, so the variant has to reach up to the group */}
+        <ChevronDownIcon className="text-muted-foreground size-4 transition-transform duration-200 group-data-[panel-open]:rotate-180" />
         <h2 className="text-lg font-medium">{title}</h2>
         <Badge variant={count > 0 ? "default" : "outline"}>{count}</Badge>
       </CollapsibleTrigger>
@@ -115,6 +116,7 @@ export function Reconciler({
   resolutions,
   duplicates,
   unknownStatus,
+  statuses,
   group,
 }: Props) {
   /* what each row has been told about itself. a row that has been acted on
@@ -295,7 +297,7 @@ export function Reconciler({
               >
                 <Who person={person} />
                 <div className="flex flex-wrap items-center gap-2">
-                  {MEMBER_STATUSES.map((status: MemberStatus) => (
+                  {statuses.map((status) => (
                     <Button
                       key={status}
                       size="sm"

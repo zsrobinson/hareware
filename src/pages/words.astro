@@ -63,8 +63,8 @@ Astro.response.headers.set("cache-control", "private, no-store");
 const who = viewerState(await viewer(Astro.request));
 ---
 
-<Dashboard title="Word Counter" viewer={who}>
-  <div class="flex max-w-120 flex-col gap-2">
+<Dashboard title="Word Counter" viewer={who} width="form">
+  <div class="flex flex-col gap-2">
     <FormItem>
       <Link2Icon className="size-5 min-w-max" />
       <FormLabel>Article Links</FormLabel>

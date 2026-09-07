@@ -42,23 +42,30 @@ export const MEMBER_PROPERTIES = {
 } as const;
 
 /**
- * where a member stands with the university.
+ * the one status the rules turn on.
  *
- * the only thing distinguishing an alum, because nothing else does: people do
- * not leave the server, and graduation year is deliberately not recorded — see
- * ADR 0010 on why a stored year is wrong more often than it is useful.
- *
- * spelled exactly as the select's options are in notion. a value that is not
- * one of these is read as unknown rather than coerced, because a typo'd status
- * silently granting or denying a vote is the failure this whole design exists
- * to avoid
+ * every other status is a label Notion owns and this code only prints — the
+ * picker reads `properties.Status.select.options`, so renaming Undergrad needs
+ * no deploy. This one is different: `standing.ts` excludes an alum from voting
+ * by comparing against exactly this string, and a rename in Notion would
+ * enfranchise alumni in an election with nothing to show for it. So the value
+ * is named once, compared through the name, and checked against Notion's live
+ * options by `alumOptionMissing` — which the standing page and the reconciler
+ * say out loud rather than failing open.
  */
-export const MEMBER_STATUSES = ["Undergrad", "Grad", "Alum"] as const;
-export type MemberStatus = (typeof MEMBER_STATUSES)[number];
+export const ALUM_STATUS = "Alum";
 
-/** whether a status is one the club recognises */
-export function isMemberStatus(value: string | null): value is MemberStatus {
-  return (MEMBER_STATUSES as readonly string[]).includes(value ?? "");
+/**
+ * what to offer when Notion's schema could not be read.
+ *
+ * a fallback, not the vocabulary. `ALUM_STATUS` is spelled through the
+ * constant so the two cannot drift
+ */
+export const FALLBACK_MEMBER_STATUSES = ["Undergrad", "Grad", ALUM_STATUS];
+
+/** whether Notion's live options still contain the value the alum rule tests */
+export function alumOptionMissing(options: string[]): boolean {
+  return options.length > 0 && !options.includes(ALUM_STATUS);
 }
 
 /** the meetings database container; `data_sources/{id}` holds the rows */

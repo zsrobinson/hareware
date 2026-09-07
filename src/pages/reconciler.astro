@@ -10,7 +10,12 @@ import {
   pendingForGroup,
 } from "~/lib/members/group";
 import { duplicates, resolveApplications } from "~/lib/members/match";
-import { people } from "~/lib/members/roster";
+import { people, statusOptions } from "~/lib/members/roster";
+import {
+  ALUM_STATUS,
+  alumOptionMissing,
+  FALLBACK_MEMBER_STATUSES,
+} from "~/lib/members/config";
 import { approvedApplications } from "~/lib/services/discord/join-requests";
 
 /* Reaching this page is the permission: the guard already refused anybody it
@@ -45,7 +50,7 @@ let discordProblem: string | null = env.DISCORD_BOT_TOKEN
   ? null
   : "DISCORD_BOT_TOKEN is not set.";
 
-const [roster, applications, watermark] = await Promise.all([
+const [roster, applications, watermark, liveStatuses] = await Promise.all([
   notionToken ? people(notionToken) : [],
   env.DISCORD_BOT_TOKEN
     ? approvedApplications(env.DISCORD_BOT_TOKEN).catch((thrown: unknown) => {
@@ -57,7 +62,13 @@ const [roster, applications, watermark] = await Promise.all([
   /* the watermark is a record of what a person did, and D1 holding it is
      exactly what ADR 0007 permits there: authoritative over nothing */
   env.DB ? groupWatermark(env.DB) : null,
+  /* the status buttons below are notion's own options, so renaming one is an
+     edit in notion. `ALUM_STATUS` is the exception and is checked, not read */
+  notionToken ? statusOptions(notionToken).catch(() => [] as string[]) : [],
 ]);
+
+const statuses = liveStatuses.length ? liveStatuses : FALLBACK_MEMBER_STATUSES;
+const alumMissing = alumOptionMissing(liveStatuses);
 
 const resolutions = resolveApplications(roster, applications);
 const nearMatches = duplicates(roster);
@@ -70,11 +81,22 @@ const external = pending
 ---
 
 <Dashboard title="Reconciler" viewer={viewerState(who)}>
-  <div class="max-w-4xl space-y-6">
+  <div class="space-y-6">
     <p class="text-muted-foreground text-sm">
       Run this before an election. An unresolved duplicate splits somebody's
       attendance across two rows and denies them a vote they earned.
     </p>
+
+    {
+      alumMissing && (
+        <p class="border-destructive/50 bg-destructive/10 text-destructive rounded-lg border p-3 text-sm">
+          Notion's Status options no longer include "{ALUM_STATUS}", which is
+          the value the voting rule excludes on. Restore that option, or nobody
+          will be excluded as an alum. Options Notion has:{" "}
+          {liveStatuses.join(", ")}.
+        </p>
+      )
+    }
 
     {
       discordProblem && (
@@ -89,6 +111,7 @@ const external = pending
       resolutions={resolutions}
       duplicates={nearMatches}
       unknownStatus={unknownStatus}
+      statuses={statuses}
       group={{ watermark, pending, external }}
       client:load
     />

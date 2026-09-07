@@ -11,16 +11,21 @@
   property in Notion cannot change what this code means.
 */
 
-import type { MemberStatus } from "./config";
-
 /** a Members row, reduced to what the roster needs */
 export type Person = {
   pageId: string;
   name: string;
   discordId: string | null;
   email: string | null;
-  /** null when the select is empty, or holds a value notion has but we do not */
-  status: MemberStatus | null;
+  /*
+    whatever Notion's Status select says, or null when it is empty.
+
+    kept as Notion spells it rather than narrowed to a union: the options are
+    Notion's to rename, and coercing an unrecognised one to null would move
+    everybody into "we do not know" the day somebody edited a label. The one
+    value any rule depends on is `ALUM_STATUS`
+  */
+  status: string | null;
 };
 
 /** a Meetings row, reduced likewise */

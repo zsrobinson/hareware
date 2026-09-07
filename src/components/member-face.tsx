@@ -1,18 +1,16 @@
 import { GhostIcon } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import type { Faces } from "~/lib/faces";
+import { initials } from "~/lib/members/kiosk";
 
-/* the ghost is a statement, not a placeholder: the row it marks is one nothing
-   can link to an application, so it is the row a duplicate hides in */
-export function GhostKey() {
-  return (
-    <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-      <GhostIcon className="size-3.5" />
-      No Discord account linked
-    </p>
-  );
-}
-
+/**
+ * the discord picture beside a name, or the initials of that name.
+ *
+ * the ghost is left for the row there is no name to draw either — an actor id
+ * the guild lookup could not resolve. A member of the roster always has a
+ * name, so on the kiosk this is always initials, which read as a person where
+ * a row of identical ghosts read as a fault
+ */
 export function MemberFace({
   discordId,
   name,
@@ -25,16 +23,17 @@ export function MemberFace({
   size?: "sm" | "default";
 }) {
   const face = discordId ? faces[discordId] : undefined;
+  const letters = initials(name);
 
-  if (!face) {
-    return (
-      <Avatar size={size}>
-        <AvatarFallback aria-label={`${name} has no Discord account linked`}>
-          <GhostIcon className="size-3.5" />
-        </AvatarFallback>
-      </Avatar>
-    );
-  }
+  const fallback = letters ? (
+    <AvatarFallback>{letters}</AvatarFallback>
+  ) : (
+    <AvatarFallback aria-label="nobody this could be drawn as">
+      <GhostIcon className="size-3.5" />
+    </AvatarFallback>
+  );
+
+  if (!face) return <Avatar size={size}>{fallback}</Avatar>;
 
   return (
     <Avatar size={size}>
@@ -42,9 +41,7 @@ export function MemberFace({
         src={face.avatarUrl}
         alt={`${face.displayName} on Discord`}
       />
-      <AvatarFallback aria-hidden>
-        <GhostIcon className="size-3.5" />
-      </AvatarFallback>
+      {fallback}
     </Avatar>
   );
 }

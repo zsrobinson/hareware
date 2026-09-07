@@ -5,7 +5,8 @@ import { StandingTable } from "~/components/standing-table";
 import { viewerState } from "~/lib/admin";
 import { admitted } from "~/lib/admin-guard";
 import { easternNow } from "~/lib/eastern";
-import { corpus, type Corpus } from "~/lib/members/roster";
+import { corpus, statusOptions, type Corpus } from "~/lib/members/roster";
+import { ALUM_STATUS, alumOptionMissing } from "~/lib/members/config";
 
 /* Reaching this page is the permission: the guard already refused anybody it
    would not admit, and its lookup knows what to call them. */
@@ -28,6 +29,20 @@ Astro.response.headers.set("cache-control", "private, no-store");
 const token = env.NOTION_TOKEN;
 const rows: Corpus | null = token ? await corpus(token) : null;
 
+/*
+  the one place a renamed notion option could change who votes.
+
+  every other Status label is notion's to spell — the pickers read the schema.
+  `standing.ts` compares against `ALUM_STATUS` to exclude alumni, so if notion
+  no longer has that option the rule matches nobody and every alum quietly
+  qualifies. Refusing to answer at all would be worse on the morning of an
+  election, so the page answers and says loudly that it cannot be trusted
+*/
+const liveStatuses = token
+  ? await statusOptions(token).catch(() => [] as string[])
+  : [];
+const alumMissing = alumOptionMissing(liveStatuses);
+
 /* eastern, because the window's ends are compared against notion dates the
    club would name in its own timezone */
 const today = easternNow(new Date()).date;
@@ -35,10 +50,16 @@ const today = easternNow(new Date()).date;
 
 <Dashboard title="Standing" viewer={viewerState(who)}>
   <div class="space-y-4">
-    <p class="text-muted-foreground text-sm">
-      Counted from attendance and publication dates each time you ask. Nothing
-      is stored.
-    </p>
+    {
+      alumMissing && (
+        <p class="border-destructive/50 bg-destructive/10 text-destructive rounded-lg border p-3 text-sm">
+          Notion's Status options no longer include "{ALUM_STATUS}", which is
+          the value that keeps alumni out of a vote. Until an editor restores
+          that option or the rule is changed in code, nobody is being excluded
+          as an alum. Options Notion has: {liveStatuses.join(", ")}.
+        </p>
+      )
+    }
 
     {
       rows ? (

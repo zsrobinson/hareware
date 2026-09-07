@@ -1,6 +1,11 @@
-import { CheckIcon, UserPlusIcon, XIcon } from "lucide-react";
+import { PlusIcon, XIcon } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { GhostKey, MemberFace } from "~/components/member-face";
+import {
+  MemberEditDialog,
+  type Editing,
+  type GuildOption,
+} from "~/components/member-edit-dialog";
+import { MemberEntry } from "~/components/member-entry";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -15,12 +20,13 @@ import {
 } from "~/components/ui/select";
 import type { Faces } from "~/lib/faces";
 import {
-  distinguish,
   indistinguishable,
+  meetingLabel,
   searchCandidates,
   type Candidate,
 } from "~/lib/members/kiosk";
-import type { MeetingRecord } from "~/lib/members/records";
+import type { MeetingRecord, Person } from "~/lib/members/records";
+import { notify } from "~/lib/notify";
 import { postJson } from "~/lib/post-json";
 import { withParam } from "~/lib/search-params";
 
@@ -37,12 +43,17 @@ import { withParam } from "~/lib/search-params";
 */
 
 type Props = {
+  /** already narrowed to the window, newest first */
   meetings: MeetingRecord[];
   candidates: Candidate[];
   /** the meeting the page opened on: the `meeting` search param, else today's */
   initialMeetingId: string | null;
   /** discord pictures for the roster, from one request for the whole guild */
   faces: Faces;
+  /** the same request's members, for the Discord chip's autocomplete */
+  guild: GuildOption[];
+  /** notion's Status options, read from the schema rather than spelled here */
+  statuses: string[];
 };
 
 /** the whole attendee list, written over the meeting's relation */
@@ -68,6 +79,12 @@ async function createPerson(
 
 const dayOf = (meeting: MeetingRecord) => meeting.date.slice(0, 10);
 
+/** the date the calendar holds, then the name with its own date taken off */
+const describe = (meeting: MeetingRecord) =>
+  `${dayOf(meeting)} ${meetingLabel(meeting.name) || "Untitled"}${
+    meeting.type ? ` (${meeting.type})` : ""
+  }`;
+
 /* the route's own message where there is one — notion's refusals say useful
    things, and everybody at this laptop holds @Editorial Board */
 const reason = (thrown: unknown) =>
@@ -78,6 +95,8 @@ export function AttendanceKiosk({
   candidates,
   initialMeetingId,
   faces,
+  guild,
+  statuses,
 }: Props) {
   const [meetingId, setMeetingId] = useState(initialMeetingId ?? "");
   const [roster, setRoster] = useState(candidates);
@@ -88,15 +107,8 @@ export function AttendanceKiosk({
   );
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  /* one notice, not a confirmation and an error side by side: they are
-     mutually exclusive, and keeping that true by hand across five call sites
-     is how a kiosk shows a green tick above a red failure for the same tap */
-  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(
-    null,
-  );
-  const [adding, setAdding] = useState(false);
-  const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
+  const [editing, setEditing] = useState<Editing | null>(null);
   const [busy, setBusy] = useState(false);
 
   const search = useRef<HTMLInputElement>(null);
@@ -120,6 +132,7 @@ export function AttendanceKiosk({
   function changeQuery(value: string) {
     setQuery(value);
     setActive(0);
+    setNewEmail("");
   }
 
   /* the next person is already reaching for the keyboard */
@@ -132,7 +145,6 @@ export function AttendanceKiosk({
     /* the new meeting's own attendees: carrying the current list across would
        file this room against a meeting it was not at */
     setPresent(meetings.find((one) => one.pageId === id)?.attendeeIds ?? []);
-    setNotice(null);
     /* so a reload during the meeting comes back to the same one */
     history.replaceState(null, "", withParam(location.href, "meeting", id));
     refocus();
@@ -154,13 +166,10 @@ export function AttendanceKiosk({
 
     try {
       await save(meetingId, next);
-      setNotice({ ok: true, text: say });
+      notify.ok(say);
     } catch (thrown) {
       setPresent(before);
-      setNotice({
-        ok: false,
-        text: `Not saved: ${reason(thrown)}. Try again.`,
-      });
+      notify.failed(`Not saved: ${reason(thrown)}. Try again.`);
     } finally {
       setBusy(false);
       refocus();
@@ -172,16 +181,16 @@ export function AttendanceKiosk({
 
     if (present.includes(candidate.person.pageId)) {
       /* they tapped because they were not sure it had registered */
-      setNotice({
-        ok: true,
-        text: `${candidate.person.name} was already signed in`,
-      });
+      notify.ok(`${candidate.person.name} was already signed in`);
       refocus();
       return;
     }
 
+    /* onto the front of the list. by the end of a general body meeting this is
+       forty rows, and the person who just tapped has to be able to see that it
+       worked without scrolling past everybody who arrived before them */
     void commit(
-      [...present, candidate.person.pageId],
+      [candidate.person.pageId, ...present],
       `${candidate.person.name} is signed in`,
     );
   }
@@ -194,8 +203,19 @@ export function AttendanceKiosk({
     );
   }
 
+  /** the roster row this page holds, replaced after a chip was edited */
+  function replacePerson(person: Person) {
+    setRoster((current) =>
+      current.map((candidate) =>
+        candidate.person.pageId === person.pageId
+          ? { ...candidate, person }
+          : candidate,
+      ),
+    );
+  }
+
   async function addNewPerson() {
-    const name = newName.trim();
+    const name = query.trim();
     const email = newEmail.trim();
     if (!name || !email) return;
 
@@ -217,17 +237,14 @@ export function AttendanceKiosk({
       /* into the local roster too, so a second person with the same name later
          this evening is disambiguated against them rather than matched to them */
       setRoster((current) => [...current, candidate]);
-      setNewName("");
-      setNewEmail("");
-      setAdding(false);
       changeQuery("");
 
       await commit(
-        [...present, created.pageId],
+        [created.pageId, ...present],
         `${created.name} was added and is signed in`,
       );
     } catch (thrown) {
-      setNotice({ ok: false, text: `Could not add them: ${reason(thrown)}` });
+      notify.failed(`Could not add them: ${reason(thrown)}`);
     } finally {
       setBusy(false);
     }
@@ -247,14 +264,20 @@ export function AttendanceKiosk({
             onValueChange={(value) => switchMeeting(String(value))}
           >
             <SelectTrigger id="kiosk-meeting" size="sm">
-              <SelectValue placeholder="Choose a meeting" />
+              {/* base-ui renders the raw value unless it is told otherwise,
+                  which put a notion page id in the trigger */}
+              <SelectValue placeholder="Choose a meeting">
+                {(value) => {
+                  const one = meetings.find((m) => m.pageId === value);
+                  return one ? describe(one) : "Choose a meeting";
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
                 {meetings.map((one) => (
                   <SelectItem key={one.pageId} value={one.pageId}>
-                    {dayOf(one)} {one.name || "Untitled"}
-                    {one.type ? ` (${one.type})` : ""}
+                    {describe(one)}
                   </SelectItem>
                 ))}
               </SelectGroup>
@@ -270,144 +293,127 @@ export function AttendanceKiosk({
             Pick a meeting before the room arrives.
           </p>
         ) : (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="kiosk-search" className="text-base">
-                Type your name
-              </Label>
-              <Input
-                id="kiosk-search"
-                ref={search}
-                autoFocus
-                value={query}
-                onChange={(event) => changeQuery(event.target.value)}
-                placeholder="Start typing…"
-                className="h-14 text-lg"
-                autoComplete="off"
-                role="combobox"
-                aria-expanded={matches.length > 0}
-                aria-controls={listboxId}
-                aria-autocomplete="list"
-                aria-activedescendant={
-                  matches.length > 0 ? `kiosk-match-${active}` : undefined
-                }
-                onKeyDown={(event) => {
-                  if (event.key === "ArrowDown") {
-                    event.preventDefault();
-                    setActive((at) => Math.min(at + 1, matches.length - 1));
-                  } else if (event.key === "ArrowUp") {
-                    event.preventDefault();
-                    setActive((at) => Math.max(at - 1, 0));
-                  } else if (event.key === "Enter") {
-                    event.preventDefault();
-                    const chosen = matches[active];
-                    /* Enter on an empty list deliberately does not fall through
+          <div className="space-y-2">
+            <Label htmlFor="kiosk-search" className="text-base">
+              Type your name
+            </Label>
+            <Input
+              id="kiosk-search"
+              ref={search}
+              autoFocus
+              value={query}
+              onChange={(event) => changeQuery(event.target.value)}
+              placeholder="Start typing…"
+              className="h-14 text-lg"
+              autoComplete="off"
+              role="combobox"
+              aria-expanded={matches.length > 0}
+              aria-controls={listboxId}
+              aria-autocomplete="list"
+              aria-activedescendant={
+                matches.length > 0 ? `kiosk-match-${active}` : undefined
+              }
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setActive((at) => Math.min(at + 1, matches.length - 1));
+                } else if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActive((at) => Math.max(at - 1, 0));
+                } else if (event.key === "Enter") {
+                  event.preventDefault();
+                  const chosen = matches[active];
+                  /* Enter on an empty list deliberately does not fall through
                        to "create this person": a stranger's half-typed name
                        would become a Members row */
-                    if (chosen) markPresent(chosen);
-                  } else if (event.key === "Escape") {
-                    changeQuery("");
-                  }
-                }}
-              />
+                  if (chosen) markPresent(chosen);
+                } else if (event.key === "Escape") {
+                  changeQuery("");
+                }
+              }}
+            />
 
-              {matches.length > 0 && (
-                <ul
-                  id={listboxId}
-                  role="listbox"
-                  className="divide-y rounded-lg border"
-                >
-                  {matches.map((candidate, index) => {
-                    /* insisted on rather than merely shown when another offer
+            {matches.length > 0 && (
+              <ul
+                id={listboxId}
+                role="listbox"
+                className="divide-y rounded-lg border"
+              >
+                {matches.map((candidate, index) => {
+                  /* insisted on rather than merely shown when another offer
                        reads identically: that pair is not a choice anybody can
                        make correctly */
-                    const clash = matches.some(
-                      (other) =>
-                        other !== candidate &&
-                        indistinguishable(other, candidate),
-                    );
+                  const clash = matches.some(
+                    (other) =>
+                      other !== candidate &&
+                      indistinguishable(other, candidate),
+                  );
 
-                    return (
-                      <li key={candidate.person.pageId}>
-                        <button
-                          type="button"
-                          id={`kiosk-match-${index}`}
-                          role="option"
-                          aria-selected={index === active}
-                          disabled={busy}
-                          onClick={() => markPresent(candidate)}
-                          onMouseEnter={() => setActive(index)}
-                          className={`hover:bg-muted flex w-full flex-col items-start gap-0.5 p-4 text-left first:rounded-t-lg last:rounded-b-lg disabled:opacity-50 ${
-                            index === active ? "bg-muted" : ""
-                          }`}
-                        >
-                          <span className="text-lg font-medium">
-                            {candidate.person.name}
-                            {present.includes(candidate.person.pageId) && (
-                              <Badge variant="secondary" className="ml-2">
-                                already in
-                              </Badge>
-                            )}
-                          </span>
-                          <span
-                            className={
-                              clash
-                                ? "text-destructive text-sm"
-                                : "text-muted-foreground text-sm"
+                  return (
+                    <li key={candidate.person.pageId}>
+                      {/*
+                          a div and not a button, because the chips inside it
+                          are buttons of their own and one cannot nest. the row
+                          is still the target for a tap and for Enter, which
+                          reaches it through the input's aria-activedescendant
+                        */}
+                      <div
+                        id={`kiosk-match-${index}`}
+                        role="option"
+                        aria-selected={index === active}
+                        onClick={() => !busy && markPresent(candidate)}
+                        onMouseEnter={() => setActive(index)}
+                        className={`hover:bg-muted flex w-full cursor-pointer items-center gap-3 p-3 text-left first:rounded-t-lg last:rounded-b-lg ${
+                          busy ? "opacity-50" : ""
+                        } ${index === active ? "bg-muted" : ""}`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <MemberEntry
+                            candidate={candidate}
+                            faces={faces}
+                            onEdit={(field) =>
+                              setEditing({
+                                field,
+                                person: candidate.person,
+                              })
                             }
-                          >
-                            {distinguish(candidate)}
-                            {clash && " · ask an officer, two rows look alike"}
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+                          />
+                        </div>
 
-              {query && matches.length === 0 && (
-                <p className="text-muted-foreground text-sm">
-                  Nobody by that name yet.
-                </p>
-              )}
-            </div>
+                        {present.includes(candidate.person.pageId) && (
+                          <Badge variant="secondary">already in</Badge>
+                        )}
+                        {clash && (
+                          <Badge variant="destructive">
+                            two rows look alike, ask an officer
+                          </Badge>
+                        )}
 
-            <div aria-live="polite" className="min-h-12">
-              {notice?.ok && (
-                <div className="flex items-center gap-2 rounded-lg border border-green-600/40 bg-green-600/10 p-4 text-lg font-medium">
-                  <CheckIcon className="size-5 shrink-0" />
-                  {notice.text}
-                </div>
-              )}
-              {notice && !notice.ok && (
-                <div
-                  role="alert"
-                  className="border-destructive/50 bg-destructive/10 text-destructive rounded-lg border p-4 text-sm"
-                >
-                  {notice.text}
-                </div>
-              )}
-            </div>
+                        <PlusIcon className="text-muted-foreground size-5 shrink-0" />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
 
-            {adding ? (
+            {/*
+                the offer to create somebody lives here rather than behind a
+                button of its own: nobody presses "someone new" before typing
+                their name, so the name is already in hand and the only thing
+                left to ask for is the address the merge later depends on
+              */}
+            {query.trim() && matches.length === 0 && (
               <div className="space-y-3 rounded-lg border p-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="kiosk-name">Full name</Label>
-                  <Input
-                    id="kiosk-name"
-                    value={newName}
-                    onChange={(event) => setNewName(event.target.value)}
-                    className="h-12 text-base"
-                    autoComplete="off"
-                  />
-                </div>
+                <p className="text-sm">
+                  Nobody on the roster is called <strong>{query.trim()}</strong>{" "}
+                  yet.
+                </p>
                 <div className="space-y-1.5">
                   <Label htmlFor="kiosk-email">Email</Label>
                   <Input
                     id="kiosk-email"
                     type="email"
-                    required
                     value={newEmail}
                     onChange={(event) => setNewEmail(event.target.value)}
                     className="h-12 text-base"
@@ -422,37 +428,17 @@ export function AttendanceKiosk({
                     Use your @terpmail.umd.edu or @umd.edu address.
                   </p>
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    className="h-12"
-                    disabled={busy || !newName.trim() || !newEmail.trim()}
-                    onClick={() => void addNewPerson()}
-                  >
-                    {busy ? "Adding…" : "Add me and sign me in"}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="h-12"
-                    onClick={() => {
-                      setAdding(false);
-                      refocus();
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                </div>
+                <Button
+                  className="h-12"
+                  disabled={busy || !newEmail.trim()}
+                  onClick={() => void addNewPerson()}
+                >
+                  <PlusIcon className="size-4" />
+                  {busy ? "Adding…" : `Add ${query.trim()} and sign in`}
+                </Button>
               </div>
-            ) : (
-              <Button
-                variant="ghost"
-                className="h-12 w-full"
-                onClick={() => setAdding(true)}
-              >
-                <UserPlusIcon className="size-4" />
-                Someone new
-              </Button>
             )}
-          </>
+          </div>
         )}
       </div>
 
@@ -474,20 +460,34 @@ export function AttendanceKiosk({
         ) : (
           <ul className="divide-y rounded-lg border">
             {present.map((pageId) => {
-              const person = byId.get(pageId)?.person ?? null;
-              const name = person?.name ?? "Someone not on this list";
+              const candidate = byId.get(pageId);
+              const name = candidate?.person.name ?? "Someone not on this list";
 
               return (
                 <li
                   key={pageId}
                   className="flex items-center gap-3 py-2 pr-2 pl-3"
                 >
-                  <MemberFace
-                    discordId={person?.discordId ?? null}
-                    name={name}
-                    faces={faces}
-                  />
-                  <span className="min-w-0 flex-1 truncate">{name}</span>
+                  <div className="min-w-0 flex-1">
+                    {/* the same row as the left column, minus the edits: two
+                        components meant two answers to "what do we know about
+                        this person" */}
+                    <MemberEntry
+                      candidate={
+                        candidate ?? {
+                          person: {
+                            pageId,
+                            name,
+                            discordId: null,
+                            email: null,
+                            status: null,
+                          },
+                          contributions: 0,
+                        }
+                      }
+                      faces={faces}
+                    />
+                  </div>
                   {/* removing is possible only because `setAttendees` replaces
                       the whole relation rather than appending to it */}
                   <Button
@@ -504,9 +504,18 @@ export function AttendanceKiosk({
             })}
           </ul>
         )}
-
-        <GhostKey />
       </div>
+
+      <MemberEditDialog
+        editing={editing}
+        onClose={() => {
+          setEditing(null);
+          refocus();
+        }}
+        onSaved={replacePerson}
+        guild={guild}
+        statuses={statuses}
+      />
     </div>
   );
 }

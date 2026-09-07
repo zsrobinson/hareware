@@ -12,7 +12,7 @@
 */
 
 import { plural } from "~/lib/utils";
-import type { MeetingType } from "./config";
+import { ALUM_STATUS, type MeetingType } from "./config";
 import type { ContributionRecord, MeetingRecord, Person } from "./records";
 
 /**
@@ -239,7 +239,10 @@ function score(person: Person, criteria: Criteria, counts: Counts): Standing {
       ? asked.length > 0 && asked.every((clause) => met[clause])
       : reasons.length > 0;
 
-  const excludedAsAlum = currentStudentsOnly && person.status === "Alum";
+  /* through the constant, never the literal: `ALUM_STATUS` is the one status
+     value a rule depends on, and `alumOptionMissing` is what tells a page
+     notion no longer has it */
+  const excludedAsAlum = currentStudentsOnly && person.status === ALUM_STATUS;
 
   return {
     person,

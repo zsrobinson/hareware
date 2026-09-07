@@ -18,7 +18,6 @@ import {
   MEETING_PROPERTIES,
   MEMBERS_DATA_SOURCE_ID,
   MEMBER_PROPERTIES,
-  type MemberStatus,
 } from "./config";
 import type { Person } from "./records";
 
@@ -27,7 +26,9 @@ type MemberFields = {
   name?: string;
   discordId?: string;
   email?: string | null;
-  status?: MemberStatus;
+  /* one of notion's own select options, checked against the live schema by the
+     route rather than against a list in here */
+  status?: string;
 };
 
 /**

@@ -4,6 +4,9 @@ import {
   defaultMeeting,
   distinguish,
   indistinguishable,
+  initials,
+  meetingLabel,
+  offerableMeetings,
   searchCandidates,
   type Candidate,
 } from "./kiosk";
@@ -146,5 +149,64 @@ describe("contributionCounts", () => {
     /* credited on both sides of one article legitimately counts twice */
     expect(contributionCounts(articles).get("sam")).toBe(3);
     expect(contributionCounts(articles).get("ada")).toBe(1);
+  });
+});
+
+describe("meetingLabel", () => {
+  it("strips the trailing date the calendar puts in the name", () => {
+    expect(meetingLabel("General Body Meeting 2026-09-08")).toBe(
+      "General Body Meeting",
+    );
+    expect(meetingLabel("Volunteer Event – 2026-09-08")).toBe(
+      "Volunteer Event",
+    );
+  });
+
+  it("leaves a date anywhere but the end alone", () => {
+    expect(meetingLabel("2026-09-08 kickoff")).toBe("2026-09-08 kickoff");
+  });
+
+  it("keeps a name that is only a date, rather than rendering nothing", () => {
+    expect(meetingLabel("2026-09-08")).toBe("2026-09-08");
+  });
+});
+
+describe("offerableMeetings", () => {
+  const calendar = [
+    meeting("2026-09-20"),
+    meeting("2026-09-01"),
+    meeting("2026-08-20"),
+    meeting("2026-03-04"),
+  ];
+
+  it("offers the past month and everything ahead, newest first", () => {
+    expect(
+      offerableMeetings(calendar, "2026-09-08").map((one) => one.date),
+    ).toEqual(["2026-09-20", "2026-09-01", "2026-08-20"]);
+  });
+
+  it("still offers a meeting outside the window when it is the pinned one", () => {
+    const offered = offerableMeetings(calendar, "2026-09-08", "2026-03-04");
+
+    expect(offered.map((one) => one.date)).toContain("2026-03-04");
+  });
+
+  it("drops an undated row, which cannot be signed into", () => {
+    expect(offerableMeetings([meeting("")], "2026-09-08")).toEqual([]);
+  });
+});
+
+describe("initials", () => {
+  it("takes the first and last name, skipping the middle ones", () => {
+    expect(initials("Mary Kate Ellis")).toBe("ME");
+    expect(initials("Joanna Reed")).toBe("JR");
+  });
+
+  it("gives a single name one letter rather than doubling it", () => {
+    expect(initials("Prince")).toBe("P");
+  });
+
+  it("has nothing to show for an empty name", () => {
+    expect(initials("   ")).toBe("");
   });
 });

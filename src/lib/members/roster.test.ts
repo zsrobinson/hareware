@@ -50,9 +50,10 @@ test("a missing email and a missing status are null rather than absent", () => {
   expect(person.status).toBeNull();
 });
 
-/* somebody adding a fourth option in notion should make the page say it does
-   not know, not have it silently mean "current student" */
-test("a Status notion has and we do not reads as unknown", () => {
+/* the options belong to notion and the pickers read them from the schema, so
+   an option this repository has never seen is a label and not an error. only
+   an empty select is "we do not know", which is what the reconciler chases */
+test("a Status notion has and we do not is kept, not coerced to unknown", () => {
   const person = toPerson({
     id: "p1",
     properties: {
@@ -61,7 +62,7 @@ test("a Status notion has and we do not reads as unknown", () => {
     },
   });
 
-  expect(person.status).toBeNull();
+  expect(person.status).toBe("Faculty");
 });
 
 test("a Meetings row reads its type and its attendees", () => {

@@ -12,13 +12,12 @@
   bug can take in something an election rests on.
 */
 
-import { plainText, queryAll } from "~/lib/services/notion/client";
+import { notion, plainText, queryAll } from "~/lib/services/notion/client";
 import {
   ARTICLES_DATA_SOURCE_ID,
   ARTICLE_PROPERTIES,
 } from "~/lib/articles/config";
 import {
-  isMemberStatus,
   MEETINGS_DATA_SOURCE_ID,
   MEETING_PROPERTIES,
   MEMBERS_DATA_SOURCE_ID,
@@ -61,17 +60,39 @@ export function toPerson(page: Page): Person {
     discordId:
       text(page.properties?.[MEMBER_PROPERTIES.discordId.name]) || null,
     email: email?.trim() || null,
-    /*
-      an unrecognised option is read as unknown rather than coerced. somebody
-      adding a fourth status in notion should make the page say it does not
-      know, not have it silently mean "current student"
-    */
-    status: isMemberStatus(status) ? status : null,
+    status: status?.trim() || null,
   };
 }
 
 export async function people(token: string): Promise<Person[]> {
   return (await queryAll<Page>(MEMBERS_DATA_SOURCE_ID, token)).map(toPerson);
+}
+
+/**
+ * the Status select's options, as notion currently has them.
+ *
+ * read rather than hardcoded so renaming an option is an edit in notion and
+ * nothing else. `alumOptionMissing` is the guard on the one option a rule
+ * depends on; an empty answer means the schema could not be read, and callers
+ * fall back rather than offering nobody a status
+ */
+export async function statusOptions(token: string): Promise<string[]> {
+  const schema = (await notion(
+    `data_sources/${MEMBERS_DATA_SOURCE_ID}`,
+    token,
+  )) as {
+    properties?: Record<
+      string,
+      { select?: { options?: { name?: string }[] } | null }
+    >;
+  };
+
+  const options =
+    schema.properties?.[MEMBER_PROPERTIES.status.name]?.select?.options ?? [];
+
+  return options
+    .map((option) => option.name?.trim())
+    .filter((name): name is string => Boolean(name));
 }
 
 /** a Meetings row as standing sees it */

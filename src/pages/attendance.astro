@@ -6,8 +6,19 @@ import { viewerState } from "~/lib/admin";
 import { admitted } from "~/lib/admin-guard";
 import { easternNow } from "~/lib/eastern";
 import { faces } from "~/lib/faces";
-import { contributionCounts, defaultMeeting } from "~/lib/members/kiosk";
-import { contributions, meetings, people } from "~/lib/members/roster";
+import { guildMembers } from "~/lib/member";
+import {
+  contributionCounts,
+  defaultMeeting,
+  offerableMeetings,
+} from "~/lib/members/kiosk";
+import {
+  contributions,
+  meetings,
+  people,
+  statusOptions,
+} from "~/lib/members/roster";
+import { FALLBACK_MEMBER_STATUSES } from "~/lib/members/config";
 
 /* Reaching this page is the permission: the guard already refused anybody it
    would not admit, and its lookup knows what to call them. */
@@ -28,23 +39,29 @@ const token = env.NOTION_TOKEN;
 
   the articles are read only to say "3 contributions" beside a name — which is
   what tells two people sharing one apart, and per ADR 0010 that is the
-  disambiguation this screen may not do without
+  disambiguation this screen may not do without.
+
+  the Status options come from notion's schema rather than a list in this
+  repository, so renaming one is an edit in notion and nothing else
 */
-const [roster, calendar, credits] = token
-  ? await Promise.all([people(token), meetings(token), contributions(token)])
-  : [[], [], []];
+const [roster, calendar, credits, notionStatuses] = token
+  ? await Promise.all([
+      people(token),
+      meetings(token),
+      contributions(token),
+      statusOptions(token).catch(() => [] as string[]),
+    ])
+  : [[], [], [], []];
+
+const statuses = notionStatuses.length
+  ? notionStatuses
+  : FALLBACK_MEMBER_STATUSES;
 
 const counts = contributionCounts(credits);
 const candidates = roster.map((person) => ({
   person,
   contributions: counts.get(person.pageId) ?? 0,
 }));
-
-/* newest first, because the picker's default is today's or the last one and
-   the override is almost always the one beside it */
-const calendarByDate = [...calendar]
-  .filter((meeting) => meeting.date)
-  .sort((a, b) => b.date.localeCompare(a.date));
 
 const today = easternNow(new Date()).date;
 
@@ -54,32 +71,44 @@ const asked = Astro.url.searchParams.get("meeting");
 const chosen = calendar.find((meeting) => meeting.pageId === asked);
 const opening = chosen ?? defaultMeeting(calendar, today);
 
-/* the whole guild in one request, narrowed to the roster: a member the kiosk
-   cannot draw is a ghost, which is also what a missing token gets */
-const rosterFaces = await faces(roster.map((person) => person.discordId));
+/* the past month and everything ahead, plus whatever `?meeting=` named: a
+   semester of history in one select is where a mis-tap files tonight's room
+   against a meeting last spring */
+const offered = offerableMeetings(calendar, today, opening?.pageId ?? null);
+
+/*
+  one request for the whole guild, read twice: once for the pictures beside a
+  name, and once for the Discord chip's autocomplete. A member the kiosk cannot
+  draw falls back to their initials, which is also what a missing token gets
+*/
+const guild = await guildMembers();
+const rosterFaces = await faces(
+  roster.map((person) => person.discordId),
+  async () => guild,
+);
+const guildOptions = [...guild].map(([id, profile]) => ({
+  id,
+  username: profile.username,
+  displayName: profile.displayName,
+}));
 ---
 
 <Dashboard title="Attendance" viewer={viewerState(who)}>
-  <div class="mx-auto max-w-5xl space-y-4">
-    <p class="text-muted-foreground text-sm">
-      Leave this at the front of the room. People type their own names, and
-      Notion is written as it happens.
-    </p>
-
-    {
-      token ? (
-        <AttendanceKiosk
-          meetings={calendarByDate}
-          candidates={candidates}
-          initialMeetingId={opening?.pageId ?? null}
-          faces={rosterFaces}
-          client:load
-        />
-      ) : (
-        <p class="text-destructive text-sm">
-          NOTION_TOKEN is not set, so attendance cannot be recorded.
-        </p>
-      )
-    }
-  </div>
+  {
+    token ? (
+      <AttendanceKiosk
+        meetings={offered}
+        candidates={candidates}
+        initialMeetingId={opening?.pageId ?? null}
+        faces={rosterFaces}
+        guild={guildOptions}
+        statuses={statuses}
+        client:load
+      />
+    ) : (
+      <p class="text-destructive text-sm">
+        NOTION_TOKEN is not set, so attendance cannot be recorded.
+      </p>
+    )
+  }
 </Dashboard>

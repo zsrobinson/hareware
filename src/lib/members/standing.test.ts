@@ -1,12 +1,6 @@
 import { expect, test } from "vitest";
-import {
-  PRESETS,
-  standings,
-  type ContributionRecord,
-  type Criteria,
-  type MeetingRecord,
-  type Person,
-} from "./standing";
+import { PRESETS, standings, type Criteria } from "./standing";
+import type { ContributionRecord, MeetingRecord, Person } from "./records";
 
 const YEAR: Pick<Criteria, "from" | "to"> = {
   from: "2026-01-01",

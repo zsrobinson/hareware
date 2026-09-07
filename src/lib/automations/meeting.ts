@@ -87,7 +87,18 @@ export async function sendMeetingReminder(
   // a dry run posts nothing, and saying "posted" made a message that never
   // went out indistinguishable from one that did
   const verb = env.REMINDERS_DRY_RUN ? "would post" : "posted";
-  return ok(`${verb} meeting reminder for "${name}"`);
+
+  /*
+    the fallback announces itself rather than waiting to be remembered. the
+    title match exists only until every Meetings row carries a `Type`, and a
+    migration bridge nobody is reminded of is a permanent special case — this
+    is the line that tells somebody the constant can go
+  */
+  const untyped = page.properties[MEETING_PROPERTIES.type.name]?.select?.name
+    ? ""
+    : " (matched on its title: this row has no Type set)";
+
+  return ok(`${verb} meeting reminder for "${name}"${untyped}`);
 }
 
 /**

@@ -77,8 +77,6 @@ declare module "@tanstack/react-table" {
   interface ColumnMeta<TData extends RowData, TValue> {
     /** the header this column writes into a csv, when its own is a component */
     csvHeader?: string;
-    /** the value it writes, when the accessor's is not printable */
-    csv?: (row: TData) => unknown;
   }
 }
 
@@ -90,11 +88,6 @@ declare module "@tanstack/react-table" {
  * added here once and all of them inherit it. forking the component would
  * break that promise on the day it was first tested
  */
-export type CsvExport = {
-  /** without an extension; a timestamp and `.csv` are appended */
-  filename: string;
-};
-
 type Props<T> = {
   columns: ColumnDef<T, unknown>[];
   data: T[];
@@ -103,7 +96,8 @@ type Props<T> = {
   searchPlaceholder?: string;
   empty?: string;
   /** when set, a download button exporting what is currently on screen */
-  csv?: CsvExport;
+  /** the filename, without an extension; a date and `.csv` are appended */
+  csv?: string;
 };
 
 export function DataTable<T>({
@@ -169,13 +163,11 @@ export function DataTable<T>({
     });
 
     const body = rows.map((row) =>
-      shown.map((column) => {
-        const value = column.columnDef.meta?.csv;
-        /* the accessor's value, not the rendered cell: a badge, an icon and a
-           dash standing in for "none" are all presentation. a column whose
-           real value is not printable — a list, say — supplies `meta.csv` */
-        return value ? value(row.original) : row.getValue(column.id);
-      }),
+      /* the accessor's value, not the rendered cell: a badge, an icon and a
+         dash standing in for "none" are all presentation, and a column whose
+         accessor is not printable should fix its accessor rather than grow a
+         second one for the export */
+      shown.map((column) => row.getValue(column.id)),
     );
 
     /* dated in the filename because these are snapshots of a question asked on
@@ -187,7 +179,8 @@ export function DataTable<T>({
       new Blob(["﻿", toCsv(headers, body)], {
         type: "text/csv;charset=utf-8",
       }),
-      `${csv?.filename ?? "export"}-${day}.csv`,
+      /* only ever called from a button rendered under `csv &&` */
+      `${csv}-${day}.csv`,
       "text/csv",
     );
   }

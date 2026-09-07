@@ -15,7 +15,7 @@
 
 import { normaliseName } from "~/lib/articles/member";
 import type { Application } from "~/lib/services/discord/join-requests";
-import type { Person } from "./standing";
+import type { Person } from "./records";
 
 /** an email reduced to what two spellings of one address share */
 export function normaliseEmail(email: string | null): string {
@@ -201,8 +201,32 @@ export function resolveApplications(
  */
 export function safeToCreate(resolutions: Resolution[]): Application[] {
   return resolutions
-    .filter((resolution) => resolution.status === "new")
+    .filter(creatable)
     .map((resolution) => resolution.application);
+}
+
+/**
+ * whether the cron may act on one resolution, decided by an exhaustive switch.
+ *
+ * a switch rather than `status === "new"` so that **adding an arm to
+ * `Resolution` is a compile error here**. `similar` was added late, precisely
+ * because the cron was creating duplicates it should have deferred, and an
+ * equality test would have let the next arm through in silence. The safe
+ * default has to be enforced by the type checker, not remembered
+ */
+function creatable(resolution: Resolution): boolean {
+  switch (resolution.status) {
+    case "new":
+      return true;
+    /* every collision. named individually rather than caught by a default, so
+       the compiler asks about the next one */
+    case "linked":
+    case "linkable":
+    case "similar":
+    case "ambiguous":
+    case "conflicted":
+      return false;
+  }
 }
 
 /**

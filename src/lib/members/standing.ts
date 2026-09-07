@@ -11,39 +11,9 @@
   function, and "voting" and "masthead" are argument sets — see `PRESETS`.
 */
 
-import type { MemberStatus } from "./config";
-
-/** a Members row, reduced to what standing needs */
-export type Person = {
-  pageId: string;
-  name: string;
-  discordId: string | null;
-  email: string | null;
-  /** null when the select is empty, or holds a value notion has but we do not */
-  status: MemberStatus | null;
-};
-
-/** a Meetings row, reduced likewise */
-export type MeetingRecord = {
-  pageId: string;
-  name: string;
-  /** `YYYY-MM-DD`; a row with no date cannot fall in a window and is dropped */
-  date: string;
-  /** null when the select is empty — such a row counts toward nothing */
-  type: string | null;
-  /** page ids of the Members related through `Attendees` */
-  attendeeIds: string[];
-};
-
-/** an Article, reduced to the two credits that count */
-export type ContributionRecord = {
-  pageId: string;
-  headline: string;
-  /** the Publication Date. an unpublished article has none and is dropped */
-  date: string;
-  authorIds: string[];
-  imageCrewIds: string[];
-};
+import { plural } from "~/lib/utils";
+import type { MeetingType } from "./config";
+import type { ContributionRecord, MeetingRecord, Person } from "./records";
 
 /**
  * the thresholds, as an OR over three independent clauses.
@@ -108,8 +78,14 @@ export type Standing = {
   statusUnknown: boolean;
 };
 
-const GENERAL_BODY = "General Body";
-const VOLUNTEER = "Volunteer Event";
+/*
+  the two types that count, named from `MEETING_TYPES` rather than spelled
+  again. `config.ts` claims to be the one place notion's select options are
+  written down, and a second spelling here would make `tally` return zero
+  counts — silently, and only for whichever type somebody re-worded
+*/
+const GENERAL_BODY: MeetingType = "General Body";
+const VOLUNTEER: MeetingType = "Volunteer Event";
 
 /**
  * a notion date reduced to its day.
@@ -182,7 +158,10 @@ export function standings(
 }
 
 /** how many meetings of one type each member attended */
-function tally(meetings: MeetingRecord[], type: string): Map<string, number> {
+function tally(
+  meetings: MeetingRecord[],
+  type: MeetingType,
+): Map<string, number> {
   const counts = new Map<string, number>();
 
   for (const meeting of meetings) {
@@ -244,10 +223,6 @@ function score(person: Person, criteria: Criteria, counts: Counts): Standing {
 /** an omitted threshold is not a clause, so it is never met */
 function met(count: number, threshold: number | undefined): boolean {
   return threshold !== undefined && count >= threshold;
-}
-
-function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
 /** a saved question, as the page offers it */

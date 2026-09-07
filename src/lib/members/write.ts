@@ -12,7 +12,7 @@
   open and repair without this repository. Nothing here is mirrored anywhere.
 */
 
-import { notion } from "~/lib/services/notion/client";
+import { notion, plainText } from "~/lib/services/notion/client";
 import type { Application } from "~/lib/services/discord/join-requests";
 import {
   MEETING_PROPERTIES,
@@ -20,7 +20,7 @@ import {
   MEMBER_PROPERTIES,
   type MemberStatus,
 } from "./config";
-import type { Person } from "./standing";
+import type { Person } from "./records";
 
 /** what a Members row is made of, in notion's write shapes */
 type MemberFields = {
@@ -240,11 +240,11 @@ export async function mergeMembers(
   await notion(`pages/${dropId}`, token, { in_trash: true }, "PATCH");
 }
 
+/* `plainText` is the notion client's, and its docstring records that it was
+   consolidated out of four files under `articles/` — a fifth copy here would
+   have re-opened exactly the problem that consolidation closed */
 function text(
   property: { rich_text?: { plain_text: string }[] | null } | undefined,
 ): string {
-  return (property?.rich_text ?? [])
-    .map((part) => part.plain_text)
-    .join("")
-    .trim();
+  return plainText(property?.rich_text).trim();
 }

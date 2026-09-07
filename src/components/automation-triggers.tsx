@@ -1,3 +1,4 @@
+import { postJson } from "~/lib/post-json";
 import { useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -29,18 +30,7 @@ async function run(id: AutomationId, mode: Mode): Promise<Report> {
   if (mode === "dry") query.set("dry", "1");
   if (mode === "silent") query.set("silent", "1");
 
-  const response = await fetch(`/api/automations/run?${query}`, {
-    method: "POST",
-    // astro refuses a cross-site POST that looks like a form submission, and
-    // one carrying no content type counts as one
-    headers: { "content-type": "application/json" },
-  });
-
-  if (!response.ok) {
-    throw new Error(`${response.status} ${await response.text()}`);
-  }
-
-  return response.json() as Promise<Report>;
+  return postJson<Report>(`/api/automations/run?${query}`);
 }
 
 export function AutomationTriggers({

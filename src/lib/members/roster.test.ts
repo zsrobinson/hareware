@@ -1,0 +1,159 @@
+import { afterEach, expect, test, vi } from "vitest";
+import { toContribution, toMeeting, toPerson, people } from "./roster";
+
+afterEach(() => vi.unstubAllGlobals());
+
+const title = (text: string) => ({
+  type: "title",
+  title: [{ plain_text: text }],
+});
+const richText = (text: string) => ({
+  type: "rich_text",
+  rich_text: [{ plain_text: text }],
+});
+
+test("a Members row reads into a Person", () => {
+  const person = toPerson({
+    id: "p1",
+    properties: {
+      Name: title("Bay Hoffman"),
+      "Discord ID": richText("574376763006648349"),
+      Email: { type: "email", email: "bay@terpmail.umd.edu" },
+      Status: { type: "select", select: { name: "Undergrad" } },
+    },
+  });
+
+  expect(person).toEqual({
+    pageId: "p1",
+    name: "Bay Hoffman",
+    discordId: "574376763006648349",
+    email: "bay@terpmail.umd.edu",
+    status: "Undergrad",
+  });
+});
+
+/* the difference between "no id" and "empty id" is the difference between a row
+   we may link and a row we may not */
+test("an empty Discord ID reads as null, never as an empty string", () => {
+  const person = toPerson({
+    id: "p1",
+    properties: { Name: title("Bay Hoffman"), "Discord ID": richText("   ") },
+  });
+
+  expect(person.discordId).toBeNull();
+});
+
+test("a missing email and a missing status are null rather than absent", () => {
+  const person = toPerson({ id: "p1", properties: { Name: title("Ada") } });
+
+  expect(person.email).toBeNull();
+  expect(person.status).toBeNull();
+});
+
+/* somebody adding a fourth option in notion should make the page say it does
+   not know, not have it silently mean "current student" */
+test("a Status notion has and we do not reads as unknown", () => {
+  const person = toPerson({
+    id: "p1",
+    properties: {
+      Name: title("Ada"),
+      Status: { type: "select", select: { name: "Faculty" } },
+    },
+  });
+
+  expect(person.status).toBeNull();
+});
+
+test("a Meetings row reads its type and its attendees", () => {
+  const meeting = toMeeting({
+    id: "m1",
+    properties: {
+      Name: title("General Body Meeting"),
+      Date: { type: "date", date: { start: "2026-09-08" } },
+      Type: { type: "select", select: { name: "General Body" } },
+      Attendees: { type: "relation", relation: [{ id: "p1" }, { id: "p2" }] },
+    },
+  });
+
+  expect(meeting.type).toBe("General Body");
+  expect(meeting.attendeeIds).toEqual(["p1", "p2"]);
+});
+
+test("a meeting with no date reads as empty, so no window can contain it", () => {
+  const meeting = toMeeting({ id: "m1", properties: { Name: title("TBD") } });
+
+  expect(meeting.date).toBe("");
+  expect(meeting.attendeeIds).toEqual([]);
+});
+
+test("an Article reads its two credits separately", () => {
+  const article = toContribution({
+    id: "a1",
+    properties: {
+      Headline: title("Something happened"),
+      "Publication Date": { type: "date", date: { start: "2026-03-04" } },
+      Author: { type: "relation", relation: [{ id: "p1" }] },
+      "Image Crew": { type: "relation", relation: [{ id: "p2" }] },
+    },
+  });
+
+  expect(article.authorIds).toEqual(["p1"]);
+  expect(article.imageCrewIds).toEqual(["p2"]);
+  expect(article.date).toBe("2026-03-04");
+});
+
+/*
+  the paging test. a reader that stops at the first page returns a plausible
+  answer quietly missing everybody after the hundredth, which for an election is
+  the worst shape a bug can take here
+*/
+test("every page is followed, not just the first", async () => {
+  const page = (n: number) => ({
+    id: `p${n}`,
+    properties: { Name: title(`Member ${n}`) },
+  });
+
+  const bodies: unknown[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(init!.body as string) as {
+        start_cursor?: string;
+      };
+      bodies.push(body);
+
+      if (!body.start_cursor) {
+        return new Response(
+          JSON.stringify({
+            results: [page(1), page(2)],
+            has_more: true,
+            next_cursor: "second",
+          }),
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ results: [page(3)], has_more: false }),
+      );
+    }),
+  );
+
+  const roster = await people("token");
+
+  expect(roster.map((one) => one.pageId)).toEqual(["p1", "p2", "p3"]);
+  expect(bodies).toHaveLength(2);
+});
+
+test("a cursor that says has_more but sends none stops rather than looping", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ results: [], has_more: true, next_cursor: null }),
+        ),
+    ),
+  );
+
+  await expect(people("token")).resolves.toEqual([]);
+});

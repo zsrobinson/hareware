@@ -6,7 +6,7 @@ import {
   resolveApplication,
   safeToCreate,
 } from "./match";
-import type { Person } from "./standing";
+import type { Person } from "./records";
 
 function person(over: Partial<Person> = {}): Person {
   return {

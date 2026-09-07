@@ -14,7 +14,7 @@
   downstream could notice.
 */
 
-import { notion, plainText } from "~/lib/services/notion/client";
+import { notion, plainText, queryAll } from "~/lib/services/notion/client";
 import { MEMBERS_DATA_SOURCE_ID, MEMBER_PROPERTIES } from "./config";
 
 /** a Members row, as much of it as we read */
@@ -204,21 +204,7 @@ export async function createMember(
 
 /** every Members row. 48 of them, so one request unless the club triples */
 async function allMembers(token: string): Promise<MemberPage[]> {
-  const pages: MemberPage[] = [];
-  let cursor: string | undefined;
-
-  do {
-    const response = (await notion(
-      `data_sources/${MEMBERS_DATA_SOURCE_ID}/query`,
-      token,
-      { page_size: 100, ...(cursor ? { start_cursor: cursor } : {}) },
-    )) as { results: MemberPage[]; has_more?: boolean; next_cursor?: string };
-
-    pages.push(...response.results);
-    cursor = response.has_more ? response.next_cursor : undefined;
-  } while (cursor);
-
-  return pages;
+  return queryAll<MemberPage>(MEMBERS_DATA_SOURCE_ID, token);
 }
 
 /**

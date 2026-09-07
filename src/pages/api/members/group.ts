@@ -40,8 +40,14 @@ export const POST = rosterRoute(
       );
     }
 
-    const applications = await approvedApplications(env.DISCORD_BOT_TOKEN);
-    const pending = pendingForGroup(applications, await groupWatermark(env.DB));
+    /* the watermark does not depend on the applications, so one round trip
+       rather than two on a button press */
+    const [applications, watermark] = await Promise.all([
+      approvedApplications(env.DISCORD_BOT_TOKEN),
+      groupWatermark(env.DB),
+    ]);
+
+    const pending = pendingForGroup(applications, watermark);
 
     if (pending.length === 0) {
       return { summary: "the google group was already up to date" };

@@ -407,7 +407,7 @@ export function StandingTable({
         ]}
         searchPlaceholder="Search names…"
         empty="No members yet."
-        csv={{ filename: `standing-${presetId}` }}
+        csv={`standing-${presetId}`}
       />
     </div>
   );

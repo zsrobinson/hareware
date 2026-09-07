@@ -18,7 +18,8 @@ import {
 import { Textarea } from "~/components/ui/textarea";
 import { MEMBER_STATUSES, type MemberStatus } from "~/lib/members/config";
 import type { Duplicate, Resolution } from "~/lib/members/match";
-import type { Person } from "~/lib/members/standing";
+import { postJson } from "~/lib/post-json";
+import type { Person } from "~/lib/members/records";
 import type { Application } from "~/lib/services/discord/join-requests";
 
 /*
@@ -51,27 +52,6 @@ type Props = {
   unknownStatus: Person[];
   group: GroupState;
 };
-
-async function post(
-  path: string,
-  body: Record<string, unknown>,
-): Promise<string> {
-  const response = await fetch(path, {
-    method: "POST",
-    // astro refuses a cross-site POST that looks like a form submission, and
-    // one carrying no content type counts as one
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  const said = (await response.json().catch(() => ({}))) as {
-    summary?: string;
-    error?: string;
-  };
-
-  if (!response.ok) throw new Error(said.error ?? `${response.status}`);
-  return said.summary ?? "done";
-}
 
 function Section({
   title,
@@ -144,11 +124,11 @@ export function Reconciler({
   } | null>(null);
   const [copied, setCopied] = useState(false);
 
-  async function act(key: string, run: () => Promise<string>) {
+  async function act(key: string, run: () => Promise<{ summary?: string }>) {
     setBusy(key);
     try {
-      const summary = await run();
-      setSaid((prev) => ({ ...prev, [key]: summary }));
+      const { summary } = await run();
+      setSaid((prev) => ({ ...prev, [key]: summary ?? "Done." }));
     } catch (thrown) {
       setSaid((prev) => ({
         ...prev,
@@ -167,16 +147,14 @@ export function Reconciler({
     (one): one is Extract<Resolution, { status: "linkable" }> =>
       one.status === "linkable",
   );
+  /*
+    narrowed on the shape rather than by listing statuses: `people` is carried
+    by exactly the arms nobody can decide automatically, so a seventh arm joins
+    this section by existing. Naming the three meant a new one would be dropped
+    from the page silently, which for a roster is how somebody goes missing
+  */
   const ambiguous = resolutions.filter(
-    (
-      one,
-    ): one is Extract<
-      Resolution,
-      { status: "ambiguous" | "conflicted" | "similar" }
-    > =>
-      one.status === "ambiguous" ||
-      one.status === "conflicted" ||
-      one.status === "similar",
+    (one): one is Extract<Resolution, { people: Person[] }> => "people" in one,
   );
 
   const emails = group.pending
@@ -203,7 +181,7 @@ export function Reconciler({
                     disabled={busy !== null || Boolean(said[key])}
                     onClick={() =>
                       void act(key, () =>
-                        post("/api/members/link", {
+                        postJson("/api/members/link", {
                           applicationId: one.application.id,
                           pageId: one.person.pageId,
                         }),
@@ -328,7 +306,7 @@ export function Reconciler({
                       disabled={busy !== null || Boolean(said[key])}
                       onClick={() =>
                         void act(key, () =>
-                          post("/api/members/status", {
+                          postJson("/api/members/status", {
                             pageId: person.pageId,
                             name: person.name,
                             status,
@@ -435,7 +413,7 @@ export function Reconciler({
                 <Button
                   disabled={busy !== null || Boolean(said["group"])}
                   onClick={() =>
-                    void act("group", () => post("/api/members/group", {}))
+                    void act("group", () => postJson("/api/members/group", {}))
                   }
                 >
                   {busy === "group" ? "Recording…" : "I have added them"}
@@ -475,7 +453,7 @@ export function Reconciler({
                 const { keep, drop } = merging!;
                 setMerging(null);
                 void act(`merge:${keep.pageId}`, () =>
-                  post("/api/members/merge", {
+                  postJson("/api/members/merge", {
                     keepId: keep.pageId,
                     dropId: drop.pageId,
                     keepName: keep.name,

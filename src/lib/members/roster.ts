@@ -5,14 +5,14 @@
   decides anything — `standing.ts` holds the rules and never touches the
   network, which is what lets the constitution be tested against fixtures.
 
-  all three reads pull every row. the roster is fifty people, the meetings
-  database a few hundred rows and the article corpus two requests' worth, so
-  paging is about correctness rather than volume: `has_more` is easy to forget
-  and the failure is a silently short answer, which for an election is the
-  worst shape a bug can take here.
+  all three reads pull every row through the client's `queryAll`, which follows
+  notion's cursor. the roster is fifty people, the meetings database a few
+  hundred rows and the article corpus two requests' worth, so paging is about
+  correctness rather than volume: a silently short answer is the worst shape a
+  bug can take in something an election rests on.
 */
 
-import { notion, plainText } from "~/lib/services/notion/client";
+import { plainText, queryAll } from "~/lib/services/notion/client";
 import {
   ARTICLES_DATA_SOURCE_ID,
   ARTICLE_PROPERTIES,
@@ -24,7 +24,7 @@ import {
   MEMBERS_DATA_SOURCE_ID,
   MEMBER_PROPERTIES,
 } from "./config";
-import type { ContributionRecord, MeetingRecord, Person } from "./standing";
+import type { ContributionRecord, MeetingRecord, Person } from "./records";
 
 /** every notion property shape these three databases hand back */
 type Property = {
@@ -38,38 +38,6 @@ type Property = {
 };
 
 type Page = { id: string; properties: Record<string, Property> };
-
-/**
- * every row of a data source, following `has_more` to the end.
- *
- * notion caps a page at 100 and reports more with a cursor. a caller that
- * reads the first page only gets a plausible answer that is quietly missing
- * everybody after the hundredth, which is exactly the kind of wrong this
- * feature must not be
- */
-async function everyRow(
-  source: string,
-  token: string,
-  body: Record<string, unknown> = {},
-): Promise<Page[]> {
-  const pages: Page[] = [];
-  let cursor: string | undefined;
-
-  do {
-    const response = (await notion(`data_sources/${source}/query`, token, {
-      page_size: 100,
-      ...body,
-      ...(cursor ? { start_cursor: cursor } : {}),
-    })) as { results: Page[]; has_more?: boolean; next_cursor?: string | null };
-
-    pages.push(...response.results);
-    cursor = response.has_more
-      ? (response.next_cursor ?? undefined)
-      : undefined;
-  } while (cursor);
-
-  return pages;
-}
 
 function text(property: Property | undefined): string {
   return plainText(property?.title ?? property?.rich_text).trim();
@@ -103,7 +71,7 @@ export function toPerson(page: Page): Person {
 }
 
 export async function people(token: string): Promise<Person[]> {
-  return (await everyRow(MEMBERS_DATA_SOURCE_ID, token)).map(toPerson);
+  return (await queryAll<Page>(MEMBERS_DATA_SOURCE_ID, token)).map(toPerson);
 }
 
 /** a Meetings row as standing sees it */
@@ -118,7 +86,7 @@ export function toMeeting(page: Page): MeetingRecord {
 }
 
 export async function meetings(token: string): Promise<MeetingRecord[]> {
-  return (await everyRow(MEETINGS_DATA_SOURCE_ID, token)).map(toMeeting);
+  return (await queryAll<Page>(MEETINGS_DATA_SOURCE_ID, token)).map(toMeeting);
 }
 
 /** an Article reduced to the two credits that count toward standing */
@@ -149,7 +117,7 @@ export function toContribution(page: Page): ContributionRecord {
 export async function contributions(
   token: string,
 ): Promise<ContributionRecord[]> {
-  const rows = await everyRow(ARTICLES_DATA_SOURCE_ID, token, {
+  const rows = await queryAll<Page>(ARTICLES_DATA_SOURCE_ID, token, {
     filter: {
       property: ARTICLE_PROPERTIES.publicationDate.name,
       date: { is_not_empty: true },

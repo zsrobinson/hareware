@@ -134,6 +134,42 @@ export async function query(
   return data.results;
 }
 
+/**
+ * every row a query matches, following `has_more` to the end.
+ *
+ * `query` above returns one page and is right for a caller that wants the
+ * first few; this is for the ones that need all of them. Notion caps a page at
+ * 100 and reports more with a cursor, so a caller reading only the first gets
+ * a plausible answer quietly missing everybody after the hundredth — a whole
+ * class of bug that reads as "that member has no articles".
+ *
+ * generic in the row so each caller keeps its own shape; this knows only how
+ * notion pages a response
+ */
+export async function queryAll<T>(
+  source: string,
+  token: string,
+  body: Record<string, unknown> = {},
+): Promise<T[]> {
+  const rows: T[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const response = (await notion(`data_sources/${source}/query`, token, {
+      page_size: 100,
+      ...body,
+      ...(cursor ? { start_cursor: cursor } : {}),
+    })) as { results: T[]; has_more?: boolean; next_cursor?: string | null };
+
+    rows.push(...response.results);
+    cursor = response.has_more
+      ? (response.next_cursor ?? undefined)
+      : undefined;
+  } while (cursor);
+
+  return rows;
+}
+
 /** the plain text of a page's title property, whatever that property is called */
 export function title(page: NotionPage): string {
   const property = Object.values(page.properties).find(

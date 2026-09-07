@@ -34,29 +34,40 @@ Astro.response.headers.set("cache-control", "private, no-store");
   the one somebody opens the morning of an election. A page that 500s because
   a bot token expired would take the merge tool down with it
 */
+/*
+  three reads sharing nothing — notion, discord and D1 — so they go out
+  together. Awaited one after another they were three round trips on a page
+  that is `no-store` and therefore re-read on every visit; the notion one alone
+  is measured at about a second in `~/lib/articles/live`.
+
+  the discord failure is caught on its own member rather than thrown: three of
+  the four sections here do not need discord at all, and the duplicates section
+  in particular is the one somebody opens the morning of an election. A page
+  that 500s because a bot token expired would take the merge tool down with it
+*/
 const notionToken = env.NOTION_TOKEN;
-const roster = notionToken ? await people(notionToken) : [];
 
-let applications: Awaited<ReturnType<typeof approvedApplications>> = [];
-let discordProblem: string | null = null;
+let discordProblem: string | null = env.DISCORD_BOT_TOKEN
+  ? null
+  : "DISCORD_BOT_TOKEN is not set.";
 
-if (env.DISCORD_BOT_TOKEN) {
-  try {
-    applications = await approvedApplications(env.DISCORD_BOT_TOKEN);
-  } catch (thrown) {
-    discordProblem = thrown instanceof Error ? thrown.message : String(thrown);
-  }
-} else {
-  discordProblem = "DISCORD_BOT_TOKEN is not set.";
-}
+const [roster, applications, watermark] = await Promise.all([
+  notionToken ? people(notionToken) : [],
+  env.DISCORD_BOT_TOKEN
+    ? approvedApplications(env.DISCORD_BOT_TOKEN).catch((thrown: unknown) => {
+        discordProblem =
+          thrown instanceof Error ? thrown.message : String(thrown);
+        return [];
+      })
+    : [],
+  /* the watermark is a record of what a person did, and D1 holding it is
+     exactly what ADR 0007 permits there: authoritative over nothing */
+  env.DB ? groupWatermark(env.DB) : null,
+]);
 
 const resolutions = resolveApplications(roster, applications);
 const nearMatches = duplicates(roster);
 const unknownStatus = roster.filter((person) => person.status === null);
-
-/* the watermark is a record of what a person did, and D1 holding it is exactly
-   what ADR 0007 permits there: authoritative over nothing */
-const watermark = env.DB ? await groupWatermark(env.DB) : null;
 const pending = pendingForGroup(applications, watermark);
 const external = pending
   .map((application) => application.email)

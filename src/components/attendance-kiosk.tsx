@@ -10,7 +10,8 @@ import {
   searchCandidates,
   type Candidate,
 } from "~/lib/members/kiosk";
-import type { MeetingRecord } from "~/lib/members/standing";
+import type { MeetingRecord } from "~/lib/members/records";
+import { postJson } from "~/lib/post-json";
 
 /*
   the kiosk. a laptop at the front of the room, already signed in, with a queue
@@ -47,45 +48,32 @@ type Props = {
 
 /** the whole attendee list, written over the meeting's relation */
 async function save(meetingId: string, memberIds: string[]): Promise<void> {
-  const response = await fetch("/api/members/attendance", {
-    method: "POST",
-    // astro refuses a cross-site POST that looks like a form submission, and
-    // one carrying no content type counts as one
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ meetingId, memberIds }),
-  });
-
-  if (!response.ok) {
-    const { error } = (await response.json().catch(() => ({}))) as {
-      error?: string;
-    };
-    throw new Error(error ?? `${response.status}`);
-  }
+  await postJson("/api/members/attendance", { meetingId, memberIds });
 }
 
 async function createPerson(
   name: string,
   email: string,
 ): Promise<{ pageId: string; name: string; email: string }> {
-  const response = await fetch("/api/members/create", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name, email }),
-  });
+  const { pageId } = await postJson<{ pageId?: string }>(
+    "/api/members/create",
+    { name, email },
+  );
 
-  const body = (await response.json().catch(() => ({}))) as {
-    pageId?: string;
-    error?: string;
-  };
+  /* the route answers 2xx only after notion accepted the page, so an id is
+     always there — but a member with no id would be one the list could not
+     remove again, so it is checked rather than asserted */
+  if (!pageId) throw new Error("the member was created without an id");
 
-  if (!response.ok || !body.pageId) {
-    throw new Error(body.error ?? `${response.status}`);
-  }
-
-  return { pageId: body.pageId, name, email };
+  return { pageId, name, email };
 }
 
 const dayOf = (meeting: MeetingRecord) => meeting.date.slice(0, 10);
+
+/* the route's own message where there is one — notion's refusals say useful
+   things, and everybody at this laptop holds @Editorial Board */
+const reason = (thrown: unknown) =>
+  thrown instanceof Error ? thrown.message : String(thrown);
 
 export function AttendanceKiosk({
   meetings,
@@ -101,8 +89,15 @@ export function AttendanceKiosk({
   );
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  const [confirmed, setConfirmed] = useState<string | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
+  /*
+    one notice, not a confirmation and an error side by side. They were always
+    mutually exclusive — every write to one cleared the other — and keeping
+    that true by hand across five call sites is how a kiosk ends up showing a
+    green tick above a red failure for the same tap
+  */
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(
+    null,
+  );
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
@@ -149,8 +144,7 @@ export function AttendanceKiosk({
       exists to allow rather than to cause
     */
     setPresent(meetings.find((one) => one.pageId === id)?.attendeeIds ?? []);
-    setConfirmed(null);
-    setProblem(null);
+    setNotice(null);
     refocus();
   }
 
@@ -168,17 +162,16 @@ export function AttendanceKiosk({
     const before = present;
     setPresent(next);
     setBusy(true);
-    setProblem(null);
 
     try {
       await save(meetingId, next);
-      setConfirmed(say);
+      setNotice({ ok: true, text: say });
     } catch (thrown) {
       setPresent(before);
-      setConfirmed(null);
-      setProblem(
-        `Not saved: ${thrown instanceof Error ? thrown.message : String(thrown)}. Try again.`,
-      );
+      setNotice({
+        ok: false,
+        text: `Not saved: ${reason(thrown)}. Try again.`,
+      });
     } finally {
       setBusy(false);
       refocus();
@@ -191,7 +184,10 @@ export function AttendanceKiosk({
     if (present.includes(candidate.person.pageId)) {
       /* already here, and saying so is better than a silent no-op: they tapped
          because they were not sure it had registered */
-      setConfirmed(`${candidate.person.name} was already signed in`);
+      setNotice({
+        ok: true,
+        text: `${candidate.person.name} was already signed in`,
+      });
       refocus();
       return;
     }
@@ -216,7 +212,6 @@ export function AttendanceKiosk({
     if (!name || !email) return;
 
     setBusy(true);
-    setProblem(null);
 
     try {
       const created = await createPerson(name, email);
@@ -245,9 +240,7 @@ export function AttendanceKiosk({
         `${created.name} was added and is signed in`,
       );
     } catch (thrown) {
-      setProblem(
-        `Could not add them: ${thrown instanceof Error ? thrown.message : String(thrown)}`,
-      );
+      setNotice({ ok: false, text: `Could not add them: ${reason(thrown)}` });
     } finally {
       setBusy(false);
     }
@@ -399,18 +392,18 @@ export function AttendanceKiosk({
               their tap registered taps again, and a double entry is a
               duplicate */}
           <div aria-live="polite" className="min-h-12">
-            {confirmed && (
+            {notice?.ok && (
               <div className="flex items-center gap-2 rounded-lg border border-green-600/40 bg-green-600/10 p-4 text-lg font-medium">
                 <CheckIcon className="size-5 shrink-0" />
-                {confirmed}
+                {notice.text}
               </div>
             )}
-            {problem && (
+            {notice && !notice.ok && (
               <div
                 role="alert"
                 className="border-destructive/50 bg-destructive/10 text-destructive rounded-lg border p-4 text-sm"
               >
-                {problem}
+                {notice.text}
               </div>
             )}
           </div>

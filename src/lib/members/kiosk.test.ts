@@ -7,7 +7,7 @@ import {
   searchCandidates,
   type Candidate,
 } from "./kiosk";
-import type { ContributionRecord, MeetingRecord, Person } from "./standing";
+import type { ContributionRecord, MeetingRecord, Person } from "./records";
 
 function person(over: Partial<Person> & { name: string }): Person {
   return {

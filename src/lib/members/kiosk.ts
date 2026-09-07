@@ -13,7 +13,8 @@
 */
 
 import { normaliseName } from "~/lib/articles/member";
-import type { ContributionRecord, MeetingRecord, Person } from "./standing";
+import { plural } from "~/lib/utils";
+import type { ContributionRecord, MeetingRecord, Person } from "./records";
 
 /**
  * a person as the kiosk offers them.
@@ -62,9 +63,7 @@ export function distinguish(candidate: Candidate): string {
   parts.push(domain ? `@${domain}` : "no email on file");
 
   if (candidate.contributions > 0) {
-    parts.push(
-      `${candidate.contributions} contribution${candidate.contributions === 1 ? "" : "s"}`,
-    );
+    parts.push(plural(candidate.contributions, "contribution"));
   }
 
   if (candidate.person.status) parts.push(candidate.person.status);

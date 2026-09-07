@@ -19,6 +19,7 @@
 
 import type { EasternNow } from "~/lib/eastern";
 import { misconfigured, ok, skipped, type Result } from "~/lib/result";
+import { plural } from "~/lib/utils";
 import { approvedApplications } from "~/lib/services/discord/join-requests";
 import { resolveApplications, safeToCreate, type Resolution } from "./match";
 import { people } from "./roster";
@@ -76,11 +77,10 @@ export async function syncApplications(
 
   const resolutions = resolveApplications(roster, applications);
   const creatable = safeToCreate(resolutions);
-  const waiting = deferred(resolutions);
 
   if (creatable.length === 0)
     return skipped(
-      `No new applications out of ${applications.length}. ${leftovers(waiting)}`,
+      `No new applications out of ${applications.length}. ${leftovers(resolutions)}`,
     );
 
   /*
@@ -90,7 +90,7 @@ export async function syncApplications(
   */
   if (env.REMINDERS_DRY_RUN)
     return ok(
-      `Would create ${plural(creatable.length, "member")} from applications. ${leftovers(waiting)}`,
+      `Would create ${plural(creatable.length, "member")} from applications. ${leftovers(resolutions)}`,
     );
 
   /*
@@ -109,38 +109,27 @@ export async function syncApplications(
   }
 
   return ok(
-    `Created ${plural(created, "member")} from applications. ${leftovers(waiting)}`,
+    `Created ${plural(created, "member")} from applications. ${leftovers(resolutions)}`,
   );
 }
 
-/** the resolutions a person has to decide, grouped by why */
-type Deferred = Record<
-  "linkable" | "similar" | "ambiguous" | "conflicted",
-  number
->;
-
 /**
- * what the cron would not touch.
+ * how many of each kind the cron left for a person, and what to call them.
  *
- * `linked` is not in here. A row that already carries the snowflake is finished
- * business, not work waiting for somebody — counting it would put a permanent
- * and growing number in the log line that never goes down
+ * one list, in the order the summary reads. Written as data rather than as
+ * four fields and four additions because that shape had the count, the sum and
+ * the wording in three separate places, and `similar` had to be added to all
+ * three — the fourth edit is the one somebody forgets
  */
-function deferred(resolutions: Resolution[]): Deferred {
-  const counts: Deferred = {
-    linkable: 0,
-    similar: 0,
-    ambiguous: 0,
-    conflicted: 0,
-  };
-
-  for (const resolution of resolutions) {
-    if (resolution.status in counts)
-      counts[resolution.status as keyof Deferred] += 1;
-  }
-
-  return counts;
-}
+const DEFERS = [
+  { status: "linkable", say: (n: number) => `${n} to link` },
+  { status: "similar", say: (n: number) => `${n} near an existing name` },
+  { status: "ambiguous", say: (n: number) => `${n} ambiguous` },
+  { status: "conflicted", say: (n: number) => `${n} conflicted` },
+] as const satisfies readonly {
+  status: Resolution["status"];
+  say: (n: number) => string;
+}[];
 
 /**
  * the second sentence of the summary.
@@ -148,23 +137,23 @@ function deferred(resolutions: Resolution[]): Deferred {
  * the summary is one line in the invocation log and on the trigger panel, so it
  * is written as english rather than as a count dump: somebody reading it a
  * month later wants to know whether anything is waiting on them, and a bare
- * `{linkable: 2}` does not answer that
+ * `{linkable: 2}` does not answer that.
+ *
+ * `linked` and `new` are absent from `DEFERS` on purpose. A row that already
+ * carries the snowflake is finished business, not work waiting for somebody,
+ * and counting it would put a permanent and growing number in a line that
+ * never goes down
  */
-function leftovers(waiting: Deferred): string {
-  const total =
-    waiting.linkable + waiting.similar + waiting.ambiguous + waiting.conflicted;
+function leftovers(resolutions: Resolution[]): string {
+  const counted = DEFERS.map((defer) => ({
+    ...defer,
+    n: resolutions.filter((one) => one.status === defer.status).length,
+  }));
+
+  const total = counted.reduce((sum, one) => sum + one.n, 0);
   if (total === 0) return "Nothing is waiting on the reconciler.";
 
-  const why = [
-    waiting.linkable && `${waiting.linkable} to link`,
-    waiting.similar && `${waiting.similar} near an existing name`,
-    waiting.ambiguous && `${waiting.ambiguous} ambiguous`,
-    waiting.conflicted && `${waiting.conflicted} conflicted`,
-  ].filter(Boolean);
+  const why = counted.filter((one) => one.n > 0).map((one) => one.say(one.n));
 
   return `${total} need${total === 1 ? "s" : ""} review on the reconciler (${why.join(", ")}).`;
-}
-
-function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }

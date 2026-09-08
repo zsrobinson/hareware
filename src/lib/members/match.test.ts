@@ -5,6 +5,7 @@ import {
   nearName,
   resolveApplication,
   safeToCreate,
+  suggestDiscordLinks,
 } from "./match";
 import type { Person } from "./records";
 
@@ -292,4 +293,113 @@ test("two edits are too many, and an identical name is not 'near'", () => {
   expect(nearName("bay", "bay")).toBe(false);
   expect(nearName("", "bay")).toBe(false);
   expect(nearName("ada vance", "bay hoffman")).toBe(false);
+});
+
+/*
+  the third way somebody arrives: already in the server, with a row that has
+  never been linked to it. Nothing else on the reconciler reaches these people,
+  because applications only carry those who went through the join form
+*/
+const account = (
+  over: Partial<{ id: string; username: string; displayName: string }> = {},
+) => ({
+  id: "574376763006648349",
+  username: "bayh",
+  displayName: "Bay",
+  ...over,
+});
+
+test("a row and an account sharing a name are offered to each other", () => {
+  const [suggestion] = suggestDiscordLinks(
+    [person({ name: "Bay Hoffman" })],
+    [account({ displayName: "Bay Hoffman" })],
+  );
+
+  expect(suggestion?.person.name).toBe("Bay Hoffman");
+  expect(suggestion?.account.username).toBe("bayh");
+});
+
+/* the handle is the name they cannot change, so it is matched too */
+test("the discord handle counts as a name as well as the nickname", () => {
+  const suggestions = suggestDiscordLinks(
+    [person({ name: "bayh" })],
+    [account({ displayName: "something else" })],
+  );
+
+  expect(suggestions).toHaveLength(1);
+});
+
+test("a row that already has an id is not offered another", () => {
+  const suggestions = suggestDiscordLinks(
+    [person({ name: "Bay Hoffman", discordId: "1" })],
+    [account({ displayName: "Bay Hoffman" })],
+  );
+
+  expect(suggestions).toEqual([]);
+});
+
+/* the account is already somebody's, and offering it again would be offering
+   to move that person's contribution history onto this row */
+test("an account another row already claims is not offered", () => {
+  const suggestions = suggestDiscordLinks(
+    [
+      person({
+        pageId: "p1",
+        name: "Ada Vance",
+        discordId: "574376763006648349",
+      }),
+      person({ pageId: "p2", name: "Bay Hoffman" }),
+    ],
+    [account({ displayName: "Bay Hoffman" })],
+  );
+
+  expect(suggestions).toEqual([]);
+});
+
+/* the ambiguity ADR 0009 refuses to guess at, from both directions */
+test("two accounts that could be one row are not guessed between", () => {
+  const suggestions = suggestDiscordLinks(
+    [person({ name: "Bay Hoffman" })],
+    [
+      account({ id: "1", displayName: "Bay Hoffman" }),
+      account({ id: "2", username: "bay hoffman", displayName: "Hoff" }),
+    ],
+  );
+
+  expect(suggestions).toEqual([]);
+});
+
+test("two rows that could be one account are not guessed between", () => {
+  const suggestions = suggestDiscordLinks(
+    [
+      person({ pageId: "p1", name: "Bay Hoffman" }),
+      person({ pageId: "p2", name: "bay hoffman" }),
+    ],
+    [account({ displayName: "Bay Hoffman" })],
+  );
+
+  expect(suggestions).toEqual([]);
+});
+
+/*
+  `nearName` withholds a create; it never proposes a link. A suggestion a tired
+  officer clicks through is not meaningfully safer than an automatic link, and
+  this is the write that moves somebody's whole history
+*/
+test("a name one edit away is not offered at all", () => {
+  const suggestions = suggestDiscordLinks(
+    [person({ name: "Matthew Reyes" })],
+    [account({ displayName: "Mathew Reyes" })],
+  );
+
+  expect(suggestions).toEqual([]);
+});
+
+test("a row with no name matches nothing", () => {
+  const suggestions = suggestDiscordLinks(
+    [person({ name: "   " })],
+    [account({ displayName: "   " })],
+  );
+
+  expect(suggestions).toEqual([]);
 });

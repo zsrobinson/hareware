@@ -24,11 +24,13 @@ export type Viewer = {
 
 /**
  * The same thing as the sidebar takes it, where signed-out is a value rather
- * than null. No `admin`: nothing the sidebar draws varies by role.
+ * than null. The role boolean is enough to choose navigation without exposing
+ * Discord's role ids to the browser.
  */
 export type ViewerState = {
   session: Session | null;
   profile: Profile | null;
+  admin: boolean;
 };
 
 /** `viewer()` in the shape the layout wants, so a page can always pass it */
@@ -36,6 +38,7 @@ export function viewerState(who: Viewer | null): ViewerState {
   return {
     session: who?.session ?? null,
     profile: who?.profile ?? null,
+    admin: who?.admin === true,
   };
 }
 

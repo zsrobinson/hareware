@@ -19,8 +19,8 @@ type Props = {
 
     a page that sets `s-maxage` passes nothing at all: its html goes to
     everyone, so the account panel asks /api/session.json for itself instead.
-    that panel is the only thing left that varies by who is looking, because
-    the nav no longer does
+    the account action and role-aware navigation resolve from that one client
+    answer, so neither personal identity nor admin links enter shared html
   */
   viewer?: ViewerState | null;
   /*

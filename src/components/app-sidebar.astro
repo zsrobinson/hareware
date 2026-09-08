@@ -1,7 +1,6 @@
 ---
-import { SidebarAccount } from "~/components/sidebar-account";
-import { NavGroup } from "~/components/nav-group";
-import { adminNav, toolsNav } from "~/lib/nav";
+import { SidebarAccount, SidebarMenu } from "~/components/sidebar-account";
+import { SidebarGroups } from "~/components/sidebar-sheet";
 import type { ViewerState } from "~/lib/admin";
 
 type Props = {
@@ -13,8 +12,8 @@ const { viewer, pathname, returnTo } = Astro.props;
 ---
 
 {
-  /* static markup: no client: directive on NavGroup, so this whole sidebar
-    ships as html and the public tools keep costing no javascript */
+  /* Public tools render in the anonymous server snapshot. Account and role
+     state hydrate from the shared viewer store on cached pages. */
 }
 <aside
   class="bg-sidebar text-sidebar-foreground border-sidebar-border hidden h-full w-(--sidebar-width) shrink-0 flex-col border-r transition-[width] duration-200 group-data-[state=collapsed]/shell:w-(--sidebar-width-icon) md:flex"
@@ -24,35 +23,31 @@ const { viewer, pathname, returnTo } = Astro.props;
       name is what goes when the rail narrows. the mark has to be 1:1 to
       survive that: a wide wordmark scaled to the rail is unreadable */
   }
-  <a
-    href="/"
-    class="hover:bg-sidebar-accent m-2 flex shrink-0 items-center gap-2 rounded-lg p-1.5 transition-colors group-data-[state=collapsed]/shell:m-1.5"
+  <div
+    class="m-2 flex shrink-0 items-center gap-1 group-data-[state=collapsed]/shell:m-1.5 group-data-[state=collapsed]/shell:flex-col"
   >
-    <img
-      src="/bot-logo.svg"
-      alt=""
-      width="28"
-      height="28"
-      class="size-7 shrink-0 rounded-md"
-    />
-    <span
-      class="truncate text-sm font-semibold group-data-[state=collapsed]/shell:hidden"
+    <a
+      href="/"
+      class="hover:bg-sidebar-accent flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1.5 transition-colors group-data-[state=collapsed]/shell:flex-none"
     >
-      HareWare
-    </span>
-  </a>
-
-  <nav class="flex flex-1 flex-col gap-4 overflow-y-auto p-3 pt-1">
-    <NavGroup items={toolsNav} pathname={pathname} label="Public tools" />
-
-    {
-      /* Everybody sees these, signed in or not: the pages refuse and say why,
-         so the nav has nothing to hide and nothing to ask
-         /api/session.json for, which is what keeps it static markup even on a
-         cached page. ADR 0007. */
-    }
-    <NavGroup items={adminNav} pathname={pathname} label="Admin tools" />
-  </nav>
+      <img
+        src="/bot-logo.svg"
+        alt=""
+        width="28"
+        height="28"
+        class="size-7 shrink-0 rounded-md"
+      />
+      <span
+        class="truncate text-sm font-semibold group-data-[state=collapsed]/shell:hidden"
+        >HareWare</span
+      >
+    </a>
+    <SidebarMenu client:idle viewer={viewer} returnTo={returnTo} />
+  </div>
 
   <SidebarAccount client:idle viewer={viewer} returnTo={returnTo} />
+
+  <nav class="flex flex-1 flex-col gap-4 overflow-y-auto p-3 pt-1">
+    <SidebarGroups client:idle pathname={pathname} viewer={viewer} />
+  </nav>
 </aside>

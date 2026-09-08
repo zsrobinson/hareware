@@ -2,12 +2,9 @@ import { useEffect, useSyncExternalStore } from "react";
 import type { ViewerState } from "./admin";
 
 /*
-  who is looking, shared by the islands that care: the account panel, and the
-  mobile drawer that contains one. they would otherwise each ask
+  who is looking, shared by the islands that care: the account action, the
+  role-aware navigation, and the mobile drawer. they would otherwise each ask
   /api/session.json and could disagree.
-
-  the nav is not in that list: every tool is shown to everybody and the admin
-  pages refuse in person, so nothing about which links to draw depends on this.
 
   one snapshot rather than separate module variables, because a partial one
   published from a page outlives that page under client-side routing.
@@ -17,7 +14,7 @@ import type { ViewerState } from "./admin";
   cancels the request that would have filled in the rest.
 */
 
-const SIGNED_OUT: ViewerState = { session: null, profile: null };
+const SIGNED_OUT: ViewerState = { session: null, profile: null, admin: false };
 
 type Snapshot =
   { status: "unknown" } | { status: "resolved"; viewer: ViewerState };
@@ -62,6 +59,7 @@ function requestViewer() {
           ? {
               session: { discordUserId: data.discordUserId as string },
               profile: readProfile(data.profile),
+              admin: data.admin === true,
             }
           : SIGNED_OUT,
       ),

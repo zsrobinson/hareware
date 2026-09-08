@@ -18,10 +18,11 @@
 import { together } from "~/lib/services/notion/client";
 import { approvedApplications } from "~/lib/services/discord/join-requests";
 import type { Application } from "~/lib/services/discord/join-requests";
-import { groupWatermark, isExternalAddress, pendingForGroup } from "./group";
+
 import { defaultMeeting, offerableMeetings } from "./kiosk";
-import { duplicates, resolveApplications } from "./match";
-import type { Duplicate, Resolution } from "./match";
+import { duplicates, resolveApplications, suggestDiscordLinks } from "./match";
+import type { Duplicate, DiscordSuggestion, Resolution } from "./match";
+import { guildMembers } from "~/lib/member";
 import type { MeetingRecord, Person } from "./records";
 import { meetings, people, statusOptions } from "./roster";
 import { alumOptionMissing, FALLBACK_MEMBER_STATUSES } from "./config";
@@ -102,33 +103,22 @@ export async function kioskData(
   };
 }
 
-/** the state of the Google Group export, which no software may write */
-export type GroupState = {
-  /** the ISO day somebody last pasted into the group, or null if never */
-  watermark: string | null;
-  /** everyone approved since, in the order they applied */
-  pending: Application[];
-  /** the addresses that are not terpmail or umd, flagged by `isExternalAddress` */
-  external: string[];
-  /**
-   * applicants the group cannot reach at all.
-   *
-   * an application with no email is in neither the paste list nor the flagged
-   * addresses, and the watermark advances past it either way. Filtering the
-   * empties out before flagging them is exactly the silent omission the
-   * watermark's own rule exists to prevent, so they are carried here and named
-   * on the page
-   */
-  unreachable: Application[];
-};
-
 export type ReconcilerData = {
   resolutions: Resolution[];
   duplicates: Duplicate[];
   /** rows whose `Status` select is empty, the one field a person maintains */
   unknownStatus: Person[];
   statuses: string[];
-  group: GroupState;
+  /**
+   * the whole roster, for the comparison the browser does itself.
+   *
+   * the google group cannot be read by software, so an editor exports its
+   * members and the page diffs the file against this. Sending the roster and
+   * keeping the file in the browser means the export never touches a server
+   */
+  roster: Person[];
+  /** rows that could be linked to an account already in the server */
+  discordSuggestions: DiscordSuggestion[];
   /** notion's live options, named in the banner when the alum one is gone */
   liveStatuses: string[];
   alumMissing: boolean;
@@ -157,7 +147,7 @@ export async function reconcilerData(env: ViewEnv): Promise<ReconcilerData> {
     ? null
     : "DISCORD_BOT_TOKEN is not set.";
 
-  const [roster, applications, watermark, options] = await Promise.all([
+  const [roster, applications, guild, options] = await Promise.all([
     token ? people(token) : Promise.resolve([] as Person[]),
     bot
       ? approvedApplications(bot).catch((thrown: unknown) => {
@@ -166,28 +156,27 @@ export async function reconcilerData(env: ViewEnv): Promise<ReconcilerData> {
           return [] as Application[];
         })
       : Promise.resolve([] as Application[]),
-    /* the watermark is a record of what a person did, and D1 holding it is
-       exactly what ADR 0007 permits there: authoritative over nothing */
-    env.DB ? groupWatermark(env.DB) : Promise.resolve(null),
+    /* one request for the whole server. it needs the Server Members intent and
+       answers an empty map without it, which reads here as no suggestions
+       rather than as an error: the rest of the page does not depend on it */
+    guildMembers(),
     statuses(token),
   ]);
-
-  const pending = pendingForGroup(applications, watermark);
 
   return {
     resolutions: resolveApplications(roster, applications),
     duplicates: duplicates(roster),
     unknownStatus: roster.filter((person) => person.status === null),
     statuses: options.offered,
-    group: {
-      watermark,
-      pending,
-      external: pending
-        .map((application) => application.email)
-        .filter((email): email is string => Boolean(email))
-        .filter((email) => isExternalAddress(email)),
-      unreachable: pending.filter((application) => !application.email?.trim()),
-    },
+    roster,
+    discordSuggestions: suggestDiscordLinks(
+      roster,
+      [...guild].map(([id, profile]) => ({
+        id,
+        username: profile.username,
+        displayName: profile.displayName,
+      })),
+    ),
     liveStatuses: options.live,
     alumMissing: options.alumMissing,
     discordProblem,

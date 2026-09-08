@@ -80,41 +80,35 @@ test("a candidate carries the count notion computed for their row", async () => 
 });
 
 /*
-  the group export's silent omission, pinned.
-
-  filtering the blank addresses out before flagging them reads as tidy and puts
-  an applicant with no email in neither the paste list nor the flagged one,
-  while the watermark advances past them regardless. That is the loss the
-  watermark's own "a harmless repeat beats a silent omission" rule exists to
-  prevent, so they are named instead
+  the roster travels to the page because the google group comparison happens in
+  the browser: an editor exports the group's members and the file is diffed
+  against these rows without going anywhere. A page missing the roster would
+  compare against nothing and report that everybody is already a member
 */
-test("an applicant with no email is named rather than filtered away", async () => {
+test("the reconciler carries the roster the group is compared against", async () => {
   const { reconcilerData } = await import("./views");
 
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
       if (String(url).includes("discord.com")) {
-        return new Response(
-          JSON.stringify({
-            guild_join_requests: [
-              {
-                id: "1",
-                created_at: "2026-09-04T00:00:00.000Z",
-                user_id: "u1",
-                user: { username: "noemail" },
-                form_responses: [
-                  { label: "What's your full name?", response: "Ada Vance" },
-                  { label: "What's your email?", response: "" },
-                ],
-              },
-            ],
-          }),
-        );
+        return new Response(JSON.stringify({ guild_join_requests: [] }));
       }
 
       return new Response(
-        JSON.stringify({ results: [], has_more: false, properties: {} }),
+        JSON.stringify({
+          results: [
+            {
+              id: "p1",
+              properties: {
+                Name: { type: "title", title: [{ plain_text: "Ada Vance" }] },
+                Email: { type: "email", email: "ada@terpmail.umd.edu" },
+              },
+            },
+          ],
+          has_more: false,
+          properties: {},
+        }),
       );
     }),
   );
@@ -124,7 +118,6 @@ test("an applicant with no email is named rather than filtered away", async () =
     DISCORD_BOT_TOKEN: "bot",
   } as never);
 
-  expect(data.group.pending).toHaveLength(1);
-  expect(data.group.external).toEqual([]);
-  expect(data.group.unreachable.map((one) => one.name)).toEqual(["Ada Vance"]);
+  expect(data.roster.map((one) => one.name)).toEqual(["Ada Vance"]);
+  expect(data.discordSuggestions).toEqual([]);
 });

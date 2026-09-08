@@ -20,7 +20,7 @@ const views = vi.hoisted(() => ({
 vi.mock("~/lib/members/views", () => views);
 
 const { GET } = await import("./reconciler");
-const { POST } = await import("./group");
+const { POST } = await import("./status");
 
 const WAITING = {
   resolutions: [],
@@ -35,11 +35,16 @@ const WAITING = {
     },
   ],
   statuses: ["Undergrad"],
-  group: {
-    watermark: "2026-09-01",
-    pending: [],
-    external: ["bay@example.com"],
-  },
+  roster: [
+    {
+      pageId: "p1",
+      name: "Bay Hoffman",
+      discordId: null,
+      email: "bay@terpmail.umd.edu",
+      status: null,
+    },
+  ],
+  discordSuggestions: [],
   liveStatuses: ["Undergrad"],
   alumMissing: false,
   discordProblem: null,

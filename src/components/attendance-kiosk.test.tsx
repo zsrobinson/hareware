@@ -22,7 +22,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { fireEvent } from "@testing-library/dom";
+import { configure, fireEvent } from "@testing-library/dom";
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mergeAttendance } from "~/lib/members/attendance";
@@ -41,6 +41,15 @@ let AttendanceKiosk: typeof import("./attendance-kiosk").AttendanceKiosk;
 vi.mock("~/lib/notify", () => ({
   notify: { ok: vi.fn(), failed: vi.fn() },
 }));
+
+/*
+  generous, because every wait here is for a condition rather than for a
+  duration: the writes are gated by the test, not by a clock. A default second
+  is enough on an idle machine and not on one running the rest of this suite in
+  parallel, and a test that fails only when the laptop is busy teaches nobody
+  anything
+*/
+configure({ asyncUtilTimeout: 10_000 });
 
 const NAMES = ["Ana Diaz", "Ben Okafor", "Cass Lin", "Dev Patel", "Elle Moore"];
 
@@ -70,6 +79,9 @@ const initial: KioskData = {
 type Fake = {
   attendees: string[];
   writes: { known: string[]; memberIds: string[] }[];
+  /* held open by the test that wants to look at the screen while every write
+     is still in flight. Resolved by default, so the rest run at full speed */
+  gate: Promise<void>;
 };
 
 let fake: Fake;
@@ -78,7 +90,7 @@ beforeEach(async () => {
   vi.resetModules();
   ({ AttendanceKiosk } = await import("./attendance-kiosk"));
 
-  fake = { attendees: [], writes: [] };
+  fake = { attendees: [], writes: [], gate: Promise.resolve() };
   /*
     the stub closes over *this* test's fake, not the variable.
 
@@ -101,7 +113,10 @@ beforeEach(async () => {
         notion.writes.push(body);
 
         /* the round trip, so a second tap really does land mid-write */
-        await new Promise((done) => setTimeout(done, 30));
+        await notion.gate;
+        /* enough for the next tap to land while this one is in flight, which
+           is the whole situation under test */
+        await new Promise((done) => setTimeout(done, 10));
 
         notion.attendees = mergeAttendance(
           notion.attendees,
@@ -172,6 +187,11 @@ function signIn(name: string) {
 }
 
 test("five people signing in one after another all land, in order", async () => {
+  /* nothing answers until this is released, so "before any write landed" is a
+     fact rather than a race the test usually wins */
+  let release = () => {};
+  fake.gate = new Promise<void>((done) => (release = done));
+
   draw();
 
   /* no awaiting between them: this is the queue at the front of the room,
@@ -185,6 +205,8 @@ test("five people signing in one after another all land, in order", async () => 
   await act(async () => {});
   expect(signedIn()).toHaveLength(5);
   expect(fake.attendees).toEqual([]);
+
+  release();
 
   await waitFor(() => expect(fake.writes).toHaveLength(5));
   await waitFor(() => expect(fake.attendees).toHaveLength(5));

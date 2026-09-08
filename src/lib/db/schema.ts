@@ -52,28 +52,3 @@ export const invocations = sqliteTable(
 
 export type Invocation = typeof invocations.$inferInsert;
 export type Row = typeof invocations.$inferSelect;
-
-/*
-  when somebody last pasted the new emails into the Google Group.
-
-  the group cannot be read or written by software — the Admin SDK wants
-  Workspace admin credentials on the domain that owns the group, and the club's
-  is owned by a consumer gmail account with no domain and no admin console. so
-  ADR 0010 does not sync it. it records the day the additions were last done and
-  lists everyone approved since, to paste into the bulk-add field.
-
-  one row, always id 1, because there is one group and one watermark. a table
-  with a fixed key rather than a `sync_meta` key/value store: this is the only
-  thing of its kind, and a typed column beats parsing a string out of a bag.
-
-  authoritative over nothing, which is what makes it allowed in D1 at all under
-  ADR 0007. if it drifts, the club re-adds somebody who is already a member and
-  google treats that as a no-op — a harmless failure, which is exactly why this
-  beats an *In Group* checkbox somebody would eventually forget to tick
-*/
-export const groupWatermark = sqliteTable("group_watermark", {
-  /** always 1; there is one group */
-  id: integer("id").primaryKey(),
-  /** an ISO day — `YYYY-MM-DD` — compared against an application's `applied` */
-  at: text("at").notNull(),
-});

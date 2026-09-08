@@ -1,6 +1,5 @@
 /*
-  everything the reconciler shows, re-read after a link, a merge, a status or
-  the group watermark.
+  everything the reconciler shows, re-read after a link, a merge or a status.
 
   the same shape `/reconciler` hands the island as `initialData`, from the same
   function. Refetching after each of those is the point: every one of them

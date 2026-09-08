@@ -1,97 +1,128 @@
 import { expect, test } from "vitest";
-import type { Application } from "~/lib/services/discord/join-requests";
-import { isExternalAddress, pendingForGroup } from "./group";
+import { compareToGroup, emailsInExport, isExternalAddress } from "./group";
+import type { Person } from "./records";
 
-function application(over: Partial<Application> = {}): Application {
-  return {
-    id: "1545474779111497810",
-    discordId: "574376763006648349",
-    username: "bayh",
-    name: "Bay Hoffman",
-    email: "bay@terpmail.umd.edu",
-    gradYear: "2028",
-    applied: "2026-09-04",
-    ...over,
-  };
-}
-
-test("a null watermark makes everybody pending", () => {
-  const pending = pendingForGroup(
-    [application({ applied: "2025-12-04" }), application()],
-    null,
-  );
-
-  expect(pending).toHaveLength(2);
+const person = (fields: Partial<Person> & { pageId: string }): Person => ({
+  name: "Somebody",
+  discordId: null,
+  email: null,
+  status: "Undergrad",
+  contributions: 0,
+  ...fields,
 });
 
-test("an application from before the watermark was already pasted in", () => {
-  const pending = pendingForGroup(
-    [application({ applied: "2026-08-01" })],
-    "2026-09-01",
-  );
+/* the shape google actually exports, header row and all */
+const EXPORT = `Email address,Nickname,Join date,Posting permissions
+ana@terpmail.umd.edu,Ana,2026-01-04,allowed
+ben@umd.edu,,2026-02-11,allowed
+"quoted@terpmail.umd.edu",Quoted,2026-03-01,allowed
+`;
 
-  expect(pending).toEqual([]);
+test("every address in an export is found, whatever the columns are", () => {
+  expect([...emailsInExport(EXPORT)]).toEqual([
+    "ana@terpmail.umd.edu",
+    "ben@umd.edu",
+    "quoted@terpmail.umd.edu",
+  ]);
 });
 
-/* an `applied` date has no time on it, so somebody who applies in the evening
-   of a day already pasted at noon cannot be told from somebody who was in that
-   paste. re-offering the boundary day costs a duplicate google ignores;
-   excluding it would lose that person for good */
-test("the watermark's own day is offered again rather than risked", () => {
-  const pending = pendingForGroup(
-    [application({ applied: "2026-09-01" })],
-    "2026-09-01",
-  );
-
-  expect(pending).toHaveLength(1);
+/* the column names have changed before and are not ours to depend on. a reader
+   that looked for one and found nothing would report an empty group, which
+   reads as "add everybody again" rather than as a failure */
+test("a file with no header is read the same way", () => {
+  expect([...emailsInExport("ana@terpmail.umd.edu\nben@umd.edu")]).toEqual([
+    "ana@terpmail.umd.edu",
+    "ben@umd.edu",
+  ]);
 });
 
-test("everyone approved since the watermark is pending, oldest first", () => {
-  const pending = pendingForGroup(
+test("addresses are folded to lower case, and each is listed once", () => {
+  const found = emailsInExport("Ana@Terpmail.UMD.edu, ana@terpmail.umd.edu");
+
+  expect([...found]).toEqual(["ana@terpmail.umd.edu"]);
+});
+
+test("a file with nothing in it finds nothing rather than throwing", () => {
+  expect(emailsInExport("").size).toBe(0);
+});
+
+test("somebody on the roster and not in the group is missing", () => {
+  const diff = compareToGroup(
     [
-      application({ id: "c", applied: "2026-09-06" }),
-      application({ id: "a", applied: "2026-09-02" }),
-      application({ id: "b", applied: "2026-09-04" }),
-      application({ id: "old", applied: "2026-08-30" }),
+      person({ pageId: "p1", name: "Ana", email: "ana@terpmail.umd.edu" }),
+      person({ pageId: "p2", name: "Ben", email: "ben@umd.edu" }),
     ],
-    "2026-09-01",
+    new Set(["ana@terpmail.umd.edu"]),
   );
 
-  expect(pending.map((one) => one.id)).toEqual(["a", "b", "c"]);
+  expect(diff.missing.map((one) => one.name)).toEqual(["Ben"]);
 });
 
-test("pendingForGroup does not reorder the list it was given", () => {
-  const applications = [
-    application({ id: "b", applied: "2026-09-04" }),
-    application({ id: "a", applied: "2026-09-02" }),
-  ];
+/* the address on the row was typed by a person, the one in the group came back
+   from google, and either may carry capitals or a stray space */
+test("a difference of case or whitespace is not a difference", () => {
+  const diff = compareToGroup(
+    [person({ pageId: "p1", email: "  Ana@Terpmail.umd.edu " })],
+    new Set(["ana@terpmail.umd.edu"]),
+  );
 
-  pendingForGroup(applications, null);
-
-  expect(applications.map((one) => one.id)).toEqual(["b", "a"]);
+  expect(diff.missing).toEqual([]);
 });
 
-test("a terpmail address auto-adds and is not flagged", () => {
+/*
+  a row with no address is neither in the group nor addable to it, and the
+  earlier version of this page filtered those rows out before counting. That is
+  the silent omission ADR 0010 keeps refusing: somebody nobody can reach looks
+  exactly like somebody already reached
+*/
+test("a row with no email is named, not counted as present", () => {
+  const diff = compareToGroup(
+    [
+      person({ pageId: "p1", name: "Ana", email: "ana@terpmail.umd.edu" }),
+      person({ pageId: "p2", name: "No Address", email: null }),
+      person({ pageId: "p3", name: "Blank", email: "   " }),
+    ],
+    new Set(["ana@terpmail.umd.edu"]),
+  );
+
+  expect(diff.missing).toEqual([]);
+  expect(diff.unreachable.map((one) => one.name)).toEqual([
+    "No Address",
+    "Blank",
+  ]);
+});
+
+/* alumni, mostly. but a typo in a notion email looks exactly the same from
+   here, which is why they are shown rather than dropped */
+test("an address in the group that no row claims is reported", () => {
+  const diff = compareToGroup(
+    [person({ pageId: "p1", email: "ana@terpmail.umd.edu" })],
+    new Set(["ana@terpmail.umd.edu", "graduated@gmail.com"]),
+  );
+
+  expect(diff.strangers).toEqual(["graduated@gmail.com"]);
+});
+
+test("an empty group makes everybody with an address missing", () => {
+  const diff = compareToGroup(
+    [
+      person({ pageId: "p1", name: "Ana", email: "ana@terpmail.umd.edu" }),
+      person({ pageId: "p2", name: "Ben", email: "ben@umd.edu" }),
+    ],
+    new Set(),
+  );
+
+  expect(diff.missing).toHaveLength(2);
+  expect(diff.strangers).toEqual([]);
+});
+
+test("the university's own domains are not external", () => {
   expect(isExternalAddress("bay@terpmail.umd.edu")).toBe(false);
-});
-
-test("a umd.edu address auto-adds and is not flagged", () => {
   expect(isExternalAddress("bay@umd.edu")).toBe(false);
 });
 
-test("a gmail address is flagged, because google will not auto-add it", () => {
+test("anything else is, including an address we do not have", () => {
   expect(isExternalAddress("bay@gmail.com")).toBe(true);
-});
-
-test("a domain is matched whole, so a lookalike is still external", () => {
-  expect(isExternalAddress("bay@notumd.edu")).toBe(true);
-  expect(isExternalAddress("bay@umd.edu.example.com")).toBe(true);
-});
-
-test("case and stray whitespace do not make an address external", () => {
-  expect(isExternalAddress("  Bay@TerpMail.UMD.edu ")).toBe(false);
-});
-
-test("an application with no email at all is flagged for a human", () => {
+  expect(isExternalAddress("bay@cs.umd.edu")).toBe(true);
   expect(isExternalAddress(null)).toBe(true);
 });

@@ -295,3 +295,82 @@ function group(
 function unique(people: Person[]): Person[] {
   return [...new Map(people.map((person) => [person.pageId, person])).values()];
 }
+
+/** one discord account in the server, as a suggestion needs to see it */
+export type GuildAccount = {
+  id: string;
+  username: string;
+  displayName: string;
+};
+
+/** a row and the account it looks like, for a human to confirm */
+export type DiscordSuggestion = {
+  person: Person;
+  account: GuildAccount;
+};
+
+/**
+ * roster rows that could be linked to somebody already in the server.
+ *
+ * the third way people arrive, and the one nothing else covers. Applications
+ * only carry people who went through the join form, so anybody who joined
+ * before member verification, or was invited straight in, has a discord
+ * account and a Members row that have never met. Until they are linked, their
+ * face does not appear beside their name and a second row for them looks like
+ * a stranger rather than a duplicate.
+ *
+ * exact on the normalised name, and never fuzzy. `nearName` exists to withhold
+ * a create, not to propose a link: writing a snowflake onto the wrong row
+ * moves that person's whole contribution history onto somebody else, and a
+ * suggestion a tired officer clicks through is not meaningfully safer than an
+ * automatic link.
+ *
+ * a suggestion is offered only where the match is one to one in both
+ * directions. Two accounts that could be one row, or two rows that could be
+ * one account, are exactly the ambiguity ADR 0009 refuses to guess at, and
+ * they are left for the duplicates section and a human
+ */
+export function suggestDiscordLinks(
+  roster: Person[],
+  guild: GuildAccount[],
+): DiscordSuggestion[] {
+  const taken = new Set(
+    roster.map((person) => person.discordId).filter(Boolean),
+  );
+  const free = guild.filter((account) => !taken.has(account.id));
+
+  /* every spelling an account answers to: the server nickname somebody set,
+     and the handle they cannot change */
+  const named = free.map((account) => ({
+    account,
+    names: new Set(
+      [account.displayName, account.username]
+        .map((name) => normaliseName(name))
+        .filter(Boolean),
+    ),
+  }));
+
+  const suggestions: DiscordSuggestion[] = [];
+  const proposed = new Map<string, number>();
+
+  for (const person of roster) {
+    if (person.discordId) continue;
+
+    const name = normaliseName(person.name);
+    if (!name) continue;
+
+    const matches = named.filter((one) => one.names.has(name));
+    /* one row, one account, or nobody decides anything */
+    if (matches.length !== 1) continue;
+
+    const { account } = matches[0]!;
+    proposed.set(account.id, (proposed.get(account.id) ?? 0) + 1);
+    suggestions.push({ person, account });
+  }
+
+  /* and the same test from the account's side: two rows named alike would
+     otherwise both offer to take the one account */
+  return suggestions.filter(
+    (suggestion) => proposed.get(suggestion.account.id) === 1,
+  );
+}

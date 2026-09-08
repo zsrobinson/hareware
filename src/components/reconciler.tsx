@@ -21,7 +21,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
+import {
+  compareToGroup,
+  emailsInExport,
+  GROUP_MEMBERS_URL,
+  isExternalAddress,
+} from "~/lib/members/group";
 import type { Resolution } from "~/lib/members/match";
 import { postJson } from "~/lib/post-json";
 import type { Person } from "~/lib/members/records";
@@ -113,8 +121,18 @@ export function Reconciler({ initial }: Props) {
 }
 
 function Sections({ initial }: Props) {
-  const { resolutions, duplicates, unknownStatus, statuses, group } =
-    useRosterQuery(rosterKeys.reconciler(), "/api/members/reconciler", initial);
+  const {
+    resolutions,
+    duplicates,
+    unknownStatus,
+    statuses,
+    roster,
+    discordSuggestions,
+  } = useRosterQuery(
+    rosterKeys.reconciler(),
+    "/api/members/reconciler",
+    initial,
+  );
 
   /*
     every action on this page changes what the *other* sections should say:
@@ -137,6 +155,16 @@ function Sections({ initial }: Props) {
     drop: Person;
   } | null>(null);
   const [copied, setCopied] = useState(false);
+  /*
+    the google group's own member list, as exported by an editor.
+
+    held here and nowhere else: it is read from a file the browser already has,
+    compared against the roster in memory, and never sent anywhere. There is
+    nothing a server would add to a comparison of two lists of strings, and an
+    export sitting in a log is a list of everybody's address
+  */
+  const [inGroup, setInGroup] = useState<Set<string> | null>(null);
+  const [exportName, setExportName] = useState<string | null>(null);
 
   async function act(key: string, run: () => Promise<{ summary?: string }>) {
     setBusy(key);
@@ -172,9 +200,15 @@ function Sections({ initial }: Props) {
     (one): one is Extract<Resolution, { people: Person[] }> => "people" in one,
   );
 
-  const emails = group.pending
-    .map((application) => application.email)
+  /* until a file is handed over there is nothing to say, which is different
+     from saying nobody is missing */
+  const diff = inGroup ? compareToGroup(roster, inGroup) : null;
+  const emails = (diff?.missing ?? [])
+    .map((person) => person.email)
     .filter((email): email is string => Boolean(email));
+  /* flagged rather than dropped: google does not auto-add these, and an
+     address nobody can add is still an address somebody has to deal with */
+  const external = emails.filter((email) => isExternalAddress(email));
 
   return (
     <div className="space-y-10">
@@ -333,56 +367,142 @@ function Sections({ initial }: Props) {
       </Section>
 
       <Section
+        title="Discord accounts nobody is linked to"
+        why="People who were already in the server when their row was made, so no application ever connected the two. Suggested only where one row and one account share a name."
+        count={discordSuggestions.length}
+      >
+        <div className="divide-y rounded-lg border">
+          {discordSuggestions.length === 0 && (
+            <Empty>
+              Everybody in the server is on the row that claims them.
+            </Empty>
+          )}
+          {discordSuggestions.map(({ person, account }) => {
+            const key = `discord:${person.pageId}`;
+            return (
+              <div
+                key={key}
+                className="flex flex-wrap items-center justify-between gap-2 p-4"
+              >
+                <div>
+                  <Who person={person} />
+                  <div className="text-muted-foreground text-sm">
+                    looks like <strong>{account.username}</strong>
+                    {account.displayName !== account.username &&
+                      `, who the server shows as ${account.displayName}`}
+                  </div>
+                </div>
+                {said[key] ? (
+                  <Note>{said[key]}</Note>
+                ) : (
+                  <Button
+                    variant="outline"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      void act(key, () =>
+                        postJson("/api/members/discord", {
+                          pageId: person.pageId,
+                          name: person.name,
+                          discordId: account.id,
+                        }),
+                      )
+                    }
+                  >
+                    Link
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Section>
+
+      <Section
         title="Google Group"
-        why="The group cannot be written by software. Paste this into its bulk-add field, then say it is done."
-        count={emails.length}
+        why="The group cannot be read or written by software, so it is compared by hand: export its members, hand the file over, and this says who on the roster is not in it."
+        count={diff ? diff.missing.length : roster.length}
       >
         <div className="space-y-3 rounded-lg border p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              render={
+                <a href={GROUP_MEMBERS_URL} target="_blank" rel="noreferrer" />
+              }
+            >
+              <ExternalLinkIcon className="size-4" />
+              Open the group's members
+            </Button>
+            <Label
+              htmlFor="group-export"
+              className="text-muted-foreground text-sm font-normal"
+            >
+              then Export CSV, and choose the file:
+            </Label>
+            <Input
+              id="group-export"
+              type="file"
+              accept=".csv,text/csv,text/plain"
+              className="w-auto"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+
+                void file.text().then((text) => {
+                  setInGroup(emailsInExport(text));
+                  setExportName(file.name);
+                });
+              }}
+            />
+          </div>
+
+          {/* the file is read here and goes no further, which is worth saying
+              on screen: it is every member's address */}
           <p className="text-muted-foreground text-sm">
-            {group.watermark
-              ? `Last done ${group.watermark}.`
-              : "Never done. This is everybody ever approved."}
+            {exportName
+              ? `Compared against ${exportName}, which stayed in this browser.`
+              : "The file is read in this browser and never uploaded."}
           </p>
 
-          {group.unreachable.length > 0 && (
+          {diff && diff.unreachable.length > 0 && (
             <div className="border-destructive/50 bg-destructive/10 space-y-1 rounded-lg border p-3 text-sm">
               <div className="flex items-center gap-2 font-medium">
                 <AlertTriangleIcon className="size-4" />
-                {group.unreachable.length}{" "}
-                {group.unreachable.length === 1 ? "person" : "people"} with no
+                {diff.unreachable.length}{" "}
+                {diff.unreachable.length === 1 ? "person" : "people"} with no
                 email
               </div>
               <p className="text-muted-foreground">
-                Their application left it blank, so nothing below reaches them.
-                Ask them for an address and add it to their row.
+                Nothing reaches them, and nothing below is about them. Ask for
+                an address and put it on their row.
               </p>
               <ul className="list-inside list-disc">
-                {group.unreachable.map((application) => (
-                  <li key={application.id}>
-                    {application.name ?? application.username}
-                  </li>
+                {diff.unreachable.map((person) => (
+                  <li key={person.pageId}>{person.name}</li>
                 ))}
               </ul>
             </div>
           )}
 
-          {emails.length === 0 ? (
-            <Empty>Nobody new since then.</Empty>
+          {!diff ? (
+            <Empty>Nothing to compare yet.</Empty>
+          ) : emails.length === 0 ? (
+            <Empty>Everybody with an address is already in the group.</Empty>
           ) : (
             <>
-              {group.external.length > 0 && (
+              {external.length > 0 && (
                 <div className="border-destructive/50 bg-destructive/10 space-y-1 rounded-lg border p-3 text-sm">
                   <div className="flex items-center gap-2 font-medium">
                     <AlertTriangleIcon className="size-4" />
-                    {group.external.length} address
-                    {group.external.length === 1 ? "" : "es"} outside
-                    terpmail.umd.edu and umd.edu
+                    {external.length} address
+                    {external.length === 1 ? "" : "es"} outside terpmail.umd.edu
+                    and umd.edu
                   </div>
                   <p className="text-muted-foreground">
                     These do not auto-add and may need an invitation instead.
                   </p>
                   <ul className="list-inside list-disc">
-                    {group.external.map((email) => (
+                    {external.map((email) => (
                       <li key={email}>{email}</li>
                     ))}
                   </ul>
@@ -403,53 +523,39 @@ function Sections({ initial }: Props) {
                 className="font-mono text-xs"
               />
 
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    /* the clipboard rejects when the document is not focused
-                       or permission was refused, and the textarea above is
-                       still selectable by hand, so a failure leaves the tick
-                       off rather than throwing */
-                    void navigator.clipboard
-                      .writeText(emails.join(", "))
-                      .then(() => setCopied(true))
-                      .catch(() => setCopied(false));
-                  }}
-                >
-                  {copied ? (
-                    <CheckIcon className="size-4" />
-                  ) : (
-                    <CopyIcon className="size-4" />
-                  )}
-                  {copied ? "Copied" : `Copy ${emails.length} addresses`}
-                </Button>
-
-                <Button
-                  variant="outline"
-                  render={
-                    <a
-                      href="https://groups.google.com/"
-                      target="_blank"
-                      rel="noreferrer"
-                    />
-                  }
-                >
-                  <ExternalLinkIcon className="size-4" />
-                  Open Google Groups
-                </Button>
-
-                <Button
-                  disabled={busy !== null || Boolean(said["group"])}
-                  onClick={() =>
-                    void act("group", () => postJson("/api/members/group", {}))
-                  }
-                >
-                  {busy === "group" ? "Recording…" : "I have added them"}
-                </Button>
-              </div>
-              {said["group"] && <Note>{said["group"]}</Note>}
+              <Button
+                variant="outline"
+                onClick={() => {
+                  /* the clipboard rejects when the document is not focused
+                     or permission was refused, and the textarea above is
+                     still selectable by hand, so a failure leaves the tick
+                     off rather than throwing */
+                  void navigator.clipboard
+                    .writeText(emails.join(", "))
+                    .then(() => setCopied(true))
+                    .catch(() => setCopied(false));
+                }}
+              >
+                {copied ? (
+                  <CheckIcon className="size-4" />
+                ) : (
+                  <CopyIcon className="size-4" />
+                )}
+                {copied ? "Copied" : `Copy ${emails.length} addresses`}
+              </Button>
             </>
+          )}
+
+          {/* an address in the group that no row claims is how a typo in
+              notion shows up, and it is also every alum the club has ever
+              had. A count, not a list to work through */}
+          {diff && diff.strangers.length > 0 && (
+            <p className="text-muted-foreground text-sm">
+              {diff.strangers.length} address
+              {diff.strangers.length === 1 ? "" : "es"} in the group match
+              nobody on the roster. Alumni, mostly — but a typo in a Notion
+              email looks the same from here.
+            </p>
           )}
         </div>
       </Section>

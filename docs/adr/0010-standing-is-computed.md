@@ -277,21 +277,86 @@ Autocomplete reduces typos but introduces the worse error, which is tapping the
 wrong existing person. Two members sharing a name are disambiguated rather than
 guessed between — the same refusal ADR 0009 already makes for the same reason.
 
-### Google Groups is an export with a watermark
+### Google Groups is a comparison, not a watermark
 
 Since the group cannot be read or written by software, HareWare does not try to
-sync it. It records **when the additions were last done** and lists the emails
-of everyone approved since, formatted to paste into the group's bulk-add field.
-Confirming advances the watermark.
+sync it. An editor opens the group's member list, exports the CSV, and hands the
+file to the reconciler, which says which people on the roster are not in it and
+offers their addresses to paste into the bulk-add field.
 
-The watermark lives in D1 and is exactly the kind of thing ADR 0007 permits
-there: a record of what HareWare did, authoritative over nothing. If it drifts,
-the club re-adds someone who is already a member, which Google treats as a
-no-op. The failure mode is harmless, which is why a watermark beats a
-maintained _In Group_ checkbox that someone would eventually forget to tick.
+The file is read in the browser and never uploaded. The comparison is two lists
+of strings and a server would add nothing to it except a log holding every
+member's address. Addresses are matched case-insensitively, and every address in
+the file is found by shape rather than by column name — Google has changed those
+columns before, and a reader that looks for a column and finds none reports an
+empty group, which reads as "add everyone again" rather than as a failure.
+
+Three answers come back rather than one, because they need different things
+done about them: people to add, people with **no address at all** (nothing
+reaches them and no paste will fix it), and addresses in the group matching
+nobody on the roster. That last group is mostly alumni, and is reported rather
+than acted on because a typo in a Notion email looks exactly the same from here.
 
 The list flags addresses outside `terpmail.umd.edu` and `umd.edu` — 7 of the 51
 today — because those do not auto-add and may need an invitation.
+
+**This replaced a watermark**: a day in D1 recording when the additions were
+last done, and a list of everyone approved since. Two things were wrong with it.
+It answered "who arrived since we last remembered" rather than "who is missing",
+so anything that fell through — a paste half done, a watermark advanced for a
+list nobody actually pasted — was invisible and permanent. And it was fed by
+Discord applications, so somebody who joined by walking into a meeting and
+signing the kiosk never appeared in it at all. That is the flow the kiosk exists
+for, and those people simply never got the announcements.
+
+The comparison answers the real question every time and remembers nothing, which
+is why the `group_watermark` table is gone and this feature now touches D1 not
+at all.
+
+### The three ways somebody arrives, and what each needs
+
+The reconciler's sections are not a list of everything that could be checked.
+They are what the join flows actually produce:
+
+**They come to a meeting first.** The kiosk writes a row with a name, an email
+and a status, and no Discord ID. If they later fill in the Discord form, the
+sync matches the application to that row and stops, because linking is a
+decision: the **Applications** section offers it with one button.
+
+**They join Discord first.** The sync creates the row itself from the
+application. They turn up at a meeting, autocomplete finds them, and nothing
+needs reconciling — unless they type a different name than they applied under,
+and the kiosk makes a second row. That is what **Rows that look like the same
+person twice** is for. Rows made this way carry no status, which is why
+**Members with no status** is a standing queue rather than one-time cleanup: an
+applicant may be an alum, the constitution turns on the answer, and nothing here
+guesses at it.
+
+**They are already in the server, unlinked.** Applications only carry people who
+went through the join form, so anybody who joined before member verification, or
+was invited straight in, has a Discord account and a Members row that have never
+met. Nothing else on the page reaches them, so **Discord accounts nobody is
+linked to** suggests the pairing where one row and one account share a name.
+
+Exact on the normalised name, and never fuzzy. `nearName` exists to withhold a
+create, not to propose a link: writing a snowflake onto the wrong row moves that
+person's whole contribution history onto somebody else, and a suggestion a tired
+officer clicks through is not meaningfully safer than an automatic link. Where
+two rows could be one account, or two accounts one row, nothing is offered.
+
+### Notion truncates a relation at 25
+
+A relation inside any page object — a `pages/{id}` read and a data source query
+alike — carries at most 25 entries, with `has_more` the only sign there are
+more. A general body meeting is thirty people.
+
+Read for standing, the twenty-sixth onward were never counted. Read before a
+write, they were merged against and deleted: the kiosk sends the whole attendee
+list, the merge preserved what it could see, and what it could not see went. The
+back half of a room disappeared on the next tap, silently.
+
+Both paths follow the **retrieve a page property item** endpoint when Notion says
+there is more, and only then, so an ordinary meeting costs no extra request.
 
 ### TerpLink stays manual
 

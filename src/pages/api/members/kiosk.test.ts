@@ -22,7 +22,7 @@ const views = vi.hoisted(() => ({
 vi.mock("~/lib/members/views", () => views);
 
 const { GET } = await import("./kiosk");
-const { POST } = await import("./group");
+const { POST } = await import("./status");
 
 const ROSTER = {
   meetings: [],

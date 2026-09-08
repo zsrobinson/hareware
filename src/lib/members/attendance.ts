@@ -91,3 +91,24 @@ export function applyIntent(list: string[], intent: Intent): string[] {
 export function applyIntents(list: string[], intents: Intent[]): string[] {
   return intents.reduce(applyIntent, list);
 }
+
+/**
+ * the order to draw a list in, given the order it was drawn in last.
+ *
+ * membership comes from notion and the merge; the *order* does not. Notion
+ * answers a relation with no ordering guarantee, and a write that came back
+ * with the same people in a different sequence moved rows around under a room
+ * that was still signing in — five people arriving in a row made the list jump
+ * on every answer.
+ *
+ * so this keeps whatever order the screen already had, drops whoever is no
+ * longer there, and appends anybody new on the end. Idempotent: drawing the
+ * same list twice never moves it
+ */
+export function stableOrder(previous: string[], current: string[]): string[] {
+  const now = new Set(current);
+  const kept = previous.filter((id) => now.has(id));
+  const drawn = new Set(kept);
+
+  return [...kept, ...current.filter((id) => !drawn.has(id))];
+}

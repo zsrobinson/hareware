@@ -16,6 +16,7 @@ import {
   notion,
   plainText,
   queryAll,
+  relationIds,
   together,
 } from "~/lib/services/notion/client";
 import {
@@ -40,6 +41,10 @@ type Property = {
   select?: { name?: string | null } | null;
   relation?: { id: string }[] | null;
   formula?: { type?: string; number?: number | null } | null;
+  /* the property's own id, and notion's word for "this relation is longer
+     than the 25 entries above" */
+  id?: string;
+  has_more?: boolean;
 };
 
 type Page = { id: string; properties: Record<string, Property> };
@@ -128,8 +133,31 @@ export function toMeeting(page: Page): MeetingRecord {
   };
 }
 
+/**
+ * every meeting, with attendee lists notion did not cut short.
+ *
+ * a query answers at most 25 entries of a relation and flags the rest with
+ * `has_more`. A general body meeting is thirty people, so counting straight
+ * from the query would leave five of them one meeting short of a vote with
+ * nothing to show for it. The extra read happens only for the meetings that
+ * say they were truncated, one at a time, which is a handful a semester
+ */
 export async function meetings(token: string): Promise<MeetingRecord[]> {
-  return (await queryAll<Page>(MEETINGS_DATA_SOURCE_ID, token)).map(toMeeting);
+  const pages = await queryAll<Page>(MEETINGS_DATA_SOURCE_ID, token);
+  const records = pages.map(toMeeting);
+
+  for (const [index, page] of pages.entries()) {
+    const property = page.properties?.[MEETING_PROPERTIES.attendees.name];
+    if (!property?.has_more || !property.id) continue;
+
+    records[index]!.attendeeIds = await relationIds(
+      page.id,
+      property.id,
+      token,
+    );
+  }
+
+  return records;
 }
 
 /** an Article reduced to the two credits that count toward standing */

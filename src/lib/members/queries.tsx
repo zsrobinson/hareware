@@ -29,6 +29,7 @@ import { useEffect, type ReactNode } from "react";
 import {
   applyIntent,
   applyIntents,
+  stableOrder,
   type Intent,
 } from "~/lib/members/attendance";
 import type { KioskData } from "~/lib/members/views";
@@ -270,6 +271,17 @@ function attendeesOf(data: KioskData | undefined, meetingId: string): string[] {
  * entry of their own that nothing revalidates, so a roster refetch landing
  * mid-write cannot take a tap back off the screen
  */
+/**
+ * one tap: what it changes, and what to say once notion has taken it.
+ *
+ * the words travel with the intent rather than in `mutate`'s own callbacks,
+ * which look like the place for them and are not. React Query keeps those on
+ * the observer, so a second tap before the first has answered overwrites them
+ * and the first tap's confirmation is either the wrong name or never said at
+ * all. A room signing five people in hits that every time
+ */
+export type Tap = { intent: Intent; say: string };
+
 export function useAttendance(meetingId: string, data: KioskData) {
   const queries = useQueryClient();
   const key = rosterKeys.attendees(meetingId);
@@ -297,7 +309,7 @@ export function useAttendance(meetingId: string, data: KioskData) {
     mutationKey,
     /* one write at a time, per meeting */
     scope: { id: `members-attendance-${meetingId}` },
-    mutationFn: async (intent: Intent): Promise<string[]> => {
+    mutationFn: async ({ intent }: Tap): Promise<string[]> => {
       /* the cache, not the render's copy: several taps may have been queued
          since this one was made, and each has to be applied to what the last
          write actually got back */
@@ -313,27 +325,38 @@ export function useAttendance(meetingId: string, data: KioskData) {
 
       return memberIds ?? wanted;
     },
-    onSuccess: (attendeeIds) => queries.setQueryData(key, attendeeIds),
+    onSuccess: (attendeeIds, { say }) => {
+      /*
+        the answer decides who is in the room; the order stays the screen's.
+
+        notion gives a relation no ordering guarantee, and a write answers with
+        the whole thing, so taking the sequence from the answer let a list
+        reshuffle itself under a room that was still queueing. Normalising here
+        rather than at the point it is drawn means nothing downstream has to
+        know, and re-drawing never moves anything
+      */
+      queries.setQueryData<string[]>(key, (current) =>
+        stableOrder(current ?? [], attendeeIds),
+      );
+      notify.ok(say);
+    },
+    onError: (thrown) =>
+      notify.failed(
+        `Not saved: ${thrown instanceof Error ? thrown.message : String(thrown)}. Try again.`,
+      ),
   });
 
   const queued = useMutationState({
     filters: { mutationKey, status: "pending" },
-    select: (mutation) => mutation.state.variables as Intent,
+    select: (mutation) => (mutation.state.variables as Tap).intent,
   });
 
   return {
-    /** what notion last took, with everything still queued applied on top */
+    /** who is in the room: notion's answer, then everything still queued */
     present: applyIntents(recorded, queued),
     /** whether any write is still in flight, for the one word that says so */
     saving: queued.length > 0,
-    /** enqueue one tap. `say` names it once notion has taken it */
-    tap: (
-      intent: Intent,
-      handlers: { onSuccess?: () => void; onError?: (thrown: unknown) => void },
-    ) =>
-      mutate(intent, {
-        onSuccess: handlers.onSuccess,
-        onError: handlers.onError,
-      }),
+    /** enqueue one tap. it draws at once and writes in its turn */
+    tap: (tap: Tap) => mutate(tap),
   };
 }

@@ -12,7 +12,7 @@
   open and repair without this repository. Nothing here is mirrored anywhere.
 */
 
-import { notion, plainText } from "~/lib/services/notion/client";
+import { notion, plainText, relationIds } from "~/lib/services/notion/client";
 import type { Application } from "~/lib/services/discord/join-requests";
 import {
   MEETING_PROPERTIES,
@@ -166,7 +166,14 @@ export async function currentAttendees(
   meetingPageId: string,
 ): Promise<string[]> {
   const page = (await notion(`pages/${meetingPageId}`, env.NOTION_TOKEN!)) as {
-    properties?: Record<string, { relation?: { id: string }[] | null }>;
+    properties?: Record<
+      string,
+      {
+        relation?: { id: string }[] | null;
+        id?: string;
+        has_more?: boolean;
+      }
+    >;
   };
 
   const property = page.properties?.[MEETING_PROPERTIES.attendees.name];
@@ -181,6 +188,16 @@ export async function currentAttendees(
     throw new Error(
       "the meeting's Attendees relation is not readable, so who is already signed in cannot be preserved",
     );
+  }
+
+  /*
+    notion answers a page with at most 25 entries of a relation and says so
+    with `has_more`. Merging against a list cut short at 25 deletes everybody
+    after the twenty-fifth, which for a thirty-person general body meeting is
+    the whole back half of the room, silently
+  */
+  if (property.has_more && property.id) {
+    return relationIds(meetingPageId, property.id, env.NOTION_TOKEN!);
   }
 
   return (property.relation ?? []).map((related) => related.id);

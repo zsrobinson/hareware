@@ -1,5 +1,11 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { toContribution, toMeeting, toPerson, people } from "./roster";
+import {
+  toContribution,
+  toMeeting,
+  toPerson,
+  meetings,
+  people,
+} from "./roster";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -243,4 +249,98 @@ test("corpus never has more than two notion requests in flight", async () => {
 
   expect(most).toBeLessThanOrEqual(2);
   expect(most).toBeGreaterThan(1);
+});
+
+/*
+  notion answers a relation with at most 25 entries wherever it appears inside
+  a page and flags the rest with `has_more`. A general body meeting is thirty
+  people, so counting straight from the query leaves five of them a meeting
+  short of a vote, and nothing about the answer looks short
+*/
+test("a truncated attendee relation is read in full, not counted short", async () => {
+  const asked: string[] = [];
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      asked.push(String(url));
+
+      if (String(url).includes("/query")) {
+        return new Response(
+          JSON.stringify({
+            results: [
+              {
+                id: "m1",
+                properties: {
+                  Name: title("General Body"),
+                  Attendees: {
+                    type: "relation",
+                    id: "a%3Ab",
+                    relation: [{ id: "p1" }],
+                    has_more: true,
+                  },
+                },
+              },
+            ],
+            has_more: false,
+          }),
+        );
+      }
+
+      if (String(url).includes("start_cursor=")) {
+        return new Response(
+          JSON.stringify({
+            results: [{ relation: { id: "p3" } }],
+            has_more: false,
+          }),
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          results: [{ relation: { id: "p1" } }, { relation: { id: "p2" } }],
+          has_more: true,
+          next_cursor: "more",
+        }),
+      );
+    }),
+  );
+
+  const [meeting] = await meetings("token");
+
+  expect(meeting!.attendeeIds).toEqual(["p1", "p2", "p3"]);
+  /* the property's own id, url-encoded, rather than its name */
+  expect(asked[1]).toContain("/pages/m1/properties/a%253Ab");
+});
+
+/* the extra read is a whole round trip per meeting, so it happens only for the
+   meetings notion actually cut short */
+test("a relation notion answered in full costs no second read", async () => {
+  const fetched = vi.fn(
+    async () =>
+      new Response(
+        JSON.stringify({
+          results: [
+            {
+              id: "m1",
+              properties: {
+                Name: title("General Body"),
+                Attendees: {
+                  type: "relation",
+                  id: "abc",
+                  relation: [{ id: "p1" }],
+                },
+              },
+            },
+          ],
+          has_more: false,
+        }),
+      ),
+  );
+  vi.stubGlobal("fetch", fetched);
+
+  const [meeting] = await meetings("token");
+
+  expect(meeting!.attendeeIds).toEqual(["p1"]);
+  expect(fetched).toHaveBeenCalledTimes(1);
 });

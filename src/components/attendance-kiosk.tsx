@@ -172,9 +172,12 @@ function Kiosk({ initial, today, faces, guild }: Props) {
     setNewStatus(defaultStatus(statuses));
   }
 
-  /* the next person is already reaching for the keyboard */
+  /* the next person is already reaching for the keyboard. `preventScroll`
+     because focusing scrolls the input into view, and on a laptop showing a
+     room's worth of names that yanked the page back to the top after every
+     single tap */
   function refocus() {
-    search.current?.focus();
+    search.current?.focus({ preventScroll: true });
   }
 
   function switchMeeting(id: string) {
@@ -208,12 +211,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
   function record(intent: Intent, say: string) {
     if (!meetingId) return;
 
-    tap(intent, {
-      onSuccess: () => notify.ok(say),
-      onError: (thrown) =>
-        notify.failed(`Not saved: ${reason(thrown)}. Try again.`),
-    });
-
+    tap({ intent, say });
     refocus();
   }
 

@@ -4,6 +4,7 @@ import {
   applyIntents,
   knownOrSafe,
   mergeAttendance,
+  stableOrder,
 } from "./attendance";
 
 test("an addition is added", () => {
@@ -125,10 +126,9 @@ test("an add appends, and a second add of the same person changes nothing", () =
 });
 
 test("a remove takes one out and leaves the order alone", () => {
-  expect(applyIntent(["a", "b", "c"], { kind: "remove", pageId: "b" })).toEqual([
-    "a",
-    "c",
-  ]);
+  expect(applyIntent(["a", "b", "c"], { kind: "remove", pageId: "b" })).toEqual(
+    ["a", "c"],
+  );
   expect(applyIntent(["a"], { kind: "remove", pageId: "z" })).toEqual(["a"]);
 });
 
@@ -163,4 +163,36 @@ test("a remove queued behind an add of the same person wins", () => {
       ],
     ),
   ).toEqual(["a"]);
+});
+
+test("an order already drawn is kept, and arrivals go on the end", () => {
+  expect(stableOrder(["a", "b"], ["a", "b", "c"])).toEqual(["a", "b", "c"]);
+});
+
+/* notion answers a relation in whatever order it likes, and a write that came
+   back reshuffled moved rows under a room that was still signing in */
+test("a reshuffled answer does not reorder the screen", () => {
+  expect(stableOrder(["a", "b", "c"], ["c", "a", "b"])).toEqual([
+    "a",
+    "b",
+    "c",
+  ]);
+});
+
+test("somebody no longer in the list is dropped", () => {
+  expect(stableOrder(["a", "b", "c"], ["a", "c"])).toEqual(["a", "c"]);
+});
+
+test("somebody another device signed in lands at the end, once", () => {
+  expect(stableOrder(["a"], ["z", "a", "y"])).toEqual(["a", "z", "y"]);
+});
+
+test("drawing the same list again never moves it", () => {
+  const once = stableOrder(["a", "b"], ["b", "a"]);
+
+  expect(stableOrder(once, ["b", "a"])).toEqual(once);
+});
+
+test("a first draw takes the order it is given", () => {
+  expect(stableOrder([], ["a", "b"])).toEqual(["a", "b"]);
 });

@@ -252,3 +252,48 @@ export async function together<
   const done = await mapLimit([...tasks], LANES, (task) => task());
   return done as Results<T>;
 }
+
+/**
+ * every id in a relation property, including the ones a page object omits.
+ *
+ * notion truncates a relation to 25 entries wherever it appears inside a page
+ * — a `pages/{id}` read and a data source query alike — and says so only with
+ * `has_more` on the property. Nothing else about the answer looks short. A
+ * general body meeting is thirty people, so the twenty-sixth onward were
+ * simply not there: read for standing they were never counted, and read
+ * before a write they were merged against and deleted.
+ *
+ * the property item endpoint is the documented way to the whole list, and it
+ * pages. `property` is the property's own id from the page object, not its
+ * name, and it is url-encoded because notion's ids for properties are
+ * arbitrary short strings rather than uuids
+ */
+export async function relationIds(
+  pageId: string,
+  property: string,
+  token: string,
+): Promise<string[]> {
+  const ids: string[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const page = (await notion(
+      `pages/${pageId}/properties/${encodeURIComponent(property)}?page_size=100${
+        cursor ? `&start_cursor=${encodeURIComponent(cursor)}` : ""
+      }`,
+      token,
+    )) as {
+      results?: { relation?: { id: string } | null }[] | null;
+      has_more?: boolean;
+      next_cursor?: string | null;
+    };
+
+    for (const item of page.results ?? []) {
+      if (item.relation?.id) ids.push(item.relation.id);
+    }
+
+    cursor = page.has_more ? (page.next_cursor ?? undefined) : undefined;
+  } while (cursor);
+
+  return ids;
+}

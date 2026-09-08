@@ -319,7 +319,8 @@ export function StandingTable({
         </div>
       )}
 
-      <div className="space-y-4">
+      {/* the question, set apart from the answer below it */}
+      <div className="space-y-4 pb-4">
         <div className="space-y-1.5">
           <Label>Preset</Label>
           <div className="flex flex-wrap gap-2">

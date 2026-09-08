@@ -1,3 +1,4 @@
+import { useMutation } from "@tanstack/react-query";
 import { PlusIcon, XIcon } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import {
@@ -29,10 +30,12 @@ import { defaultStatus } from "~/lib/members/config";
 import {
   RosterQueries,
   rosterKeys,
+  useAttendance,
   usePatch,
   useRosterQuery,
 } from "~/lib/members/queries";
 import type { KioskData } from "~/lib/members/views";
+import type { Intent } from "~/lib/members/attendance";
 import type { MeetingRecord, Person } from "~/lib/members/records";
 import { notify } from "~/lib/notify";
 import { postJson } from "~/lib/post-json";
@@ -68,26 +71,6 @@ type Props = {
   /** the same request's members, for the Discord chip's autocomplete */
   guild: GuildOption[];
 };
-
-/**
- * writes the list and answers with what notion actually holds.
- *
- * `known` is what this device had before the tap. The route merges against
- * notion rather than replacing, so another device's sign-ins survive, and the
- * answer carries them back here
- */
-async function save(
-  meetingId: string,
-  known: string[],
-  wanted: string[],
-): Promise<string[]> {
-  const { memberIds } = await postJson<{ memberIds?: string[] }>(
-    "/api/members/attendance",
-    { meetingId, memberIds: wanted, known },
-  );
-
-  return memberIds ?? wanted;
-}
 
 async function createPerson(
   name: string,
@@ -127,49 +110,36 @@ export function AttendanceKiosk(props: Props) {
 
 function Kiosk({ initial, today, faces, guild }: Props) {
   /*
-    nothing here re-reads notion during a session.
+    the attendee list is held in exactly one place: the query cache.
 
-    `present` is local and optimistic: the person who just tapped is standing
-    at the laptop, and a round trip between their tap and the list moving is a
-    wait the room watches. A write that changes the roster, a member created or
-    a chip corrected, is patched into the cache instead of refetched, for the
-    same reason. Notion is read again on the next mount.
+    it used to be held twice, in the cache and in the island's own state, and
+    every reported problem came from that — a switch that reseeded from a stale
+    read, a write whose answer overwrote what had been tapped since, an
+    optimistic list computed before the last write had landed. `useAttendance`
+    keeps the list in the cache and the taps in a serial queue, and this
+    component only says what was tapped.
 
-    `pinned` is the meeting the read is keyed to. It starts as the one the page
-    opened on and moves when somebody switches, so the key and the path move
-    together: the route decides which meetings are offerable around it
+    `meetingId` is the one piece of state, and it is the query key too, so the
+    read and the meeting on screen cannot disagree
   */
-  const [pinned, setPinned] = useState(initial.openingId ?? "");
+  const [meetingId, setMeetingId] = useState(initial.openingId ?? "");
 
-  const { meetings, candidates, openingId, statuses } = useRosterQuery(
-    rosterKeys.kiosk(pinned),
+  const data = useRosterQuery(
+    rosterKeys.kiosk(meetingId),
     `/api/members/kiosk?today=${encodeURIComponent(today)}${
-      pinned ? `&meeting=${encodeURIComponent(pinned)}` : ""
+      meetingId ? `&meeting=${encodeURIComponent(meetingId)}` : ""
     }`,
     initial,
     /* the seed describes the meeting the page opened on and no other, so a
        switch re-reads rather than showing the last one for a staleTime */
-    pinned === (initial.openingId ?? ""),
+    meetingId === (initial.openingId ?? ""),
   );
 
-  const patchRoster = usePatch<KioskData>(rosterKeys.kiosk(pinned));
+  const { meetings, candidates, statuses } = data;
+  const { present, saving, tap } = useAttendance(meetingId, data);
 
-  const [meetingId, setMeetingId] = useState(openingId ?? "");
-  const [present, setPresent] = useState<string[]>(
-    () =>
-      meetings.find((meeting) => meeting.pageId === openingId)?.attendeeIds ??
-      [],
-  );
-  /*
-    what notion says about this meeting arrives two ways, and neither is an
-    effect syncing it into state: every write answers with the merged list and
-    `commit` puts that on screen, and switching meetings reseeds from the read.
+  const patchRoster = usePatch<KioskData>(rosterKeys.kiosk(meetingId));
 
-    a background union would need a third rule for removals, because a name
-    this screen just took off is a name the last read still has, and it would
-    put it back. ADR 0010 keeps one laptop at the front of the room; the server
-    merge is what makes a second one safe, not this
-  */
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [newEmail, setNewEmail] = useState("");
@@ -177,7 +147,6 @@ function Kiosk({ initial, today, faces, guild }: Props) {
      those currently begin with Alum, and an alum does not vote */
   const [newStatus, setNewStatus] = useState(() => defaultStatus(statuses));
   const [editing, setEditing] = useState<Editing | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const search = useRef<HTMLInputElement>(null);
 
@@ -209,42 +178,31 @@ function Kiosk({ initial, today, faces, guild }: Props) {
   }
 
   function switchMeeting(id: string) {
+    /* the attendees follow from the key, so there is nothing else to reseed */
     setMeetingId(id);
-    setPinned(id);
-    /* the new meeting's own attendees: carrying the current list across would
-       file this room against a meeting it was not at */
-    setPresent(meetings.find((one) => one.pageId === id)?.attendeeIds ?? []);
     /* so a reload during the meeting comes back to the same one */
     history.replaceState(null, "", withParam(location.href, "meeting", id));
     refocus();
   }
 
   /**
-   * writes a whole attendee list, and puts it back if notion refused.
+   * one tap, onto the queue.
    *
-   * optimistic because the person is standing there. the rollback is what
-   * makes that honest: a kiosk showing somebody as present when the write
-   * failed would cost them a vote they could not know they had lost
+   * it draws immediately and writes in turn. A refusal takes it back off the
+   * list and says so, which is what keeps the screen honest: a kiosk showing
+   * somebody as present when the write failed would cost them a vote they
+   * could not know they had lost
    */
-  async function commit(next: string[], say: string) {
+  function record(intent: Intent, say: string) {
     if (!meetingId) return;
 
-    const before = present;
-    setPresent(next);
-    setBusy(true);
+    tap(intent, {
+      onSuccess: () => notify.ok(say),
+      onError: (thrown) =>
+        notify.failed(`Not saved: ${reason(thrown)}. Try again.`),
+    });
 
-    try {
-      /* the merged list, which may hold somebody another device signed in
-         while this one was open */
-      setPresent(await save(meetingId, before, next));
-      notify.ok(say);
-    } catch (thrown) {
-      setPresent(before);
-      notify.failed(`Not saved: ${reason(thrown)}. Try again.`);
-    } finally {
-      setBusy(false);
-      refocus();
-    }
+    refocus();
   }
 
   function markPresent(person: Person) {
@@ -257,11 +215,8 @@ function Kiosk({ initial, today, faces, guild }: Props) {
       return;
     }
 
-    /* onto the list. by the end of a general body meeting this is
-       forty rows, and the person who just tapped has to be able to see that it
-       worked without scrolling past everybody who arrived before them */
-    void commit(
-      [...present, person.pageId],
+    record(
+      { kind: "add", pageId: person.pageId },
       `${shownName(person)} is signed in`,
     );
   }
@@ -269,10 +224,8 @@ function Kiosk({ initial, today, faces, guild }: Props) {
   function remove(pageId: string) {
     const person = byId.get(pageId);
     const name = person ? shownName(person) : "that row";
-    void commit(
-      present.filter((id) => id !== pageId),
-      `Removed ${name}`,
-    );
+
+    record({ kind: "remove", pageId }, `Removed ${name}`);
   }
 
   /**
@@ -292,46 +245,52 @@ function Kiosk({ initial, today, faces, guild }: Props) {
     }));
   }
 
-  async function addNewPerson() {
-    const name = query.trim();
-    const email = newEmail.trim();
-    if (!name || !email) return;
-
-    setBusy(true);
-
-    try {
-      const created = await createPerson(name, email, newStatus);
+  /*
+    creating somebody is its own write, and deliberately not in the attendance
+    queue: it has to finish before there is an id to sign in
+  */
+  const { mutate: create, isPending: creating } = useMutation({
+    mutationFn: (fields: {
+      name: string;
+      email: string;
+      status: string | null;
+    }) => createPerson(fields.name, fields.email, fields.status),
+    onSuccess: (created, fields) => {
       const added: Person = {
         pageId: created.pageId,
         name: created.name,
         email: created.email,
         discordId: null,
-        status: newStatus,
+        status: fields.status,
         /* nobody has written anything under a row created a second ago */
         contributions: 0,
       };
 
       /* into the roster on screen too, so a second person with the same name
          later this evening is disambiguated against them rather than matched
-         to them */
-      /* no refetch. the patch above is the whole answer for a row created a
-         second ago, and re-reading costs three notion requests and a visible
-         redraw of a page somebody is queueing at */
+         to them. Patched rather than refetched: re-reading costs three notion
+         requests to be told what this page just wrote, and redraws a screen
+         somebody is queueing at while it does */
       patchRoster((current) => ({
         ...current,
         candidates: [...current.candidates, added],
       }));
       changeQuery("");
 
-      await commit(
-        [...present, created.pageId],
+      record(
+        { kind: "add", pageId: created.pageId },
         `${created.name} was added and is signed in`,
       );
-    } catch (thrown) {
-      notify.failed(`Could not add them: ${reason(thrown)}`);
-    } finally {
-      setBusy(false);
-    }
+    },
+    onError: (thrown) => notify.failed(`Could not add them: ${reason(thrown)}`),
+  });
+
+  function addNewPerson() {
+    const name = query.trim();
+    const email = newEmail.trim();
+    if (!name || !email) return;
+
+    create({ name, email, status: newStatus });
   }
 
   /*
@@ -450,12 +409,11 @@ function Kiosk({ initial, today, faces, guild }: Props) {
                         id={`kiosk-match-${index}`}
                         role="option"
                         aria-selected={index === active}
-                        disabled={busy}
                         onClick={() => markPresent(person)}
                         onMouseEnter={() => setActive(index)}
                         className={`hover:bg-muted flex w-full cursor-pointer items-center gap-3 p-3 text-left first:rounded-t-lg last:rounded-b-lg ${
-                          busy ? "opacity-50" : ""
-                        } ${index === active ? "bg-muted" : ""}`}
+                          index === active ? "bg-muted" : ""
+                        }`}
                       >
                         <div className="min-w-0 flex-1">
                           {/* a name and a count: every edit lives on the
@@ -534,11 +492,11 @@ function Kiosk({ initial, today, faces, guild }: Props) {
 
                 <Button
                   className="h-12"
-                  disabled={busy || !newEmail.trim()}
-                  onClick={() => void addNewPerson()}
+                  disabled={creating || !newEmail.trim()}
+                  onClick={() => addNewPerson()}
                 >
                   <PlusIcon className="size-4" />
-                  {busy ? "Adding…" : "Add and sign in"}
+                  {creating ? "Adding…" : "Add and sign in"}
                 </Button>
               </div>
             )}
@@ -552,7 +510,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
           <Badge variant={present.length > 0 ? "default" : "outline"}>
             {present.length}
           </Badge>
-          {busy && (
+          {saving && (
             <span className="text-muted-foreground text-sm font-normal">
               saving…
             </span>
@@ -593,7 +551,6 @@ function Kiosk({ initial, today, faces, guild }: Props) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={busy}
                     aria-label={`Remove ${name}`}
                     onClick={() => remove(pageId)}
                   >

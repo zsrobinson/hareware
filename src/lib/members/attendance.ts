@@ -59,3 +59,35 @@ export function mergeAttendance(
 export function knownOrSafe(known: string[] | undefined): string[] {
   return known ?? [];
 }
+
+/**
+ * one tap, before it has been anywhere.
+ *
+ * a tap is an intent and not a list. holding it that way is what makes a
+ * second tap during the first one's write safe: two people who tap a second
+ * apart each hand over what *they* changed, and each is applied to whatever
+ * the list is by the time it runs. Two whole lists computed a second apart
+ * from the same starting point lose one of the two people
+ */
+export type Intent = { kind: "add" | "remove"; pageId: string };
+
+/** the list with one intent applied, in insertion order, idempotently */
+export function applyIntent(list: string[], intent: Intent): string[] {
+  if (intent.kind === "remove") {
+    return list.filter((id) => id !== intent.pageId);
+  }
+
+  return list.includes(intent.pageId) ? list : [...list, intent.pageId];
+}
+
+/**
+ * the list with every intent applied in order.
+ *
+ * how the screen is drawn: notion's answer, then everything tapped since that
+ * has not finished writing. Applying an intent twice is the same as applying
+ * it once, so a write that is halfway through — already in the answer and
+ * still in the queue — draws the same either way
+ */
+export function applyIntents(list: string[], intents: Intent[]): string[] {
+  return intents.reduce(applyIntent, list);
+}

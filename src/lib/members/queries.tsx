@@ -19,12 +19,21 @@
 import {
   QueryClient,
   QueryClientProvider,
+  useMutation,
+  useMutationState,
   useQuery,
   useQueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
 import { useEffect, type ReactNode } from "react";
+import {
+  applyIntent,
+  applyIntents,
+  type Intent,
+} from "~/lib/members/attendance";
+import type { KioskData } from "~/lib/members/views";
 import { notify } from "~/lib/notify";
+import { postJson } from "~/lib/post-json";
 
 /** every roster query's key, so a mutation cannot invalidate a name nobody uses */
 export const rosterKeys = {
@@ -35,6 +44,10 @@ export const rosterKeys = {
   kiosk: (meetingId = "") =>
     ["members", "kiosk", meetingId] as const satisfies QueryKey,
   reconciler: () => ["members", "reconciler"] as const satisfies QueryKey,
+  /* the writes, keyed the same way, so the queue for one meeting can be read
+     back without the queue for another */
+  attendance: (meetingId = "") =>
+    ["members", "attendance", meetingId] as const satisfies QueryKey,
 };
 
 /**
@@ -206,4 +219,114 @@ export function useRefresh(key: QueryKey) {
   const queries = useQueryClient();
 
   return () => queries.invalidateQueries({ queryKey: key });
+}
+
+/** the meeting's attendees as the last read left them, in insertion order */
+function attendeesOf(data: KioskData | undefined, meetingId: string): string[] {
+  return (
+    data?.meetings.find((meeting) => meeting.pageId === meetingId)
+      ?.attendeeIds ?? []
+  );
+}
+
+/** the same data with one meeting's attendees replaced */
+function withAttendees(
+  data: KioskData,
+  meetingId: string,
+  attendeeIds: string[],
+): KioskData {
+  return {
+    ...data,
+    meetings: data.meetings.map((meeting) =>
+      meeting.pageId === meetingId ? { ...meeting, attendeeIds } : meeting,
+    ),
+  };
+}
+
+/**
+ * the queue a room's taps go through.
+ *
+ * every problem this replaced came from the attendee list being held twice —
+ * once in the cache and once in the island's own state — and from each tap
+ * sending a whole list it had computed before the last one answered. Two
+ * people tapping a second apart both wrote three names derived from the same
+ * two, and the second write erased the first. Nothing errored.
+ *
+ * so a tap is an `Intent`, and three rules follow:
+ *
+ * - `scope` makes the writes serial. React Query runs one mutation per scope
+ *   at a time and queues the rest, so the second tap's list is computed from
+ *   the answer the first one got back rather than from what was on screen when
+ *   it was tapped.
+ * - the list lives only in the cache. There is no second copy to reconcile,
+ *   which is what an effect syncing state to props was papering over.
+ * - the screen draws the cache plus everything still queued, so a tap shows up
+ *   the instant it is made even though its write has not started. Applying an
+ *   intent is idempotent, so the write that is halfway through — already in
+ *   the answer and still in the queue — draws the same either way.
+ *
+ * a failed write simply leaves the queue, and the row returns to whatever
+ * notion last said. No rollback, because nothing was overwritten
+ */
+export function useAttendance(meetingId: string, data: KioskData) {
+  const queries = useQueryClient();
+  const key = rosterKeys.kiosk(meetingId);
+  const mutationKey = rosterKeys.attendance(meetingId);
+
+  const { mutate } = useMutation({
+    mutationKey,
+    /* one write at a time, per meeting */
+    scope: { id: `members-attendance-${meetingId}` },
+    mutationFn: async (intent: Intent): Promise<string[]> => {
+      const known = attendeesOf(
+        queries.getQueryData<KioskData>(key),
+        meetingId,
+      );
+      const wanted = applyIntent(known, intent);
+
+      /* `known` as well as `wanted`: the route merges against notion rather
+         than replacing, so a second device's sign-ins survive this write */
+      const { memberIds } = await postJson<{ memberIds?: string[] }>(
+        "/api/members/attendance",
+        { meetingId, memberIds: wanted, known },
+      );
+
+      return memberIds ?? wanted;
+    },
+    onMutate: async () => {
+      /* a read landing after this write would put notion's older answer back
+         on screen until the next one */
+      await queries.cancelQueries({ queryKey: key });
+    },
+    onSuccess: (attendeeIds) => {
+      queries.setQueryData<KioskData>(key, (current) =>
+        current ? withAttendees(current, meetingId, attendeeIds) : current,
+      );
+    },
+  });
+
+  const queued = useMutationState({
+    filters: { mutationKey, status: "pending" },
+    select: (mutation) => mutation.state.variables as Intent,
+  });
+
+  return {
+    /* `data` rather than another `getQueryData`: the caller is subscribed to
+       it, so this recomputes when the answer changes. The mutation reads the
+       cache directly instead, because what matters there is what is true when
+       the write runs, which may be several taps later */
+    /** notion's answer with everything still queued applied on top */
+    present: applyIntents(attendeesOf(data, meetingId), queued),
+    /** whether any write is still in flight, for the one word that says so */
+    saving: queued.length > 0,
+    /** enqueue one tap. `say` names it once notion has taken it */
+    tap: (
+      intent: Intent,
+      handlers: { onSuccess?: () => void; onError?: (thrown: unknown) => void },
+    ) =>
+      mutate(intent, {
+        onSuccess: handlers.onSuccess,
+        onError: handlers.onError,
+      }),
+  };
 }

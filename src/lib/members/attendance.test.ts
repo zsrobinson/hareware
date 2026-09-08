@@ -1,5 +1,10 @@
 import { expect, test } from "vitest";
-import { knownOrSafe, mergeAttendance } from "./attendance";
+import {
+  applyIntent,
+  applyIntents,
+  knownOrSafe,
+  mergeAttendance,
+} from "./attendance";
 
 test("an addition is added", () => {
   expect(mergeAttendance(["a", "b"], ["a", "b"], ["a", "b", "c"])).toEqual([
@@ -109,4 +114,53 @@ test("a removal does not reorder what is left", () => {
   expect(mergeAttendance(["a", "b", "c"], ["a", "b", "c"], ["a", "c"])).toEqual(
     ["a", "c"],
   );
+});
+
+test("an add appends, and a second add of the same person changes nothing", () => {
+  expect(applyIntent(["a"], { kind: "add", pageId: "b" })).toEqual(["a", "b"]);
+  expect(applyIntent(["a", "b"], { kind: "add", pageId: "b" })).toEqual([
+    "a",
+    "b",
+  ]);
+});
+
+test("a remove takes one out and leaves the order alone", () => {
+  expect(applyIntent(["a", "b", "c"], { kind: "remove", pageId: "b" })).toEqual([
+    "a",
+    "c",
+  ]);
+  expect(applyIntent(["a"], { kind: "remove", pageId: "z" })).toEqual(["a"]);
+});
+
+/*
+  the race the intents exist for: two people tap while the first write is still
+  in flight. as whole lists, both are computed from ["a"] and whoever writes
+  second drops the other. as intents, each applies to what it finds
+*/
+test("intents queued against the same list both survive", () => {
+  const first = applyIntents(["a"], [{ kind: "add", pageId: "b" }]);
+  const both = applyIntents(first, [{ kind: "add", pageId: "c" }]);
+
+  expect(both).toEqual(["a", "b", "c"]);
+});
+
+/* the screen draws notion's answer plus whatever has not finished writing, and
+   the one currently writing is in both. applying it twice must not double it */
+test("an intent already reflected in the answer draws the same", () => {
+  expect(applyIntents(["a", "b"], [{ kind: "add", pageId: "b" }])).toEqual([
+    "a",
+    "b",
+  ]);
+});
+
+test("a remove queued behind an add of the same person wins", () => {
+  expect(
+    applyIntents(
+      ["a"],
+      [
+        { kind: "add", pageId: "b" },
+        { kind: "remove", pageId: "b" },
+      ],
+    ),
+  ).toEqual(["a"]);
 });

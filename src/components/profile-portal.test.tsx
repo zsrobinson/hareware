@@ -126,6 +126,36 @@ test("a preset writes concrete dates and refetches both cards", async () => {
   );
 });
 
+test("browser history restores the selected profile and date range", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string) => {
+      const selected = String(input).includes("member=person-2");
+      return new Response(
+        JSON.stringify({
+          ...ready,
+          person: selected
+            ? { ...ready.person, pageId: "person-2", name: "Mina Finch" }
+            : ready.person,
+        }),
+        { headers: { "content-type": "application/json" } },
+      );
+    }),
+  );
+  render(
+    <ProfilePortal initial={ready} displayName="Robin Hare" today="2026-09-08" />,
+  );
+
+  history.pushState({}, "", "/profile?member=person-2&from=2026-07-01&to=2026-12-31");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await waitFor(() => expect(screen.getByRole("heading", { name: "Mina Finch" })).toBeTruthy());
+  expect((screen.getByLabelText("Activity range") as unknown as { value: string }).value).toBe("semester");
+
+  history.replaceState({}, "", "/profile");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await waitFor(() => expect(screen.getByRole("heading", { name: "Robin Hare" })).toBeTruthy());
+});
+
 test("edits one identity fact at a time and keeps the saved answer visible", async () => {
   let releaseRead = () => {};
   const oldRead = new Promise<Response>((resolve) => {
@@ -145,7 +175,7 @@ test("edits one identity fact at a time and keeps the saved answer visible", asy
         value: "new@umd.edu",
       });
       return new Response(
-        JSON.stringify({ ok: true, pageId: "person-1", email: "new@umd.edu" }),
+        JSON.stringify({ action: "email", pageId: "person-1", value: "canonical@umd.edu" }),
         {
           headers: { "content-type": "application/json" },
         },
@@ -167,10 +197,10 @@ test("edits one identity fact at a time and keeps the saved answer visible", asy
   });
   fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
 
-  await waitFor(() => expect(screen.getByText("new@umd.edu")).toBeTruthy());
+  await waitFor(() => expect(screen.getByText("canonical@umd.edu")).toBeTruthy());
   releaseRead();
   await new Promise((done) => setTimeout(done, 0));
-  expect(screen.getByText("new@umd.edu")).toBeTruthy();
+  expect(screen.getByText("canonical@umd.edu")).toBeTruthy();
 });
 
 test("an unlinked member confirms a complete profile despite a possible duplicate", async () => {

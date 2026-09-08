@@ -40,7 +40,11 @@ test("self-service ignores a browser target and updates the uniquely linked Memb
   expect(deps.update).toHaveBeenCalledWith("self", {
     email: "bay@example.com",
   });
-  expect(result).toEqual({ pageId: "self", email: "bay@example.com" });
+  expect(result).toEqual({
+    action: "email",
+    pageId: "self",
+    value: "bay@example.com",
+  });
   expect(deps.record).toHaveBeenCalledWith(
     expect.objectContaining({
       outcome: "ok",
@@ -83,7 +87,39 @@ test("creation re-reads identity and returns a concurrent link instead of creati
     },
   );
   expect(deps.create).not.toHaveBeenCalled();
-  expect(result).toEqual({ pageId: "now-linked", concurrent: true });
+  expect(result).toEqual({
+    action: "create",
+    pageId: "now-linked",
+    concurrent: true,
+  });
+});
+
+test("an audit outage cannot turn a confirmed mutation into a failure", async () => {
+  const deps = dependencies([person("self", "42")]);
+  vi.mocked(deps.record).mockRejectedValue(new Error("D1 unavailable"));
+
+  await expect(
+    mutateProfile(deps, { discordId: "42", editor: false }, {
+      action: "name",
+      value: "Bay Hoffman",
+    }),
+  ).resolves.toEqual({ action: "name", pageId: "self", value: "Bay Hoffman" });
+  expect(deps.update).toHaveBeenCalledOnce();
+  expect(deps.record).toHaveBeenCalledOnce();
+});
+
+test("a failed write keeps its original error when failure logging is unavailable", async () => {
+  const deps = dependencies([person("self", "42")]);
+  vi.mocked(deps.update).mockRejectedValue(new Error("Notion refused"));
+  vi.mocked(deps.record).mockRejectedValue(new Error("D1 unavailable"));
+
+  await expect(
+    mutateProfile(deps, { discordId: "42", editor: false }, {
+      action: "email",
+      value: "bay@example.com",
+    }),
+  ).rejects.toThrow("Notion refused");
+  expect(deps.record).toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed" }));
 });
 
 test("a failed Discord nickname write is logged and does not touch Notion", async () => {

@@ -185,38 +185,6 @@ export async function guildMembers(): Promise<Map<string, Profile>> {
   }
 }
 
-/** Change only this guild's nickname; Discord account identity is untouched. */
-export async function changeGuildNickname(
-  userId: string,
-  nickname: string,
-): Promise<void> {
-  const token = env.DISCORD_BOT_TOKEN;
-  if (!token) throw new Error("Discord nickname updates are unavailable");
-
-  const response = await sendPatiently(
-    () =>
-      fetch(
-        `https://discord.com/api/v10/guilds/${GUILD_ID}/members/${userId}`,
-        {
-          method: "PATCH",
-          headers: {
-            authorization: `Bot ${token}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({ nick: nickname }),
-        },
-      ),
-    "discord nickname update",
-  );
-  if (!response.ok) {
-    throw new Error(
-      response.status === 403
-        ? "Discord role hierarchy prevents changing this nickname"
-        : `Discord refused the nickname change (${response.status})`,
-    );
-  }
-}
-
 /** a string field from discord, kept only when it is a non-empty one */
 const text = (value: unknown) =>
   typeof value === "string" && value ? value : undefined;

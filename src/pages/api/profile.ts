@@ -9,6 +9,7 @@ import {
   profileMutationDependencies,
   profileReadDependencies,
 } from "~/lib/members/profile-runtime";
+import { parseProfileLocation } from "~/lib/members/profile-query-keys";
 
 export const prerender = false;
 
@@ -21,45 +22,30 @@ const json = (body: unknown, status = 200) =>
     },
   });
 
-function date(value: string | null): string | undefined {
-  if (!value) return undefined;
-  const parsed = new Date(`${value}T00:00:00Z`);
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
-    Number.isNaN(parsed.valueOf()) ||
-    parsed.toISOString().slice(0, 10) !== value
-  ) {
-    throw new Error("invalid date range");
-  }
-  return value;
-}
-
 export const GET: APIRoute = async ({ request }) => {
   const who = await viewer(request);
   if (!who?.profile)
     return json({ error: who ? who.denial : "signed-out" }, 401);
   try {
     const url = new URL(request.url);
-    const from = date(url.searchParams.get("from"));
-    const to = date(url.searchParams.get("to"));
-    if (from && to && from > to)
-      return json({ error: "invalid date range" }, 400);
+    const parsed = parseProfileLocation(url.searchParams);
+    if (!parsed.valid) return json({ error: "invalid date range" }, 400);
     return json(
       await readProfilePayload(profileReadDependencies(), {
         actorDiscordId: who.session.discordUserId,
         actorDisplayName: who.profile.displayName,
         actorNickname: who.profile.discordNickname,
         editor: who.admin,
-        selectedPageId: url.searchParams.get("member") ?? undefined,
-        from,
-        to,
+        selectedPageId: parsed.location.member,
+        from: parsed.location.from,
+        to: parsed.location.to,
       }),
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return json(
       { error: message },
-      message === "invalid date range" ? 400 : 500,
+      500,
     );
   }
 };

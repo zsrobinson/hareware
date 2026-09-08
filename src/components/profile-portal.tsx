@@ -14,7 +14,7 @@ import {
   PencilIcon,
   UserRoundIcon,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import {
   Card,
@@ -36,7 +36,10 @@ import { Label } from "~/components/ui/label";
 import type { ProfilePayload } from "~/lib/members/profile";
 import {
   profileKey,
+  profilePagePath,
   profilePath,
+  profilePresets,
+  selectedProfileRange,
   type ProfileLocation,
 } from "~/lib/members/profile-query-keys";
 import { notify } from "~/lib/notify";
@@ -96,12 +99,14 @@ function Portal({
         : undefined,
   });
 
+  useEffect(() => {
+    const restore = () => setLocation(profileLocation(window.location.search));
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
+
   function navigate(next: ProfileLocation) {
-    const params = new URLSearchParams();
-    if (next.member) params.set("member", next.member);
-    if (next.from) params.set("from", next.from);
-    if (next.to) params.set("to", next.to);
-    history.pushState({}, "", `/profile${params.size ? `?${params}` : ""}`);
+    history.pushState({}, "", profilePagePath(next));
     setLocation(next);
   }
 
@@ -109,6 +114,8 @@ function Portal({
   if (!query.data)
     return <p className="text-muted-foreground text-sm">Loading profile…</p>;
   const data = query.data;
+  if (data.status === "unavailable")
+    return <Unavailable message={data.problem} />;
   if (data.status === "ambiguous")
     return (
       <Unavailable message="More than one profile is linked to your Discord account. Ask an editor." />
@@ -131,6 +138,15 @@ function Portal({
       fetching={query.isFetching}
     />
   );
+}
+
+function profileLocation(search: string): ProfileLocation {
+  const params = new URLSearchParams(search);
+  return {
+    member: params.get("member") ?? undefined,
+    from: params.get("from") ?? undefined,
+    to: params.get("to") ?? undefined,
+  };
 }
 
 function Unavailable({ message }: { message: string }) {
@@ -420,7 +436,7 @@ function RangeControl({
   const [custom, setCustom] = useState(Boolean(location.from || location.to));
   const [from, setFrom] = useState(location.from ?? "");
   const [to, setTo] = useState(location.to ?? "");
-  const preset = rangePreset(today);
+  const preset = profilePresets(today);
   function choose(value: string) {
     if (value === "all") {
       setCustom(false);
@@ -447,7 +463,7 @@ function RangeControl({
         <select
           aria-label="Activity range"
           className="border-input bg-background text-foreground block h-9 rounded-lg border px-3 text-sm"
-          value={custom ? "custom" : selectedRange(location, preset)}
+          value={custom ? "custom" : selectedProfileRange(location, preset)}
           onChange={(event) => choose(event.target.value)}
         >
           <option value="all">All time</option>
@@ -761,42 +777,6 @@ function patchProfile(
           )
         : known.selectable,
   };
-}
-
-function rangePreset(today: string) {
-  const [year, month] = today.split("-").map(Number) as [
-    number,
-    number,
-    number,
-  ];
-  const semester =
-    month <= 6
-      ? { from: `${year}-01-01`, to: `${year}-06-30` }
-      : { from: `${year}-07-01`, to: `${year}-12-31` };
-  const academic =
-    month >= 7
-      ? { from: `${year}-07-01`, to: `${year + 1}-06-30` }
-      : { from: `${year - 1}-07-01`, to: `${year}-06-30` };
-  const date = new Date(`${today}T12:00:00Z`);
-  date.setUTCFullYear(date.getUTCFullYear() - 1);
-  date.setUTCDate(date.getUTCDate() + 1);
-  return {
-    semester,
-    academic,
-    year: { from: date.toISOString().slice(0, 10), to: today },
-  };
-}
-
-function selectedRange(
-  location: ProfileLocation,
-  preset: ReturnType<typeof rangePreset>,
-) {
-  if (!location.from && !location.to) return "all";
-  return (
-    Object.entries(preset).find(
-      ([, range]) => range.from === location.from && range.to === location.to,
-    )?.[0] ?? "custom"
-  );
 }
 
 const formatDate = (date: string) =>

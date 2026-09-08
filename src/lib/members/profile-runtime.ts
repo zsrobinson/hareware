@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { record } from "~/lib/log";
-import { changeGuildNickname, guildMembers } from "~/lib/member";
+import { guildMembers } from "~/lib/member";
+import { changeGuildNickname } from "~/lib/services/discord/nickname";
 import type { ProfileMutationDependencies } from "./profile-mutation";
 import type { ProfileReadDependencies } from "./profile";
 import { corpus, people, statusOptions } from "./roster";

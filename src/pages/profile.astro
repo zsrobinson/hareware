@@ -3,8 +3,9 @@ import Dashboard from "~/layouts/dashboard.astro";
 import { ProfilePortal } from "~/components/profile-portal";
 import { viewer, viewerState } from "~/lib/admin";
 import { easternNow } from "~/lib/eastern";
-import { readProfilePayload, type ProfileRange } from "~/lib/members/profile";
+import { readProfilePayload } from "~/lib/members/profile";
 import { profileReadDependencies } from "~/lib/members/profile-runtime";
+import { parseProfileLocation } from "~/lib/members/profile-query-keys";
 
 export const prerender = false;
 
@@ -13,23 +14,8 @@ if (!who) return Astro.redirect("/sign-in?returnTo=%2Fprofile");
 
 Astro.response.headers.set("cache-control", "private, no-store");
 
-const from = Astro.url.searchParams.get("from") ?? undefined;
-const to = Astro.url.searchParams.get("to") ?? undefined;
-const validDate = (value?: string) => {
-  if (!value) return true;
-  const parsed = new Date(`${value}T00:00:00Z`);
-  return (
-    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
-    !Number.isNaN(parsed.valueOf()) &&
-    parsed.toISOString().slice(0, 10) === value
-  );
-};
-const validRange =
-  validDate(from) && validDate(to) && (!from || !to || from <= to);
-const location: ProfileRange & { member?: string } = {
-  member: Astro.url.searchParams.get("member") ?? undefined,
-  ...(validRange ? { from, to } : {}),
-};
+const parsed = parseProfileLocation(Astro.url.searchParams);
+const location = parsed.location;
 
 let problem: string | null = null;
 let initial;
@@ -54,7 +40,7 @@ if (!who.profile) {
   }
 }
 
-const invalid = !validRange
+const invalid = !parsed.valid
   ? "That date range is not valid, so this page is showing all time."
   : null;
 ---

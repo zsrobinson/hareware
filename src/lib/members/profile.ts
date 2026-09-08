@@ -16,6 +16,7 @@ export type ProfileRequest = ProfileRange & {
 export type ProfileView =
   | { status: "unlinked"; possibleDuplicate: boolean }
   | { status: "ambiguous" }
+  | { status: "unavailable"; problem: string }
   | {
       status: "ready";
       person: Person;
@@ -122,21 +123,30 @@ export async function readProfilePayload(
   deps: ProfileReadDependencies,
   request: ProfileRequest,
 ): Promise<ProfilePayload> {
-  const [records, statuses] = await Promise.all([
-    deps.corpus(),
-    deps.statuses?.() ?? Promise.resolve([]),
-  ]);
-  const view = await readProfile(
-    { ...deps, corpus: () => Promise.resolve(records) },
-    request,
-  );
-  return {
-    ...view,
-    statuses,
-    selectable: request.editor
-      ? records.people.map(({ pageId, name }) => ({ pageId, name }))
-      : [],
-  };
+  try {
+    const [records, statuses] = await Promise.all([
+      deps.corpus(),
+      deps.statuses?.() ?? Promise.resolve([]),
+    ]);
+    const view = await readProfile(
+      { ...deps, corpus: () => Promise.resolve(records) },
+      request,
+    );
+    return {
+      ...view,
+      statuses,
+      selectable: request.editor
+        ? records.people.map(({ pageId, name }) => ({ pageId, name }))
+        : [],
+    };
+  } catch (error) {
+    return {
+      status: "unavailable",
+      problem: error instanceof Error ? error.message : String(error),
+      statuses: [],
+      selectable: [],
+    };
+  }
 }
 
 export const loadProfile = (token: string, request: ProfileRequest) =>

@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Corpus } from "./roster";
-import { readProfile } from "./profile";
+import { readProfile, readProfilePayload } from "./profile";
 
 const person = (pageId: string, discordId: string | null, name = pageId) => ({
   pageId,
@@ -132,5 +132,23 @@ test("only an editor may select another Member and duplicate warnings reuse the 
     status: "ready",
     person: people[1],
     possibleDuplicate: true,
+  });
+});
+
+test("the outward read distinguishes unavailable data from an empty profile", async () => {
+  const result = await readProfilePayload(
+    {
+      corpus: async () => {
+        throw new Error("Notion unavailable");
+      },
+    },
+    { actorDiscordId: "42", editor: false },
+  );
+
+  expect(result).toEqual({
+    status: "unavailable",
+    problem: "Notion unavailable",
+    statuses: [],
+    selectable: [],
   });
 });

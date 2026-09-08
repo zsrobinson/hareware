@@ -10,6 +10,14 @@ export type ProfileIntent =
     }
   | { action: "nickname"; value: string; selectedPageId?: string };
 
+export type ProfileMutationResult =
+  | { action: "create"; pageId: string; concurrent: boolean }
+  | {
+      action: "name" | "email" | "status" | "nickname";
+      pageId: string;
+      value: string;
+    };
+
 type Audit = { outcome: "ok" | "failed"; actor: string; summary: string };
 export type ProfileMutationDependencies = {
   people: () => Promise<Person[]>;
@@ -52,7 +60,7 @@ export async function mutateProfile(
   deps: ProfileMutationDependencies,
   actor: ProfileActor,
   intent: ProfileIntent,
-): Promise<Record<string, unknown>> {
+): Promise<ProfileMutationResult> {
   let subject = "unlinked Member";
   try {
     const roster = await deps.people();
@@ -62,7 +70,11 @@ export async function mutateProfile(
       );
       if (linked.length > 1) throw new Error("Discord identity is ambiguous");
       if (linked.length === 1)
-        return { pageId: linked[0]!.pageId, concurrent: true };
+        return {
+          action: "create",
+          pageId: linked[0]!.pageId,
+          concurrent: true,
+        };
       const options = await deps.statuses();
       if (!options.includes(intent.status))
         throw new Error(`${intent.status} is not a current Member status`);
@@ -71,12 +83,12 @@ export async function mutateProfile(
         discordId: actor.discordId,
       });
       subject = pageId;
-      await deps.record({
+      await audit(deps, {
         outcome: "ok",
         actor: actor.discordId,
         summary: `created Member ${pageId} from profile`,
       });
-      return { pageId };
+      return { action: "create", pageId, concurrent: false };
     }
 
     const member = target(roster, actor, intent.selectedPageId);
@@ -84,12 +96,12 @@ export async function mutateProfile(
     if (intent.action === "nickname") {
       if (!member.discordId) throw new Error("Member has no Discord identity");
       await deps.nickname(member.discordId, intent.value);
-      await deps.record({
+      await audit(deps, {
         outcome: "ok",
         actor: actor.discordId,
         summary: `changed Discord nickname for Member ${subject}`,
       });
-      return { pageId: subject, nickname: intent.value };
+      return { action: "nickname", pageId: subject, value: intent.value };
     }
     if (intent.action === "status") {
       const options = await deps.statuses();
@@ -97,19 +109,28 @@ export async function mutateProfile(
         throw new Error(`${intent.value} is not a current Member status`);
     }
     await deps.update(member.pageId, { [intent.action]: intent.value });
-    await deps.record({
+    await audit(deps, {
       outcome: "ok",
       actor: actor.discordId,
       summary: `changed ${intent.action} for Member ${subject}`,
     });
-    return { pageId: subject, [intent.action]: intent.value };
+    return { action: intent.action, pageId: subject, value: intent.value };
   } catch (error) {
     const why = error instanceof Error ? error.message : String(error);
-    await deps.record({
+    await audit(deps, {
       outcome: "failed",
       actor: actor.discordId,
       summary: `profile edit for ${subject} failed: ${why}`,
     });
     throw error;
+  }
+}
+
+/** Invocation history is deliberately less authoritative than the confirmed write. */
+async function audit(deps: ProfileMutationDependencies, entry: Audit) {
+  try {
+    await deps.record(entry);
+  } catch (error) {
+    console.error("[profile] could not record profile mutation", error);
   }
 }

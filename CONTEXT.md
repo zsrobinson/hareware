@@ -179,6 +179,16 @@ Graduation year is deliberately not recorded. People change it without telling
 the club, and winter versus spring is not a distinction anyone here needs. See
 ADR 0010.
 
+## Member Portal
+
+The private `/profile` place where a signed-in Member sees their own identity
+and activity. Identity details belong to the Member to maintain; Attendance and
+contributions are historical records they may ask an editor about, not rewrite
+themselves.
+
+An editor may inspect another person's Member Portal, but remains the editor —
+they never become or impersonate that Member.
+
 ## Standing
 
 What a person has done in a window of time, and whether it was enough.

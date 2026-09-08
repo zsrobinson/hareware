@@ -4,7 +4,8 @@ import { GUILD_ID } from "./services/discord/config";
 const workers = vi.hoisted(() => ({ env: {} as Record<string, string> }));
 vi.mock("cloudflare:workers", () => workers);
 
-const { guildMember, guildMembers } = await import("./member");
+const { changeGuildNickname, guildMember, guildMembers } =
+  await import("./member");
 
 const USER = "342850506328117249";
 const CDN = "https://cdn.discordapp.com";
@@ -221,4 +222,24 @@ test("does not ask discord for the guild without a bot token", async () => {
 
   expect(await guildMembers()).toEqual(new Map());
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test("nickname updates patch the guild member and surface role hierarchy refusal", async () => {
+  workers.env.DISCORD_BOT_TOKEN = "bot";
+  const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  await changeGuildNickname(USER, "Bay");
+  expect(fetchMock).toHaveBeenCalledWith(
+    `https://discord.com/api/v10/guilds/${GUILD_ID}/members/${USER}`,
+    expect.objectContaining({
+      method: "PATCH",
+      body: JSON.stringify({ nick: "Bay" }),
+    }),
+  );
+
+  fetchMock.mockResolvedValueOnce(new Response("forbidden", { status: 403 }));
+  await expect(changeGuildNickname(USER, "Bay")).rejects.toThrow(
+    "role hierarchy",
+  );
 });

@@ -8,6 +8,7 @@ const { faces } = await import("./faces");
 
 const profile = (displayName: string): Profile => ({
   displayName,
+  discordNickname: null,
   username: displayName,
   avatarUrl: `https://cdn.discordapp.com/avatars/${displayName}.png`,
 });

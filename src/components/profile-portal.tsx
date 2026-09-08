@@ -34,7 +34,9 @@ import {
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import type { ProfilePayload } from "~/lib/members/profile";
+import type { ProfileMutationResult } from "~/lib/members/profile-mutation";
 import {
+  parseProfileLocation,
   profileKey,
   profilePagePath,
   profilePath,
@@ -44,6 +46,7 @@ import {
 } from "~/lib/members/profile-query-keys";
 import { notify } from "~/lib/notify";
 import { postJson } from "~/lib/post-json";
+import { rosterKeys } from "~/lib/members/query-keys";
 
 const client = new QueryClient({
   defaultOptions: {
@@ -141,12 +144,7 @@ function Portal({
 }
 
 function profileLocation(search: string): ProfileLocation {
-  const params = new URLSearchParams(search);
-  return {
-    member: params.get("member") ?? undefined,
-    from: params.get("from") ?? undefined,
-    to: params.get("to") ?? undefined,
-  };
+  return parseProfileLocation(new URLSearchParams(search)).location;
 }
 
 function Unavailable({ message }: { message: string }) {
@@ -320,7 +318,12 @@ function ReadyProfile({
       {data.possibleDuplicate ? <DuplicateNotice /> : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-        <RangeControl location={location} today={today} navigate={navigate} />
+        <RangeControl
+          key={`${location.from ?? ""}:${location.to ?? ""}`}
+          location={location}
+          today={today}
+          navigate={navigate}
+        />
         <Identity data={data} edit={setEditing} />
         <ActivityCard
           kind="contributions"
@@ -433,10 +436,12 @@ function RangeControl({
   today: string;
   navigate: (next: ProfileLocation) => void;
 }) {
-  const [custom, setCustom] = useState(Boolean(location.from || location.to));
+  const preset = profilePresets(today);
+  const selected = selectedProfileRange(location, preset);
+  const [custom, setCustom] = useState(selected === "custom");
   const [from, setFrom] = useState(location.from ?? "");
   const [to, setTo] = useState(location.to ?? "");
-  const preset = profilePresets(today);
+
   function choose(value: string) {
     if (value === "all") {
       setCustom(false);
@@ -463,7 +468,7 @@ function RangeControl({
         <select
           aria-label="Activity range"
           className="border-input bg-background text-foreground block h-9 rounded-lg border px-3 text-sm"
-          value={custom ? "custom" : selectedProfileRange(location, preset)}
+          value={custom ? "custom" : selected}
           onChange={(event) => choose(event.target.value)}
         >
           <option value="all">All time</option>
@@ -657,17 +662,27 @@ function EditDialog({
   const mutation = useMutation({
     scope: { id: `profile-${data.person.pageId}` },
     mutationFn: (next: string) =>
-      postJson<Record<string, unknown>>("/api/profile", {
+      postJson<ProfileMutationResult>("/api/profile", {
         action: field,
         value: next,
         ...(location.member ? { selectedPageId: location.member } : {}),
       }),
-    onSuccess: (_answer, next) => {
-      queries.setQueryData<ProfilePayload>(profileKey(location), (known) =>
-        patchProfile(known, field!, next),
+    onSuccess: async (answer) => {
+      if (answer.action === "create") return;
+      await queries.cancelQueries({ queryKey: ["members", "profile"] });
+      queries.setQueriesData<ProfilePayload>(
+        { queryKey: ["members", "profile"] },
+        (known) =>
+          known?.status === "ready" && known.person.pageId === answer.pageId
+            ? patchProfile(known, answer.action, answer.value)
+            : known,
       );
+      await Promise.all([
+        queries.invalidateQueries({ queryKey: rosterKeys.kiosk() }),
+        queries.invalidateQueries({ queryKey: rosterKeys.reconciler() }),
+      ]);
       notify.ok(
-        `${field === "nickname" ? "Discord name" : field![0]!.toUpperCase() + field!.slice(1)} saved`,
+        `${answer.action === "nickname" ? "Discord name" : answer.action[0]!.toUpperCase() + answer.action.slice(1)} saved`,
       );
       close();
     },

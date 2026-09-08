@@ -143,17 +143,34 @@ test("browser history restores the selected profile and date range", async () =>
     }),
   );
   render(
-    <ProfilePortal initial={ready} displayName="Robin Hare" today="2026-09-08" />,
+    <ProfilePortal
+      initial={ready}
+      displayName="Robin Hare"
+      today="2026-09-08"
+    />,
   );
 
-  history.pushState({}, "", "/profile?member=person-2&from=2026-07-01&to=2026-12-31");
+  history.pushState(
+    {},
+    "",
+    "/profile?member=person-2&from=2026-07-01&to=2026-12-31",
+  );
   window.dispatchEvent(new PopStateEvent("popstate"));
-  await waitFor(() => expect(screen.getByRole("heading", { name: "Mina Finch" })).toBeTruthy());
-  expect((screen.getByLabelText("Activity range") as unknown as { value: string }).value).toBe("semester");
+  await waitFor(() =>
+    expect(screen.getByRole("heading", { name: "Mina Finch" })).toBeTruthy(),
+  );
+  await waitFor(() =>
+    expect(
+      (screen.getByLabelText("Activity range") as unknown as { value: string })
+        .value,
+    ).toBe("semester"),
+  );
 
   history.replaceState({}, "", "/profile");
   window.dispatchEvent(new PopStateEvent("popstate"));
-  await waitFor(() => expect(screen.getByRole("heading", { name: "Robin Hare" })).toBeTruthy());
+  await waitFor(() =>
+    expect(screen.getByRole("heading", { name: "Robin Hare" })).toBeTruthy(),
+  );
 });
 
 test("edits one identity fact at a time and keeps the saved answer visible", async () => {
@@ -175,7 +192,11 @@ test("edits one identity fact at a time and keeps the saved answer visible", asy
         value: "new@umd.edu",
       });
       return new Response(
-        JSON.stringify({ action: "email", pageId: "person-1", value: "canonical@umd.edu" }),
+        JSON.stringify({
+          action: "email",
+          pageId: "person-1",
+          value: "canonical@umd.edu",
+        }),
         {
           headers: { "content-type": "application/json" },
         },
@@ -197,7 +218,9 @@ test("edits one identity fact at a time and keeps the saved answer visible", asy
   });
   fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
 
-  await waitFor(() => expect(screen.getByText("canonical@umd.edu")).toBeTruthy());
+  await waitFor(() =>
+    expect(screen.getByText("canonical@umd.edu")).toBeTruthy(),
+  );
   releaseRead();
   await new Promise((done) => setTimeout(done, 0));
   expect(screen.getByText("canonical@umd.edu")).toBeTruthy();

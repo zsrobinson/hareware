@@ -46,9 +46,6 @@ test("the agreed ranges are concrete and recognizable", () => {
   expect(selectedProfileRange(presets.semester, presets)).toBe("semester");
   expect(selectedProfileRange({}, presets)).toBe("all");
   expect(
-    selectedProfileRange(
-      { from: "2026-08-01", to: "2026-08-31" },
-      presets,
-    ),
+    selectedProfileRange({ from: "2026-08-01", to: "2026-08-31" }, presets),
   ).toBe("custom");
 });

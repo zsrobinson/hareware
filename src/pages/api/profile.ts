@@ -43,10 +43,7 @@ export const GET: APIRoute = async ({ request }) => {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return json(
-      { error: message },
-      500,
-    );
+    return json({ error: message }, 500);
   }
 };
 

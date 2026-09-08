@@ -13,9 +13,14 @@ test("patches the guild member and surfaces role hierarchy refusal", async () =>
   await changeGuildNickname("42", "Bay");
   expect(fetchMock).toHaveBeenCalledWith(
     `https://discord.com/api/v10/guilds/${GUILD_ID}/members/42`,
-    expect.objectContaining({ method: "PATCH", body: JSON.stringify({ nick: "Bay" }) }),
+    expect.objectContaining({
+      method: "PATCH",
+      body: JSON.stringify({ nick: "Bay" }),
+    }),
   );
 
   fetchMock.mockResolvedValueOnce(new Response("forbidden", { status: 403 }));
-  await expect(changeGuildNickname("42", "Bay")).rejects.toThrow("role hierarchy");
+  await expect(changeGuildNickname("42", "Bay")).rejects.toThrow(
+    "role hierarchy",
+  );
 });

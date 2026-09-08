@@ -19,7 +19,7 @@ function person(over: Partial<Person> & { name: string }): Person {
     email: null,
     status: null,
     contributions: 0,
-  noAnnouncements: false,
+    noAnnouncements: false,
     ...over,
   };
 }

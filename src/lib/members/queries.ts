@@ -4,12 +4,16 @@
   three things live here, and each is here because an island getting it wrong
   is invisible:
 
-  - `RosterQueries`, the provider. These are separate astro islands hydrated
-    independently, so there is no single React root to put one at the top of
-    and no shared cache between them. Each island wraps itself.
-  - the query keys, spelled once. A mutation that invalidates a key nobody
-    reads is a mutation that silently still needs a reload, and two string
-    literals in two files is exactly how that happens.
+  - the provider and its cache live in `roster-queries.tsx`, and the keys in
+    `query-keys.ts`. Both are next door rather than here for the same reason:
+    react fast refresh gives up on a module that mixes a component with
+    anything else, and a module it gives up on remounts the island on every
+    edit — mid-meeting, in a dev session, that is the room's sign-ins gone.
+  - the hooks the islands read and write through. The keys they use live in
+    `query-keys.ts` rather than here, and that is a dev-server constraint
+    rather than taste: react fast refresh only accepts a module whose exports
+    are all components or hooks, and one plain object among them made every
+    edit to this file invalidate its importers and remount the island.
   - `useRosterQuery`, which takes the page's server-rendered read as
     `initialData`. That is what keeps first paint the same: the island renders
     the data the page already had, rather than a spinner and a second request
@@ -17,15 +21,13 @@
 */
 
 import {
-  QueryClient,
-  QueryClientProvider,
   useMutation,
   useMutationState,
   useQuery,
   useQueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
-import { useEffect, type ReactNode } from "react";
+import { useEffect } from "react";
 import {
   applyIntent,
   applyIntents,
@@ -33,82 +35,9 @@ import {
   type Intent,
 } from "~/lib/members/attendance";
 import type { KioskData } from "~/lib/members/views";
+import { rosterKeys } from "~/lib/members/query-keys";
 import { notify } from "~/lib/notify";
 import { postJson } from "~/lib/post-json";
-
-/** every roster query's key, so a mutation cannot invalidate a name nobody uses */
-export const rosterKeys = {
-  /* the pinned meeting is part of the key, because it is part of the answer:
-     the route decides which meetings are offerable around it. A constant key
-     with the meeting in the path only meant a refetch after a switch re-read
-     the meeting the page opened on */
-  kiosk: (meetingId = "") =>
-    ["members", "kiosk", meetingId] as const satisfies QueryKey,
-  reconciler: () => ["members", "reconciler"] as const satisfies QueryKey,
-  /*
-    who is in the room, kept apart from the roster read on purpose.
-
-    it used to live inside the kiosk answer, and a revalidation of that answer
-    then landed on top of writes that were still in flight: the refetch had
-    left before the write and arrived after it, so somebody who had just
-    tapped disappeared. Nothing about that looks like a failure on screen.
-
-    its own key, never refetched, only written. Revalidating the roster — the
-    names, the calendar, notion's statuses — can no longer touch it
-  */
-  attendees: (meetingId = "") =>
-    ["members", "attendees", meetingId] as const satisfies QueryKey,
-  /* the writes, keyed the same way, so the queue for one meeting can be read
-     back without the queue for another */
-  attendance: (meetingId = "") =>
-    ["members", "attendance", meetingId] as const satisfies QueryKey,
-};
-
-/**
- * how long a read stays fresh before a refocus would re-ask for it.
- *
- * notion allows about three requests a second and each of these reads is
- * several, so a window regaining focus may not cost a page load's worth of
- * them. The invalidations after a mutation are exact and ignore this
- */
-const FRESH_MS = 60_000;
-
-function client() {
-  return new QueryClient({
-    defaultOptions: {
-      queries: {
-        staleTime: FRESH_MS,
-        /* the kiosk is a laptop somebody walks past all evening, and the
-           reconciler is worked through top to bottom. A list reordering itself
-           because a window was clicked loses the reader's place */
-        refetchOnWindowFocus: false,
-        /* and not because the wifi blinked. this defaults to true, and on a
-           meeting room's network every `online` event would spend a read worth
-           several notion requests, which `retry: false` then turns into a
-           visible error rather than a retry */
-        refetchOnReconnect: false,
-        /* a read here is several notion requests; retrying a failed one three
-           times is how a rate limit becomes a worse rate limit. The client
-           already waits out a 429 on each request */
-        retry: false,
-      },
-    },
-  });
-}
-
-/**
- * the cache, at module scope so it outlives a remount.
- *
- * it was per-mount, which reads as the tidier choice and was wrong here:
- * `dashboard.astro` renders `<ClientRouter />`, so every navigation swaps the
- * body and remounts the islands, and a client in `useState` was thrown away
- * with them. Every visit then paid for a full read again, which is the
- * "constantly reloading" this layer was added to stop.
- *
- * outliving the tree is the point, not a leak: the entries are the roster, the
- * keys are stable, and `staleTime` decides when they are asked for again
- */
-let cache: QueryClient | undefined;
 
 /**
  * the errors already toasted about.
@@ -118,18 +47,6 @@ let cache: QueryClient | undefined;
  * collected error takes its entry with it
  */
 const reported = new WeakSet<object>();
-
-function sharedClient() {
-  return (cache ??= client());
-}
-
-export function RosterQueries({ children }: { children: ReactNode }) {
-  return (
-    <QueryClientProvider client={sharedClient()}>
-      {children}
-    </QueryClientProvider>
-  );
-}
 
 /**
  * a roster read, seeded with what the page already rendered.

@@ -25,12 +25,9 @@ import { Textarea } from "~/components/ui/textarea";
 import type { Resolution } from "~/lib/members/match";
 import { postJson } from "~/lib/post-json";
 import type { Person } from "~/lib/members/records";
-import {
-  RosterQueries,
-  rosterKeys,
-  useRefresh,
-  useRosterQuery,
-} from "~/lib/members/queries";
+import { rosterKeys } from "~/lib/members/query-keys";
+import { RosterQueries } from "~/lib/members/roster-queries";
+import { useRefresh, useRosterQuery } from "~/lib/members/queries";
 import type { ReconcilerData } from "~/lib/members/views";
 import type { Application } from "~/lib/services/discord/join-requests";
 

@@ -27,13 +27,9 @@ import {
   shownName,
 } from "~/lib/members/kiosk";
 import { defaultStatus } from "~/lib/members/config";
-import {
-  RosterQueries,
-  rosterKeys,
-  useAttendance,
-  usePatch,
-  useRosterQuery,
-} from "~/lib/members/queries";
+import { rosterKeys } from "~/lib/members/query-keys";
+import { RosterQueries } from "~/lib/members/roster-queries";
+import { useAttendance, usePatch, useRosterQuery } from "~/lib/members/queries";
 import type { KioskData } from "~/lib/members/views";
 import type { Intent } from "~/lib/members/attendance";
 import type { MeetingRecord, Person } from "~/lib/members/records";
@@ -530,7 +526,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
         {present.length === 0 ? (
           <p className="text-muted-foreground text-sm">Nobody yet.</p>
         ) : (
-          <ul className="divide-y rounded-lg border">
+          <ul aria-label="Signed in" className="divide-y rounded-lg border">
             {signedIn.map((pageId) => {
               const person = byId.get(pageId) ?? {
                 pageId,

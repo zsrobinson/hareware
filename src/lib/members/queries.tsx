@@ -44,6 +44,19 @@ export const rosterKeys = {
   kiosk: (meetingId = "") =>
     ["members", "kiosk", meetingId] as const satisfies QueryKey,
   reconciler: () => ["members", "reconciler"] as const satisfies QueryKey,
+  /*
+    who is in the room, kept apart from the roster read on purpose.
+
+    it used to live inside the kiosk answer, and a revalidation of that answer
+    then landed on top of writes that were still in flight: the refetch had
+    left before the write and arrived after it, so somebody who had just
+    tapped disappeared. Nothing about that looks like a failure on screen.
+
+    its own key, never refetched, only written. Revalidating the roster — the
+    names, the calendar, notion's statuses — can no longer touch it
+  */
+  attendees: (meetingId = "") =>
+    ["members", "attendees", meetingId] as const satisfies QueryKey,
   /* the writes, keyed the same way, so the queue for one meeting can be read
      back without the queue for another */
   attendance: (meetingId = "") =>
@@ -210,10 +223,9 @@ export function usePatch<T>(key: QueryKey) {
 /**
  * re-reads one roster query after a write.
  *
- * returned as a function rather than called for you, because the kiosk's
- * attendance write deliberately does not use it: that one is optimistic with a
- * rollback, and turning it into a refetch would put a round trip between a
- * person tapping their name and the room seeing it
+ * returned as a function rather than called for you, because the kiosk never
+ * uses it: a tap draws from its own queue, and a refetch would put a round
+ * trip between somebody tapping their name and the room seeing it
  */
 export function useRefresh(key: QueryKey) {
   const queries = useQueryClient();
@@ -227,20 +239,6 @@ function attendeesOf(data: KioskData | undefined, meetingId: string): string[] {
     data?.meetings.find((meeting) => meeting.pageId === meetingId)
       ?.attendeeIds ?? []
   );
-}
-
-/** the same data with one meeting's attendees replaced */
-function withAttendees(
-  data: KioskData,
-  meetingId: string,
-  attendeeIds: string[],
-): KioskData {
-  return {
-    ...data,
-    meetings: data.meetings.map((meeting) =>
-      meeting.pageId === meetingId ? { ...meeting, attendeeIds } : meeting,
-    ),
-  };
 }
 
 /**
@@ -266,22 +264,44 @@ function withAttendees(
  *   the answer and still in the queue — draws the same either way.
  *
  * a failed write simply leaves the queue, and the row returns to whatever
- * notion last said. No rollback, because nothing was overwritten
+ * notion last said. No rollback, because nothing was overwritten.
+ *
+ * `data` seeds the list and is then out of the way: the attendees have a cache
+ * entry of their own that nothing revalidates, so a roster refetch landing
+ * mid-write cannot take a tap back off the screen
  */
 export function useAttendance(meetingId: string, data: KioskData) {
   const queries = useQueryClient();
-  const key = rosterKeys.kiosk(meetingId);
+  const key = rosterKeys.attendees(meetingId);
   const mutationKey = rosterKeys.attendance(meetingId);
+
+  /*
+    a query rather than state, for the cache and nothing else: it is where the
+    writes put their answer, and it survives the island being remounted by a
+    navigation. `staleTime: Infinity` is what makes it a record rather than a
+    read — notion is asked once, by the page, and after that this list only
+    moves when somebody at the laptop moves it
+  */
+  const { data: recorded } = useQuery({
+    queryKey: key,
+    queryFn: () =>
+      attendeesOf(
+        queries.getQueryData<KioskData>(rosterKeys.kiosk(meetingId)),
+        meetingId,
+      ),
+    initialData: () => attendeesOf(data, meetingId),
+    staleTime: Infinity,
+  });
 
   const { mutate } = useMutation({
     mutationKey,
     /* one write at a time, per meeting */
     scope: { id: `members-attendance-${meetingId}` },
     mutationFn: async (intent: Intent): Promise<string[]> => {
-      const known = attendeesOf(
-        queries.getQueryData<KioskData>(key),
-        meetingId,
-      );
+      /* the cache, not the render's copy: several taps may have been queued
+         since this one was made, and each has to be applied to what the last
+         write actually got back */
+      const known = queries.getQueryData<string[]>(key) ?? [];
       const wanted = applyIntent(known, intent);
 
       /* `known` as well as `wanted`: the route merges against notion rather
@@ -293,16 +313,7 @@ export function useAttendance(meetingId: string, data: KioskData) {
 
       return memberIds ?? wanted;
     },
-    onMutate: async () => {
-      /* a read landing after this write would put notion's older answer back
-         on screen until the next one */
-      await queries.cancelQueries({ queryKey: key });
-    },
-    onSuccess: (attendeeIds) => {
-      queries.setQueryData<KioskData>(key, (current) =>
-        current ? withAttendees(current, meetingId, attendeeIds) : current,
-      );
-    },
+    onSuccess: (attendeeIds) => queries.setQueryData(key, attendeeIds),
   });
 
   const queued = useMutationState({
@@ -311,12 +322,8 @@ export function useAttendance(meetingId: string, data: KioskData) {
   });
 
   return {
-    /* `data` rather than another `getQueryData`: the caller is subscribed to
-       it, so this recomputes when the answer changes. The mutation reads the
-       cache directly instead, because what matters there is what is true when
-       the write runs, which may be several taps later */
-    /** notion's answer with everything still queued applied on top */
-    present: applyIntents(attendeesOf(data, meetingId), queued),
+    /** what notion last took, with everything still queued applied on top */
+    present: applyIntents(recorded, queued),
     /** whether any write is still in flight, for the one word that says so */
     saving: queued.length > 0,
     /** enqueue one tap. `say` names it once notion has taken it */

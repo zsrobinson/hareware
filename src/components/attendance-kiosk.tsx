@@ -180,8 +180,20 @@ function Kiosk({ initial, today, faces, guild }: Props) {
   function switchMeeting(id: string) {
     /* the attendees follow from the key, so there is nothing else to reseed */
     setMeetingId(id);
-    /* so a reload during the meeting comes back to the same one */
-    history.replaceState(null, "", withParam(location.href, "meeting", id));
+    /*
+      so a reload during the meeting comes back to the same one.
+
+      `history.state` is passed back rather than replaced with null, which is
+      not a detail: astro's `<ClientRouter />` keeps its own scroll and index
+      record in there, and a popstate arriving to find it missing calls
+      `location.reload()`. Wiping it here is what reloaded the page under
+      somebody halfway through signing a room in
+    */
+    history.replaceState(
+      history.state,
+      "",
+      withParam(location.href, "meeting", id),
+    );
     refocus();
   }
 

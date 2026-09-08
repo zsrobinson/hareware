@@ -140,11 +140,34 @@ export async function approvedApplications(
       );
     }
 
-    const page = (
-      (await response.json()) as {
-        guild_join_requests?: RawRequest[] | null;
-      }
-    ).guild_join_requests;
+    const answer = (await response.json()) as {
+      guild_join_requests?: RawRequest[] | null;
+      total?: number;
+    };
+
+    /*
+      "nobody has applied" and "we cannot read applications" have to be
+      different answers, and from this endpoint they look identical.
+
+      discord answers a query with results as `{ guild_join_requests: [...] }`
+      and a query with none as `{ "total": 0 }` — but for some statuses it
+      answers `{}`, with no list and no count at all. Read as an empty list,
+      that is a sync reporting "no new applications out of 0" every hour and a
+      reconciler saying every applicant is already on a row: the roster quietly
+      stops growing and every screen says it is fine.
+
+      so an answer carrying neither is refused. The reconciler shows the
+      message beside its applications section and the automation log records a
+      failure, which is the whole point of ADR 0007's distinction between a run
+      that did nothing and a run that could not try
+    */
+    if (!answer.guild_join_requests && answer.total === undefined) {
+      throw new Error(
+        "discord answered the join requests endpoint with neither a list nor a count, so whether anybody has applied cannot be known",
+      );
+    }
+
+    const page = answer.guild_join_requests;
 
     if (!page?.length) break;
 

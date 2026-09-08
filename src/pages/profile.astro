@@ -1,0 +1,86 @@
+---
+import Dashboard from "~/layouts/dashboard.astro";
+import { ProfilePortal } from "~/components/profile-portal";
+import { viewer, viewerState } from "~/lib/admin";
+import { easternNow } from "~/lib/eastern";
+import { readProfilePayload, type ProfileRange } from "~/lib/members/profile";
+import { profileReadDependencies } from "~/lib/members/profile-runtime";
+
+export const prerender = false;
+
+const who = await viewer(Astro.request);
+if (!who) return Astro.redirect("/sign-in?returnTo=%2Fprofile");
+
+Astro.response.headers.set("cache-control", "private, no-store");
+
+const from = Astro.url.searchParams.get("from") ?? undefined;
+const to = Astro.url.searchParams.get("to") ?? undefined;
+const validDate = (value?: string) => {
+  if (!value) return true;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return (
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    !Number.isNaN(parsed.valueOf()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
+};
+const validRange =
+  validDate(from) && validDate(to) && (!from || !to || from <= to);
+const location: ProfileRange & { member?: string } = {
+  member: Astro.url.searchParams.get("member") ?? undefined,
+  ...(validRange ? { from, to } : {}),
+};
+
+let problem: string | null = null;
+let initial;
+if (!who.profile) {
+  problem =
+    who.denial === "not-in-server"
+      ? "Your Discord account is not in The Hare’s server."
+      : "Discord could not confirm your membership. Try again in a moment.";
+} else {
+  try {
+    initial = await readProfilePayload(profileReadDependencies(), {
+      actorDiscordId: who.session.discordUserId,
+      actorDisplayName: who.profile.displayName,
+      actorNickname: who.profile.discordNickname,
+      editor: who.admin,
+      selectedPageId: location.member,
+      from: location.from,
+      to: location.to,
+    });
+  } catch (error) {
+    problem = error instanceof Error ? error.message : String(error);
+  }
+}
+
+const invalid = !validRange
+  ? "That date range is not valid, so this page is showing all time."
+  : null;
+---
+
+<Dashboard title="Profile" viewer={viewerState(who)} width="wide">
+  {
+    invalid && (
+      <p class="bg-muted text-muted-foreground mb-4 rounded-lg px-3 py-2 text-sm">
+        {invalid}
+      </p>
+    )
+  }
+  {
+    problem ? (
+      <div class="border-destructive/25 bg-destructive/5 mx-auto max-w-xl rounded-xl border p-5">
+        <h2 class="font-heading text-lg font-medium">Profile unavailable</h2>
+        <p class="text-muted-foreground mt-1 text-sm">{problem}</p>
+      </div>
+    ) : initial && who.profile ? (
+      <ProfilePortal
+        initial={initial}
+        displayName={who.profile.displayName}
+        today={easternNow(new Date()).date}
+        location={location}
+        client:load
+      />
+    ) : null
+  }
+</Dashboard>

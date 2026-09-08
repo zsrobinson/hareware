@@ -51,6 +51,7 @@ const initial: ReconcilerData = {
     person({ pageId: "p3", name: "Cass Lin", email: null }),
   ],
   discordSuggestions: [],
+  discordNameMismatches: [],
   liveStatuses: ["Undergrad", "Grad", "Alum"],
   alumMissing: false,
   discordProblem: null,
@@ -181,4 +182,40 @@ test("no request is made to compare a file", async () => {
   await upload(EXPORT);
 
   expect(fetch).not.toHaveBeenCalled();
+});
+
+test("linked Members with different Notion and Discord names are informational", () => {
+  const kenlynn = person({
+    pageId: "p4",
+    discordId: "42",
+    name: "Kenlynn Ingham",
+  });
+
+  render(
+    <Reconciler
+      initial={{
+        ...initial,
+        discordNameMismatches: [
+          {
+            person: kenlynn,
+            account: {
+              id: "42",
+              username: "kenlynn",
+              displayName: 'Kenlynn "horse girl" Ingham',
+            },
+          },
+        ],
+      }}
+      faces={{}}
+    />,
+  );
+
+  expect(
+    screen.getByText("Members whose names differ in Discord"),
+  ).toBeTruthy();
+  expect(screen.getByText("Kenlynn Ingham")).toBeTruthy();
+  expect(screen.getByText(/Kenlynn "horse girl" Ingham/)).toBeTruthy();
+  expect(
+    screen.queryByRole("button", { name: /resolve|dismiss|accept/i }),
+  ).toBeNull();
 });

@@ -170,6 +170,7 @@ function Sections({ initial, faces }: Props) {
     statuses,
     roster,
     discordSuggestions,
+    discordNameMismatches,
   } = useRosterQuery(
     rosterKeys.reconciler(),
     "/api/members/reconciler",
@@ -465,6 +466,27 @@ function Sections({ initial, faces }: Props) {
               </div>
             );
           })}
+        </div>
+      </Section>
+
+      <Section
+        title="Members whose names differ in Discord"
+        why="Their Member row and current Discord display name do not match. Decorative nicknames are included on purpose; this is only something to notice, not a task that blocks anything."
+        count={discordNameMismatches.length}
+      >
+        <div className="divide-y rounded-lg border">
+          {discordNameMismatches.length === 0 && (
+            <Empty>Every linked Member has the same normalized name.</Empty>
+          )}
+          {discordNameMismatches.map(({ person, account }) => (
+            <div key={person.pageId} className="p-4">
+              <MemberEntry
+                person={person}
+                faces={faces}
+                note={`shown in Discord as ${account.displayName}`}
+              />
+            </div>
+          ))}
         </div>
       </Section>
 

@@ -1,7 +1,9 @@
 import { expect, test } from "vitest";
 import type { Application } from "~/lib/services/discord/join-requests";
 import {
+  appearsInDuplicates,
   duplicates,
+  mismatchedDiscordNames,
   nearName,
   resolveApplication,
   safeToCreate,
@@ -403,4 +405,56 @@ test("a row with no name matches nothing", () => {
   );
 
   expect(suggestions).toEqual([]);
+});
+
+test("linked rows whose Discord display name differs are surfaced", () => {
+  const bay = person({ discordId: "1", name: "Bay Hoffman" });
+  const kenlynn = person({
+    pageId: "p2",
+    discordId: "2",
+    name: "Kenlynn Ingham",
+  });
+
+  const mismatches = mismatchedDiscordNames(
+    [bay, kenlynn],
+    [
+      account({ id: "1", displayName: "bay hoffman" }),
+      account({
+        id: "2",
+        displayName: 'Kenlynn "horse girl" Ingham',
+      }),
+    ],
+  );
+
+  expect(mismatches).toEqual([
+    {
+      person: kenlynn,
+      account: expect.objectContaining({
+        id: "2",
+        displayName: 'Kenlynn "horse girl" Ingham',
+      }),
+    },
+  ]);
+});
+
+test("unlinked rows and linked accounts absent from the guild are not name findings", () => {
+  expect(
+    mismatchedDiscordNames(
+      [
+        person({ pageId: "p1", name: "Not Linked" }),
+        person({ pageId: "p2", discordId: "gone", name: "Left Server" }),
+      ],
+      [account({ id: "somebody-else", displayName: "Different" })],
+    ),
+  ).toEqual([]);
+});
+
+test("a Member can be checked against the existing duplicate findings", () => {
+  const bay = person({ pageId: "bay", name: "Bay Hoffman" });
+  const duplicate = person({ pageId: "bay-2", name: "bay hoffman" });
+  const ada = person({ pageId: "ada", name: "Ada Vance" });
+  const findings = duplicates([bay, duplicate, ada]);
+
+  expect(appearsInDuplicates(bay, findings)).toBe(true);
+  expect(appearsInDuplicates(ada, findings)).toBe(false);
 });

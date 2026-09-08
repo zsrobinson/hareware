@@ -20,8 +20,18 @@ import { approvedApplications } from "~/lib/services/discord/join-requests";
 import type { Application } from "~/lib/services/discord/join-requests";
 
 import { defaultMeeting, offerableMeetings } from "./kiosk";
-import { duplicates, resolveApplications, suggestDiscordLinks } from "./match";
-import type { Duplicate, DiscordSuggestion, Resolution } from "./match";
+import {
+  duplicates,
+  mismatchedDiscordNames,
+  resolveApplications,
+  suggestDiscordLinks,
+} from "./match";
+import type {
+  DiscordNameMismatch,
+  Duplicate,
+  DiscordSuggestion,
+  Resolution,
+} from "./match";
 import { guildMembers } from "~/lib/member";
 import type { MeetingRecord, Person } from "./records";
 import { meetings, people, statusOptions } from "./roster";
@@ -119,6 +129,8 @@ export type ReconcilerData = {
   roster: Person[];
   /** rows that could be linked to an account already in the server */
   discordSuggestions: DiscordSuggestion[];
+  /** linked rows whose Notion and current Discord display names differ */
+  discordNameMismatches: DiscordNameMismatch[];
   /** notion's live options, named in the banner when the alum one is gone */
   liveStatuses: string[];
   alumMissing: boolean;
@@ -163,20 +175,20 @@ export async function reconcilerData(env: ViewEnv): Promise<ReconcilerData> {
     statuses(token),
   ]);
 
+  const accounts = [...guild].map(([id, profile]) => ({
+    id,
+    username: profile.username,
+    displayName: profile.displayName,
+  }));
+
   return {
     resolutions: resolveApplications(roster, applications),
     duplicates: duplicates(roster),
     unknownStatus: roster.filter((person) => person.status === null),
     statuses: options.offered,
     roster,
-    discordSuggestions: suggestDiscordLinks(
-      roster,
-      [...guild].map(([id, profile]) => ({
-        id,
-        username: profile.username,
-        displayName: profile.displayName,
-      })),
-    ),
+    discordSuggestions: suggestDiscordLinks(roster, accounts),
+    discordNameMismatches: mismatchedDiscordNames(roster, accounts),
     liveStatuses: options.live,
     alumMissing: options.alumMissing,
     discordProblem,

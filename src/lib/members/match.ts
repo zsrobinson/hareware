@@ -274,6 +274,16 @@ export function duplicates(people: Person[]): Duplicate[] {
   });
 }
 
+/** whether the Reconciler's existing duplicate rule includes this Member */
+export function appearsInDuplicates(
+  person: Person,
+  findings: Duplicate[],
+): boolean {
+  return findings.some((finding) =>
+    finding.people.some((candidate) => candidate.pageId === person.pageId),
+  );
+}
+
 function group(
   people: Person[],
   on: Duplicate["on"],
@@ -308,6 +318,38 @@ export type DiscordSuggestion = {
   person: Person;
   account: GuildAccount;
 };
+
+/** a linked Member whose database and current server names do not agree */
+export type DiscordNameMismatch = {
+  person: Person;
+  account: GuildAccount;
+};
+
+/**
+ * Linked Members whose current Discord display names differ from Notion.
+ *
+ * Deliberately exact after the shared normalization: decoration such as a fun
+ * nickname remains visible for an editor to notice, but this finding never
+ * decides or changes anything.
+ */
+export function mismatchedDiscordNames(
+  roster: Person[],
+  guild: GuildAccount[],
+): DiscordNameMismatch[] {
+  const accounts = new Map(guild.map((account) => [account.id, account]));
+
+  return roster.flatMap((person) => {
+    if (!person.discordId) return [];
+    const account = accounts.get(person.discordId);
+    if (
+      !account ||
+      normaliseName(person.name) === normaliseName(account.displayName)
+    )
+      return [];
+
+    return [{ person, account }];
+  });
+}
 
 /**
  * roster rows that could be linked to somebody already in the server.

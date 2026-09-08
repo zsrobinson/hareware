@@ -36,6 +36,14 @@ export type Person = {
     inside a window and has to keep reading articles for it
   */
   contributions: number;
+  /*
+    they left the announcements group on purpose, or asked not to be in it.
+
+    false for every row that has never said so, including one where the
+    property does not exist at all, because the group comparison offers to add
+    whoever it does not exclude and the safe direction is to offer
+  */
+  noAnnouncements: boolean;
 };
 
 /** a Meetings row, reduced likewise */

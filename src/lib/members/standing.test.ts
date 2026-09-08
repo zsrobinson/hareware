@@ -25,6 +25,7 @@ function person(over: Partial<Person> = {}): Person {
     email: null,
     status: "Undergrad",
     contributions: 0,
+  noAnnouncements: false,
     ...over,
   };
 }

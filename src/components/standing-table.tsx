@@ -9,6 +9,8 @@ import { Label } from "~/components/ui/label";
 import { Link } from "~/components/ui/link";
 import { Switch } from "~/components/ui/switch";
 import { duplicates } from "~/lib/members/match";
+import { MemberFace } from "~/components/member-face";
+import type { Faces } from "~/lib/faces";
 import type { Corpus } from "~/lib/members/roster";
 import {
   PRESETS,
@@ -114,7 +116,10 @@ function thresholds(form: Form): Thresholds {
  * one carried it. under AND every clause that was set had to pass, so there is
  * nothing to single out
  */
-function columnsFor(combine: Combine): ColumnDef<Standing, unknown>[] {
+function columnsFor(
+  combine: Combine,
+  faces: Faces,
+): ColumnDef<Standing, unknown>[] {
   const bold = combine === "or";
 
   return [
@@ -124,7 +129,14 @@ function columnsFor(combine: Combine): ColumnDef<Standing, unknown>[] {
       header: sortable("Name"),
       meta: { csvHeader: "name" },
       cell: ({ row }) => (
-        <div className="min-w-40 font-medium">{row.original.person.name}</div>
+        <div className="flex min-w-48 items-center gap-2.5">
+          <MemberFace
+            discordId={row.original.person.discordId}
+            name={row.original.person.name}
+            faces={faces}
+          />
+          <span className="font-medium">{row.original.person.name}</span>
+        </div>
       ),
     },
     /*
@@ -237,9 +249,12 @@ function count(
 export function StandingTable({
   corpus,
   today,
+  faces,
 }: {
   corpus: Corpus;
   today: string;
+  /** discord pictures, so a person is recognisable here as on the other pages */
+  faces: Faces;
 }) {
   const [presetId, setPresetId] = useState<string>(PRESETS[0]!.id);
   const [form, setForm] = useState<Form>(() => formFor(PRESETS[0]!, today));
@@ -269,7 +284,10 @@ export function StandingTable({
     [corpus, form],
   );
 
-  const columns = useMemo(() => columnsFor(form.combine), [form.combine]);
+  const columns = useMemo(
+    () => columnsFor(form.combine, faces),
+    [form.combine, faces],
+  );
 
   /* recomputed from the same roster the table is drawn from, so the warning
      cannot disagree with what is on screen */

@@ -12,9 +12,19 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { fireEvent } from "@testing-library/dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { Reconciler } from "./reconciler";
 import type { ReconcilerData } from "~/lib/members/views";
 import type { Person } from "~/lib/members/records";
+
+/*
+  imported per test, not once.
+
+  the query client is module scope in the app, because it has to outlive an
+  island that `<ClientRouter />` remounts on every navigation. Two tests
+  sharing this module share that cache, and `initialData` is only installed
+  under a key with no entry — so the second test would silently render the
+  first one's roster
+*/
+let Reconciler: typeof import("./reconciler").Reconciler;
 
 vi.mock("~/lib/notify", () => ({
   notify: { ok: vi.fn(), failed: vi.fn() },
@@ -26,6 +36,7 @@ const person = (fields: Partial<Person> & { pageId: string }): Person => ({
   email: null,
   status: "Undergrad",
   contributions: 0,
+  noAnnouncements: false,
   ...fields,
 });
 
@@ -50,7 +61,10 @@ ana@terpmail.umd.edu,Ana,2026-01-04
 graduated@gmail.com,Old Friend,2024-09-01
 `;
 
-beforeEach(() => {
+beforeEach(async () => {
+  vi.resetModules();
+  ({ Reconciler } = await import("./reconciler"));
+
   /* the page is seeded by its props and only refetches after a write, so
      nothing here should reach the network. A stub that throws says so loudly */
   vi.stubGlobal(
@@ -76,14 +90,16 @@ async function upload(csv: string) {
 }
 
 test("nothing is claimed about the group before a file is handed over", () => {
-  render(<Reconciler initial={initial} />);
+  render(<Reconciler initial={initial} faces={{}} />);
 
-  expect(screen.getByText("Nothing to compare yet.")).toBeTruthy();
+  expect(
+    screen.getByText("Choose an export to compare the roster against."),
+  ).toBeTruthy();
   expect(screen.queryByText(/already in the group/)).toBeNull();
 });
 
 test("somebody on the roster and not in the export is offered to paste", async () => {
-  render(<Reconciler initial={initial} />);
+  render(<Reconciler initial={initial} faces={{}} />);
   await upload(EXPORT);
 
   const blob = screen.getByLabelText(
@@ -91,29 +107,67 @@ test("somebody on the roster and not in the export is offered to paste", async (
   ) as HTMLTextAreaElement;
 
   expect(blob.value).toBe("ben@umd.edu");
-  expect(screen.getByText("Copy 1 addresses")).toBeTruthy();
+  expect(screen.getByText("Copy 1 address")).toBeTruthy();
+  /* the person, not only the address: an editor who recognises somebody who
+     left the group on purpose can only act on it if the name is on screen */
+  expect(screen.getByText("Ben Okafor")).toBeTruthy();
+});
+
+/*
+  the whole reason the roster carries a flag about this.
+
+  somebody who leaves the group on purpose looks exactly like somebody never
+  added, so without this the next comparison offers them again and one paste
+  undoes their decision
+*/
+test("somebody who opted out is left out of the paste, and said to be", async () => {
+  render(
+    <Reconciler
+      initial={{
+        ...initial,
+        roster: [
+          person({
+            pageId: "p1",
+            name: "Ana Diaz",
+            email: "ana@terpmail.umd.edu",
+          }),
+          person({
+            pageId: "p2",
+            name: "Ben Okafor",
+            email: "ben@umd.edu",
+            noAnnouncements: true,
+          }),
+        ],
+      }}
+      faces={{}}
+    />,
+  );
+  await upload(EXPORT);
+
+  expect(screen.queryByLabelText("Emails to paste into the group")).toBeNull();
+  expect(screen.getByText(/1 member asked not to be added/)).toBeTruthy();
 });
 
 /* the row nothing reaches. filtering these out before counting is the silent
    omission this page exists to end */
 test("a row with no address is named rather than counted as present", async () => {
-  render(<Reconciler initial={initial} />);
+  render(<Reconciler initial={initial} faces={{}} />);
   await upload(EXPORT);
 
-  expect(screen.getByText(/1 person with no email/)).toBeTruthy();
+  expect(screen.getByText(/1 member has no email address/)).toBeTruthy();
   expect(screen.getByText("Cass Lin")).toBeTruthy();
 });
 
 /* alumni, mostly — and typos, which look identical from here */
 test("an address in the group that no row claims is reported", async () => {
-  render(<Reconciler initial={initial} />);
+  render(<Reconciler initial={initial} faces={{}} />);
   await upload(EXPORT);
 
-  expect(screen.getByText(/1 address in the group match/)).toBeTruthy();
+  expect(screen.getByText(/1 address in the group/)).toBeTruthy();
 });
 
 test("an export holding everybody says so instead of offering a paste", async () => {
-  render(<Reconciler initial={initial} />);
+  render(<Reconciler initial={initial} faces={{}} />);
   await upload("ana@terpmail.umd.edu, ben@umd.edu");
 
   expect(
@@ -123,7 +177,7 @@ test("an export holding everybody says so instead of offering a paste", async ()
 
 /* the file is every member's address, and it is read where it was chosen */
 test("no request is made to compare a file", async () => {
-  render(<Reconciler initial={initial} />);
+  render(<Reconciler initial={initial} faces={{}} />);
   await upload(EXPORT);
 
   expect(fetch).not.toHaveBeenCalled();

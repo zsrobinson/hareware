@@ -7,6 +7,7 @@ import { admitted } from "~/lib/admin-guard";
 import { easternNow } from "~/lib/eastern";
 import { corpus, statusOptions, type Corpus } from "~/lib/members/roster";
 import { ALUM_STATUS, alumOptionMissing } from "~/lib/members/config";
+import { faces } from "~/lib/faces";
 
 /* Reaching this page is the permission: the guard already refused anybody it
    would not admit, and its lookup knows what to call them. */
@@ -28,6 +29,12 @@ Astro.response.headers.set("cache-control", "private, no-store");
 */
 const token = env.NOTION_TOKEN;
 const rows: Corpus | null = token ? await corpus(token) : null;
+
+/* the same pictures the kiosk and the reconciler draw. one request for the
+   whole guild, and initials for anybody with no linked account */
+const rosterFaces = await faces(
+  (rows?.people ?? []).map((person) => person.discordId),
+);
 
 /*
   the one place a renamed notion option could change who votes.
@@ -63,7 +70,12 @@ const today = easternNow(new Date()).date;
 
     {
       rows ? (
-        <StandingTable corpus={rows} today={today} client:load />
+        <StandingTable
+          corpus={rows}
+          today={today}
+          faces={rosterFaces}
+          client:load
+        />
       ) : (
         <p class="text-destructive text-sm">
           NOTION_TOKEN is not set, so there is nothing to count.

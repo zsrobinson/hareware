@@ -1,9 +1,13 @@
 import {
   AlertTriangleIcon,
+  AtSignIcon,
+  BellOffIcon,
   CheckIcon,
   ChevronDownIcon,
   CopyIcon,
   ExternalLinkIcon,
+  GraduationCapIcon,
+  MailIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "~/components/ui/badge";
@@ -30,8 +34,12 @@ import {
   GROUP_MEMBERS_URL,
   isExternalAddress,
 } from "~/lib/members/group";
+import { MemberEntry } from "~/components/member-entry";
+import { MemberFace } from "~/components/member-face";
+import type { Faces } from "~/lib/faces";
 import type { Resolution } from "~/lib/members/match";
 import { postJson } from "~/lib/post-json";
+import { plural } from "~/lib/utils";
 import type { Person } from "~/lib/members/records";
 import { rosterKeys } from "~/lib/members/query-keys";
 import { RosterQueries } from "~/lib/members/roster-queries";
@@ -54,8 +62,20 @@ import type { Application } from "~/lib/services/discord/join-requests";
  * by it. `/api/members/reconciler` answers the same type from the same
  * function, so what a refetch shows cannot differ in shape from first paint
  */
-type Props = { initial: ReconcilerData };
+type Props = {
+  initial: ReconcilerData;
+  /** discord pictures, so a person looks the same here as on the kiosk */
+  faces: Faces;
+};
 
+/**
+ * one heading and what is under it.
+ *
+ * the title says what the section is for in the words an editor would use, and
+ * `why` is the sentence under it rather than the only explanation: a heading
+ * that reads as a category — "Applications", "Duplicates" — makes somebody
+ * open the section to find out what it wants from them
+ */
 function Section({
   title,
   why,
@@ -77,50 +97,72 @@ function Section({
         <Badge variant={count > 0 ? "default" : "outline"}>{count}</Badge>
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-3 pt-3">
-        <p className="text-muted-foreground text-sm">{why}</p>
+        <p className="text-muted-foreground max-w-prose text-sm">{why}</p>
         {children}
       </CollapsibleContent>
     </Collapsible>
   );
 }
 
-/** a person, spelled the way a page deciding about them needs to see them */
-function Who({ person }: { person: Person }) {
+/**
+ * an applicant, drawn to line up with the roster rows beside them.
+ *
+ * they have no Members row yet, so there is no `Person` and no linked face —
+ * but the account is in the guild, and that picture is the one thing that
+ * makes an application recognisable as somebody the room knows
+ */
+function Applicant({
+  application,
+  faces,
+}: {
+  application: Application;
+  faces: Faces;
+}) {
+  const called = application.name ?? application.username;
+
   return (
-    <span>
-      <strong>{person.name}</strong>{" "}
-      <span className="text-muted-foreground text-sm">
-        {person.email ?? "no email"}
-        {person.discordId ? " · has a Discord ID" : " · no Discord ID"}
-        {person.status ? ` · ${person.status}` : ""}
-      </span>
-    </span>
+    <div className="flex min-w-0 flex-1 items-center gap-3">
+      <MemberFace
+        discordId={application.discordId}
+        name={called}
+        faces={faces}
+        size="default"
+      />
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="truncate font-medium">{called}</div>
+        <div className="flex flex-wrap items-center gap-1">
+          <Badge variant="outline">
+            <AtSignIcon />
+            {application.username}
+          </Badge>
+          <Badge variant={application.email ? "outline" : "destructive"}>
+            <MailIcon />
+            {application.email ?? "no email given"}
+          </Badge>
+          {/* the graduation year is read and deliberately never stored — ADR
+              0010 on why a kept one is wrong more often than it is useful */}
+          {application.gradYear && (
+            <Badge variant="outline">
+              <GraduationCapIcon />
+              says {application.gradYear}
+            </Badge>
+          )}
+          <Badge variant="outline">applied {application.applied}</Badge>
+        </div>
+      </div>
+    </div>
   );
 }
 
-function Applicant({ application }: { application: Application }) {
-  return (
-    <span>
-      <strong>{application.name ?? application.username}</strong>{" "}
-      <span className="text-muted-foreground text-sm">
-        {application.email ?? "no email given"} · applied {application.applied}
-        {/* the graduation year is read and deliberately never stored — ADR
-            0010 on why a kept one is wrong more often than it is useful */}
-        {application.gradYear ? ` · says ${application.gradYear}` : ""}
-      </span>
-    </span>
-  );
-}
-
-export function Reconciler({ initial }: Props) {
+export function Reconciler({ initial, faces }: Props) {
   return (
     <RosterQueries>
-      <Sections initial={initial} />
+      <Sections initial={initial} faces={faces} />
     </RosterQueries>
   );
 }
 
-function Sections({ initial }: Props) {
+function Sections({ initial, faces }: Props) {
   const {
     resolutions,
     duplicates,
@@ -213,53 +255,61 @@ function Sections({ initial }: Props) {
   return (
     <div className="space-y-10">
       <Section
-        title="Applications"
-        why="What the hourly sync would not decide on its own. A Link button means one row matches; without one, several rows could be this person, and the fix is to correct them in Notion."
+        title="Discord applicants waiting to be matched to a member"
+        why="They filled in the join form and the hourly sync would not decide who they are on its own. A Link button means exactly one row matches. Without one, several rows could be them, and the fix is to correct those rows in Notion first."
         count={linkable.length + ambiguous.length}
       >
         <div className="divide-y rounded-lg border">
           {linkable.length + ambiguous.length === 0 && (
-            <Empty>Nothing waiting.</Empty>
+            <Empty>Every applicant is already on a row.</Empty>
           )}
           {linkable.map((one) => {
             const key = `link:${one.application.id}`;
             return (
-              <div key={key} className="space-y-2 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Applicant application={one.application} />
-                  <Button
-                    size="sm"
-                    disabled={busy !== null || Boolean(said[key])}
-                    onClick={() =>
-                      void act(key, () =>
-                        postJson("/api/members/link", {
-                          applicationId: one.application.id,
-                          pageId: one.person.pageId,
-                        }),
-                      )
-                    }
+              <div key={key} className="space-y-3 p-4">
+                <Applicant application={one.application} faces={faces} />
+                <div className="border-l-2 pl-4">
+                  <MemberEntry
+                    person={one.person}
+                    faces={faces}
+                    note={`the only row with the same ${one.on}`}
                   >
-                    {busy === key ? "Linking…" : "Link"}
-                  </Button>
-                </div>
-                <div className="text-sm">
-                  → <Who person={one.person} />{" "}
-                  <Badge variant="outline">matched on {one.on}</Badge>
+                    <Button
+                      size="sm"
+                      disabled={busy !== null || Boolean(said[key])}
+                      onClick={() =>
+                        void act(key, () =>
+                          postJson("/api/members/link", {
+                            applicationId: one.application.id,
+                            pageId: one.person.pageId,
+                          }),
+                        )
+                      }
+                    >
+                      {busy === key ? "Linking…" : "This is them"}
+                    </Button>
+                  </MemberEntry>
                 </div>
                 {said[key] && <Note>{said[key]}</Note>}
               </div>
             );
           })}
           {ambiguous.map((one) => (
-            <div key={one.application.id} className="space-y-2 p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Applicant application={one.application} />
-                <Badge variant="destructive">{one.status}</Badge>
+            <div key={one.application.id} className="space-y-3 p-4">
+              <div className="flex flex-wrap items-start gap-2">
+                <Applicant application={one.application} faces={faces} />
+                <Badge variant="destructive">
+                  {one.status === "similar"
+                    ? "too close to call"
+                    : one.status === "conflicted"
+                      ? "two rows disagree"
+                      : "could be either"}
+                </Badge>
               </div>
-              <ul className="space-y-1 text-sm">
+              <ul className="space-y-3 border-l-2 pl-4">
                 {one.people.map((person) => (
                   <li key={person.pageId}>
-                    → <Who person={person} />
+                    <MemberEntry person={person} faces={faces} />
                   </li>
                 ))}
               </ul>
@@ -269,13 +319,15 @@ function Sections({ initial }: Props) {
       </Section>
 
       <Section
-        title="Rows that look like the same person twice"
-        why="Attendance split across two rows fails a threshold the person met. Merging cannot be undone from here: the row you keep gains the other's articles, images and attendance."
+        title="One person with two member rows"
+        why="Their attendance and bylines are split between the rows, so neither reaches a threshold they actually met. Merging cannot be undone from here: the row you keep gains the other's articles, images and attendance, and the other goes to Notion's trash."
         count={duplicates.length}
       >
         <div className="divide-y rounded-lg border">
           {duplicates.length === 0 && (
-            <Empty>No near-matches. The standing page can be trusted.</Empty>
+            <Empty>
+              Nobody appears twice, so the standing page can be trusted.
+            </Empty>
           )}
           {duplicates.map((pair) => (
             <div key={`${pair.on}:${pair.value}`} className="space-y-2 p-4">
@@ -288,12 +340,8 @@ function Sections({ initial }: Props) {
                 {pair.people.map((person) => {
                   const key = `merge:${person.pageId}`;
                   return (
-                    <li
-                      key={person.pageId}
-                      className="flex flex-wrap items-center justify-between gap-2 text-sm"
-                    >
-                      <Who person={person} />
-                      <div className="flex flex-wrap gap-2">
+                    <li key={person.pageId} className="space-y-1">
+                      <MemberEntry person={person} faces={faces}>
                         {/* one button per *other* row, so the choice of which
                             survives is made explicitly rather than by whichever
                             happened to be listed first */}
@@ -309,10 +357,10 @@ function Sections({ initial }: Props) {
                                 setMerging({ keep: person, drop: other })
                               }
                             >
-                              Keep this one, fold in {other.name}
+                              Keep this one
                             </Button>
                           ))}
-                      </div>
+                      </MemberEntry>
                       {said[key] && <Note>{said[key]}</Note>}
                     </li>
                   );
@@ -324,21 +372,19 @@ function Sections({ initial }: Props) {
       </Section>
 
       <Section
-        title="Members with no status"
-        why="The one field nothing can derive. An empty status is not a disqualification; the standing page flags these people rather than denying them."
+        title="Members nobody has said are undergrad, grad or alum"
+        why="Status is the one field nothing can work out on its own, and the voting rule turns on it. An empty one is not a disqualification: the standing page flags these people rather than denying them."
         count={unknownStatus.length}
       >
         <div className="divide-y rounded-lg border">
-          {unknownStatus.length === 0 && <Empty>Everybody has one.</Empty>}
+          {unknownStatus.length === 0 && (
+            <Empty>Every member has a status.</Empty>
+          )}
           {unknownStatus.map((person) => {
             const key = `status:${person.pageId}`;
             return (
-              <div
-                key={person.pageId}
-                className="flex flex-wrap items-center justify-between gap-2 p-4"
-              >
-                <Who person={person} />
-                <div className="flex flex-wrap items-center gap-2">
+              <div key={person.pageId} className="p-4">
+                <MemberEntry person={person} faces={faces}>
                   {statuses.map((status) => (
                     <Button
                       key={status}
@@ -358,8 +404,8 @@ function Sections({ initial }: Props) {
                       {status}
                     </Button>
                   ))}
-                  {said[key] && <Note>{said[key]}</Note>}
-                </div>
+                </MemberEntry>
+                {said[key] && <Note>{said[key]}</Note>}
               </div>
             );
           })}
@@ -367,50 +413,55 @@ function Sections({ initial }: Props) {
       </Section>
 
       <Section
-        title="Discord accounts nobody is linked to"
-        why="People who were already in the server when their row was made, so no application ever connected the two. Suggested only where one row and one account share a name."
+        title="Members already in the server whose row is not linked"
+        why="They were in the Discord before their row existed, so no application ever connected the two and their picture does not appear beside their name. Only offered where exactly one row and one account share a name."
         count={discordSuggestions.length}
       >
         <div className="divide-y rounded-lg border">
           {discordSuggestions.length === 0 && (
-            <Empty>
-              Everybody in the server is on the row that claims them.
-            </Empty>
+            <Empty>Nothing left to link by name.</Empty>
           )}
           {discordSuggestions.map(({ person, account }) => {
             const key = `discord:${person.pageId}`;
             return (
-              <div
-                key={key}
-                className="flex flex-wrap items-center justify-between gap-2 p-4"
-              >
-                <div>
-                  <Who person={person} />
-                  <div className="text-muted-foreground text-sm">
-                    looks like <strong>{account.username}</strong>
-                    {account.displayName !== account.username &&
-                      `, who the server shows as ${account.displayName}`}
-                  </div>
-                </div>
-                {said[key] ? (
-                  <Note>{said[key]}</Note>
-                ) : (
-                  <Button
-                    variant="outline"
-                    disabled={busy !== null}
-                    onClick={() =>
-                      void act(key, () =>
-                        postJson("/api/members/discord", {
-                          pageId: person.pageId,
-                          name: person.name,
-                          discordId: account.id,
-                        }),
-                      )
-                    }
-                  >
-                    Link
-                  </Button>
-                )}
+              <div key={key} className="space-y-2 p-4">
+                <MemberEntry
+                  person={person}
+                  faces={faces}
+                  note={
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      looks like
+                      <MemberFace
+                        discordId={account.id}
+                        name={account.displayName}
+                        faces={faces}
+                      />
+                      <strong>{account.username}</strong>
+                      {account.displayName !== account.username &&
+                        `, shown in the server as ${account.displayName}`}
+                    </span>
+                  }
+                >
+                  {!said[key] && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        void act(key, () =>
+                          postJson("/api/members/discord", {
+                            pageId: person.pageId,
+                            name: person.name,
+                            discordId: account.id,
+                          }),
+                        )
+                      }
+                    >
+                      Same person
+                    </Button>
+                  )}
+                </MemberEntry>
+                {said[key] && <Note>{said[key]}</Note>}
               </div>
             );
           })}
@@ -418,9 +469,9 @@ function Sections({ initial }: Props) {
       </Section>
 
       <Section
-        title="Google Group"
-        why="The group cannot be read or written by software, so it is compared by hand: export its members, hand the file over, and this says who on the roster is not in it."
-        count={diff ? diff.missing.length : roster.length}
+        title="Members missing from the announcements email group"
+        why="Google gives software no way to read or write this group, so it is compared by hand. Export its members from the link below, choose the file, and this lists who on the roster is not in it."
+        count={diff ? diff.missing.length : 0}
       >
         <div className="space-y-3 rounded-lg border p-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -437,7 +488,7 @@ function Sections({ initial }: Props) {
               htmlFor="group-export"
               className="text-muted-foreground text-sm font-normal"
             >
-              then Export CSV, and choose the file:
+              then Export CSV and choose the file:
             </Label>
             <Input
               id="group-export"
@@ -465,27 +516,33 @@ function Sections({ initial }: Props) {
           </p>
 
           {diff && diff.unreachable.length > 0 && (
-            <div className="border-destructive/50 bg-destructive/10 space-y-1 rounded-lg border p-3 text-sm">
-              <div className="flex items-center gap-2 font-medium">
-                <AlertTriangleIcon className="size-4" />
-                {diff.unreachable.length}{" "}
-                {diff.unreachable.length === 1 ? "person" : "people"} with no
-                email
+            <div className="border-destructive/50 bg-destructive/10 space-y-3 rounded-lg border p-3">
+              <div>
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <AlertTriangleIcon className="size-4" />
+                  {diff.unreachable.length}{" "}
+                  {diff.unreachable.length === 1
+                    ? "member has"
+                    : "members have"}{" "}
+                  no email address
+                </div>
+                <p className="text-muted-foreground text-sm">
+                  Nothing reaches them and no paste will fix it. Ask them for an
+                  address and put it on their row.
+                </p>
               </div>
-              <p className="text-muted-foreground">
-                Nothing reaches them, and nothing below is about them. Ask for
-                an address and put it on their row.
-              </p>
-              <ul className="list-inside list-disc">
+              <ul className="space-y-3">
                 {diff.unreachable.map((person) => (
-                  <li key={person.pageId}>{person.name}</li>
+                  <li key={person.pageId}>
+                    <MemberEntry person={person} faces={faces} />
+                  </li>
                 ))}
               </ul>
             </div>
           )}
 
           {!diff ? (
-            <Empty>Nothing to compare yet.</Empty>
+            <Empty>Choose an export to compare the roster against.</Empty>
           ) : emails.length === 0 ? (
             <Empty>Everybody with an address is already in the group.</Empty>
           ) : (
@@ -508,6 +565,44 @@ function Sections({ initial }: Props) {
                   </ul>
                 </div>
               )}
+
+              {/*
+                the people, not only their addresses. a blob of text is what
+                gets pasted, and it is also the one thing on this page nobody
+                can check: an editor who recognises a name as somebody who left
+                on purpose can only act on it if the name is on screen
+              */}
+              <ul className="divide-y rounded-lg border">
+                {diff.missing.map((person) => {
+                  const key = `mute:${person.pageId}`;
+                  return (
+                    <li key={person.pageId} className="space-y-1 p-3">
+                      <MemberEntry person={person} faces={faces}>
+                        {!said[key] && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={busy !== null}
+                            onClick={() =>
+                              void act(key, () =>
+                                postJson("/api/members/announcements", {
+                                  pageId: person.pageId,
+                                  name: person.name,
+                                  noAnnouncements: true,
+                                }),
+                              )
+                            }
+                          >
+                            <BellOffIcon className="size-4" />
+                            They opted out
+                          </Button>
+                        )}
+                      </MemberEntry>
+                      {said[key] && <Note>{said[key]}</Note>}
+                    </li>
+                  );
+                })}
+              </ul>
 
               <label className="sr-only" htmlFor="group-blob">
                 Emails to paste into the group
@@ -541,9 +636,24 @@ function Sections({ initial }: Props) {
                 ) : (
                   <CopyIcon className="size-4" />
                 )}
-                {copied ? "Copied" : `Copy ${emails.length} addresses`}
+                {copied
+                  ? "Copied"
+                  : `Copy ${plural(emails.length, "address", "addresses")}`}
               </Button>
             </>
+          )}
+
+          {/* the people the comparison deliberately does not offer. shown as a
+              count, because the point is that nobody has to do anything about
+              them — and shown at all, because a silent exclusion is how the
+              numbers stop adding up with nothing to explain why */}
+          {diff && diff.optedOut.length > 0 && (
+            <p className="text-muted-foreground text-sm">
+              {plural(diff.optedOut.length, "member")} asked not to be added,
+              and {diff.optedOut.length === 1 ? "is" : "are"} left out of the
+              list above. Untick No Announcements on their Notion row to offer
+              them again.
+            </p>
           )}
 
           {/* an address in the group that no row claims is how a typo in
@@ -551,10 +661,9 @@ function Sections({ initial }: Props) {
               had. A count, not a list to work through */}
           {diff && diff.strangers.length > 0 && (
             <p className="text-muted-foreground text-sm">
-              {diff.strangers.length} address
-              {diff.strangers.length === 1 ? "" : "es"} in the group match
-              nobody on the roster. Alumni, mostly — but a typo in a Notion
-              email looks the same from here.
+              {plural(diff.strangers.length, "address", "addresses")} in the
+              group match nobody on the roster. Alumni, mostly, though a typo in
+              a Notion email looks the same from here.
             </p>
           )}
         </div>

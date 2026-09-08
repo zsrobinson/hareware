@@ -291,11 +291,22 @@ the file is found by shape rather than by column name — Google has changed tho
 columns before, and a reader that looks for a column and finds none reports an
 empty group, which reads as "add everyone again" rather than as a failure.
 
-Three answers come back rather than one, because they need different things
-done about them: people to add, people with **no address at all** (nothing
-reaches them and no paste will fix it), and addresses in the group matching
-nobody on the roster. That last group is mostly alumni, and is reported rather
-than acted on because a typo in a Notion email looks exactly the same from here.
+Four answers come back rather than one, because each needs something different
+done about it: people to add, people with **no address at all** (nothing reaches
+them and no paste will fix it), addresses in the group matching nobody on the
+roster, and people who asked not to be added. That third group is mostly alumni,
+and is reported rather than acted on because a typo in a Notion email looks
+exactly the same from here.
+
+**Leaving the group has to be recordable, or the comparison undoes it.** Someone
+who leaves a mailing list on purpose is invisible to a diff: they look exactly
+like someone who was never added, so every export would offer them again and one
+paste would put them back. `Members` gains a **No Announcements** checkbox, set
+from a button beside their name on the reconciler, and they are then counted
+separately rather than silently skipped — a silent exclusion is how the numbers
+stop adding up with nothing on screen to explain why. Unticking it offers them
+again, because someone asking to come back is the other half of the same
+conversation.
 
 The list flags addresses outside `terpmail.umd.edu` and `umd.edu` — 7 of the 51
 today — because those do not auto-add and may need an invitation.

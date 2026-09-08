@@ -8,6 +8,7 @@ const person = (fields: Partial<Person> & { pageId: string }): Person => ({
   email: null,
   status: "Undergrad",
   contributions: 0,
+  noAnnouncements: false,
   ...fields,
 });
 
@@ -125,4 +126,61 @@ test("anything else is, including an address we do not have", () => {
   expect(isExternalAddress("bay@gmail.com")).toBe(true);
   expect(isExternalAddress("bay@cs.umd.edu")).toBe(true);
   expect(isExternalAddress(null)).toBe(true);
+});
+
+/*
+  the flag exists because a comparison cannot see an intention: somebody who
+  left the group on purpose is indistinguishable from somebody never added, so
+  without this every export would offer to add them back
+*/
+test("somebody who opted out is not offered, and is counted separately", () => {
+  const diff = compareToGroup(
+    [
+      person({ pageId: "p1", name: "Ana", email: "ana@terpmail.umd.edu" }),
+      person({
+        pageId: "p2",
+        name: "Ben",
+        email: "ben@umd.edu",
+        noAnnouncements: true,
+      }),
+    ],
+    new Set(["ana@terpmail.umd.edu"]),
+  );
+
+  expect(diff.missing).toEqual([]);
+  expect(diff.optedOut.map((one) => one.name)).toEqual(["Ben"]);
+});
+
+/* their address is still theirs, so it is not somebody else's stray entry */
+test("an opted-out member already in the group is mentioned nowhere", () => {
+  const diff = compareToGroup(
+    [
+      person({
+        pageId: "p1",
+        name: "Ben",
+        email: "ben@umd.edu",
+        noAnnouncements: true,
+      }),
+    ],
+    new Set(["ben@umd.edu"]),
+  );
+
+  expect(diff).toEqual({
+    missing: [],
+    unreachable: [],
+    optedOut: [],
+    strangers: [],
+  });
+});
+
+/* asking for an address is the only thing that can be done about a row with
+   none, whatever it says about announcements */
+test("a row with no address is unreachable rather than opted out", () => {
+  const diff = compareToGroup(
+    [person({ pageId: "p1", name: "Cass", noAnnouncements: true })],
+    new Set(),
+  );
+
+  expect(diff.unreachable.map((one) => one.name)).toEqual(["Cass"]);
+  expect(diff.optedOut).toEqual([]);
 });

@@ -4,6 +4,7 @@ import {
   MailIcon,
   PenLineIcon,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import { MemberFace } from "~/components/member-face";
 import { Badge } from "~/components/ui/badge";
 import type { Faces } from "~/lib/faces";
@@ -34,9 +35,27 @@ type Props = {
   faces: Faces;
   /** absent in the typeahead, which shows a name and a count and no chips */
   onEdit?: (field: EditableField) => void;
+  /**
+   * a line under the name, where the caller has something to say about *this*
+   * row that the row itself does not carry — which account it looks like, why
+   * it is being offered. Chips are what the row knows; this is what the page
+   * knows about it
+   */
+  note?: ReactNode;
+  /** buttons belonging to this row, drawn opposite the name */
+  children?: ReactNode;
 };
 
-export function MemberEntry({ person, faces, onEdit }: Props) {
+/**
+ * one person, drawn the same way wherever people are drawn.
+ *
+ * three pages show people, and each had grown its own spelling of it: the
+ * kiosk with a face and chips, the reconciler with a bold name and a
+ * middle-dot line of fields, the standing table with a name in one column and
+ * an email in another. Three answers to "who is this" that a reader has to
+ * learn separately, and only one of them showed a face
+ */
+export function MemberEntry({ person, faces, onEdit, note, children }: Props) {
   const credits = person.contributions > 0 && (
     <Badge variant="secondary">
       <PenLineIcon />
@@ -45,7 +64,7 @@ export function MemberEntry({ person, faces, onEdit }: Props) {
   );
 
   return (
-    <div className="flex min-w-0 items-center gap-3">
+    <div className="flex min-w-0 flex-1 items-center gap-3">
       <MemberFace
         discordId={person.discordId}
         name={person.name}
@@ -53,8 +72,9 @@ export function MemberEntry({ person, faces, onEdit }: Props) {
         size="default"
       />
 
-      <div className="min-w-0 space-y-1">
+      <div className="min-w-0 flex-1 space-y-1">
         <div className="truncate font-medium">{shownName(person)}</div>
+        {note && <div className="text-muted-foreground text-sm">{note}</div>}
 
         {onEdit ? (
           <div className="flex flex-wrap items-center gap-1">
@@ -84,9 +104,29 @@ export function MemberEntry({ person, faces, onEdit }: Props) {
             {credits}
           </div>
         ) : (
-          credits && <div className="flex items-center gap-1">{credits}</div>
+          /* no `onEdit` means a list somebody is scanning rather than a row
+             they have arrived at: their own fields, but nothing to press */
+          <div className="flex flex-wrap items-center gap-1">
+            {person.email && (
+              <Badge variant="outline">
+                <MailIcon />
+                {person.email}
+              </Badge>
+            )}
+            {person.status && (
+              <Badge variant="outline">
+                <GraduationCapIcon />
+                {person.status}
+              </Badge>
+            )}
+            {credits}
+          </div>
         )}
       </div>
+
+      {children && (
+        <div className="flex shrink-0 items-center gap-2">{children}</div>
+      )}
     </div>
   );
 }

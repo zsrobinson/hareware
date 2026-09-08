@@ -70,6 +70,7 @@ const initial: KioskData = {
     email: `${name.split(" ")[0]!.toLowerCase()}@terpmail.umd.edu`,
     status: "Undergrad",
     contributions: 0,
+    noAnnouncements: false,
   })),
   openingId: "m1",
   statuses: ["Undergrad", "Grad", "Alum"],

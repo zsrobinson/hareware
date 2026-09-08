@@ -6,6 +6,7 @@ import { viewerState } from "~/lib/admin";
 import { admitted } from "~/lib/admin-guard";
 import { reconcilerData } from "~/lib/members/views";
 import { ALUM_STATUS } from "~/lib/members/config";
+import { faces } from "~/lib/faces";
 
 /* Reaching this page is the permission: the guard already refused anybody it
    would not admit, and its lookup knows what to call them. */
@@ -23,6 +24,14 @@ Astro.response.headers.set("cache-control", "private, no-store");
   that a link, a merge or a status no longer needs the editor to reload
 */
 const data = await reconcilerData(env);
+
+/* the same pictures the kiosk draws, from the guild read `reconcilerData`
+   already made. A row with no linked account falls back to its initials, which
+   is also what a missing bot token gets */
+const rosterFaces = await faces([
+  ...data.roster.map((person) => person.discordId),
+  ...data.discordSuggestions.map((suggestion) => suggestion.account.id),
+]);
 ---
 
 <Dashboard title="Reconciler" viewer={viewerState(who)}>
@@ -52,6 +61,6 @@ const data = await reconcilerData(env);
       )
     }
 
-    <Reconciler initial={data} client:load />
+    <Reconciler initial={data} faces={rosterFaces} client:load />
   </div>
 </Dashboard>

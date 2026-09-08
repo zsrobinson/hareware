@@ -268,8 +268,10 @@ function Kiosk({ initial, today, faces, guild }: Props) {
         email: created.email,
         discordId: null,
         status: fields.status,
-        /* nobody has written anything under a row created a second ago */
+        /* nobody has written anything under a row created a second ago, and
+           nobody has opted out of anything either */
         contributions: 0,
+        noAnnouncements: false,
       };
 
       /* into the roster on screen too, so a second person with the same name
@@ -535,6 +537,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
                 email: null,
                 status: null,
                 contributions: 0,
+                noAnnouncements: false,
               };
               const name = shownName(person);
 

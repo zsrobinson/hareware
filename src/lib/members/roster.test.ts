@@ -290,9 +290,11 @@ test("a truncated attendee relation is read in full, not counted short", async (
                 id: "m1",
                 properties: {
                   Name: title("General Body"),
+                  /* the shape notion really answers with: the property id is
+                     already percent-encoded when it arrives */
                   Attendees: {
                     type: "relation",
-                    id: "a%3Ab",
+                    id: "c%3CLo",
                     relation: [{ id: "p1" }],
                     has_more: true,
                   },
@@ -326,8 +328,18 @@ test("a truncated attendee relation is read in full, not counted short", async (
   const [meeting] = await meetings("token");
 
   expect(meeting!.attendeeIds).toEqual(["p1", "p2", "p3"]);
-  /* the property's own id, url-encoded, rather than its name */
-  expect(asked[1]).toContain("/pages/m1/properties/a%253Ab");
+  /*
+    the id exactly as notion gave it, never encoded again.
+
+    measured against the real database: `c%3CLo` answers with the twelve
+    related pages, and `c%253CLo` — the same id through `encodeURIComponent` —
+    answers 200 with an empty list. An empty relation is the one wrong answer
+    that does no harm here and great harm in `recordAttendance`, which merges
+    against what notion holds: an empty answer for a meeting of thirty reads as
+    an empty room, and the next tap writes that back
+  */
+  expect(asked[1]).toContain("/pages/m1/properties/c%3CLo");
+  expect(asked[1]).not.toContain("c%253CLo");
 });
 
 /* the extra read is a whole round trip per meeting, so it happens only for the

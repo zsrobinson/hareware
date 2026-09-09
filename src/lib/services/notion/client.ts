@@ -265,8 +265,18 @@ export async function together<
  *
  * the property item endpoint is the documented way to the whole list, and it
  * pages. `property` is the property's own id from the page object, not its
- * name, and it is url-encoded because notion's ids for properties are
- * arbitrary short strings rather than uuids
+ * name, and it goes into the path **verbatim**.
+ *
+ * verbatim is load-bearing. notion hands these ids back already
+ * percent-encoded — `c%3CLo`, `%5CClH` — so encoding them again asks for a
+ * property that does not exist. Measured against the real database: the id as
+ * given answers with twelve related pages, and the same id put through
+ * `encodeURIComponent` answers `200` with an empty list. Not a 404, not an
+ * error; an empty relation.
+ *
+ * that shape is the worst one this could take. `recordAttendance` merges the
+ * device's list against what notion currently holds, so an empty answer for a
+ * meeting of thirty reads as an empty room, and the next tap writes that back
  */
 export async function relationIds(
   pageId: string,
@@ -278,7 +288,7 @@ export async function relationIds(
 
   do {
     const page = (await notion(
-      `pages/${pageId}/properties/${encodeURIComponent(property)}?page_size=100${
+      `pages/${pageId}/properties/${property}?page_size=100${
         cursor ? `&start_cursor=${encodeURIComponent(cursor)}` : ""
       }`,
       token,

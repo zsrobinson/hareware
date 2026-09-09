@@ -48,16 +48,17 @@ import { notify } from "~/lib/notify";
 import { postJson } from "~/lib/post-json";
 import { rosterKeys } from "~/lib/members/query-keys";
 
-const client = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 60_000,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-      retry: false,
+const createClient = () =>
+  new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 60_000,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        retry: false,
+      },
     },
-  },
-});
+  });
 
 type Props = {
   initial: ProfilePayload;
@@ -67,7 +68,9 @@ type Props = {
 };
 
 export function ProfilePortal(props: Props) {
-  client.setQueryData(profileKey(props.location ?? {}), props.initial);
+  /* A Worker isolate serves many members. Each mounted portal owns its cache
+     so one server render can never seed another member's profile query. */
+  const [client] = useState(createClient);
   return (
     <QueryClientProvider client={client}>
       <Portal {...props} />

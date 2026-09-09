@@ -74,22 +74,25 @@ test("an inverted date range is visible and never reaches the reader", async () 
   expect(profile.readProfilePayload).not.toHaveBeenCalled();
 });
 
-test("mutation authorization comes from the live viewer rather than the body", async () => {
+test("a regular member cannot select another profile in a read", async () => {
   admin.viewer.mockResolvedValue(who(false));
-  profile.mutateProfile.mockResolvedValue({
-    pageId: "self",
-    email: "bay@example.com",
-  });
-  await call(POST, "https://hareware.test/api/profile", {
+  const response = await call(
+    GET,
+    "https://hareware.test/api/profile?member=other",
+  );
+  expect(response.status).toBe(403);
+  expect(profile.readProfilePayload).not.toHaveBeenCalled();
+});
+
+test("a regular member cannot select another profile in a mutation", async () => {
+  admin.viewer.mockResolvedValue(who(false));
+  const response = await call(POST, "https://hareware.test/api/profile", {
     action: "email",
     value: "bay@example.com",
     selectedPageId: "other",
     editor: true,
     discordId: "84",
   });
-  expect(profile.mutateProfile).toHaveBeenCalledWith(
-    expect.anything(),
-    { discordId: "42", editor: false },
-    expect.objectContaining({ selectedPageId: "other" }),
-  );
+  expect(response.status).toBe(403);
+  expect(profile.mutateProfile).not.toHaveBeenCalled();
 });

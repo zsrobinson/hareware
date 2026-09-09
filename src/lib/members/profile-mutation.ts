@@ -69,12 +69,19 @@ export async function mutateProfile(
         (person) => person.discordId === actor.discordId,
       );
       if (linked.length > 1) throw new Error("Discord identity is ambiguous");
-      if (linked.length === 1)
+      if (linked.length === 1) {
+        subject = linked[0]!.pageId;
+        await audit(deps, {
+          outcome: "ok",
+          actor: actor.discordId,
+          summary: `profile creation found existing Member ${subject}`,
+        });
         return {
           action: "create",
-          pageId: linked[0]!.pageId,
+          pageId: subject,
           concurrent: true,
         };
+      }
       const options = await deps.statuses();
       if (!options.includes(intent.status))
         throw new Error(`${intent.status} is not a current Member status`);

@@ -137,9 +137,9 @@ mutation result, and one field's refresh must not revert another queued field.
    help affordances, toasts and race-safe query behavior.
 4. **Add editor inspection and Reconciler names.** Reuse the same profile view
    and pure matching logic, then test the regular-member refusal path.
-5. **Reshape navigation.** Move account actions into the header area and make
-   Admin tools role-aware on server-rendered and cached pages without leaking a
-   viewer into cached HTML.
+5. **Reshape navigation.** Add Home and signed-in Profile links, keep the
+   existing account footer, and make Admin tools role-aware on server-rendered
+   and cached pages without leaking a viewer into cached HTML.
 6. **Verify end to end.** Run generated binding types where needed, focused
    tests throughout, then Astro checking, lint, the complete test suite and
    formatting. Exercise responsive and keyboard behavior in the browser.

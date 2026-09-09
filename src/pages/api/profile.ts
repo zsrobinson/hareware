@@ -30,6 +30,8 @@ export const GET: APIRoute = async ({ request }) => {
     const url = new URL(request.url);
     const parsed = parseProfileLocation(url.searchParams);
     if (!parsed.valid) return json({ error: "invalid date range" }, 400);
+    if (parsed.location.member && !who.admin)
+      return json({ error: "only editors may select a Member" }, 403);
     return json(
       await readProfilePayload(profileReadDependencies(), {
         actorDiscordId: who.session.discordUserId,
@@ -53,6 +55,8 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ error: who ? who.denial : "signed-out" }, 401);
   try {
     const intent = parseIntent(await request.json());
+    if ("selectedPageId" in intent && intent.selectedPageId && !who.admin)
+      return json({ error: "only editors may select a Member" }, 403);
     return json({
       ok: true,
       ...(await mutateProfile(

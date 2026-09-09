@@ -114,6 +114,12 @@ click a link into a lie. And nothing about a role is served client-side any more
 — `/api/session.json` answers who you are and not what you may do, because no
 island needs to know.
 
+> **Amended 2026-09-09.** The member portal made the sidebar useful to regular
+> members and changed this narrow consequence. `/api/session.json` now returns
+> one coarse `admin` boolean so cached pages can show Admin tools only to the
+> Editorial Board. Authorization still happens independently on every guarded
+> request; the browser receives no role ids and its boolean grants no access.
+
 **The guard moved to middleware**, from a line at the top of each page. Three
 reasons, in the order they matter: the guard runs before any page's frontmatter,
 so the check cannot be forgotten; a refused request never executes the page, so

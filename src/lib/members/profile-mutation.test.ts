@@ -87,6 +87,13 @@ test("creation re-reads identity and returns a concurrent link instead of creati
     },
   );
   expect(deps.create).not.toHaveBeenCalled();
+  expect(deps.record).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outcome: "ok",
+      actor: "42",
+      summary: expect.stringContaining("now-linked"),
+    }),
+  );
   expect(result).toEqual({
     action: "create",
     pageId: "now-linked",

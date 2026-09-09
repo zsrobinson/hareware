@@ -284,6 +284,15 @@ export function appearsInDuplicates(
   );
 }
 
+/** Whether a proposed Member name uses the Reconciler's exact name signal. */
+export function possibleDuplicateName(name: string, people: Person[]): boolean {
+  const proposed = normaliseName(name);
+  return (
+    Boolean(proposed) &&
+    people.some((person) => normaliseName(person.name) === proposed)
+  );
+}
+
 function group(
   people: Person[],
   on: Duplicate["on"],

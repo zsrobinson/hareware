@@ -1,8 +1,11 @@
-import { normaliseName } from "~/lib/articles/member";
-import { duplicates, nearName } from "./match";
+import {
+  appearsInDuplicates,
+  duplicates,
+  possibleDuplicateName,
+} from "./match";
 import type { Profile } from "~/lib/member";
 import type { ContributionRecord, MeetingRecord, Person } from "./records";
-import { corpus, type Corpus } from "./roster";
+import type { Corpus } from "./roster";
 
 export type ProfileRange = { from?: string; to?: string };
 export type ProfileRequest = ProfileRange & {
@@ -69,13 +72,10 @@ export async function readProfile(
     person = linked[0];
   }
   if (!person) {
-    const proposed = normaliseName(request.actorDisplayName ?? "");
-    const possibleDuplicate =
-      Boolean(proposed) &&
-      records.people.some((candidate) => {
-        const existing = normaliseName(candidate.name);
-        return existing === proposed || nearName(existing, proposed);
-      });
+    const possibleDuplicate = possibleDuplicateName(
+      request.actorDisplayName ?? "",
+      records.people,
+    );
     return { status: "unlinked", possibleDuplicate };
   }
 
@@ -100,8 +100,9 @@ export async function readProfile(
         ]
       : [];
   });
-  const possibleDuplicate = duplicates(records.people).some((group) =>
-    group.people.some((candidate) => candidate.pageId === person.pageId),
+  const possibleDuplicate = appearsInDuplicates(
+    person,
+    duplicates(records.people),
   );
   const discordNickname = request.selectedPageId
     ? person.discordId
@@ -148,6 +149,3 @@ export async function readProfilePayload(
     };
   }
 }
-
-export const loadProfile = (token: string, request: ProfileRequest) =>
-  readProfile({ corpus: () => corpus(token) }, request);

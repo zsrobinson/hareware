@@ -195,6 +195,7 @@ export function SidebarAccount({
           width={28}
           height={28}
           className="size-7 shrink-0 rounded-full object-cover"
+          /* Discord's CDN needs no credentials and should not receive any. */
           referrerPolicy="no-referrer"
         />
       ) : (

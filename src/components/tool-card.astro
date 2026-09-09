@@ -1,0 +1,22 @@
+---
+import type { NavItem } from "~/lib/nav";
+
+type Props = { item: NavItem };
+const { item } = Astro.props;
+const Icon = item.icon;
+---
+
+<a
+  href={item.href}
+  class="group border-border bg-card hover:border-foreground/25 hover:bg-accent/40 focus-visible:ring-ring flex min-h-32 flex-col rounded-xl border p-5 transition-colors outline-none focus-visible:ring-2"
+>
+  <div
+    class="bg-muted text-muted-foreground group-hover:text-foreground mb-5 flex size-9 items-center justify-center rounded-lg transition-colors"
+  >
+    <Icon className="size-4.5" />
+  </div>
+  <h3 class="text-sm font-semibold">{item.label}</h3>
+  <p class="text-muted-foreground mt-1 text-sm leading-relaxed">
+    {item.description}
+  </p>
+</a>

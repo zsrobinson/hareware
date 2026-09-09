@@ -46,9 +46,8 @@ test("signed-in navigation links the Discord identity to the profile", () => {
 
   render(<SidebarAccount returnTo="/words" />);
 
-  expect(
-    screen.getByRole("link", { name: /Ana Diaz/ }).getAttribute("href"),
-  ).toBe("/profile");
+  expect(screen.getByText("Ana Diaz")).toBeTruthy();
+  expect(screen.queryByRole("link", { name: /Ana Diaz/ })).toBeNull();
   expect(screen.queryByRole("link", { name: /sign in/i })).toBeNull();
 });
 
@@ -57,12 +56,19 @@ test("mobile navigation shows admin tools only to Editorial Board", () => {
   const { rerender } = render(<SidebarGroups pathname="/words" />);
 
   expect(screen.getByText("Public tools")).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
+  expect(screen.queryByRole("link", { name: "Profile" })).toBeNull();
   expect(screen.queryByText("Admin tools")).toBeNull();
 
-  viewer = { session: null, profile: null, admin: true };
+  viewer = {
+    session: { discordUserId: "42" },
+    profile: null,
+    admin: true,
+  };
   rerender(<SidebarGroups pathname="/words" />);
 
   expect(screen.getByText("Admin tools")).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Profile" })).toBeTruthy();
 });
 
 test("an unresolved cached page renders no personalized navigation", () => {

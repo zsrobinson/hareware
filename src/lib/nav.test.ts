@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { expect, test } from "vitest";
 import { ADMIN_ROUTES, isAdminPath } from "./admin-routes";
-import { adminNav, isActive, toolsNav } from "./nav";
+import { adminNav, isActive, primaryNav, toolsNav } from "./nav";
 
 /*
   Nothing about a url says which tools need the role, so `ADMIN_ROUTES` says it
@@ -52,6 +52,16 @@ test("every admin page asks the guard who it is rendering for", () => {
 test("no public tool is sitting on a guarded route", () => {
   for (const item of toolsNav) {
     expect(isAdminPath(item.href)).toBe(false);
+  }
+});
+
+test("the primary navigation starts with home and keeps profile separate", () => {
+  expect(primaryNav.map((item) => item.href)).toEqual(["/", "/profile"]);
+});
+
+test("every tool has copy for the home directory", () => {
+  for (const item of [...toolsNav, ...adminNav]) {
+    expect(item.description.trim().length).toBeGreaterThan(20);
   }
 });
 

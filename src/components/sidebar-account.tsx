@@ -53,15 +53,13 @@ const versionHref = commit
 
 /* the same menu either side of signing in, so the one thing in it stays
    reachable whether or not anyone is signed in yet */
-export function SidebarMenu({
-  viewer: knownByServer,
+function AccountMenu({
+  signedIn,
   returnTo,
 }: {
-  viewer?: ViewerState | null;
+  signedIn: boolean;
   returnTo: string;
 }) {
-  const { session } = useViewer(knownByServer);
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -72,8 +70,8 @@ export function SidebarMenu({
         <span className="sr-only">More</span>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent side="bottom" align="end" className="min-w-48">
-        {session ? (
+      <DropdownMenuContent side="top" align="end" className="min-w-48">
+        {signedIn ? (
           /*
             a <button> sizes to its own text even as a flex container, where an
             <a> fills the row. both widths are needed for this item to
@@ -143,7 +141,10 @@ export function SidebarAccount({
   /* the sheet is only ever open at full width, so it never collapses. the rail
      has no room for a row, so the menu sits under what it belongs to */
   const railHidden = inSheet ? "" : "group-data-[state=collapsed]/shell:hidden";
-  const row = "px-2 pb-2";
+  const row = cn(
+    "border-sidebar-border flex items-center gap-2 border-t p-2",
+    !inSheet && "group-data-[state=collapsed]/shell:flex-col",
+  );
 
   if (!session) {
     /*
@@ -159,7 +160,7 @@ export function SidebarAccount({
           href={signInHref}
           title="Sign in with Discord"
           className={cn(
-            "flex h-9 min-w-0 items-center justify-center gap-2 rounded-md bg-[#5865F2] px-2 text-sm font-medium text-white transition-colors hover:bg-[#4752c4]",
+            "flex h-9 min-w-0 flex-1 items-center justify-center gap-2 rounded-md bg-[#5865F2] text-sm font-medium text-white transition-colors hover:bg-[#4752c4]",
             /*
               the rail stacks this row, and `flex-1` in a column grows down
               rather than across, which would leave a tall blue slab. at rail
@@ -174,6 +175,8 @@ export function SidebarAccount({
             Sign in with Discord
           </span>
         </a>
+
+        <AccountMenu signedIn={false} returnTo={returnTo} />
       </div>
     );
   }
@@ -185,34 +188,31 @@ export function SidebarAccount({
   */
   return (
     <div className={row}>
-      <a
-        href="/profile"
-        className="hover:bg-sidebar-accent flex h-10 min-w-0 items-center gap-2 rounded-md px-2 transition-colors group-data-[state=collapsed]/shell:justify-center group-data-[state=collapsed]/shell:px-0"
-      >
-        {profile ? (
-          <img
-            src={profile.avatarUrl}
-            alt=""
-            width={28}
-            height={28}
-            className="size-7 shrink-0 rounded-full object-cover"
-            referrerPolicy="no-referrer"
-          />
-        ) : (
-          <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#5865F2] text-white">
-            <DiscordMark className="size-3.5" />
-          </div>
-        )}
-
-        <div className={cn("min-w-0 flex-1 leading-tight", railHidden)}>
-          <div className="truncate text-sm font-medium">
-            {profile?.displayName ?? "Profile"}
-          </div>
-          <div className="text-sidebar-foreground/50 truncate text-xs">
-            {profile ? `@${profile.username}` : "View profile"}
-          </div>
+      {profile ? (
+        <img
+          src={profile.avatarUrl}
+          alt=""
+          width={28}
+          height={28}
+          className="size-7 shrink-0 rounded-full object-cover"
+          referrerPolicy="no-referrer"
+        />
+      ) : (
+        <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#5865F2] text-white">
+          <DiscordMark className="size-3.5" />
         </div>
-      </a>
+      )}
+
+      <div className={cn("min-w-0 flex-1 leading-tight", railHidden)}>
+        <div className="truncate text-sm font-medium">
+          {profile?.displayName ?? "Signed in with Discord"}
+        </div>
+        <div className="text-sidebar-foreground/50 truncate text-xs">
+          {profile ? `@${profile.username}` : `ID ${session.discordUserId}`}
+        </div>
+      </div>
+
+      <AccountMenu signedIn returnTo={returnTo} />
     </div>
   );
 }

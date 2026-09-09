@@ -1,5 +1,5 @@
 ---
-import { SidebarAccount, SidebarMenu } from "~/components/sidebar-account";
+import { SidebarAccount } from "~/components/sidebar-account";
 import { SidebarGroups } from "~/components/sidebar-sheet";
 import type { ViewerState } from "~/lib/admin";
 
@@ -23,31 +23,26 @@ const { viewer, pathname, returnTo } = Astro.props;
       name is what goes when the rail narrows. the mark has to be 1:1 to
       survive that: a wide wordmark scaled to the rail is unreadable */
   }
-  <div
-    class="m-2 flex shrink-0 items-center gap-1 group-data-[state=collapsed]/shell:m-1.5 group-data-[state=collapsed]/shell:flex-col"
+  <a
+    href="/"
+    class="hover:bg-sidebar-accent m-2 flex shrink-0 items-center gap-2 rounded-lg p-1.5 transition-colors group-data-[state=collapsed]/shell:m-1.5"
   >
-    <a
-      href="/"
-      class="hover:bg-sidebar-accent flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1.5 transition-colors group-data-[state=collapsed]/shell:flex-none"
+    <img
+      src="/bot-logo.svg"
+      alt=""
+      width="28"
+      height="28"
+      class="size-7 shrink-0 rounded-md"
+    />
+    <span
+      class="truncate text-sm font-semibold group-data-[state=collapsed]/shell:hidden"
+      >HareWare</span
     >
-      <img
-        src="/bot-logo.svg"
-        alt=""
-        width="28"
-        height="28"
-        class="size-7 shrink-0 rounded-md"
-      />
-      <span
-        class="truncate text-sm font-semibold group-data-[state=collapsed]/shell:hidden"
-        >HareWare</span
-      >
-    </a>
-    <SidebarMenu client:idle viewer={viewer} returnTo={returnTo} />
-  </div>
-
-  <SidebarAccount client:idle viewer={viewer} returnTo={returnTo} />
+  </a>
 
   <nav class="flex flex-1 flex-col gap-4 overflow-y-auto p-3 pt-1">
     <SidebarGroups client:idle pathname={pathname} viewer={viewer} />
   </nav>
+
+  <SidebarAccount client:idle viewer={viewer} returnTo={returnTo} />
 </aside>

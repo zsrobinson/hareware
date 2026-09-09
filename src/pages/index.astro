@@ -1,4 +1,45 @@
 ---
-/* the front door is the tool people actually came for */
-return Astro.redirect("/generate", 302);
+import ToolCard from "~/components/tool-card.astro";
+import Dashboard from "~/layouts/dashboard.astro";
+import { viewer, viewerState } from "~/lib/admin";
+import { adminNav, toolsNav } from "~/lib/nav";
+
+export const prerender = false;
+
+Astro.response.headers.set("cache-control", "private, no-store");
+const who = viewerState(await viewer(Astro.request));
 ---
+
+<Dashboard title="Home" viewer={who} width="wide">
+  <div class="mb-8 max-w-2xl">
+    <h2 class="text-2xl font-semibold tracking-tight">Tools for The Hare</h2>
+    <p class="text-muted-foreground mt-2 leading-relaxed">
+      Publishing tools are open to everyone. Club records and Discord controls
+      are available to the Editorial Board.
+    </p>
+  </div>
+
+  <section aria-labelledby="public-tools-heading">
+    <h2 id="public-tools-heading" class="mb-3 text-sm font-semibold">
+      Public tools
+    </h2>
+    <div class="grid gap-3 sm:grid-cols-2">
+      {toolsNav.map((item) => <ToolCard item={item} />)}
+    </div>
+  </section>
+
+  {
+    who.admin && (
+      <section class="mt-8" aria-labelledby="admin-tools-heading">
+        <h2 id="admin-tools-heading" class="mb-3 text-sm font-semibold">
+          Admin tools
+        </h2>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {adminNav.map((item) => (
+            <ToolCard item={item} />
+          ))}
+        </div>
+      </section>
+    )
+  }
+</Dashboard>

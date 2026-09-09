@@ -77,18 +77,17 @@ and logging still identify the editor.
 
 ## Sidebar
 
-Move account actions out of the footer. Beside the HareWare mark and title,
-place the existing overflow menu. Between the brand row and navigation groups,
-show exactly one account action:
+Keep the existing account footer unchanged: Discord sign-in when signed out,
+and the member's Discord identity plus account menu when signed in. At the top
+of navigation, show an ungrouped **Home** link and, when signed in, an ungrouped
+**Profile** link. Below those, render **Public tools** for everyone and **Admin
+tools** only for an Editorial Board member. The collapsed rail and mobile sheet
+preserve the same information hierarchy.
 
-- signed out: a compact purple **Sign in with Discord** button;
-- signed in: a regular profile link showing the Discord identity and leading
-  to `/profile`.
-
-Below it, render **Public tools** for everyone and **Admin tools** only for an
-Editorial Board member. The collapsed rail and mobile sheet preserve the same
-information hierarchy. Cached public pages still resolve account and admin
-navigation client-side without placing personalized markup in shared HTML.
+`/` is a tool directory. It presents the public tools as cards, followed by the
+admin tools for an Editorial Board member. Card icons, titles, destinations and
+descriptions come from the same navigation registry as the sidebar, so the two
+surfaces cannot quietly drift apart.
 
 ## Reconciler
 

@@ -1,6 +1,6 @@
 import { ChevronDownIcon } from "lucide-react";
 import { NavGroup } from "~/components/nav-group";
-import { SidebarAccount, SidebarMenu } from "~/components/sidebar-account";
+import { SidebarAccount } from "~/components/sidebar-account";
 import {
   Sheet,
   SheetContent,
@@ -8,7 +8,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "~/components/ui/sheet";
-import { adminNav, toolsNav } from "~/lib/nav";
+import { adminNav, primaryNav, toolsNav } from "~/lib/nav";
 import type { ViewerState } from "~/lib/admin";
 import { useViewer } from "~/lib/use-session";
 
@@ -23,6 +23,10 @@ export function SidebarGroups({
 
   return (
     <>
+      <NavGroup
+        items={resolved.session ? primaryNav : primaryNav.slice(0, 1)}
+        pathname={pathname}
+      />
       <NavGroup items={toolsNav} pathname={pathname} label="Public tools" />
       {resolved.admin ? (
         <NavGroup items={adminNav} pathname={pathname} label="Admin tools" />
@@ -68,26 +72,23 @@ export function SidebarSheet({
         {/* the same mark and name the sidebar wears, so the drawer reads as
             the same thing rather than a second design */}
         <SheetHeader className="px-3.5 pt-3.5 pb-0">
-          <div className="flex items-center gap-1">
-            <SheetTitle className="flex min-w-0 flex-1 items-center gap-2 text-sm">
-              <img
-                src="/bot-logo.svg"
-                alt=""
-                width={28}
-                height={28}
-                className="size-7 shrink-0 rounded-md"
-              />
-              HareWare
-            </SheetTitle>
-            <SidebarMenu viewer={viewer} returnTo={returnTo} />
-          </div>
+          <SheetTitle className="flex items-center gap-2 text-sm">
+            <img
+              src="/bot-logo.svg"
+              alt=""
+              width={28}
+              height={28}
+              className="size-7 shrink-0 rounded-md"
+            />
+            HareWare
+          </SheetTitle>
         </SheetHeader>
-
-        <SidebarAccount viewer={viewer} returnTo={returnTo} inSheet />
 
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
           <SidebarGroups pathname={pathname} viewer={viewer} />
         </nav>
+
+        <SidebarAccount viewer={viewer} returnTo={returnTo} inSheet />
       </SheetContent>
     </Sheet>
   );

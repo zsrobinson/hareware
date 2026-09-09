@@ -20,7 +20,7 @@ import {
   requireText,
   rosterRoute,
 } from "~/lib/members/api";
-import { statusOptions } from "~/lib/members/roster";
+import { people, statusOptions } from "~/lib/members/roster";
 import { createMember } from "~/lib/members/write";
 
 export const prerender = false;
@@ -30,8 +30,11 @@ export const POST = rosterRoute(
     name: requireText(body, "name"),
     email: requireText(body, "email"),
     status: optionalText(body, "status"),
+    /* the kiosk creates people who have no Discord account yet; the reconciler
+       creates them from an application, which is nothing but an account */
+    discordId: optionalText(body, "discordId"),
   }),
-  async ({ name, email, status }) => {
+  async ({ name, email, status, discordId }) => {
     /* checked against the live options for the reason `status.ts` gives: a
        notion select accepts a name it has never seen and adds it */
     if (status) {
@@ -43,14 +46,32 @@ export const POST = rosterRoute(
       }
     }
 
+    /*
+      refused rather than overwritten, the same way `discord.ts` refuses it
+      from the other side: two rows carrying one snowflake is precisely the
+      duplicate the reconciler exists to find, and making one here would be
+      making work
+    */
+    if (discordId) {
+      const taken = (await people(env.NOTION_TOKEN!)).find(
+        (person) => person.discordId === discordId,
+      );
+      if (taken) {
+        throw new BadRequest(
+          `${taken.name} already has that Discord account, so this application belongs to their row`,
+        );
+      }
+    }
+
     const pageId = await createMember(env, {
       name,
       email,
       ...(status ? { status } : {}),
+      ...(discordId ? { discordId } : {}),
     });
 
     return {
-      summary: `created a Members row for ${name} from the kiosk`,
+      summary: `created a Members row for ${name}`,
       /* returned so the kiosk can mark them present without re-reading the
          roster — the person is standing at the laptop waiting */
       data: { pageId, name, email },

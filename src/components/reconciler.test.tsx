@@ -9,7 +9,13 @@
   diff reaches the screen is to hand a page a file and read what it says.
 */
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { fireEvent } from "@testing-library/dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { ReconcilerData } from "~/lib/members/views";
@@ -81,6 +87,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/*
+  a row can be in more than one section at once, and usually is: somebody with
+  no Discord account and a gmail address is work in two places. So every query
+  about a list says which section it means
+*/
+function section(title: string) {
+  return screen.getByRole("heading", { name: title }).closest("section")!;
+}
+
 /** hands the page an export, the way the file picker does */
 async function upload(csv: string) {
   const input = screen.getByLabelText(/Export CSV/);
@@ -93,10 +108,11 @@ async function upload(csv: string) {
 test("nothing is claimed about the group before a file is handed over", () => {
   render(<Reconciler initial={initial} faces={{}} />);
 
-  expect(
-    screen.getByText("Choose an export to compare the roster against."),
-  ).toBeTruthy();
-  expect(screen.queryByText(/already in the group/)).toBeNull();
+  /* the picker is still there, which is the point: a section that hid itself
+     when it had nothing to report would hide the only control that produces a
+     report */
+  expect(screen.getByLabelText(/Export CSV/)).toBeTruthy();
+  expect(screen.queryByText(/in the group/)).toBeNull();
 });
 
 test("somebody on the roster and not in the export is offered to paste", async () => {
@@ -111,7 +127,9 @@ test("somebody on the roster and not in the export is offered to paste", async (
   expect(screen.getByText("Copy 1 address")).toBeTruthy();
   /* the person, not only the address: an editor who recognises somebody who
      left the group on purpose can only act on it if the name is on screen */
-  expect(screen.getByText("Ben Okafor")).toBeTruthy();
+  expect(
+    within(section("Missing from Google Group")).getByText("Ben Okafor"),
+  ).toBeTruthy();
 });
 
 /*
@@ -159,12 +177,18 @@ test("a row with no address is counted against the group, not listed twice", asy
   await upload(EXPORT);
 
   expect(screen.getByText(/1 member has no address at all/)).toBeTruthy();
-  expect(screen.getAllByText("Cass Lin")).toHaveLength(1);
+  /* counted beside the group, and named once under Missing email field */
+  expect(
+    within(section("Missing from Google Group")).queryByText("Cass Lin"),
+  ).toBeNull();
+  expect(
+    within(section("Missing email field")).getByText("Cass Lin"),
+  ).toBeTruthy();
 });
 
 /* the three ways an address can be unusable, in one section: the two that are
    wrong counted in the heading, and the merely empty ones below them */
-test("addresses that cannot be right are separated from the ones merely missing", () => {
+test("an unusable address and an outside one share a section", () => {
   render(
     <Reconciler
       initial={{
@@ -183,11 +207,14 @@ test("addresses that cannot be right are separated from the ones merely missing"
     />,
   );
 
-  expect(screen.getByText(/1 address that cannot be delivered/)).toBeTruthy();
-  expect(
-    screen.getByText(/1 address outside terpmail.umd.edu and umd.edu/),
-  ).toBeTruthy();
-  expect(screen.getByText(/1 member with no address at all/)).toBeTruthy();
+  /* one section for both, because the fix and the question are the same */
+  const wrong = within(section("Incorrect email domain"));
+
+  expect(wrong.getByText("Typo Person")).toBeTruthy();
+  expect(wrong.getByText("Dud Row")).toBeTruthy();
+  /* and the one that is not an address at all says so, since "gmail" and
+     "not an address" are the same section but not the same problem */
+  expect(wrong.getByText("not an address at all")).toBeTruthy();
 });
 
 /* a row carrying nothing at all is import residue, and saying so beside the
@@ -241,7 +268,7 @@ test("an export holding everybody says so instead of offering a paste", async ()
   await upload("ana@terpmail.umd.edu, ben@umd.edu");
 
   expect(
-    screen.getByText("Everybody with an address is already in the group."),
+    screen.getByText("Everybody with an address is in the group"),
   ).toBeTruthy();
 });
 
@@ -251,4 +278,73 @@ test("no request is made to compare a file", async () => {
   await upload(EXPORT);
 
   expect(fetch).not.toHaveBeenCalled();
+});
+
+/*
+  the questions are found by looking for "name" and "email" anywhere in the
+  label. Rewording one survives that; deleting one does not, and then every
+  application answers null at once. The cron refuses to create rows from those,
+  so the page has to be able to.
+*/
+test("an application the form gave nothing for is added by hand", async () => {
+  const posted: { path: string; body: Record<string, unknown> }[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (path: string, init?: RequestInit) => {
+      posted.push({
+        path: String(path),
+        body: JSON.parse(
+          typeof init?.body === "string" ? init.body : "{}",
+        ) as Record<string, unknown>,
+      });
+      return new Response(JSON.stringify({ summary: "created a row" }), {
+        headers: { "content-type": "application/json" },
+      });
+    }),
+  );
+
+  render(
+    <Reconciler
+      initial={{
+        ...initial,
+        resolutions: [
+          {
+            status: "incomplete",
+            missing: ["name", "email"],
+            application: {
+              id: "a1",
+              discordId: "d1",
+              username: "someone",
+              name: null,
+              email: null,
+              gradYear: null,
+              applied: "2026-09-08",
+            },
+          },
+        ],
+      }}
+      faces={{}}
+    />,
+  );
+
+  expect(screen.getByText("the form gave no name or email")).toBeTruthy();
+
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Ada Vance" },
+  });
+  fireEvent.change(screen.getByLabelText("Email"), {
+    target: { value: "ada@terpmail.umd.edu" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Add member" }));
+
+  await waitFor(() => expect(posted).not.toHaveLength(0));
+
+  /* the snowflake goes with it, so the row is linked by the same write that
+     creates it and no second pass has to match them up */
+  expect(posted[0]!.path).toBe("/api/members/create");
+  expect(posted[0]!.body).toMatchObject({
+    name: "Ada Vance",
+    email: "ada@terpmail.umd.edu",
+    discordId: "d1",
+  });
 });

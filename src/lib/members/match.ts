@@ -52,6 +52,21 @@ export type Resolution =
    * attendance and can cost them a vote. So the cron stops and a person decides
    */
   | { status: "similar"; application: Application; people: Person[] }
+  /**
+   * the form did not give us a name or an email, so there is nothing to match
+   * on and nothing to write.
+   *
+   * the questions are found by looking for "name" and "email" anywhere in the
+   * label, which survives most rewordings — but not all of them, and not a
+   * question that gets deleted. When that happens every application answers
+   * `null` at once, and the cron would create a row per applicant named by
+   * their Discord handle with no address on it: fifty rows nobody can match to
+   * anybody, made silently, at the top of the hour.
+   *
+   * so it stops and asks. The reconciler shows what the applicant actually
+   * typed and takes the row from a person instead
+   */
+  | { status: "incomplete"; application: Application; missing: string[] }
   /** nothing matches at all, so a new row is safe */
   | { status: "new"; application: Application }
   /** more than one row carries this snowflake, which is never safe to act on */
@@ -87,6 +102,16 @@ export function resolveApplication(
 
   const email = normaliseEmail(application.email);
   const name = normaliseName(application.name ?? "");
+
+  /*
+    after the id checks, because a row already carrying this snowflake is a
+    complete answer whatever the form said, and before everything else,
+    because the rest of this function has nothing to work with
+  */
+  const missing = [!name && "name", !email && "email"].filter(
+    (one): one is string => Boolean(one),
+  );
+  if (missing.length > 0) return { status: "incomplete", application, missing };
 
   const emailMatches = email
     ? free.filter((person) => normaliseEmail(person.email) === email)
@@ -225,6 +250,10 @@ function creatable(resolution: Resolution): boolean {
     case "similar":
     case "ambiguous":
     case "conflicted":
+      return false;
+    /* not a collision, but the same answer: a row made from this would carry
+       no address and a name nobody chose */
+    case "incomplete":
       return false;
   }
 }

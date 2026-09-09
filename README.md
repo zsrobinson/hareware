@@ -296,8 +296,16 @@ error, which surfaces on the reconciler and in the `#carl-bot` alert.
 
 Membership screening with manual approval has to stay switched on. There is no
 webhook when an editor approves somebody, which is why the sync polls, and it
-reads the whole approved list every time rather than keeping a cursor — a stored
+reads the whole approved list every time rather than keeping a cursor: a stored
 position that slips past a gap never revisits it.
+
+The form's questions are found by looking for `name`, `email` and `year`
+anywhere in the question's own text, lowercased. "What's your full name?" and
+"Please give your name" both match, so the questions can be reworded freely.
+Deleting or renaming one past its keyword is the case that does not survive,
+and then every application answers nothing at once. Nothing is created from
+those: they appear on the reconciler under **Discord applicants needing
+attention**, showing what the applicant actually typed, to be added by hand.
 
 ### The Google Group
 

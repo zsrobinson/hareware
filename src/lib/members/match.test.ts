@@ -152,13 +152,50 @@ test("nothing but `new` is ever safe for the cron to create", () => {
   expect(safeToCreate(resolutions)).toHaveLength(1);
 });
 
-test("an application with no answers matches nobody rather than everybody", () => {
+/*
+  the form questions are found by looking for "name" and "email" anywhere in
+  the label, which survives a rewording but not a deletion. When one goes, every
+  application answers null at once — and a row per applicant, named by their
+  Discord handle with no address on it, would be made silently at the top of
+  the hour. So it stops and says which answer it wanted
+*/
+test("an application with no name and no email stops rather than creating a row", () => {
   const resolution = resolveApplication(
     [person({ name: "", email: null })],
     application({ name: null, email: null }),
   );
 
-  expect(resolution.status).toBe("new");
+  expect(resolution.status).toBe("incomplete");
+  if (resolution.status === "incomplete")
+    expect(resolution.missing).toEqual(["name", "email"]);
+});
+
+test("either one missing is enough to stop", () => {
+  const noEmail = resolveApplication([], application({ email: null }));
+  const noName = resolveApplication([], application({ name: null }));
+
+  expect(noEmail.status).toBe("incomplete");
+  if (noEmail.status === "incomplete")
+    expect(noEmail.missing).toEqual(["email"]);
+  expect(noName.status).toBe("incomplete");
+  if (noName.status === "incomplete") expect(noName.missing).toEqual(["name"]);
+});
+
+/* a row already carrying the snowflake is a complete answer whatever the form
+   said, so the check for missing answers comes after the id */
+test("an incomplete application whose account is already on a row reads as linked", () => {
+  const resolution = resolveApplication(
+    [person({ pageId: "p1", discordId: "574376763006648349" })],
+    application({ name: null, email: null }),
+  );
+
+  expect(resolution.status).toBe("linked");
+});
+
+test("nothing incomplete is ever created automatically", () => {
+  expect(
+    safeToCreate([resolveApplication([], application({ email: null }))]),
+  ).toEqual([]);
 });
 
 test("two rows normalising to one name are a duplicate", () => {
@@ -235,7 +272,7 @@ test("two people who merely share a first name are left alone", () => {
 test("a near name still never resolves an application to a row", () => {
   const resolution = resolveApplication(
     [person({ pageId: "p1", name: "Matthew Reyes" })],
-    application({ name: "Mathew Reyes", email: null }),
+    application({ name: "Mathew Reyes", email: "mathew@terpmail.umd.edu" }),
   );
 
   expect(resolution.status).toBe("similar");
@@ -326,7 +363,7 @@ test("an exact match still wins over a near one", () => {
       person({ pageId: "p1", name: "Bay Hoffman", email: null }),
       person({ pageId: "p2", name: "Bay Hofman", email: null }),
     ],
-    application({ email: null }),
+    application({ email: "nobody@terpmail.umd.edu" }),
   );
 
   expect(resolution.status).toBe("linkable");
@@ -337,7 +374,7 @@ test("an exact match still wins over a near one", () => {
 test("names further apart than one edit are still new", () => {
   const resolution = resolveApplication(
     [person({ name: "Ada Vance", email: null })],
-    application({ name: "Bay Hoffman", email: null }),
+    application({ name: "Bay Hoffman", email: "bay@terpmail.umd.edu" }),
   );
 
   expect(resolution.status).toBe("new");

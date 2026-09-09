@@ -28,6 +28,7 @@ import {
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
+import { defaultStatus } from "~/lib/members/config";
 import {
   compareToGroup,
   emailProblem,
@@ -85,13 +86,23 @@ type Props = {
  */
 function Section({
   title,
-  why,
+  how,
   count,
+  clear,
   children,
 }: {
   title: string;
-  why: string;
+  /** one short line, only where how the list was arrived at is not obvious */
+  how?: string;
   count: number;
+  /**
+   * what to say when there is nothing in it, in four or five words.
+   *
+   * absent for a section whose body is not a list — the Google Group's is a
+   * file picker, and hiding it whenever there was nothing to report would hide
+   * the only control that could produce a report
+   */
+  clear?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -103,55 +114,102 @@ function Section({
         <h2 className="text-lg font-medium">{title}</h2>
         <Badge variant={count > 0 ? "default" : "outline"}>{count}</Badge>
       </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-3 pt-3">
-        <p className="text-muted-foreground max-w-prose text-sm">{why}</p>
-        {children}
+      <CollapsibleContent className="space-y-2 pt-2">
+        {how && <p className="text-muted-foreground text-sm">{how}</p>}
+        {clear && count === 0 ? <Cleared>{clear}</Cleared> : children}
       </CollapsibleContent>
     </Collapsible>
   );
 }
 
 /**
- * one kind of problem inside a section, with the rows it applies to.
+ * an application the form's questions could not be read from, added by hand.
  *
- * a heading rather than a section of its own. Three sections for three
- * spellings of "the address on this row is not usable" would be three places
- * to look for one question, and the count an editor actually cares about is
- * the two that are wrong rather than the one that is merely empty
+ * prefilled with whatever did come back, so the usual case is confirming two
+ * fields rather than typing them. What the applicant actually answered is
+ * printed above it, because when a question is renamed the answers are all
+ * still there and only their labels stopped matching
  */
-function Group({
-  title,
-  why,
-  people,
+function ManualAdd({
+  application,
+  missing,
   faces,
-  onEdit,
-  note,
+  statuses,
+  busy,
+  said,
+  onAdd,
 }: {
-  title: string;
-  why: string;
-  people: Person[];
+  application: Application;
+  missing: string[];
   faces: Faces;
-  onEdit: (editing: Editing) => void;
-  note?: (person: Person) => string | undefined;
+  statuses: string[];
+  busy: boolean;
+  said?: string;
+  onAdd: (fields: { name: string; email: string; status?: string }) => void;
 }) {
+  const [name, setName] = useState(application.name ?? "");
+  const [email, setEmail] = useState(application.email ?? "");
+  const [status, setStatus] = useState(() => defaultStatus(statuses));
+
   return (
-    <div className="space-y-2">
-      <div>
-        <h3 className="text-sm font-medium">{title}</h3>
-        <p className="text-muted-foreground max-w-prose text-sm">{why}</p>
-      </div>
-      <ul className="divide-y rounded-lg border">
-        {people.map((person) => (
-          <li key={person.pageId} className="p-3">
-            <MemberEntry
-              person={person}
-              faces={faces}
-              note={note?.(person)}
-              onEdit={(field) => onEdit({ field, person })}
+    <div className="space-y-3 p-4">
+      <Applicant application={application} faces={faces} />
+      <Badge variant="destructive">
+        the form gave no {missing.join(" or ")}
+      </Badge>
+
+      {said ? (
+        <Note>{said}</Note>
+      ) : (
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1.5">
+            <Label htmlFor={`add-name-${application.id}`}>Name</Label>
+            <Input
+              id={`add-name-${application.id}`}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
             />
-          </li>
-        ))}
-      </ul>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`add-email-${application.id}`}>Email</Label>
+            <Input
+              id={`add-email-${application.id}`}
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Status</Label>
+            <div className="flex flex-wrap gap-2">
+              {statuses.map((one) => (
+                <Button
+                  key={one}
+                  type="button"
+                  size="sm"
+                  variant={status === one ? "secondary" : "outline"}
+                  aria-pressed={status === one}
+                  onClick={() => setStatus(one)}
+                >
+                  {one}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <Button
+            disabled={busy || !name.trim() || !email.trim()}
+            onClick={() =>
+              onAdd({
+                name: name.trim(),
+                email: email.trim(),
+                ...(status ? { status } : {}),
+              })
+            }
+          >
+            Add member
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -309,6 +367,13 @@ function Sections({ initial, faces }: Props) {
      `Resolution` is a union whose arms carry different fields, and re-testing
      `status` in the jsx is how one of them ends up reading a field the other
      does not have */
+  /* the form's questions could not be found, so there is nothing to match on
+     and nothing to write. Added by hand from what the applicant typed */
+  const incomplete = resolutions.filter(
+    (one): one is Extract<Resolution, { status: "incomplete" }> =>
+      one.status === "incomplete",
+  );
+
   const linkable = resolutions.filter(
     (one): one is Extract<Resolution, { status: "linkable" }> =>
       one.status === "linkable",
@@ -346,24 +411,35 @@ function Sections({ initial, faces }: Props) {
     problems.filter((one) => one.problem === kind).map((one) => one.person);
 
   const missing = of("missing");
-  const malformed = of("malformed");
-  const mistyped = of("outside");
+  /* one section, because the fix is the same and so is the question an editor
+     asks of it: text that is not an address, and a real address at neither
+     university domain, are both "this is not the address we expect" */
+  const wrongDomain = [...of("malformed"), ...of("outside")].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
 
-  /* said in the suggestions' empty state: "nothing to suggest" and "nobody is
-     unlinked" are very different answers and both render as an empty list */
-  const unlinked = roster.filter((person) => !person.discordId).length;
+  /*
+    every unlinked row, not only the ones a name matches. an empty section
+    reading "nothing to suggest" and one reading "nobody is unlinked" are very
+    different answers, and the rows without a suggestion are still the ones
+    somebody has to work through
+  */
+  const unlinked = roster
+    .filter((person) => !person.discordId)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const suggestedFor = new Map(
+    discordSuggestions.map((one) => [one.person.pageId, one.account]),
+  );
 
   return (
     <div className="space-y-10">
       <Section
-        title="Discord applicants waiting to be matched to a member"
-        why="They filled in the join form and the hourly sync would not decide who they are on its own. A Link button means exactly one row matches. Without one, several rows could be them, and the fix is to correct those rows in Notion first."
-        count={linkable.length + ambiguous.length}
+        title="Discord applicants needing attention"
+        how="Approved applications the hourly sync would not act on by itself."
+        count={linkable.length + ambiguous.length + incomplete.length}
+        clear="No applicants waiting"
       >
         <div className="divide-y rounded-lg border">
-          {linkable.length + ambiguous.length === 0 && (
-            <Empty>Every applicant is already on a row.</Empty>
-          )}
           {linkable.map((one) => {
             const key = `link:${one.application.id}`;
             return (
@@ -395,6 +471,25 @@ function Sections({ initial, faces }: Props) {
               </div>
             );
           })}
+          {incomplete.map((one) => (
+            <ManualAdd
+              key={one.application.id}
+              application={one.application}
+              missing={one.missing}
+              faces={faces}
+              statuses={statuses}
+              busy={busy !== null}
+              said={said[`add:${one.application.id}`]}
+              onAdd={(fields) =>
+                void act(`add:${one.application.id}`, () =>
+                  postJson("/api/members/create", {
+                    ...fields,
+                    discordId: one.application.discordId,
+                  }),
+                )
+              }
+            />
+          ))}
           {ambiguous.map((one) => (
             <div key={one.application.id} className="space-y-3 p-4">
               <div className="flex flex-wrap items-start gap-2">
@@ -421,15 +516,11 @@ function Sections({ initial, faces }: Props) {
 
       <Section
         title="Possible duplicate members"
-        why="Their attendance and bylines are split between the rows, so neither reaches a threshold they actually met. Rows sharing a name or an address are almost certainly one person; the ones a letter apart or differing by a middle name are guesses, and some will be wrong. Merging cannot be undone from here: the row you keep gains the other's articles, images and attendance, and the other goes to Notion's trash."
+        how="Rows sharing a name or an address, one letter apart, or differing only by a middle name. Merging cannot be undone."
         count={duplicates.length}
+        clear="No duplicate members detected"
       >
         <div className="divide-y rounded-lg border">
-          {duplicates.length === 0 && (
-            <Empty>
-              Nobody appears twice, so the standing page can be trusted.
-            </Empty>
-          )}
           {duplicates.map((pair) => (
             <div key={`${pair.on}:${pair.value}`} className="space-y-2 p-4">
               <div className="flex flex-wrap items-center gap-2">
@@ -479,14 +570,12 @@ function Sections({ initial, faces }: Props) {
       </Section>
 
       <Section
-        title="Members nobody has said are undergrad, grad or alum"
-        why="Status is the one field nothing can work out on its own, and the voting rule turns on it. An empty one is not a disqualification: the standing page flags these people rather than denying them."
+        title="Missing status field"
+        how="Nothing can work this out, and the voting rule turns on it. An empty status does not disqualify anybody."
         count={unknownStatus.length}
+        clear="Every member has a status"
       >
         <div className="divide-y rounded-lg border">
-          {unknownStatus.length === 0 && (
-            <Empty>Every member has a status.</Empty>
-          )}
           {unknownStatus.map((person) => {
             const key = `status:${person.pageId}`;
             return (
@@ -520,40 +609,37 @@ function Sections({ initial, faces }: Props) {
       </Section>
 
       <Section
-        title="Members already in the server whose row is not linked"
-        why="They were in the Discord before their row existed, so no application ever connected the two and their picture does not appear beside their name. Only offered where exactly one row and one account share a name."
-        count={discordSuggestions.length}
+        title="Missing Discord ID"
+        how="A match is offered where exactly one account in the server shares their name."
+        count={unlinked.length}
+        clear="Every member is linked to an account"
       >
         <div className="divide-y rounded-lg border">
-          {discordSuggestions.length === 0 && (
-            <Empty>
-              {unlinked === 0
-                ? "Every member row is linked to a Discord account."
-                : `No name matches exactly. ${plural(unlinked, "member")} still ${unlinked === 1 ? "has" : "have"} no Discord account, and each can be linked from their chip above or at the kiosk.`}
-            </Empty>
-          )}
-          {discordSuggestions.map(({ person, account }) => {
+          {unlinked.map((person) => {
             const key = `discord:${person.pageId}`;
+            const account = suggestedFor.get(person.pageId);
+
             return (
               <div key={key} className="space-y-2 p-4">
                 <MemberEntry
                   person={person}
                   faces={faces}
                   note={
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      looks like
-                      <MemberFace
-                        discordId={account.id}
-                        name={account.displayName}
-                        faces={faces}
-                      />
-                      <strong>{account.username}</strong>
-                      {account.displayName !== account.username &&
-                        `, shown in the server as ${account.displayName}`}
-                    </span>
+                    account && (
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        looks like
+                        <MemberFace
+                          discordId={account.id}
+                          name={account.displayName}
+                          faces={faces}
+                        />
+                        <strong>{account.username}</strong>
+                      </span>
+                    )
                   }
+                  onEdit={(field) => setEditing({ field, person })}
                 >
-                  {!said[key] && (
+                  {account && !said[key] && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -580,57 +666,56 @@ function Sections({ initial, faces }: Props) {
       </Section>
 
       <Section
-        title="Email addresses worth a look"
-        why="An address is how somebody is matched to their Discord application later and how the announcements reach them. The two groups at the top are addresses that cannot be right. The rest are rows that predate the kiosk, which is nothing to fix today."
-        count={mistyped.length + malformed.length}
+        title="Missing email field"
+        how="An address is what matches somebody to their application later and what the announcements reach them at. Expected on rows that predate the kiosk."
+        count={missing.length}
+        clear="Every member has an address"
       >
-        <div className="space-y-4">
-          {problems.length === 0 ? (
-            <Empty>Every member has a university address.</Empty>
-          ) : (
-            <>
-              {malformed.length > 0 && (
-                <Group
-                  title={`${plural(malformed.length, "address", "addresses")} that cannot be delivered`}
-                  why="There is text in the field but it is not an address, so nothing has ever reached them and nothing on this page questions it."
-                  people={malformed}
-                  faces={faces}
-                  onEdit={setEditing}
-                />
-              )}
-
-              {mistyped.length > 0 && (
-                <Group
-                  title={`${plural(mistyped.length, "address", "addresses")} outside terpmail.umd.edu and umd.edu`}
-                  why="Google will not add these to the group without an invitation, and a mistyped terpmail looks exactly like this: terpmial.umd.edu is a real answer on a real application."
-                  people={mistyped}
-                  faces={faces}
-                  onEdit={setEditing}
-                />
-              )}
-
-              {missing.length > 0 && (
-                <Group
-                  title={`${plural(missing.length, "member")} with no address at all`}
-                  why="Expected for now. Most of the roster predates the kiosk, and those rows carry a byline and nothing else. Anybody signing in at a meeting is asked for one."
-                  people={missing}
-                  faces={faces}
-                  onEdit={setEditing}
-                  note={(person) =>
-                    identifiesNobody(person)
-                      ? "nothing else on this row either: no Discord, no writing, no status"
-                      : undefined
-                  }
-                />
-              )}
-            </>
-          )}
-        </div>
+        <ul className="divide-y rounded-lg border">
+          {missing.map((person) => (
+            <li key={person.pageId} className="p-3">
+              <MemberEntry
+                person={person}
+                faces={faces}
+                note={
+                  identifiesNobody(person)
+                    ? "nothing else on this row either"
+                    : undefined
+                }
+                onEdit={(field) => setEditing({ field, person })}
+              />
+            </li>
+          ))}
+        </ul>
       </Section>
 
       <Section
-        title="Members missing from the announcements email group"
-        why="Google gives software no way to read or write this group, so it is compared by hand. Export its members from the link below, choose the file, and this lists who on the roster is not in it."
+        title="Incorrect email domain"
+        how="Not terpmail.umd.edu or umd.edu, or not an address at all. Google will not add these to the group without an invitation."
+        count={wrongDomain.length}
+        clear="Every address is a university one"
+      >
+        <ul className="divide-y rounded-lg border">
+          {wrongDomain.map((person) => (
+            <li key={person.pageId} className="p-3">
+              <MemberEntry
+                person={person}
+                faces={faces}
+                note={
+                  emailProblem(person.email) === "malformed"
+                    ? "not an address at all"
+                    : undefined
+                }
+                onEdit={(field) => setEditing({ field, person })}
+              />
+            </li>
+          ))}
+        </ul>
+      </Section>
+
+      <Section
+        title="Missing from Google Group"
+        how="Google gives software no way to read this group, so it is compared by hand."
         count={diff ? diff.missing.length : 0}
       >
         <div className="space-y-3 rounded-lg border p-4">
@@ -687,10 +772,8 @@ function Sections({ initial, faces }: Props) {
             </p>
           )}
 
-          {!diff ? (
-            <Empty>Choose an export to compare the roster against.</Empty>
-          ) : emails.length === 0 ? (
-            <Empty>Everybody with an address is already in the group.</Empty>
+          {!diff ? null : emails.length === 0 ? (
+            <Cleared>Everybody with an address is in the group</Cleared>
           ) : (
             <>
               {external.length > 0 && (
@@ -877,8 +960,14 @@ function Sections({ initial, faces }: Props) {
   );
 }
 
-function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="text-muted-foreground p-4 text-sm">{children}</p>;
+/** nothing to do here, said the same way in every section */
+function Cleared({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-muted-foreground flex items-center gap-2 rounded-lg border p-4 text-sm">
+      <CheckIcon className="size-4" />
+      {children}
+    </div>
+  );
 }
 
 function Note({ children }: { children: React.ReactNode }) {

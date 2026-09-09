@@ -146,24 +146,29 @@ export async function approvedApplications(
     };
 
     /*
-      "nobody has applied" and "we cannot read applications" have to be
-      different answers, and from this endpoint they look identical.
+      "nobody has applied" and "we are not allowed to read applications" have
+      to be different answers, and from this endpoint they look identical.
 
-      discord answers a query with results as `{ guild_join_requests: [...] }`
-      and a query with none as `{ "total": 0 }` — but for some statuses it
-      answers `{}`, with no list and no count at all. Read as an empty list,
-      that is a sync reporting "no new applications out of 0" every hour and a
-      reconciler saying every applicant is already on a row: the roster quietly
-      stops growing and every screen says it is fine.
+      discord answers a readable query with `{ guild_join_requests: [...] }`,
+      and a readable query with no matches as `{ "total": 0 }`. Without the
+      permission it answers `{}` — no list, no count, HTTP 200. Not a 403,
+      which is what every other endpoint gives: `/guilds/{id}/bans` and
+      `/guilds/{id}/audit-logs` both refuse this bot properly.
 
-      so an answer carrying neither is refused. The reconciler shows the
-      message beside its applications section and the automation log records a
-      failure, which is the whole point of ADR 0007's distinction between a run
-      that did nothing and a run that could not try
+      that cost this project the backfill. On 2026-09-07 the bot held
+      Administrator and this endpoint returned 51 approved applications; the
+      role was then narrowed to Manage Server and the same call started
+      answering `{}`. A check on the status code alone said everything was
+      fine, and the sync would have reported "no new applications out of 0"
+      every hour for the rest of the year.
+
+      so an answer carrying neither is refused, and the message names the
+      permission, because that is the fix. ADR 0007 asks for the difference
+      between a run that did nothing and a run that could not try
     */
     if (!answer.guild_join_requests && answer.total === undefined) {
       throw new Error(
-        "discord answered the join requests endpoint with neither a list nor a count, so whether anybody has applied cannot be known",
+        "discord returned neither a list nor a count for join requests, which is what it does when the bot may not review applications: give the HareWare role Kick Members, which is the permission Discord gates member applications behind",
       );
     }
 

@@ -153,15 +153,16 @@ test("the applied day is the date alone", () => {
 });
 
 /*
-  measured against the real guild on 2026-09-08, when the applications this
-  design reads had gone: `?status=SUBMITTED` answered `{"total": 0}` and
-  `?status=APPROVED` answered `{}` — no list, no count, HTTP 200.
+  measured against the real guild. On 2026-09-07, with the bot holding
+  Administrator, `?status=APPROVED` returned 51 applications. On 2026-09-08,
+  with the role narrowed to Manage Server, the same call returned `{}` — no
+  list, no count, HTTP 200 — while `?status=SUBMITTED` still returned
+  `{"total": 0}`.
 
-  read as an empty list, `{}` is the sync reporting "no new applications out of
-  0" every hour and the reconciler saying every applicant is already on a row,
-  while the roster quietly stops growing. ADR 0007 asks for the difference
-  between a run that did nothing and a run that could not try, and this is
-  where that difference is decided
+  discord refuses this bot properly everywhere else: `/guilds/{id}/bans` and
+  `/guilds/{id}/audit-logs` both answer 403. This one does not, so a check on
+  the status code says everything is fine and the sync reports "no new
+  applications out of 0" every hour while the roster never grows again
 */
 test("an answer with neither a list nor a count is refused, not read as none", async () => {
   answer({});
@@ -169,6 +170,15 @@ test("an answer with neither a list nor a count is refused, not read as none", a
   await expect(approvedApplications("token")).rejects.toThrow(
     /neither a list nor a count/,
   );
+});
+
+/* the message is the fix, not a description of the symptom: it reaches an
+   editor on the reconciler and in the alert, neither of whom is going to
+   work out which discord permission gates member applications */
+test("the refusal names the permission that fixes it", async () => {
+  answer({});
+
+  await expect(approvedApplications("token")).rejects.toThrow(/Kick Members/);
 });
 
 test("a count of zero is a real answer and means nobody", async () => {

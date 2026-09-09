@@ -171,13 +171,74 @@ test("two rows normalising to one name are a duplicate", () => {
   expect(found[0]!.on).toBe("name");
 });
 
-test("near spellings are deliberately not grouped", () => {
+/*
+  near spellings used to be deliberately left out of this, on the grounds that
+  a matcher loose enough to join "Matthew" and "Mathew" joins real members too.
+  That reasoning still holds for *linking*, which is why `resolveApplication`
+  still refuses them — but it was the wrong call for a page whose entire job is
+  to put a question in front of a person.
+
+  `Timur Malamud` and `Timur Malcmud` are two rows on the real roster, one
+  letter apart, and nothing here had ever compared them. Their attendance is
+  split across both, which is exactly the vote this page exists to protect
+*/
+test("two rows a letter apart are offered as a possible duplicate", () => {
+  const found = duplicates([
+    person({ pageId: "p1", name: "Timur Malamud" }),
+    person({ pageId: "p2", name: "Timur Malcmud" }),
+  ]);
+
+  expect(found).toHaveLength(1);
+  expect(found[0]!.on).toBe("near-name");
+});
+
+/* the exact finding is the confident one and stays first, so an editor works
+   through the certainties before the guesses */
+test("an exact match outranks a near one", () => {
+  const found = duplicates([
+    person({ pageId: "p1", name: "Bay Hoffman" }),
+    person({ pageId: "p2", name: "bay hoffman" }),
+    person({ pageId: "p3", name: "Bay Hoffmann" }),
+  ]);
+
+  expect(found[0]!.on).toBe("name");
+  expect(found.some((one) => one.on === "near-name")).toBe(true);
+});
+
+/*
+  the other way one person becomes two rows: a middle name typed once and not
+  the next time. An edit distance will never join these — "andy andromeda vu"
+  and "andy vu" are eight edits apart — and this roster collects both spellings
+  because one comes from an application and the other from a kiosk
+*/
+test("a name with a middle part is offered against one without", () => {
+  const found = duplicates([
+    person({ pageId: "p1", name: "Andy (Andromeda) Vu" }),
+    person({ pageId: "p2", name: "Andy Vu" }),
+  ]);
+
+  expect(found).toHaveLength(1);
+  expect(found[0]!.on).toBe("same-ends");
+});
+
+test("two people who merely share a first name are left alone", () => {
   expect(
     duplicates([
-      person({ pageId: "p1", name: "Matthew Reyes" }),
-      person({ pageId: "p2", name: "Mathew Reyes" }),
+      person({ pageId: "p1", name: "Bay Hoffman" }),
+      person({ pageId: "p2", name: "Bay Okafor" }),
     ]),
   ).toEqual([]);
+});
+
+/* a guess is still never a link. `resolveApplication` keeps refusing these,
+   because that one writes without asking anybody */
+test("a near name still never resolves an application to a row", () => {
+  const resolution = resolveApplication(
+    [person({ pageId: "p1", name: "Matthew Reyes" })],
+    application({ name: "Mathew Reyes", email: null }),
+  );
+
+  expect(resolution.status).toBe("similar");
 });
 
 test("two rows sharing an email are a duplicate even under different names", () => {

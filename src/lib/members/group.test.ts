@@ -1,12 +1,18 @@
 import { expect, test } from "vitest";
-import { compareToGroup, emailsInExport, isExternalAddress } from "./group";
+import {
+  compareToGroup,
+  emailProblem,
+  emailsInExport,
+  identifiesNobody,
+  isExternalAddress,
+} from "./group";
 import type { Person } from "./records";
 
 const person = (fields: Partial<Person> & { pageId: string }): Person => ({
   name: "Somebody",
   discordId: null,
   email: null,
-  status: "Undergrad",
+  status: null,
   contributions: 0,
   noAnnouncements: false,
   ...fields,
@@ -183,4 +189,56 @@ test("a row with no address is unreachable rather than opted out", () => {
 
   expect(diff.unreachable.map((one) => one.name)).toEqual(["Cass"]);
   expect(diff.optedOut).toEqual([]);
+});
+
+test("a row with no address is missing rather than malformed", () => {
+  expect(emailProblem(null)).toBe("missing");
+  expect(emailProblem("   ")).toBe("missing");
+});
+
+/* worse than missing, because the row looks filled in and nothing else on the
+   page questions it. `t@w.w` is on the real roster */
+test("text that cannot be an address is malformed", () => {
+  expect(emailProblem("not an address")).toBe("malformed");
+  expect(emailProblem("bay@terpmail")).toBe("malformed");
+  expect(emailProblem("@terpmail.umd.edu")).toBe("malformed");
+  expect(emailProblem("bay@@umd.edu")).toBe("malformed");
+});
+
+/* loose on purpose: only sending mail can say whether it is deliverable, and
+   this only has to catch what cannot possibly be an address */
+test("an odd but well-shaped address is not called malformed", () => {
+  expect(emailProblem("t@w.w")).toBe("outside");
+  expect(emailProblem("a.b+c@sub.domain.co.uk")).toBe("outside");
+});
+
+/* google does not auto-add these, and it is also what a mistyped terpmail
+   looks like — `terpmial.umd.edu` is a real answer on a real application */
+test("a real address at neither university domain is outside", () => {
+  expect(emailProblem("iortiz1@terpmial.umd.edu")).toBe("outside");
+  expect(emailProblem("someone@gmail.com")).toBe("outside");
+});
+
+test("a university address has no problem at all", () => {
+  expect(emailProblem("bay@terpmail.umd.edu")).toBeNull();
+  expect(emailProblem("  bay@umd.edu  ")).toBeNull();
+});
+
+test("a row with nothing that could identify anybody is named", () => {
+  expect(identifiesNobody(person({ pageId: "p1" }))).toBe(true);
+});
+
+test("anything at all on the row is enough", () => {
+  expect(identifiesNobody(person({ pageId: "p1", email: "a@b.co" }))).toBe(
+    false,
+  );
+  expect(identifiesNobody(person({ pageId: "p2", discordId: "1" }))).toBe(
+    false,
+  );
+  expect(identifiesNobody(person({ pageId: "p3", contributions: 1 }))).toBe(
+    false,
+  );
+  expect(identifiesNobody(person({ pageId: "p4", status: "Undergrad" }))).toBe(
+    false,
+  );
 });

@@ -30,20 +30,27 @@ import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
 import {
   compareToGroup,
+  emailProblem,
   emailsInExport,
   GROUP_MEMBERS_URL,
+  identifiesNobody,
   isExternalAddress,
+  type EmailProblem,
 } from "~/lib/members/group";
+import {
+  MemberEditDialog,
+  type Editing,
+} from "~/components/member-edit-dialog";
 import { MemberEntry } from "~/components/member-entry";
 import { MemberFace } from "~/components/member-face";
 import type { Faces } from "~/lib/faces";
-import type { Resolution } from "~/lib/members/match";
+import type { Duplicate, Resolution } from "~/lib/members/match";
 import { postJson } from "~/lib/post-json";
 import { plural } from "~/lib/utils";
 import type { Person } from "~/lib/members/records";
 import { rosterKeys } from "~/lib/members/query-keys";
 import { RosterQueries } from "~/lib/members/roster-queries";
-import { useRefresh, useRosterQuery } from "~/lib/members/queries";
+import { usePatch, useRefresh, useRosterQuery } from "~/lib/members/queries";
 import type { ReconcilerData } from "~/lib/members/views";
 import type { Application } from "~/lib/services/discord/join-requests";
 
@@ -103,6 +110,69 @@ function Section({
     </Collapsible>
   );
 }
+
+/**
+ * one kind of problem inside a section, with the rows it applies to.
+ *
+ * a heading rather than a section of its own. Three sections for three
+ * spellings of "the address on this row is not usable" would be three places
+ * to look for one question, and the count an editor actually cares about is
+ * the two that are wrong rather than the one that is merely empty
+ */
+function Group({
+  title,
+  why,
+  people,
+  faces,
+  onEdit,
+  note,
+}: {
+  title: string;
+  why: string;
+  people: Person[];
+  faces: Faces;
+  onEdit: (editing: Editing) => void;
+  note?: (person: Person) => string | undefined;
+}) {
+  return (
+    <div className="space-y-2">
+      <div>
+        <h3 className="text-sm font-medium">{title}</h3>
+        <p className="text-muted-foreground max-w-prose text-sm">{why}</p>
+      </div>
+      <ul className="divide-y rounded-lg border">
+        {people.map((person) => (
+          <li key={person.pageId} className="p-3">
+            <MemberEntry
+              person={person}
+              faces={faces}
+              note={note?.(person)}
+              onEdit={(field) => onEdit({ field, person })}
+            />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** how two rows came to be listed together, in the words the page uses */
+const WHY_ALIKE: Record<Duplicate["on"], string> = {
+  name: "the same name",
+  email: "the same email",
+  "near-name": "one letter apart",
+  "same-ends": "a middle name on one and not the other",
+};
+
+/* the first two are exact matches and almost always one person; the other two
+   are guesses, and a page that shouted equally about both would train an
+   editor to ignore the ones that matter */
+const SURE: Record<Duplicate["on"], boolean> = {
+  name: true,
+  email: true,
+  "near-name": false,
+  "same-ends": false,
+};
 
 /**
  * an applicant, drawn to line up with the roster rows beside them.
@@ -170,6 +240,7 @@ function Sections({ initial, faces }: Props) {
     statuses,
     roster,
     discordSuggestions,
+    guild,
   } = useRosterQuery(
     rosterKeys.reconciler(),
     "/api/members/reconciler",
@@ -185,6 +256,13 @@ function Sections({ initial, faces }: Props) {
     reload
   */
   const refresh = useRefresh(rosterKeys.reconciler());
+
+  /*
+    a corrected row goes into the cache rather than costing a re-read.
+    Everything else on this page re-reads, because a link or a merge changes
+    what the *other* sections should say; an address does not
+  */
+  const patch = usePatch<ReconcilerData>(rosterKeys.reconciler());
 
   /* what each row has been told about itself. a row that has been acted on
      stays on screen saying so rather than vanishing: this page is worked
@@ -207,6 +285,9 @@ function Sections({ initial, faces }: Props) {
   */
   const [inGroup, setInGroup] = useState<Set<string> | null>(null);
   const [exportName, setExportName] = useState<string | null>(null);
+  /* the same dialog the kiosk uses, so an address is corrected where it is
+     noticed rather than in a second tab */
+  const [editing, setEditing] = useState<Editing | null>(null);
 
   async function act(key: string, run: () => Promise<{ summary?: string }>) {
     setBusy(key);
@@ -251,6 +332,26 @@ function Sections({ initial, faces }: Props) {
   /* flagged rather than dropped: google does not auto-add these, and an
      address nobody can add is still an address somebody has to deal with */
   const external = emails.filter((email) => isExternalAddress(email));
+
+  /*
+    one pass over the roster for the three ways an address can be unusable.
+    Sorted by name inside each so the lists do not reshuffle between visits
+  */
+  const problems = roster
+    .map((person) => ({ person, problem: emailProblem(person.email) }))
+    .filter((one) => one.problem !== null)
+    .sort((a, b) => a.person.name.localeCompare(b.person.name));
+
+  const of = (kind: EmailProblem) =>
+    problems.filter((one) => one.problem === kind).map((one) => one.person);
+
+  const missing = of("missing");
+  const malformed = of("malformed");
+  const mistyped = of("outside");
+
+  /* said in the suggestions' empty state: "nothing to suggest" and "nobody is
+     unlinked" are very different answers and both render as an empty list */
+  const unlinked = roster.filter((person) => !person.discordId).length;
 
   return (
     <div className="space-y-10">
@@ -319,8 +420,8 @@ function Sections({ initial, faces }: Props) {
       </Section>
 
       <Section
-        title="One person with two member rows"
-        why="Their attendance and bylines are split between the rows, so neither reaches a threshold they actually met. Merging cannot be undone from here: the row you keep gains the other's articles, images and attendance, and the other goes to Notion's trash."
+        title="Possible duplicate members"
+        why="Their attendance and bylines are split between the rows, so neither reaches a threshold they actually met. Rows sharing a name or an address are almost certainly one person; the ones a letter apart or differing by a middle name are guesses, and some will be wrong. Merging cannot be undone from here: the row you keep gains the other's articles, images and attendance, and the other goes to Notion's trash."
         count={duplicates.length}
       >
         <div className="divide-y rounded-lg border">
@@ -331,10 +432,16 @@ function Sections({ initial, faces }: Props) {
           )}
           {duplicates.map((pair) => (
             <div key={`${pair.on}:${pair.value}`} className="space-y-2 p-4">
-              <div className="flex items-center gap-2">
-                <AlertTriangleIcon className="text-destructive size-4" />
+              <div className="flex flex-wrap items-center gap-2">
+                <AlertTriangleIcon
+                  className={
+                    SURE[pair.on] ? "text-destructive size-4" : "size-4"
+                  }
+                />
                 <span className="font-medium">{pair.value}</span>
-                <Badge variant="outline">same {pair.on}</Badge>
+                <Badge variant={SURE[pair.on] ? "destructive" : "outline"}>
+                  {WHY_ALIKE[pair.on]}
+                </Badge>
               </div>
               <ul className="space-y-2">
                 {pair.people.map((person) => {
@@ -419,7 +526,11 @@ function Sections({ initial, faces }: Props) {
       >
         <div className="divide-y rounded-lg border">
           {discordSuggestions.length === 0 && (
-            <Empty>Nothing left to link by name.</Empty>
+            <Empty>
+              {unlinked === 0
+                ? "Every member row is linked to a Discord account."
+                : `No name matches exactly. ${plural(unlinked, "member")} still ${unlinked === 1 ? "has" : "have"} no Discord account, and each can be linked from their chip above or at the kiosk.`}
+            </Empty>
           )}
           {discordSuggestions.map(({ person, account }) => {
             const key = `discord:${person.pageId}`;
@@ -465,6 +576,55 @@ function Sections({ initial, faces }: Props) {
               </div>
             );
           })}
+        </div>
+      </Section>
+
+      <Section
+        title="Email addresses worth a look"
+        why="An address is how somebody is matched to their Discord application later and how the announcements reach them. The two groups at the top are addresses that cannot be right. The rest are rows that predate the kiosk, which is nothing to fix today."
+        count={mistyped.length + malformed.length}
+      >
+        <div className="space-y-4">
+          {problems.length === 0 ? (
+            <Empty>Every member has a university address.</Empty>
+          ) : (
+            <>
+              {malformed.length > 0 && (
+                <Group
+                  title={`${plural(malformed.length, "address", "addresses")} that cannot be delivered`}
+                  why="There is text in the field but it is not an address, so nothing has ever reached them and nothing on this page questions it."
+                  people={malformed}
+                  faces={faces}
+                  onEdit={setEditing}
+                />
+              )}
+
+              {mistyped.length > 0 && (
+                <Group
+                  title={`${plural(mistyped.length, "address", "addresses")} outside terpmail.umd.edu and umd.edu`}
+                  why="Google will not add these to the group without an invitation, and a mistyped terpmail looks exactly like this: terpmial.umd.edu is a real answer on a real application."
+                  people={mistyped}
+                  faces={faces}
+                  onEdit={setEditing}
+                />
+              )}
+
+              {missing.length > 0 && (
+                <Group
+                  title={`${plural(missing.length, "member")} with no address at all`}
+                  why="Expected for now. Most of the roster predates the kiosk, and those rows carry a byline and nothing else. Anybody signing in at a meeting is asked for one."
+                  people={missing}
+                  faces={faces}
+                  onEdit={setEditing}
+                  note={(person) =>
+                    identifiesNobody(person)
+                      ? "nothing else on this row either: no Discord, no writing, no status"
+                      : undefined
+                  }
+                />
+              )}
+            </>
+          )}
         </div>
       </Section>
 
@@ -515,30 +675,16 @@ function Sections({ initial, faces }: Props) {
               : "The file is read in this browser and never uploaded."}
           </p>
 
+          {/* the same rows the email section lists, said once here as a count:
+              repeating the names put everybody with no address on this page
+              twice, in two sections that meant the same thing by it */}
           {diff && diff.unreachable.length > 0 && (
-            <div className="border-destructive/50 bg-destructive/10 space-y-3 rounded-lg border p-3">
-              <div>
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <AlertTriangleIcon className="size-4" />
-                  {diff.unreachable.length}{" "}
-                  {diff.unreachable.length === 1
-                    ? "member has"
-                    : "members have"}{" "}
-                  no email address
-                </div>
-                <p className="text-muted-foreground text-sm">
-                  Nothing reaches them and no paste will fix it. Ask them for an
-                  address and put it on their row.
-                </p>
-              </div>
-              <ul className="space-y-3">
-                {diff.unreachable.map((person) => (
-                  <li key={person.pageId}>
-                    <MemberEntry person={person} faces={faces} />
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <p className="text-muted-foreground text-sm">
+              {plural(diff.unreachable.length, "member")}{" "}
+              {diff.unreachable.length === 1 ? "has" : "have"} no address at
+              all, so nothing below can reach them and no paste will fix it.
+              They are listed under Email addresses worth a look.
+            </p>
           )}
 
           {!diff ? (
@@ -668,6 +814,23 @@ function Sections({ initial, faces }: Props) {
           )}
         </div>
       </Section>
+
+      {/* every chip on this page opens this, so a missing address or account
+          is fixed where somebody noticed it */}
+      <MemberEditDialog
+        editing={editing}
+        onClose={() => setEditing(null)}
+        onSaved={(person: Person) =>
+          patch((current) => ({
+            ...current,
+            roster: current.roster.map((one) =>
+              one.pageId === person.pageId ? person : one,
+            ),
+          }))
+        }
+        guild={guild}
+        statuses={statuses}
+      />
 
       {/* the only irreversible action on the page, so it names both rows and
           says which one is going away */}

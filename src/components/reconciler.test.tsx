@@ -51,6 +51,7 @@ const initial: ReconcilerData = {
     person({ pageId: "p3", name: "Cass Lin", email: null }),
   ],
   discordSuggestions: [],
+  guild: [],
   liveStatuses: ["Undergrad", "Grad", "Alum"],
   alumMissing: false,
   discordProblem: null,
@@ -148,14 +149,83 @@ test("somebody who opted out is left out of the paste, and said to be", async ()
   expect(screen.getByText(/1 member asked not to be added/)).toBeTruthy();
 });
 
-/* the row nothing reaches. filtering these out before counting is the silent
-   omission this page exists to end */
-test("a row with no address is named rather than counted as present", async () => {
+/*
+  the row nothing reaches. filtering these out before counting is the silent
+  omission this page exists to end — but it is counted here and listed once, in
+  the email section, rather than named twice on one page
+*/
+test("a row with no address is counted against the group, not listed twice", async () => {
   render(<Reconciler initial={initial} faces={{}} />);
   await upload(EXPORT);
 
-  expect(screen.getByText(/1 member has no email address/)).toBeTruthy();
-  expect(screen.getByText("Cass Lin")).toBeTruthy();
+  expect(screen.getByText(/1 member has no address at all/)).toBeTruthy();
+  expect(screen.getAllByText("Cass Lin")).toHaveLength(1);
+});
+
+/* the three ways an address can be unusable, in one section: the two that are
+   wrong counted in the heading, and the merely empty ones below them */
+test("addresses that cannot be right are separated from the ones merely missing", () => {
+  render(
+    <Reconciler
+      initial={{
+        ...initial,
+        roster: [
+          ...initial.roster,
+          person({ pageId: "p4", name: "Dud Row", email: "not an address" }),
+          person({
+            pageId: "p5",
+            name: "Typo Person",
+            email: "someone@terpmial.umd.edu",
+          }),
+        ],
+      }}
+      faces={{}}
+    />,
+  );
+
+  expect(screen.getByText(/1 address that cannot be delivered/)).toBeTruthy();
+  expect(
+    screen.getByText(/1 address outside terpmail.umd.edu and umd.edu/),
+  ).toBeTruthy();
+  expect(screen.getByText(/1 member with no address at all/)).toBeTruthy();
+});
+
+/* a row carrying nothing at all is import residue, and saying so beside the
+   address beats a section of its own for ten rows */
+test("a row with nothing else on it says so", () => {
+  render(
+    <Reconciler
+      initial={{
+        ...initial,
+        roster: [person({ pageId: "p9", name: "Ghost Row", status: null })],
+      }}
+      faces={{}}
+    />,
+  );
+
+  expect(screen.getByText(/nothing else on this row either/)).toBeTruthy();
+});
+
+/* a row with a byline and no address is not residue: somebody wrote under it */
+test("a row with writing on it is not called empty", () => {
+  render(
+    <Reconciler
+      initial={{
+        ...initial,
+        roster: [
+          person({
+            pageId: "p9",
+            name: "Wrote Something",
+            status: null,
+            contributions: 2,
+          }),
+        ],
+      }}
+      faces={{}}
+    />,
+  );
+
+  expect(screen.queryByText(/nothing else on this row either/)).toBeNull();
 });
 
 /* alumni, mostly — and typos, which look identical from here */

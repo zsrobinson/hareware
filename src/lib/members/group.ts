@@ -143,3 +143,57 @@ export function isExternalAddress(email: string | null): boolean {
 
   return !UNIVERSITY_DOMAINS.includes(domain);
 }
+
+/**
+ * what is wrong with the address on a row, if anything.
+ *
+ * one function rather than four checks scattered over a page, because the
+ * answers are mutually exclusive and an editor reads them as one question:
+ * can we reach this person, and is the address the one we expect?
+ *
+ * - `missing` — nothing to reach them at. Not an error today: most of the
+ *   roster predates the kiosk, and those rows carry a byline and nothing else.
+ * - `malformed` — text that cannot be an address. Worse than missing, because
+ *   the row looks filled in and nothing else on the page questions it.
+ * - `outside` — a real address at neither university domain. Google will not
+ *   auto-add it to the announcements group, and it is also what a mistyped
+ *   `terpmail` looks like: `terpmial.umd.edu` is somebody's real answer on a
+ *   real application.
+ */
+export type EmailProblem = "missing" | "malformed" | "outside";
+
+/*
+  deliberately loose. this is not here to decide whether mail would be
+  delivered — nothing but sending it can answer that — it is here to catch the
+  answers that cannot possibly be addresses, so the rest of the page can trust
+  what it is comparing. Anything with one @, something either side, and a dot
+  in the domain passes
+*/
+const SHAPED_LIKE_AN_ADDRESS = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
+
+export function emailProblem(email: string | null): EmailProblem | null {
+  const address = (email ?? "").trim();
+  if (!address) return "missing";
+  if (!SHAPED_LIKE_AN_ADDRESS.test(address)) return "malformed";
+  if (isExternalAddress(address)) return "outside";
+
+  return null;
+}
+
+/**
+ * a row carrying nothing that could ever identify anybody.
+ *
+ * no address, no discord account, nothing written, no status. These are import
+ * residue: they cannot be matched to an application, cannot be reached, and
+ * count toward nothing. Named on the page beside their address problem rather
+ * than in a section of their own — the row is already there, and what is
+ * unusual about it is one more thing to say about it
+ */
+export function identifiesNobody(person: Person): boolean {
+  return (
+    !person.email?.trim() &&
+    !person.discordId &&
+    person.contributions === 0 &&
+    !person.status
+  );
+}

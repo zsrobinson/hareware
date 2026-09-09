@@ -245,16 +245,106 @@ function creatable(resolution: Resolution): boolean {
  * enough to join those is loose enough to join two real members.
  */
 export type Duplicate = {
-  /** what they share, for a page that has to explain the grouping */
-  on: "name" | "email";
+  /**
+   * what they share, for a page that has to explain the grouping.
+   *
+   * ordered by how sure it is. `name` and `email` are exact matches on a
+   * normalised form and are almost always one person; `near-name` and
+   * `same-ends` are guesses offered to a human, and some of them will be wrong
+   */
+  on: "name" | "email" | "near-name" | "same-ends";
   value: string;
   people: Person[];
 };
+
+/**
+ * the middle taken out of a name.
+ *
+ * "Andy (Andromeda) Vu" and "Andy Vu" are one person on this roster, and so
+ * are "Mary Kate Ellis" and "Mary Ellis". A roster typed from applications and
+ * from a kiosk collects both spellings of the same human, and neither exact
+ * matching nor an edit distance will ever put them together
+ */
+function firstAndLast(name: string): string {
+  const parts = normaliseName(name).split(" ").filter(Boolean);
+  if (parts.length < 3) return "";
+
+  return `${parts[0]} ${parts[parts.length - 1]}`;
+}
+
+/**
+ * pairs that are probably one person, for a human to look at.
+ *
+ * exact matching finds the duplicates somebody made by pasting; this finds the
+ * ones they made by typing. `Timur Malamud` and `Timur Malcmud` are on this
+ * roster right now, one letter apart, and neither `duplicates` nor anything
+ * else on the page had ever compared them.
+ *
+ * `nearName` is used here in the one direction ADR 0010 allows: to *ask*. It
+ * withholds a create and it proposes a merge, and it never performs either —
+ * the merge behind this is the page's only irreversible action and it goes
+ * through a dialog naming both rows.
+ *
+ * some of these will be wrong. Two siblings, two people a letter apart. That
+ * is the cost of asking, and the answer to a wrong pair is not to click it
+ */
+function nearDuplicates(people: Person[]): Duplicate[] {
+  const found: Duplicate[] = [];
+
+  for (let i = 0; i < people.length; i++) {
+    for (let j = i + 1; j < people.length; j++) {
+      const a = people[i]!;
+      const b = people[j]!;
+      const one = normaliseName(a.name);
+      const two = normaliseName(b.name);
+
+      /* an exact match is already a finding, and a louder one */
+      if (!one || !two || one === two) continue;
+
+      if (nearName(one, two)) {
+        found.push({
+          on: "near-name",
+          value: `${a.name} · ${b.name}`,
+          people: [a, b],
+        });
+        continue;
+      }
+
+      const ends = firstAndLast(a.name) || firstAndLast(b.name);
+      if (
+        ends &&
+        firstAndLast(a.name) === ends &&
+        firstAndLast(b.name) === ends
+      ) {
+        found.push({
+          on: "same-ends",
+          value: `${a.name} · ${b.name}`,
+          people: [a, b],
+        });
+        continue;
+      }
+
+      /* one carries a middle name and the other does not */
+      if (ends && (one === ends || two === ends)) {
+        found.push({
+          on: "same-ends",
+          value: `${a.name} · ${b.name}`,
+          people: [a, b],
+        });
+      }
+    }
+  }
+
+  return found;
+}
 
 export function duplicates(people: Person[]): Duplicate[] {
   const found = [
     ...group(people, "name", (person) => normaliseName(person.name)),
     ...group(people, "email", (person) => normaliseEmail(person.email)),
+    /* last, because they are guesses and the confident findings should be the
+       ones an editor works through first */
+    ...nearDuplicates(people),
   ];
 
   /*

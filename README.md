@@ -2,8 +2,9 @@
 
 The in-house tooling for [The Hare](https://theumdhare.com): a set of tools that
 turn published articles into Instagram posts, InDesign copy and newsletter
-content, plus a bot that posts the club's recurring reminders into Discord. The
-tools are open to anyone and need no account.
+content, a bot that posts the club's recurring reminders into Discord, and the
+pages that work out who has standing to vote. The article tools are open to
+anyone and need no account; the membership pages are for the Editorial Board.
 
 HareWare does **not** integrate with the article tracker. That lives in Notion,
 is maintained by hand, and is read by people rather than by software — see
@@ -72,8 +73,12 @@ Eastern — see `src/lib/eastern.ts`.
   `#instagram-posting` and pings that day's poster role.
 - **Board meeting** — if the Notion Meetings database holds a meeting dated
   today, posts a link to its agenda page.
+- **Member applications** — creates a Notion `Members` row for each approved
+  Discord application that matches nobody already on the roster. This one runs
+  **every hour** rather than at 8am, and posts nothing: somebody who applies on
+  Wednesday afternoon has to autocomplete at Wednesday evening's meeting.
 
-Neither posts anything on a day with nothing to say.
+The two reminders post nothing on a day with nothing to say.
 
 ### Environment
 
@@ -85,13 +90,13 @@ Set them with `npx wrangler versions secret put <NAME>`. Plain
 `wrangler secret put` refuses unless the latest version happens to be the
 deployed one, which it usually is not.
 
-| Secret                     | What it is                                                          |
-| -------------------------- | ------------------------------------------------------------------- |
-| `DISCORD_BOT_TOKEN`        | Sends every reminder, and reads the roles the admin pages gate on   |
-| `NOTION_TOKEN`             | Notion integration token, read access to Meetings only              |
-| `SESSION_SECRET`           | Signs the session and OAuth-state cookies. `openssl rand -hex 32`   |
-| `DISCORD_CLIENT_SECRET`    | The OAuth client secret, exchanged once per sign-in                 |
-| `REMINDERS_TRIGGER_SECRET` | Guards `POST /api/automations/run`. Unset, that route answers `404` |
+| Secret                     | What it is                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `DISCORD_BOT_TOKEN`        | Sends every reminder, reads the roles the admin pages gate on, and reads the join-request applications |
+| `NOTION_TOKEN`             | Notion integration token. Reads Meetings, Members and Articles, and writes Members and attendance      |
+| `SESSION_SECRET`           | Signs the session and OAuth-state cookies. `openssl rand -hex 32`                                      |
+| `DISCORD_CLIENT_SECRET`    | The OAuth client secret, exchanged once per sign-in                                                    |
+| `REMINDERS_TRIGGER_SECRET` | Guards `POST /api/automations/run`. Unset, that route answers `404`                                    |
 
 `DISCORD_BOT_TOKEN` is the one nothing works without: both reminders post as the
 bot, and the admin pages ask Discord for the caller's roles on every request.
@@ -131,12 +136,12 @@ like a form submission, and a request carrying no content type at all counts —
 without that header the answer is `403 Cross-site POST form submissions are
 forbidden`, from Astro rather than from this route.
 
-| Parameter                        | What it does                                        |
-| -------------------------------- | --------------------------------------------------- |
-| `?only=meeting` / `?only=social` | Fire one rather than both                           |
-| `?dry=1`                         | Report what each would post, without posting it     |
-| `?silent=1`                      | Post, but notify nobody                             |
-| `?sync=1`                        | Re-register the commands from Notion; fires nothing |
+| Parameter                                             | What it does                                        |
+| ----------------------------------------------------- | --------------------------------------------------- |
+| `?only=meeting`, `?only=social`, `?only=applications` | Fire one rather than all                            |
+| `?dry=1`                                              | Report what each would post, without posting it     |
+| `?silent=1`                                           | Post, but notify nobody                             |
+| `?sync=1`                                             | Re-register the commands from Notion; fires nothing |
 
 The response is a line per reminder saying what it did. It is a `POST` because
 it posts to Discord, and the secret travels in a header rather than the URL,
@@ -201,18 +206,119 @@ real.
    **Mention @everyone, @here, and All Roles** — without that last one the
    reminders post and ping nobody, silently. See
    [Why a ping renders but does not notify](#why-a-ping-renders-but-does-not-notify).
+   It also needs **Manage Server**, **Kick Members** and the **Server Members**
+   privileged intent for the membership pages — see
+   [Discord setup](#discord-setup).
 3. **Notion.** Create an internal integration at
    [notion.so/my-integrations](https://www.notion.com/my-integrations) and copy
    its token. Then open the Meetings database, and under `⋯` → Connections add
    that integration — Notion connections are opt-in per database, so the token
-   reads nothing until you do. Read access is all it needs. Put the database's
-   ID into `MEETINGS_DATABASE_ID`.
+   reads nothing until you do. Put the database's ID into
+   `MEETINGS_DATABASE_ID`. Connect `Members` and `Articles` the same way for the
+   membership pages, which need write access as well — see
+   [Notion setup](#notion-setup).
 4. **HareWare's own origin.** Set `HAREWARE_ORIGIN` to wherever this app is
    deployed. A cron tick has no incoming request to read an origin from, so it
    has to be written down. Left unset, the social reminder still goes out — it
    just omits the "open in HareWare" buttons.
 5. **WordPress.** Nothing. The social reminder reads the public feed and needs
    no account, token or plugin.
+
+## Membership and standing
+
+Three pages answer one question the club actually has to get right: **who may
+vote**. The constitution's rule is that within the past year somebody attended
+3 general body meetings, or made 2 contributions, or worked 1 volunteer event.
+Nothing stores an "eligible" flag — the answer is computed from records every
+time it is asked for. See
+[ADR 0010](docs/adr/0010-standing-is-computed.md) for the reasoning.
+
+- **`/attendance`** is a kiosk. It sits on a laptop at the front of the room,
+  people type their own names, and it writes attendance onto the meeting in
+  Notion. Somebody the roster has never heard of is created from the name and
+  email they type. Every row can have its Discord account, email and status
+  corrected on the spot, by the person it is about.
+- **`/reconciler`** holds everything that needs a human: applications that could
+  match more than one row, rows that look like the same person twice, members
+  with no status, members already in the Discord whose row is not linked, and
+  the Google Group comparison. Run it before an election — a duplicate splits
+  somebody's attendance across two rows and can cost them a vote they earned.
+- **`/standing`** computes eligibility over any window and thresholds, with the
+  constitution's rule as a preset, and exports CSV for TerpLink.
+
+### Notion setup
+
+The `Members` and `Meetings` databases both need connecting to the integration
+(`⋯` → Connections), the same way Meetings already is for the reminders.
+
+`Meetings` needs:
+
+| Property    | Type                                                         |
+| ----------- | ------------------------------------------------------------ |
+| `Type`      | Select: `General Body`, `Editorial Board`, `Volunteer Event` |
+| `Attendees` | Relation to `Members`, two-way with its `Attendance`         |
+
+**Set `Type` on the rows that already exist.** Only `General Body` and
+`Volunteer Event` count toward standing, and a meeting with no type counts
+toward nothing — the kiosk says so on screen rather than filing attendance that
+turns out not to count.
+
+`Members` needs:
+
+| Property           | Type                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------ |
+| `Status`           | Select. Its options are Notion's to name, except `Alum`, which the voting rule excludes on |
+| `Attendance`       | The other side of Meetings' `Attendees`                                                    |
+| `Contributions`    | Formula: `prop("Articles Count") + prop("Images Count")`                                   |
+| `No Announcements` | Checkbox. Ticked for somebody who asked not to be in the email group                       |
+
+Renaming a `Status` option needs no deploy — the pickers read the live schema.
+Removing `Alum` does need one, and the reconciler says so in red if it goes
+missing, because with it gone nobody is excluded from a vote as an alum.
+
+### Discord setup
+
+The bot reads the join-request applications people fill in to enter the server,
+which is where the cleanest name and email the club has come from.
+
+Give the bot's role **Kick Members** — Discord's own name for it in the role
+editor is "Kick, approve, and reject members". That is the permission
+[member applications](https://support.discord.com/hc/en-us/articles/29729107418519-Server-Member-Applications)
+are gated behind, and it is required to _read_ the list as well as to act on it.
+
+**Without it, the endpoint does not refuse — it answers `200` with `{}`.** No
+list, no count, no error. Every other endpoint returns a clean `403`:
+`/guilds/{id}/bans` and `/guilds/{id}/audit-logs` both do. This one does not, so
+a check that only looks at the status code reports success while the roster
+quietly stops growing. This cost us a day. `approvedApplications` now refuses an
+answer carrying neither a list nor a count, and names this permission in the
+error, which surfaces on the reconciler and in the `#carl-bot` alert.
+
+Membership screening with manual approval has to stay switched on. There is no
+webhook when an editor approves somebody, which is why the sync polls, and it
+reads the whole approved list every time rather than keeping a cursor — a stored
+position that slips past a gap never revisits it.
+
+### The Google Group
+
+The announcements group cannot be read or written by software: the Admin SDK
+wants Workspace administrator credentials on the domain that owns the group, and
+the club's is owned by a consumer Gmail account. So the reconciler compares it by
+hand instead.
+
+Open the group's members, use its **Export CSV** button, and hand the file to
+the reconciler. It reads the file in the browser — the addresses are never
+uploaded anywhere — and says who on the roster is missing, who has no address at
+all, and which addresses in the group match nobody. Copy the missing ones into
+the group's bulk-add field.
+
+Nothing is remembered between times, so the answer is right on every run rather
+than depending on somebody having pressed a button last time. Somebody who
+leaves the group on purpose looks exactly like somebody never added, so tick
+**No Announcements** on their row and the comparison stops offering them.
+
+Addresses outside `terpmail.umd.edu` and `umd.edu` are flagged: Google does not
+auto-add those, and they need an invitation instead.
 
 ## Editor commands
 

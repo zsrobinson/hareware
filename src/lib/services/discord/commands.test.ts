@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { HANDLED } from "./interactions";
-import { buildCommands, choicesFor } from "./commands";
+import { ALIASES, buildCommands, choicesFor } from "./commands";
 
 const article = () => buildCommands([])[0]!;
 
@@ -131,6 +131,31 @@ test("every subcommand the handler answers to is registered", () => {
   const registered = buildCommands([])[0]!.options!.map((o) => o.name);
 
   expect([...registered].sort()).toEqual([...HANDLED].sort());
+});
+
+/*
+  discord resolves a subcommand by name and has no aliases, so the only way to
+  answer two names is to register both — and registering a name nothing handles
+  shows the editor "HareWare didn't respond in time"
+*/
+test("every alias is registered as a subcommand of its own", () => {
+  const registered = article().options.map((option) => option.name);
+
+  expect(Object.keys(ALIASES).length).toBeGreaterThan(0);
+  for (const [alias, answers] of Object.entries(ALIASES)) {
+    expect(registered, alias).toContain(alias);
+    expect(registered, answers).toContain(answers);
+  }
+});
+
+test("an alias takes the same options as the subcommand behind it", () => {
+  for (const [alias, answers] of Object.entries(ALIASES))
+    expect(sub(alias)!.options, alias).toEqual(sub(answers)!.options);
+});
+
+test("/article scheduled is the other name for /article upcoming", () => {
+  expect(ALIASES.scheduled).toBe("upcoming");
+  expect(sub("upcoming")!.options).toEqual([]);
 });
 
 test("the article picker is autocompleted, not a choice list", () => {

@@ -14,6 +14,10 @@
 */
 
 import { articleResponse } from "./article-response";
+import { scheduleCard } from "./article-card";
+import { ALIASES } from "./commands";
+import { ARTICLE_PROPERTIES } from "~/lib/articles/config";
+import { SCHEDULED, type Upcoming } from "~/lib/articles/upcoming";
 import {
   IS_COMPONENTS_V2,
   type CommandMessage,
@@ -141,6 +145,8 @@ export type InteractionDeps = {
   search?: (text: string) => Promise<Article[]>;
   /** one Article, read live from notion */
   page?: (pageId: string) => Promise<ArticlePage>;
+  /** every scheduled Article, in the order they publish */
+  upcoming?: () => Promise<Upcoming>;
   /**
    * the write, which happens after the reply.
    *
@@ -223,19 +229,20 @@ function optionOf(
   `deferEphemeral()` here and follows up, rather than trying to fit a write
   inside three seconds
 */
-const SUBCOMMANDS: Record<
-  string,
-  (
-    interaction: Interaction,
-    deps: InteractionDeps,
-  ) => MessageResponse | Promise<MessageResponse>
-> = {
+type Handler = (
+  interaction: Interaction,
+  deps: InteractionDeps,
+) => MessageResponse | Promise<MessageResponse>;
+
+const HANDLERS: Record<string, Handler> = {
   ping: (interaction) =>
     ephemeral(
       `HareWare is listening. Discord says you are **${who(interaction)}**.`,
     ),
 
   show: (interaction, deps) => show(interaction, deps),
+
+  upcoming: (_interaction, deps) => upcoming(deps),
 
   new: (interaction, deps) =>
     write(interaction, deps, (subcommand) => {
@@ -323,6 +330,25 @@ const SUBCOMMANDS: Record<
         ? { request: { kind: "delete", pageId } }
         : refuse("Pick an Article from the list HareWare offers.");
     }),
+};
+
+/**
+ * the handlers, plus one entry per alias pointing at the same function.
+ *
+ * an alias reaches this file as an ordinary subcommand — discord registers it
+ * as one, having no aliases of its own — and `commands.ts` is where the
+ * pairing is written down. an alias whose subcommand has no handler is dropped
+ * rather than bound to `undefined`, so it goes missing from `HANDLED` and the
+ * registration test says so
+ */
+const SUBCOMMANDS: Record<string, Handler> = {
+  ...HANDLERS,
+  ...Object.fromEntries(
+    Object.entries(ALIASES).flatMap(([alias, name]) => {
+      const handler = HANDLERS[name];
+      return handler ? [[alias, handler] as const] : [];
+    }),
+  ),
 };
 
 /**
@@ -556,6 +582,41 @@ async function show(
       "Notion did not answer, so HareWare cannot show that Article. Try again, or open it in Notion.",
     );
   }
+}
+
+/**
+ * `/article upcoming` — every scheduled Article, read live from notion.
+ *
+ * two reads where `show` makes one, and answered inline for the same reason:
+ * ADR 0009 measures the schema at about half a second and a filtered query at
+ * about seven tenths, well inside discord's three. every branch says
+ * something, including the one where notion no longer has the status
+ */
+async function upcoming(deps: InteractionDeps): Promise<MessageResponse> {
+  if (!deps.upcoming)
+    return ephemeral("HareWare cannot reach Notion right now.");
+
+  let found: Upcoming;
+  try {
+    found = await deps.upcoming();
+  } catch (error) {
+    console.error("[article] could not read the schedule", error);
+
+    return ephemeral(
+      "Notion did not answer, so HareWare cannot say what is scheduled. Try again, or open the Articles database in Notion.",
+    );
+  }
+
+  /* the club renaming the option is not the club scheduling nothing, and an
+     empty list would report the first as the second indefinitely */
+  if (found.outcome === "no-such-status")
+    return ephemeral(
+      `Notion has no "${SCHEDULED}" option on ${ARTICLE_PROPERTIES.status.name} any more, so HareWare cannot tell which articles are scheduled.`,
+    );
+
+  return ephemeral({
+    components: [scheduleCard(found.articles, found.truncated)],
+  });
 }
 
 /**

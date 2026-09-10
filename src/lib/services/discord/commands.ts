@@ -93,6 +93,14 @@ export function choicesFor(
 type Subcommand = {
   name: string;
   description: string;
+  /**
+   * other names discord should answer this subcommand by.
+   *
+   * discord has no concept of an alias, so each one is registered as a
+   * subcommand of its own with the same options — which is why it carries its
+   * own description rather than borrowing one that names a different command
+   */
+  aliases?: { name: string; description: string }[];
   /** takes the notion choices, so a picker is data rather than a code change */
   options: (choices: ChoiceInput[]) => CommandOption[];
 };
@@ -135,6 +143,20 @@ const SUBCOMMANDS: Subcommand[] = [
     name: "show",
     description: "Show an article's current details and open it in Notion.",
     options: () => [articleOption()],
+  },
+  {
+    name: "upcoming",
+    description: "List the articles scheduled to publish, soonest first.",
+    /* "scheduled" is the word on the Article itself, "upcoming" the word for
+       the list of them — editors reach for both, so both are registered */
+    aliases: [
+      {
+        name: "scheduled",
+        description:
+          "Same as /article upcoming: the articles scheduled to publish.",
+      },
+    ],
+    options: () => [],
   },
   {
     name: "new",
@@ -323,6 +345,20 @@ function creditOptions(credit: "author" | "image"): CommandOption[] {
   ];
 }
 
+/**
+ * every alias, against the subcommand that answers it.
+ *
+ * the one place the pairing is written down. `interactions.ts` derives its
+ * handler for `/article scheduled` from this rather than listing it again, so
+ * an alias cannot be registered with nothing behind it — which discord shows
+ * as "HareWare didn't respond in time"
+ */
+export const ALIASES: Record<string, string> = Object.fromEntries(
+  SUBCOMMANDS.flatMap((subcommand) =>
+    (subcommand.aliases ?? []).map((alias) => [alias.name, subcommand.name]),
+  ),
+);
+
 /** the payload to register: `/article`, with everything notion currently offers */
 export function buildCommands(choices: ChoiceInput[]): CommandPayload {
   return [
@@ -330,12 +366,24 @@ export function buildCommands(choices: ChoiceInput[]): CommandPayload {
       name: "article",
       description: "Manage The Hare's articles in Notion from Discord.",
       default_member_permissions: "0",
-      options: SUBCOMMANDS.map((subcommand) => ({
-        type: SUB_COMMAND,
-        name: subcommand.name,
-        description: subcommand.description,
-        options: subcommand.options(choices),
-      })),
+      options: SUBCOMMANDS.flatMap((subcommand) => {
+        const options = subcommand.options(choices);
+
+        return [
+          {
+            type: SUB_COMMAND,
+            name: subcommand.name,
+            description: subcommand.description,
+            options,
+          },
+          ...(subcommand.aliases ?? []).map((alias) => ({
+            type: SUB_COMMAND,
+            name: alias.name,
+            description: alias.description,
+            options,
+          })),
+        ];
+      }),
     },
   ];
 }

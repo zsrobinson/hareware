@@ -383,6 +383,91 @@ test("the read commands are gated on the editorial board role too", async () => 
   expect(text(reply)).toContain("Editorial Board");
 });
 
+/* ---- the schedule -------------------------------------------------------- */
+
+const scheduled = (over: Partial<Article> = {}): Article =>
+  row({ status: "Scheduled", publicationDate: "2026-09-12", ...over });
+
+const schedule = (over: InteractionDeps = {}) =>
+  deps({
+    upcoming: () =>
+      Promise.resolve({
+        outcome: "scheduled" as const,
+        status: "Scheduled",
+        articles: [scheduled()],
+        truncated: false,
+      }),
+    ...over,
+  });
+
+test("/article upcoming answers with the schedule, dated and in a container", async () => {
+  const reply = asMessage(
+    await handleInteraction(command("upcoming"), schedule()),
+  );
+
+  expect(reply.type).toBe(4);
+  expect(text(reply)).toContain("2026-09-12");
+  expect(text(reply)).toContain("Terps lose again");
+});
+
+/*
+  discord has no aliases, so `/article scheduled` is a second registration
+  routed to the same handler — and the pairing lives in `commands.ts`. this is
+  what would go red if the two lists ever came apart
+*/
+test("/article scheduled is the same command under its other name", async () => {
+  const upcoming = asMessage(
+    await handleInteraction(command("upcoming"), schedule()),
+  );
+  const alias = asMessage(
+    await handleInteraction(command("scheduled"), schedule()),
+  );
+
+  expect(text(alias)).toBe(text(upcoming));
+});
+
+/* the club renaming the status is not the club scheduling nothing */
+test("/article upcoming says when Notion no longer has the status", async () => {
+  const reply = asMessage(
+    await handleInteraction(
+      command("upcoming"),
+      schedule({
+        upcoming: () => Promise.resolve({ outcome: "no-such-status" as const }),
+      }),
+    ),
+  );
+
+  expect(text(reply)).toContain("Article Status");
+  expect(text(reply)).not.toContain("Nothing is scheduled");
+});
+
+test("/article upcoming says something when notion does not answer", async () => {
+  const reply = asMessage(
+    await handleInteraction(
+      command("upcoming"),
+      schedule({ upcoming: () => Promise.reject(new Error("notion is down")) }),
+    ),
+  );
+
+  expect(reply.type).toBe(4);
+  expect(text(reply)).toContain("Notion");
+});
+
+test("/article upcoming refuses rather than reading for somebody off the board", async () => {
+  const reply = asMessage(
+    await handleInteraction(
+      command("upcoming", [], ["nope"]),
+      schedule({
+        upcoming: () => {
+          throw new Error("must not read notion for somebody off the board");
+        },
+      }),
+    ),
+  );
+
+  expect(text(reply)).toContain("Editorial Board");
+});
+
 /* ---- autocomplete -------------------------------------------------------- */
 
 const AUTOCOMPLETE_RESULT = 8;

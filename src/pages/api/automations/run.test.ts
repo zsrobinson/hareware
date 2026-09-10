@@ -66,6 +66,7 @@ test("runs both reminders for a correct secret", async () => {
   expect(Object.keys(report as object)).toEqual([
     "meeting-reminder",
     "social-ping",
+    "application-sync",
   ]);
 });
 

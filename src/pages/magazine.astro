@@ -60,8 +60,8 @@ const { output, unprocessed } = body
 const who = viewerState(await viewer(Astro.request));
 ---
 
-<Dashboard title="InDesign Export" viewer={who}>
-  <div class="flex max-w-120 flex-col gap-2">
+<Dashboard title="InDesign Export" viewer={who} width="form">
+  <div class="flex flex-col gap-2">
     {
       /* the landing state is otherwise a field floating on its own, with
          nothing saying what it wants or what it will do with it */

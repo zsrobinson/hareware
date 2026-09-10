@@ -1,3 +1,4 @@
+import { postJson } from "~/lib/post-json";
 import { useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -29,18 +30,7 @@ async function run(id: AutomationId, mode: Mode): Promise<Report> {
   if (mode === "dry") query.set("dry", "1");
   if (mode === "silent") query.set("silent", "1");
 
-  const response = await fetch(`/api/automations/run?${query}`, {
-    method: "POST",
-    // astro refuses a cross-site POST that looks like a form submission, and
-    // one carrying no content type counts as one
-    headers: { "content-type": "application/json" },
-  });
-
-  if (!response.ok) {
-    throw new Error(`${response.status} ${await response.text()}`);
-  }
-
-  return response.json() as Promise<Report>;
+  return postJson<Report>(`/api/automations/run?${query}`);
 }
 
 export function AutomationTriggers({
@@ -137,13 +127,23 @@ export function AutomationTriggers({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Run the {confirming?.name} automation?</DialogTitle>
+            {/* an automation with no channel reaches nobody, so the warning
+                that everyone will see it would be false — it still writes,
+                which is its own reason to ask first */}
             <DialogDescription>
-              This posts to{" "}
-              <strong>
-                {confirming && channelLabel(confirming.channelId)}
-              </strong>{" "}
-              and pings the role, exactly as it would in the morning. Everyone
-              in the channel sees it.
+              {confirming?.channelId ? (
+                <>
+                  This posts to{" "}
+                  <strong>{channelLabel(confirming.channelId)}</strong> and
+                  pings the role, exactly as it would in the morning. Everyone
+                  in the channel sees it.
+                </>
+              ) : (
+                <>
+                  This posts nothing, and makes the same changes it would in the
+                  morning. They are real.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

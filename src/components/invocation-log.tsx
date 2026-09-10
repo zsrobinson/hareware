@@ -1,8 +1,8 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { ArrowUpDownIcon } from "lucide-react";
-import { DataTable } from "~/components/data-table";
+import { DataTable, sortable } from "~/components/data-table";
+import { MemberFace } from "~/components/member-face";
 import { Badge } from "~/components/ui/badge";
-import { Button } from "~/components/ui/button";
+import type { Faces } from "~/lib/faces";
 import type { Row } from "~/lib/log";
 
 /** the row as it crosses to the client: json has no Date and needs none */
@@ -31,30 +31,9 @@ const when = (at: number) =>
     minute: "2-digit",
   });
 
-/** a header that says it can be sorted, rather than leaving you to discover it */
-function sortable(label: string) {
-  const Header = ({
-    column,
-  }: {
-    column: {
-      toggleSorting: (d?: boolean) => void;
-      getIsSorted: () => false | string;
-    };
-  }) => (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="-ml-2 h-8"
-      onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-    >
-      {label}
-      <ArrowUpDownIcon className="size-3.5 opacity-60" />
-    </Button>
-  );
-  return Header;
-}
-
-const columns: ColumnDef<LogRow, unknown>[] = [
+/* the actor is a discord id, so the column is built per page: the picture and
+   the name both come from the lookup the page already made */
+const columnsFor = (faces: Faces): ColumnDef<LogRow, unknown>[] => [
   {
     accessorKey: "at",
     header: sortable("When"),
@@ -101,16 +80,40 @@ const columns: ColumnDef<LogRow, unknown>[] = [
   {
     accessorKey: "actor",
     header: "Actor",
-    cell: ({ row }) => (
-      <span className="text-muted-foreground">{row.original.actor ?? "—"}</span>
-    ),
+    cell: ({ row }) => {
+      const actor = row.original.actor;
+      /* no actor at all is the cron, which is not a person and gets no ghost */
+      if (!actor) return <span className="text-muted-foreground">—</span>;
+
+      const face = faces[actor];
+      return (
+        <span className="flex items-center gap-2 whitespace-nowrap">
+          {/* the id is not a name, so an unresolved actor gets the ghost
+              rather than initials made out of a snowflake */}
+          <MemberFace
+            discordId={actor}
+            name={face?.displayName ?? ""}
+            faces={faces}
+          />
+          <span className="text-muted-foreground">
+            {face?.displayName ?? actor}
+          </span>
+        </span>
+      );
+    },
   },
 ];
 
-export function InvocationLog({ rows }: { rows: LogRow[] }) {
+export function InvocationLog({
+  rows,
+  faces,
+}: {
+  rows: LogRow[];
+  faces: Faces;
+}) {
   return (
     <DataTable
-      columns={columns}
+      columns={columnsFor(faces)}
       data={rows}
       facets={[
         { id: "source", label: "Source" },

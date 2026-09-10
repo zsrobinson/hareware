@@ -1,0 +1,87 @@
+---
+import { env } from "cloudflare:workers";
+import Dashboard from "~/layouts/dashboard.astro";
+import { AttendanceKiosk } from "~/components/attendance-kiosk";
+import { viewerState } from "~/lib/admin";
+import { admitted } from "~/lib/admin-guard";
+import { easternNow } from "~/lib/eastern";
+import { faces } from "~/lib/faces";
+import { guildMembers } from "~/lib/member";
+import { kioskData } from "~/lib/members/views";
+
+/* Reaching this page is the permission: the guard already refused anybody it
+   would not admit, and its lookup knows what to call them. */
+const who = admitted(Astro.locals);
+
+/* the room can see this screen, and it lists everybody's name and email
+   domain. nothing may cache any of it */
+Astro.response.headers.set("cache-control", "private, no-store");
+
+/* eastern, and fixed here rather than worked out again on every refetch: this
+   laptop is open all evening, and a "today" that rolled over at midnight would
+   move the meeting select off the meeting the room is signing into */
+const today = easternNow(new Date()).date;
+
+/*
+  the roster and the calendar, read once when the laptop is set down.
+
+  the whole roster rather than a search endpoint per keystroke: fifty people
+  fit in one payload, and a kiosk in a room with student wifi must keep working
+  when the network does not. Every tap after this costs exactly one write.
+
+  `kioskData` is also what `/api/members/kiosk` answers, so this is the
+  island's `initialData` — first paint is server-rendered, and creating or
+  correcting somebody re-reads it in place instead of asking the room to
+  reload. It bounds its own concurrency, which is what keeps a burst of notion
+  requests in one tick from going over the budget before any has answered.
+
+  the contribution count beside a name comes from Members' `Contributions`
+  formula, read with the roster. This page used to read the whole published
+  article corpus for it — every article the club has ever run, growing by a
+  year every year, to render a badge
+*/
+const data = await kioskData(
+  env,
+  today,
+  /* the param wins over today's meeting so a reload mid-meeting comes back to
+     the one the room is signing into */
+  Astro.url.searchParams.get("meeting"),
+);
+
+/*
+  one request for the whole guild, read twice: once for the pictures beside a
+  name, and once for the Discord chip's autocomplete. A member the kiosk cannot
+  draw falls back to their initials, which is also what a missing token gets.
+
+  discord rather than notion, and unchanged by any write this page makes, so it
+  stays a page prop rather than joining the query the kiosk refetches
+*/
+const guild = await guildMembers();
+const rosterFaces = await faces(
+  data.candidates.map((person) => person.discordId),
+  async () => guild,
+);
+const guildOptions = [...guild].map(([id, profile]) => ({
+  id,
+  username: profile.username,
+  displayName: profile.displayName,
+}));
+---
+
+<Dashboard title="Attendance" viewer={viewerState(who)}>
+  {
+    env.NOTION_TOKEN ? (
+      <AttendanceKiosk
+        initial={data}
+        today={today}
+        faces={rosterFaces}
+        guild={guildOptions}
+        client:load
+      />
+    ) : (
+      <p class="text-destructive text-sm">
+        NOTION_TOKEN is not set, so attendance cannot be recorded.
+      </p>
+    )
+  }
+</Dashboard>

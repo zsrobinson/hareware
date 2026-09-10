@@ -22,8 +22,9 @@ import type { Row } from "~/lib/log";
 import { REMINDER_HOUR, BOARD_CHANNEL_ID, SOCIAL_CHANNEL_ID } from "./config";
 import { sendMeetingReminder } from "./meeting";
 import { sendSocialPing } from "./social";
+import { syncApplications } from "~/lib/members/sync";
 
-export type AutomationId = "meeting" | "social";
+export type AutomationId = "meeting" | "social" | "applications";
 
 /**
  * what an automation reports back.
@@ -50,10 +51,25 @@ export type Automation = {
   name: string;
   /** what it does, in the words a club member would use */
   description: string;
-  /** where it posts, as an id — so the panel and the message cannot disagree */
-  channelId: string;
-  /** the hour it runs, eastern */
-  hour: number;
+  /**
+   * where it posts, as an id — so the panel and the message cannot disagree.
+   *
+   * optional, because not every automation talks to the club. The application
+   * sync writes notion rows and says nothing in discord, and giving it a
+   * channel it never posts to would be a lie the panel then prints. Absent
+   * means "this one reaches nobody", which `channelLabel` says out loud
+   */
+  channelId?: string;
+  /**
+   * the hour it runs, eastern, or `"hourly"` for every tick.
+   *
+   * the reminders are a time of day. the application sync is not: ADR 0010
+   * has it creating a row so somebody who applied on monday autocompletes at
+   * wednesday's meeting, and a fixed hour meant an application approved on
+   * wednesday afternoon waited until thursday morning, which is the case the
+   * whole section is written around
+   */
+  hour: number | "hourly";
   run: (env: Env, eastern: EasternNow) => Promise<Result>;
 };
 
@@ -78,6 +94,15 @@ export const AUTOMATIONS: Automation[] = [
     hour: REMINDER_HOUR,
     run: sendSocialPing,
   },
+  {
+    id: "applications",
+    action: "application-sync",
+    name: "Member applications",
+    description:
+      "Creates a Members row for each approved Discord application that matches nobody already on the roster. Posts nothing; anything ambiguous is left for the reconciler.",
+    hour: "hourly",
+    run: syncApplications,
+  },
 ];
 
 /** an automation by id, for a route validating `?only=` against what exists */
@@ -86,14 +111,24 @@ export function automation(id: string): Automation | undefined {
 }
 
 /** "8am", the way the panel says it */
-export function hourLabel(hour: number) {
+export function hourLabel(hour: number | "hourly") {
+  if (hour === "hourly") return "every hour";
+
   const suffix = hour < 12 ? "am" : "pm";
   const twelve = hour % 12 === 0 ? 12 : hour % 12;
   return `${twelve}${suffix}`;
 }
 
-/** "#editorial-board", for a confirmation nobody should click through blind */
-export function channelLabel(channelId: string) {
+/**
+ * "#editorial-board", for a confirmation nobody should click through blind.
+ *
+ * an automation with no channel is not an error and not an unknown channel —
+ * it is one that posts nothing, and the panel says so rather than rendering
+ * "channel undefined" beside it. ADR 0010 put the application sync on the same
+ * hourly cron precisely so that everything the cron does is visible here
+ */
+export function channelLabel(channelId: string | undefined) {
+  if (!channelId) return "posts nothing";
   return CHANNEL_NAMES[channelId] ?? `channel ${channelId}`;
 }
 

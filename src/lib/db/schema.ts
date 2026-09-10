@@ -23,6 +23,13 @@ export const invocations = sqliteTable(
         "mark-posted",
         "article-edit",
         "command-surface",
+        "application-sync",
+        /* every roster change an officer makes on the three ADR 0010 pages:
+           attendance, a member created, an application linked, two rows
+           merged, a status set. one value at the granularity `article-edit`
+           already uses — the summary names which, and an election audit needs
+           to find these without knowing what to look for */
+        "roster-edit",
       ],
     }).notNull(),
     /*

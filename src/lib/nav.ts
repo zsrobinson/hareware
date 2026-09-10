@@ -1,10 +1,13 @@
 import {
+  ClipboardCheckIcon,
   CodeIcon,
   FileTextIcon,
   ImageIcon,
   MailIcon,
+  ScaleIcon,
   SquareActivityIcon,
   TypeIcon,
+  UsersIcon,
   ZapIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -36,10 +39,17 @@ export const toolsNav: NavItem[] = [
 /*
   The admin tools, shown to everybody: the guard refuses in person, so the nav
   has nothing to hide (ADR 0007). `href` is an `AdminRoute`, so a tool listed
-  here is one the guard protects. The log goes last, being the one read after
-  the fact rather than a thing somebody came to do.
+  here is one the guard protects.
+
+  Ordered by when they are used: the kiosk at the meeting, the reconciler
+  before a vote, standing to answer the question those two make answerable,
+  then the three that were here first. The log goes last, being the one read
+  after the fact rather than a thing somebody came to do.
 */
 export const adminNav: (NavItem & { href: AdminRoute })[] = [
+  { href: "/attendance", label: "Attendance", icon: ClipboardCheckIcon },
+  { href: "/reconciler", label: "Reconciler", icon: UsersIcon },
+  { href: "/standing", label: "Standing", icon: ScaleIcon },
   { href: "/automations", label: "Automations", icon: ZapIcon },
   { href: "/commands", label: "Slash Commands", icon: CodeIcon },
   { href: "/log", label: "Invocation Log", icon: SquareActivityIcon },

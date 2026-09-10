@@ -13,12 +13,16 @@ const meeting = (
   title: string,
   start: string,
   location = "McKeldin 2100E",
+  /* ADR 0010 added `Type` to Meetings. Undefined here stands for the rows that
+     predate it, which is every row that existed when it was added */
+  type?: string,
 ) => ({
   url: `https://notion.so/${encodeURIComponent(title)}`,
   properties: {
     Name: { type: "title", title: [{ plain_text: title }] },
     Date: { type: "date", date: { start } },
     Location: { type: "rich_text", rich_text: [{ plain_text: location }] },
+    ...(type ? { Type: { type: "select", select: { name: type } } } : {}),
   },
 });
 
@@ -216,4 +220,64 @@ test("a notion location cannot ping the board", async () => {
   const body = JSON.stringify(discord.mock.calls[0]?.[0]);
   expect(body).toContain("room");
   expect(body).not.toContain("@everyone");
+});
+
+/*
+  ADR 0010 gave Meetings a `Type`. these four pin the handover: the select wins
+  wherever it is set, and the old title-prefix match survives only for rows
+  nobody has typed yet — deleting it outright would have stopped the reminder
+  finding anything, silently, on the first morning after deploy
+*/
+test("a meeting typed Editorial Board is found however it is titled", async () => {
+  const discord = mockNotion([
+    meeting(
+      "Week 3 planning",
+      "2026-09-08T19:00:00.000-04:00",
+      "STAMP",
+      "Editorial Board",
+    ),
+  ]);
+
+  const result = await sendMeetingReminder(env, today);
+
+  expect(result.outcome).toBe("ok");
+  expect(discord).toHaveBeenCalled();
+});
+
+test("a typed General Body meeting is not the board's, whatever its title says", async () => {
+  const discord = mockNotion([
+    meeting(
+      "Editorial Board social",
+      "2026-09-08T19:00:00.000-04:00",
+      "STAMP",
+      "General Body",
+    ),
+  ]);
+
+  const result = await sendMeetingReminder(env, today);
+
+  expect(result.outcome).toBe("skipped");
+  expect(discord).not.toHaveBeenCalled();
+});
+
+test("an untyped row still falls back to its title, so nothing broke on deploy", async () => {
+  const discord = mockNotion([
+    meeting("Editorial Board Meeting", "2026-09-08T19:00:00.000-04:00"),
+  ]);
+
+  const result = await sendMeetingReminder(env, today);
+
+  expect(result.outcome).toBe("ok");
+  expect(discord).toHaveBeenCalled();
+});
+
+test("an untyped row with an unrelated title is still not a board meeting", async () => {
+  const discord = mockNotion([
+    meeting("Magazine design session", "2026-09-08T19:00:00.000-04:00"),
+  ]);
+
+  const result = await sendMeetingReminder(env, today);
+
+  expect(result.outcome).toBe("skipped");
+  expect(discord).not.toHaveBeenCalled();
 });

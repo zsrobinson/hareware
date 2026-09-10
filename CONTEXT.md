@@ -147,10 +147,20 @@ The real name behind a pseudonymous Byline never reaches WordPress.
 
 ## Member
 
-A person in the club, identified by their Discord account.
+A person in the club. One row per human, ever.
 
 Members carry the things the club needs to remember about a person: their real
-name, and which Articles and images are theirs.
+name, their email, whether they are an Undergrad, a Grad or an Alum, which
+Articles and images are theirs, and which meetings they attended.
+
+A Member is usually identified by their Discord account, but not always. Rows
+are also created at the **Kiosk** by people who have not applied on Discord
+yet, and those carry a name and an email and no snowflake until an
+**Application** is matched to them. "Keyed by Discord ID" was true before ADR
+0010 and is now only the common case.
+
+There is no such thing as joining or leaving. Anyone may write, attend and
+vote subject to **Standing**; nothing is revoked, and nobody is removed.
 
 Pseudonyms are not recorded. A pseudonymous Byline is **detected** rather than
 stored — an Article whose printed Byline differs from the linked Member's name
@@ -161,14 +171,75 @@ that is read live from their Discord roles (@Editor-in-Chief, @Managing Editor,
 without anyone updating a second list.
 
 Historical Articles were backported to link a Member where one could be
-identified. Alumni still get no stub row — Members is keyed by Discord user ID,
-which alumni can no longer supply, so a legacy row carrying only its Byline text
-is the honest state. See ADR 0004.
+identified. See ADR 0004. Alumni do have rows — they keep contributing and
+never leave the server — and are marked `Alum` by hand, which is the one field
+in the roster a person has to maintain.
+
+Graduation year is deliberately not recorded. People change it without telling
+the club, and winter versus spring is not a distinction anyone here needs. See
+ADR 0010.
+
+## Standing
+
+What a person has done in a window of time, and whether it was enough.
+
+Standing is **computed, never stored**. There is no eligible flag and nothing
+to tick: HareWare counts general body meetings, volunteer events and
+contributions over a date range and compares them against thresholds. The
+constitution's rule — within the past year, 3 meetings or 2 contributions or 1
+volunteer event, alumni excluded — is a preset on that query rather than
+something the code enforces, because the rule belongs to the club.
+
+The masthead is the same question with different numbers, which is why there
+is one page and not two. See ADR 0010.
+
+Standing is the club's one **coordination** tool: people act on it during
+elections, so unlike the Article tracker it has to be right. Say "who has
+standing to vote", not "who is a member" — membership is not the question.
+
+## Application
+
+What somebody fills in to join the Discord server: their full name, email,
+graduation year and a paragraph about why. An editor approves it by hand.
+
+Applications are read, never written. They are the cleanest identity data the
+club has, and the origin of most Members — but they only reach back to
+December 2025, so most of the server predates them.
+
+## Attendance
+
+Who was in the room. A relation between a Member and a **Meeting**, recorded at
+the **Kiosk** and stored on the Meeting page in Notion.
+
+Attendance at an Editorial Board meeting counts toward nothing. Only General
+Body meetings and Volunteer Events feed Standing.
+
+## Kiosk
+
+The laptop at the front of the room at a meeting, showing `/admin/attendance`,
+where people enter their own names.
+
+It is signed in as an officer and sits beside one. It creates Members as well
+as recording Attendance, which is why a new person is asked for an email: that
+address is what later matches them to their Application without anyone
+guessing.
+
+## Reconciler
+
+The page holding everything about the roster that needs a person to decide:
+Applications that might belong to an existing row, rows that look like the same
+human twice, Members with no Status, and the emails waiting to be added to the
+Google Group by hand.
+
+Nothing on it happens automatically. A duplicate Member splits somebody's
+Attendance across two rows and can cost them a vote they earned, so the
+reconciler is run _before_ an election, and the Standing page says so while
+anything is outstanding.
 
 ## Automation
 
 Something HareWare does on a schedule without being asked: today, the two
-morning reminders.
+morning reminders and the application sync.
 
 "Automation" is the word the interface uses: `/automations`, the sidebar,
 the trigger buttons — and the word to use in code and in issues. It is broader

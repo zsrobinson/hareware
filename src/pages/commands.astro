@@ -38,8 +38,8 @@ const usage = (command: ApplicationCommand, subcommand: CommandOption) =>
     .join("")}`;
 ---
 
-<Dashboard title="Slash Commands" viewer={viewerState(who)}>
-  <div class="max-w-3xl space-y-4">
+<Dashboard title="Slash Commands" viewer={viewerState(who)} width="prose">
+  <div class="space-y-4">
     <p class="text-muted-foreground text-sm">
       A reference for the editorial commands available in Discord. Replies are
       visible only to the person who ran the command. Required options use angle

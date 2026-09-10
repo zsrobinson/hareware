@@ -1,0 +1,66 @@
+---
+import { env } from "cloudflare:workers";
+import Dashboard from "~/layouts/dashboard.astro";
+import { Reconciler } from "~/components/reconciler";
+import { viewerState } from "~/lib/admin";
+import { admitted } from "~/lib/admin-guard";
+import { reconcilerData } from "~/lib/members/views";
+import { ALUM_STATUS } from "~/lib/members/config";
+import { faces } from "~/lib/faces";
+
+/* Reaching this page is the permission: the guard already refused anybody it
+   would not admit, and its lookup knows what to call them. */
+const who = admitted(Astro.locals);
+
+/* names, emails and discord ids, all on one screen. nothing may cache it */
+Astro.response.headers.set("cache-control", "private, no-store");
+
+/*
+  read here rather than in the island, and handed down whole.
+
+  `reconcilerData` is also what `/api/members/reconciler` answers, so this is
+  the island's `initialData` and its refetches are the same shape from the same
+  function. First paint is server-rendered exactly as before; what changed is
+  that a link, a merge or a status no longer needs the editor to reload
+*/
+const data = await reconcilerData(env);
+
+/* the same pictures the kiosk draws, from the guild read `reconcilerData`
+   already made. A row with no linked account falls back to its initials, which
+   is also what a missing bot token gets */
+const rosterFaces = await faces([
+  ...data.roster.map((person) => person.discordId),
+  ...data.discordSuggestions.map((suggestion) => suggestion.account.id),
+]);
+---
+
+<Dashboard title="Reconciler" viewer={viewerState(who)}>
+  <div class="space-y-6">
+    <p class="text-muted-foreground text-sm">
+      Run this before an election. An unresolved duplicate splits somebody's
+      attendance across two rows and denies them a vote they earned.
+    </p>
+
+    {
+      data.alumMissing && (
+        <p class="border-destructive/50 bg-destructive/10 text-destructive rounded-lg border p-3 text-sm">
+          Notion's Status options no longer include "{ALUM_STATUS}", which is
+          the value the voting rule excludes on. Restore that option, or nobody
+          will be excluded as an alum. Options Notion has:{" "}
+          {data.liveStatuses.join(", ")}.
+        </p>
+      )
+    }
+
+    {
+      data.discordProblem && (
+        <p class="border-destructive/50 bg-destructive/10 text-destructive rounded-lg border p-3 text-sm">
+          Discord could not be read completely, so application and account
+          suggestions may be unavailable: {data.discordProblem}
+        </p>
+      )
+    }
+
+    <Reconciler initial={data} faces={rosterFaces} client:load />
+  </div>
+</Dashboard>

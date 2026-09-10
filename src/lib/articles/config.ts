@@ -1,5 +1,5 @@
 /*
-  the Articles and Members databases, as they actually are.
+  the Articles database, as it actually is.
 
   written down rather than discovered, unlike the Meetings reminder, which asks
   the schema which property holds its date. that works there because a meetings
@@ -10,6 +10,18 @@
   none of it is secret: a notion id is not a credential, and the token that
   reads them is.
 */
+
+/*
+  Members moved to `~/lib/members/config` when ADR 0010 made it a domain of its
+  own — it now carries emails, a student status and an attendance history, none
+  of which Articles has an opinion about. Re-exported rather than repointed
+  everywhere, because a byline resolving to a person is still an Articles
+  concern and this is the file that concern reads its names from.
+*/
+export {
+  MEMBERS_DATA_SOURCE_ID,
+  MEMBER_PROPERTIES,
+} from "~/lib/members/config";
 
 /** the database container; `data_sources/{id}` is what actually holds rows */
 export const ARTICLES_DATABASE_ID = "22cbe415-e24c-80aa-9043-e851d9ed4534";
@@ -22,9 +34,6 @@ export const ARTICLES_DATABASE_ID = "22cbe415-e24c-80aa-9043-e851d9ed4534";
  * somebody deletes the database
  */
 export const ARTICLES_DATA_SOURCE_ID = "22cbe415-e24c-8078-8349-000b6844d0d7";
-
-/** the Members data source — one row per person, keyed by their discord id */
-export const MEMBERS_DATA_SOURCE_ID = "3cfbe415-e24c-8002-8e93-000b3e37e6c3";
 
 /**
  * every Articles property we read or write, and the type it must be.
@@ -46,14 +55,6 @@ export const ARTICLE_PROPERTIES = {
   publicationDate: { name: "Publication Date", type: "date" },
   author: { name: "Author", type: "relation" },
   imageCrew: { name: "Image Crew", type: "relation" },
-} as const;
-
-/** the Members properties, same contract */
-export const MEMBER_PROPERTIES = {
-  name: { name: "Name", type: "title" },
-  /* text, not number: a discord snowflake is 19 digits and loses its low
-     digits to a float, silently, on every read */
-  discordId: { name: "Discord ID", type: "rich_text" },
 } as const;
 
 /**

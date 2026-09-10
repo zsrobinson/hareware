@@ -1,0 +1,86 @@
+---
+import { env } from "cloudflare:workers";
+import Dashboard from "~/layouts/dashboard.astro";
+import { StandingTable } from "~/components/standing-table";
+import { viewerState } from "~/lib/admin";
+import { admitted } from "~/lib/admin-guard";
+import { easternNow } from "~/lib/eastern";
+import { corpus, statusOptions, type Corpus } from "~/lib/members/roster";
+import { ALUM_STATUS, alumOptionMissing } from "~/lib/members/config";
+import { faces } from "~/lib/faces";
+
+/* Reaching this page is the permission: the guard already refused anybody it
+   would not admit, and its lookup knows what to call them. */
+const who = admitted(Astro.locals);
+
+/* this page names every member and what they did. ADR 0005 for the rule, ADR
+   0007 for why the admin surface is the sensitive one */
+Astro.response.headers.set("cache-control", "private, no-store");
+
+/*
+  all three databases read once, server-side, and handed to the island whole.
+
+  the island re-answers the question locally on every change to the form,
+  because `standings()` is pure — an editor trying "what if it were four
+  meetings" gets the answer without a round trip, and without the corpus
+  shifting under them between two attempts at the same question. that is why
+  `standing.ts` was written as a pure function and why this page reads rather
+  than queries
+*/
+const token = env.NOTION_TOKEN;
+const rows: Corpus | null = token ? await corpus(token) : null;
+
+/* the same pictures the kiosk and the reconciler draw. one request for the
+   whole guild, and initials for anybody with no linked account */
+const rosterFaces = await faces(
+  (rows?.people ?? []).map((person) => person.discordId),
+);
+
+/*
+  the one place a renamed notion option could change who votes.
+
+  every other Status label is notion's to spell — the pickers read the schema.
+  `standing.ts` compares against `ALUM_STATUS` to exclude alumni, so if notion
+  no longer has that option the rule matches nobody and every alum quietly
+  qualifies. Refusing to answer at all would be worse on the morning of an
+  election, so the page answers and says loudly that it cannot be trusted
+*/
+const liveStatuses = token
+  ? await statusOptions(token).catch(() => [] as string[])
+  : [];
+const alumMissing = alumOptionMissing(liveStatuses);
+
+/* eastern, because the window's ends are compared against notion dates the
+   club would name in its own timezone */
+const today = easternNow(new Date()).date;
+---
+
+<Dashboard title="Standing" viewer={viewerState(who)}>
+  <div class="space-y-4">
+    {
+      alumMissing && (
+        <p class="border-destructive/50 bg-destructive/10 text-destructive rounded-lg border p-3 text-sm">
+          Notion's Status options no longer include "{ALUM_STATUS}", which is
+          the value that keeps alumni out of a vote. Until an editor restores
+          that option or the rule is changed in code, nobody is being excluded
+          as an alum. Options Notion has: {liveStatuses.join(", ")}.
+        </p>
+      )
+    }
+
+    {
+      rows ? (
+        <StandingTable
+          corpus={rows}
+          today={today}
+          faces={rosterFaces}
+          client:load
+        />
+      ) : (
+        <p class="text-destructive text-sm">
+          NOTION_TOKEN is not set, so there is nothing to count.
+        </p>
+      )
+    }
+  </div>
+</Dashboard>

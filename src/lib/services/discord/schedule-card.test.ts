@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { scheduleCard } from "./article-card";
+import { scheduleCard } from "./schedule-card";
 import { ARTICLES_DATABASE_ID } from "~/lib/articles/config";
 import { toArticle, type ArticlePage } from "~/lib/articles/page";
 
@@ -81,6 +81,23 @@ test("a schedule too long for discord is cut, and says how much was cut", () => 
 
   expect(JSON.stringify(card).length).toBeLessThan(4000);
   expect(body(card)).toContain("more, further out");
+});
+
+/*
+  the two ways the list falls short of the truth are independent, and a ternary
+  picking one of them is the "four outcomes flattened into ok" shape in
+  docs/agents/silent-failures.md — an editor told the list was cut here would
+  never learn notion held a tail beyond it
+*/
+test("a list both cut here and short in Notion says both", () => {
+  const many = Array.from({ length: 200 }, (_, i) =>
+    article(`Headline number ${i}`.padEnd(90, "x"), "2026-09-12"),
+  );
+
+  const said = body(scheduleCard(many, true));
+
+  expect(said).toContain("more, further out");
+  expect(said).toContain("Notion holds more");
 });
 
 /* the club's bot must not ping a channel because somebody typed a headline */

@@ -14,7 +14,7 @@
 */
 
 import { articleResponse } from "./article-response";
-import { scheduleCard } from "./article-card";
+import { scheduleCard } from "./schedule-card";
 import { ALIASES } from "./commands";
 import { ARTICLE_PROPERTIES } from "~/lib/articles/config";
 import { SCHEDULED, type Upcoming } from "~/lib/articles/upcoming";
@@ -66,6 +66,9 @@ const AUTOCOMPLETE_BUDGET_MS = 2000;
 
 /** below this a substring search matches most of the corpus, so it is not run */
 const MIN_SEARCH = 2;
+
+/** every read command with nowhere to read from says the same thing */
+const NO_NOTION = "HareWare cannot reach Notion right now.";
 
 /**
  * an option as discord sends it back, which is not the option as we registered
@@ -571,7 +574,7 @@ async function show(
   if (!pageId)
     return ephemeral("Pick an Article from the list HareWare offers.");
 
-  if (!deps.page) return ephemeral("HareWare cannot reach Notion right now.");
+  if (!deps.page) return ephemeral(NO_NOTION);
 
   try {
     return ephemeral(articleResponse(await deps.page(pageId)));
@@ -593,8 +596,7 @@ async function show(
  * something, including the one where notion no longer has the status
  */
 async function upcoming(deps: InteractionDeps): Promise<MessageResponse> {
-  if (!deps.upcoming)
-    return ephemeral("HareWare cannot reach Notion right now.");
+  if (!deps.upcoming) return ephemeral(NO_NOTION);
 
   let found: Upcoming;
   try {

@@ -8,10 +8,10 @@
   differently matches nothing, returns `200`, and reads as an empty schedule.
 */
 
-import { notion } from "~/lib/services/notion/client";
 import { fetchSchema, optionNamed } from "./choices";
-import { ARTICLES_DATA_SOURCE_ID, ARTICLE_PROPERTIES } from "./config";
-import { toArticle, type Article, type ArticlePage } from "./page";
+import { ARTICLE_PROPERTIES } from "./config";
+import { queryArticles } from "./live";
+import type { Article } from "./page";
 
 /** casefolded, because the schema spells it back — see `optionNamed` */
 export const SCHEDULED = "scheduled";
@@ -86,22 +86,18 @@ export async function upcomingArticles(token: string): Promise<Upcoming> {
   );
   if (!status) return { outcome: "no-such-status" };
 
-  const response = (await notion(
-    `data_sources/${ARTICLES_DATA_SOURCE_ID}/query`,
-    token,
-    {
-      page_size: PAGE_SIZE,
-      filter: {
-        property: ARTICLE_PROPERTIES.status.name,
-        status: { equals: status },
-      },
+  const { articles, hasMore } = await queryArticles(token, {
+    page_size: PAGE_SIZE,
+    filter: {
+      property: ARTICLE_PROPERTIES.status.name,
+      status: { equals: status },
     },
-  )) as { results: ArticlePage[]; has_more?: boolean };
+  });
 
   return {
     outcome: "scheduled",
     status,
-    articles: inPublicationOrder(response.results.map(toArticle)),
-    truncated: response.has_more === true,
+    articles: inPublicationOrder(articles),
+    truncated: hasMore,
   };
 }

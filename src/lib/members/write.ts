@@ -278,17 +278,16 @@ export async function mergeMembers(
       RelationProperty & {
         email?: string | null;
         rich_text?: { plain_text: string }[] | null;
+        select?: { name?: string | null } | null;
+        checkbox?: boolean | null;
+        id?: string;
+        has_more?: boolean;
       }
     >;
   }[];
 
   const union: Record<string, unknown> = {};
   for (const name of MERGED_RELATIONS) {
-    const ids = new Set([
-      ...(keep!.properties?.[name]?.relation ?? []).map((r) => r.id),
-      ...(drop!.properties?.[name]?.relation ?? []).map((r) => r.id),
-    ]);
-
     /*
       a relation the integration cannot reach is omitted from the schema
       entirely and reads back as `[]` — indistinguishable from empty unless
@@ -300,6 +299,20 @@ export async function mergeMembers(
         `cannot merge: ${name} is not readable, so its contents cannot be preserved`,
       );
     }
+
+    /*
+      and a relation notion cut short at 25 is the same deletion wearing a
+      different hat. A page object carries at most 25 entries of a relation and
+      says so with `has_more` alone; an officer at the weekly editorial board
+      passes 25 attendances inside a year, and a backported writer passes 25
+      articles. Taking the page's copy would write a truncated union onto the
+      survivor and archive the original, which is this page's one irreversible
+      action, performed on the records an election is counted from
+    */
+    const ids = new Set([
+      ...(await allOf(keepId, keep!.properties[name]!, token)),
+      ...(await allOf(dropId, drop!.properties[name]!, token)),
+    ]);
 
     union[name] = { relation: [...ids].map((id) => ({ id })) };
   }
@@ -325,6 +338,25 @@ export async function mergeMembers(
   );
 
   await notion(`pages/${dropId}`, token, { in_trash: true }, "PATCH");
+}
+
+/**
+ * every id in a relation on a page, following the truncation if there is one.
+ *
+ * the page object's own copy where notion gave the whole thing, and a second
+ * request only for the relations it cut short, which is a handful of rows on a
+ * roster this size
+ */
+async function allOf(
+  pageId: string,
+  property: RelationProperty & { id?: string; has_more?: boolean },
+  token: string,
+): Promise<string[]> {
+  if (property.has_more && property.id) {
+    return relationIds(pageId, property.id, token);
+  }
+
+  return (property.relation ?? []).map((related) => related.id);
 }
 
 /* `plainText` is the notion client's, and its docstring records that it was

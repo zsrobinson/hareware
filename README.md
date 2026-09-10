@@ -265,12 +265,11 @@ turns out not to count.
 
 `Members` needs:
 
-| Property           | Type                                                                                       |
-| ------------------ | ------------------------------------------------------------------------------------------ |
-| `Status`           | Select. Its options are Notion's to name, except `Alum`, which the voting rule excludes on |
-| `Attendance`       | The other side of Meetings' `Attendees`                                                    |
-| `Contributions`    | Formula: `prop("Articles Count") + prop("Images Count")`                                   |
-| `No Announcements` | Checkbox. Ticked for somebody who asked not to be in the email group                       |
+| Property        | Type                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------ |
+| `Status`        | Select. Its options are Notion's to name, except `Alum`, which the voting rule excludes on |
+| `Attendance`    | The other side of Meetings' `Attendees`                                                    |
+| `Contributions` | Formula: `prop("Articles Count") + prop("Images Count")`                                   |
 
 Renaming a `Status` option needs no deploy — the pickers read the live schema.
 Removing `Alum` does need one, and the reconciler says so in red if it goes
@@ -321,9 +320,9 @@ all, and which addresses in the group match nobody. Copy the missing ones into
 the group's bulk-add field.
 
 Nothing is remembered between times, so the answer is right on every run rather
-than depending on somebody having pressed a button last time. Somebody who
-leaves the group on purpose looks exactly like somebody never added, so tick
-**No Announcements** on their row and the comparison stops offering them.
+than depending on somebody having pressed a button last time. The cost of that
+is that somebody who left the group on purpose looks exactly like somebody who
+was never added, so the comparison will offer them again each time.
 
 Addresses outside `terpmail.umd.edu` and `umd.edu` are flagged: Google does not
 auto-add those, and they need an invitation instead.

@@ -42,7 +42,6 @@ const person = (fields: Partial<Person> & { pageId: string }): Person => ({
   email: null,
   status: "Undergrad",
   contributions: 0,
-  noAnnouncements: false,
   ...fields,
 });
 
@@ -130,41 +129,6 @@ test("somebody on the roster and not in the export is offered to paste", async (
   expect(
     within(section("Missing from Google Group")).getByText("Ben Okafor"),
   ).toBeTruthy();
-});
-
-/*
-  the whole reason the roster carries a flag about this.
-
-  somebody who leaves the group on purpose looks exactly like somebody never
-  added, so without this the next comparison offers them again and one paste
-  undoes their decision
-*/
-test("somebody who opted out is left out of the paste, and said to be", async () => {
-  render(
-    <Reconciler
-      initial={{
-        ...initial,
-        roster: [
-          person({
-            pageId: "p1",
-            name: "Ana Diaz",
-            email: "ana@terpmail.umd.edu",
-          }),
-          person({
-            pageId: "p2",
-            name: "Ben Okafor",
-            email: "ben@umd.edu",
-            noAnnouncements: true,
-          }),
-        ],
-      }}
-      faces={{}}
-    />,
-  );
-  await upload(EXPORT);
-
-  expect(screen.queryByLabelText("Emails to paste into the group")).toBeNull();
-  expect(screen.getByText(/1 member asked not to be added/)).toBeTruthy();
 });
 
 /*

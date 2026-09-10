@@ -61,24 +61,15 @@ export type GroupDiff = {
   unreachable: Person[];
   /** in the group and on nobody's row: alumni, officers' second accounts, typos */
   strangers: string[];
-  /**
-   * asked not to be added, and not in the group.
-   *
-   * counted rather than silently skipped. Somebody who left the group on
-   * purpose is indistinguishable from somebody never added — that is exactly
-   * why the checkbox exists — so a comparison that just dropped them would
-   * leave nothing on screen to explain why the numbers do not add up
-   */
-  optedOut: Person[];
 };
 
 /**
  * the roster against the group.
  *
- * four answers rather than one, because each needs something different done
- * about it and a single "missing" list hides the other three. `strangers` is
- * the one that looks like noise and is not: an address in the group matching
- * no row is how a typo in Notion shows up, and it is also the club's alumni,
+ * three answers rather than one, because each needs something different done
+ * about it and a single "missing" list hides the other two. `strangers` is the
+ * one that looks like noise and is not: an address in the group matching no
+ * row is how a typo in Notion shows up, and it is also the club's alumni,
  * which is why it is listed rather than acted on.
  *
  * pure, and takes the parsed export rather than the file, so the rule is
@@ -90,7 +81,6 @@ export function compareToGroup(
 ): GroupDiff {
   const missing: Person[] = [];
   const unreachable: Person[] = [];
-  const optedOut: Person[] = [];
   const claimed = new Set<string>();
 
   for (const person of roster) {
@@ -106,22 +96,12 @@ export function compareToGroup(
 
     /* their address still belongs to them, so it is not a stranger's */
     claimed.add(email);
-    if (inGroup.has(email)) continue;
-
-    /*
-      the checkbox is checked here rather than by filtering the roster before
-      it arrives, because the answer differs by which list they land in: an
-      opt-out who *is* in the group is neither missing nor a stranger and
-      needs no mention, and one who is not is the row this whole flag exists
-      to stop being offered
-    */
-    (person.noAnnouncements ? optedOut : missing).push(person);
+    if (!inGroup.has(email)) missing.push(person);
   }
 
   return {
     missing,
     unreachable,
-    optedOut,
     strangers: [...inGroup].filter((email) => !claimed.has(email)).sort(),
   };
 }

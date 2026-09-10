@@ -1,7 +1,6 @@
 import {
   AlertTriangleIcon,
   AtSignIcon,
-  BellOffIcon,
   CheckIcon,
   ChevronDownIcon,
   CopyIcon,
@@ -798,39 +797,15 @@ function Sections({ initial, faces }: Props) {
               {/*
                 the people, not only their addresses. a blob of text is what
                 gets pasted, and it is also the one thing on this page nobody
-                can check: an editor who recognises a name as somebody who left
-                on purpose can only act on it if the name is on screen
+                can check: an editor who recognises a name can only act on it
+                if the name is on screen
               */}
               <ul className="divide-y rounded-lg border">
-                {diff.missing.map((person) => {
-                  const key = `mute:${person.pageId}`;
-                  return (
-                    <li key={person.pageId} className="space-y-1 p-3">
-                      <MemberEntry person={person} faces={faces}>
-                        {!said[key] && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={busy !== null}
-                            onClick={() =>
-                              void act(key, () =>
-                                postJson("/api/members/announcements", {
-                                  pageId: person.pageId,
-                                  name: person.name,
-                                  noAnnouncements: true,
-                                }),
-                              )
-                            }
-                          >
-                            <BellOffIcon className="size-4" />
-                            They opted out
-                          </Button>
-                        )}
-                      </MemberEntry>
-                      {said[key] && <Note>{said[key]}</Note>}
-                    </li>
-                  );
-                })}
+                {diff.missing.map((person) => (
+                  <li key={person.pageId} className="p-3">
+                    <MemberEntry person={person} faces={faces} />
+                  </li>
+                ))}
               </ul>
 
               <label className="sr-only" htmlFor="group-blob">
@@ -870,19 +845,6 @@ function Sections({ initial, faces }: Props) {
                   : `Copy ${plural(emails.length, "address", "addresses")}`}
               </Button>
             </>
-          )}
-
-          {/* the people the comparison deliberately does not offer. shown as a
-              count, because the point is that nobody has to do anything about
-              them — and shown at all, because a silent exclusion is how the
-              numbers stop adding up with nothing to explain why */}
-          {diff && diff.optedOut.length > 0 && (
-            <p className="text-muted-foreground text-sm">
-              {plural(diff.optedOut.length, "member")} asked not to be added,
-              and {diff.optedOut.length === 1 ? "is" : "are"} left out of the
-              list above. Untick No Announcements on their Notion row to offer
-              them again.
-            </p>
           )}
 
           {/* an address in the group that no row claims is how a typo in

@@ -200,20 +200,6 @@ export function optionalText(body: unknown, field: string): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-/**
- * a required boolean, refused rather than coerced.
- *
- * `Boolean(value)` would read a missing field as false, and false is a real
- * answer here: it is the one that puts somebody back on a mailing list
- */
-export function requireFlag(body: unknown, field: string): boolean {
-  const value = (body as Record<string, unknown> | null)?.[field];
-  if (typeof value !== "boolean") {
-    throw new BadRequest(`${field} must be true or false`);
-  }
-  return value;
-}
-
 /** an optional array of strings; absent is different from empty and stays so */
 export function optionalList(
   body: unknown,

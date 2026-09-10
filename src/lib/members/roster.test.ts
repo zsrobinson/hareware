@@ -36,24 +36,7 @@ test("a Members row reads into a Person", () => {
     email: "bay@terpmail.umd.edu",
     status: "Undergrad",
     contributions: 0,
-    noAnnouncements: false,
   });
-});
-
-/* the checkbox the group comparison reads. a property notion does not have and
-   one that is unticked are the same answer: they have not asked to be left out */
-test("No Announcements reads as a boolean, and absent means no", () => {
-  const asked = toPerson({
-    id: "p1",
-    properties: {
-      Name: title("Bay Hoffman"),
-      "No Announcements": { type: "checkbox", checkbox: true },
-    },
-  });
-  const never = toPerson({ id: "p2", properties: { Name: title("Ada") } });
-
-  expect(asked.noAnnouncements).toBe(true);
-  expect(never.noAnnouncements).toBe(false);
 });
 
 /* the difference between "no id" and "empty id" is the difference between a row

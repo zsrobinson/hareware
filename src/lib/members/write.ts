@@ -30,8 +30,6 @@ type MemberFields = {
   /* one of notion's own select options, checked against the live schema by the
      route rather than against a list in here */
   status?: string;
-  /** they are not to be added to the announcements group */
-  noAnnouncements?: boolean;
 };
 
 /**
@@ -61,11 +59,6 @@ function properties(fields: MemberFields): Record<string, unknown> {
 
   if (fields.status !== undefined)
     patch[MEMBER_PROPERTIES.status.name] = { select: { name: fields.status } };
-
-  if (fields.noAnnouncements !== undefined)
-    patch[MEMBER_PROPERTIES.noAnnouncements.name] = {
-      checkbox: fields.noAnnouncements,
-    };
 
   return patch;
 }

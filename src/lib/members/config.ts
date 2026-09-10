@@ -48,20 +48,6 @@ export const MEMBER_PROPERTIES = {
   contributions: { name: "Contributions", type: "formula" },
   /** the other side of Meetings' `Attendees` */
   attendance: { name: "Attendance", type: "relation" },
-  /*
-    they are not to be added to the announcements group.
-
-    somebody who leaves a mailing list on purpose is invisible to a comparison
-    of who is in it: they look exactly like somebody who was never added, so
-    every export would offer to add them back and one paste would do it. That
-    is worse than a stale list — it is undoing a decision somebody made about
-    their own inbox.
-
-    a checkbox rather than a date or a note, because the club only ever needs
-    the answer yes or no, and unticked is the safe default for every row that
-    already exists
-  */
-  noAnnouncements: { name: "No Announcements", type: "checkbox" },
 } as const;
 
 /**

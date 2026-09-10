@@ -41,7 +41,6 @@ type Property = {
   select?: { name?: string | null } | null;
   relation?: { id: string }[] | null;
   formula?: { type?: string; number?: number | null } | null;
-  checkbox?: boolean | null;
   /* the property's own id, and notion's word for "this relation is longer
      than the 25 entries above" */
   id?: string;
@@ -89,11 +88,6 @@ export function toPerson(page: Page): Person {
     contributions: formulaNumber(
       page.properties?.[MEMBER_PROPERTIES.contributions.name],
     ),
-    /* a property notion does not have reads as absent, which is the same as
-       unticked here: never having said so is not the same as saying no */
-    noAnnouncements:
-      page.properties?.[MEMBER_PROPERTIES.noAnnouncements.name]?.checkbox ===
-      true,
   };
 }
 

@@ -291,38 +291,17 @@ the file is found by shape rather than by column name — Google has changed tho
 columns before, and a reader that looks for a column and finds none reports an
 empty group, which reads as "add everyone again" rather than as a failure.
 
-Four answers come back rather than one, because each needs something different
+Three answers come back rather than one, because each needs something different
 done about it: people to add, people with **no address at all** (nothing reaches
-them and no paste will fix it), addresses in the group matching nobody on the
-roster, and people who asked not to be added. That third group is mostly alumni,
-and is reported rather than acted on because a typo in a Notion email looks
-exactly the same from here.
+them and no paste will fix it), and addresses in the group matching nobody on
+the roster. That last group is mostly alumni, and is reported rather than acted
+on because a typo in a Notion email looks exactly the same from here.
 
-**Leaving the group has to be recordable, or the comparison undoes it.** Someone
-who leaves a mailing list on purpose is invisible to a diff: they look exactly
-like someone who was never added, so every export would offer them again and one
-paste would put them back. `Members` gains a **No Announcements** checkbox, set
-from a button beside their name on the reconciler, and they are then counted
-separately rather than silently skipped — a silent exclusion is how the numbers
-stop adding up with nothing on screen to explain why. Unticking it offers them
-again, because someone asking to come back is the other half of the same
-conversation.
-
-The list flags addresses outside `terpmail.umd.edu` and `umd.edu` — 7 of the 51
-today — because those do not auto-add and may need an invitation.
-
-**This replaced a watermark**: a day in D1 recording when the additions were
-last done, and a list of everyone approved since. Two things were wrong with it.
-It answered "who arrived since we last remembered" rather than "who is missing",
-so anything that fell through — a paste half done, a watermark advanced for a
-list nobody actually pasted — was invisible and permanent. And it was fed by
-Discord applications, so somebody who joined by walking into a meeting and
-signing the kiosk never appeared in it at all. That is the flow the kiosk exists
-for, and those people simply never got the announcements.
-
-The comparison answers the real question every time and remembers nothing, which
-is why the `group_watermark` table is gone and this feature now touches D1 not
-at all.
+**A member who left the group on purpose is offered again.** A diff cannot see
+an intention: they look exactly like somebody who was never added. Recording it
+would take a field on `Members`, which is deliberately not added yet — the club
+would rather re-offer a handful of people than maintain another checkbox. Worth
+revisiting the first time somebody complains about being re-added.
 
 ### The three ways somebody arrives, and what each needs
 

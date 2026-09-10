@@ -15,7 +15,7 @@ import { env } from "cloudflare:workers";
 import { BadRequest, requireText, rosterRoute } from "~/lib/members/api";
 import { people } from "~/lib/members/roster";
 import { updateMember } from "~/lib/members/write";
-import { guildMembers } from "~/lib/member";
+import { requireGuildMembers } from "~/lib/member";
 
 export const prerender = false;
 
@@ -27,7 +27,7 @@ export const POST = rosterRoute(
   }),
   async ({ pageId, name, discordId }) => {
     const [guild, roster] = await Promise.all([
-      guildMembers(),
+      requireGuildMembers(env.DISCORD_BOT_TOKEN),
       people(env.NOTION_TOKEN!),
     ]);
 

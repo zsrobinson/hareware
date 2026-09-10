@@ -140,43 +140,56 @@ const EVERYBODY = 1000;
  *
  * one request for the whole server rather than one per person, which is what
  * makes a page of avatars affordable. It needs the Server Members privileged
- * intent; without it discord answers 403, and every failure here is an empty
- * map rather than a throw, because a page of names is still a page.
+ * intent; without it Discord answers 403. Callers choose whether that failure
+ * is material or whether a page of names without avatars is still useful.
  */
-export async function guildMembers(): Promise<Map<string, Profile>> {
-  const token = env.DISCORD_BOT_TOKEN;
-  if (!token) return new Map();
+async function readGuildMembers(
+  token = env.DISCORD_BOT_TOKEN,
+): Promise<Map<string, Profile>> {
+  if (!token) throw new Error("DISCORD_BOT_TOKEN is not set");
 
-  try {
-    const response = await sendPatiently(
-      () =>
-        fetch(
-          `https://discord.com/api/v10/guilds/${GUILD_ID}/members?limit=${EVERYBODY}`,
-          { headers: { authorization: `Bot ${token}` } },
-        ),
-      "discord member list",
+  const response = await sendPatiently(
+    () =>
+      fetch(
+        `https://discord.com/api/v10/guilds/${GUILD_ID}/members?limit=${EVERYBODY}`,
+        { headers: { authorization: `Bot ${token}` } },
+      ),
+    "discord member list",
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Discord answered ${response.status} while reading guild members; check the Server Members intent`,
     );
+  }
 
-    if (!response.ok) {
-      console.error("[member] discord answered", response.status);
-      return new Map();
-    }
+  const members: unknown = await response.json();
+  if (!Array.isArray(members)) {
+    throw new Error("Discord's guild member response was not a list");
+  }
 
-    const members: unknown = await response.json();
-    if (!Array.isArray(members)) {
-      console.error("[member] the member list was not an array");
-      return new Map();
-    }
+  const profiles = new Map<string, Profile>();
 
-    const profiles = new Map<string, Profile>();
+  for (const entry of members as Record<string, unknown>[]) {
+    const member = entry as Parameters<typeof readProfile>[1];
+    const userId = text(member.user?.id);
+    if (userId) profiles.set(userId, readProfile(userId, member));
+  }
 
-    for (const entry of members as Record<string, unknown>[]) {
-      const member = entry as Parameters<typeof readProfile>[1];
-      const userId = text(member.user?.id);
-      if (userId) profiles.set(userId, readProfile(userId, member));
-    }
+  return profiles;
+}
 
-    return profiles;
+/** Every guild member, failing when Discord did not actually provide a list. */
+export function requireGuildMembers(
+  token?: string,
+): Promise<Map<string, Profile>> {
+  return readGuildMembers(token);
+}
+
+/** Every guild member where an empty fallback is acceptable, such as avatars. */
+export async function guildMembers(): Promise<Map<string, Profile>> {
+  try {
+    return await readGuildMembers();
   } catch (error) {
     console.error("[member] could not reach discord", error);
     return new Map();

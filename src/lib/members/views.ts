@@ -27,7 +27,8 @@ import type {
   GuildAccount,
   Resolution,
 } from "./match";
-import { guildMembers } from "~/lib/member";
+import { requireGuildMembers } from "~/lib/member";
+import type { Profile } from "~/lib/member";
 import type { MeetingRecord, Person } from "./records";
 import { meetings, people, statusOptions } from "./roster";
 import { alumOptionMissing, FALLBACK_MEMBER_STATUSES } from "./config";
@@ -155,23 +156,27 @@ export async function reconcilerData(env: ViewEnv): Promise<ReconcilerData> {
   const token = env.NOTION_TOKEN;
   const bot = env.DISCORD_BOT_TOKEN;
 
-  let discordProblem: string | null = bot
+  let applicationProblem: string | null = bot
     ? null
     : "DISCORD_BOT_TOKEN is not set.";
+  let guildProblem: string | null = null;
 
   const [roster, applications, guild, options] = await Promise.all([
     token ? people(token) : Promise.resolve([] as Person[]),
     bot
       ? approvedApplications(bot).catch((thrown: unknown) => {
-          discordProblem =
+          applicationProblem =
             thrown instanceof Error ? thrown.message : String(thrown);
           return [] as Application[];
         })
       : Promise.resolve([] as Application[]),
-    /* one request for the whole server. it needs the Server Members intent and
-       answers an empty map without it, which reads here as no suggestions
-       rather than as an error: the rest of the page does not depend on it */
-    guildMembers(),
+    /* one request for the whole server. suggestions depend on this list, so a
+       failed read is preserved as a visible problem rather than interpreted as
+       a real empty guild */
+    requireGuildMembers(bot).catch((thrown: unknown) => {
+      guildProblem = thrown instanceof Error ? thrown.message : String(thrown);
+      return new Map<string, Profile>();
+    }),
     statuses(token),
   ]);
 
@@ -191,6 +196,7 @@ export async function reconcilerData(env: ViewEnv): Promise<ReconcilerData> {
     guild: accounts,
     liveStatuses: options.live,
     alumMissing: options.alumMissing,
-    discordProblem,
+    discordProblem:
+      [applicationProblem, guildProblem].filter(Boolean).join(" ") || null,
   };
 }

@@ -261,6 +261,11 @@ test("an application the form gave nothing for is added by hand", async () => {
           typeof init?.body === "string" ? init.body : "{}",
         ) as Record<string, unknown>,
       });
+      if (init?.method !== "POST") {
+        return new Response(JSON.stringify(initial), {
+          headers: { "content-type": "application/json" },
+        });
+      }
       return new Response(JSON.stringify({ summary: "created a row" }), {
         headers: { "content-type": "application/json" },
       });

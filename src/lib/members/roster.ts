@@ -66,8 +66,18 @@ function formulaNumber(property: Property | undefined): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-function ids(property: Property | undefined): string[] {
-  return (property?.relation ?? []).map((related) => related.id);
+function relationIdsFrom(
+  property: Property | undefined,
+  owner: string,
+  name: string,
+): string[] {
+  if (!property || !Array.isArray(property.relation)) {
+    throw new Error(
+      `${owner}'s ${name} relation is not readable, so standing cannot be computed`,
+    );
+  }
+
+  return property.relation.map((related) => related.id);
 }
 
 /** a Members row as standing sees it */
@@ -129,7 +139,11 @@ export function toMeeting(page: Page): MeetingRecord {
     name: text(page.properties?.[MEETING_PROPERTIES.name.name]),
     date: page.properties?.[MEETING_PROPERTIES.date.name]?.date?.start ?? "",
     type: page.properties?.[MEETING_PROPERTIES.type.name]?.select?.name ?? null,
-    attendeeIds: ids(page.properties?.[MEETING_PROPERTIES.attendees.name]),
+    attendeeIds: relationIdsFrom(
+      page.properties?.[MEETING_PROPERTIES.attendees.name],
+      "a meeting",
+      MEETING_PROPERTIES.attendees.name,
+    ),
   };
 }
 
@@ -168,8 +182,16 @@ export function toContribution(page: Page): ContributionRecord {
     date:
       page.properties?.[ARTICLE_PROPERTIES.publicationDate.name]?.date?.start ??
       "",
-    authorIds: ids(page.properties?.[ARTICLE_PROPERTIES.author.name]),
-    imageCrewIds: ids(page.properties?.[ARTICLE_PROPERTIES.imageCrew.name]),
+    authorIds: relationIdsFrom(
+      page.properties?.[ARTICLE_PROPERTIES.author.name],
+      "an article",
+      ARTICLE_PROPERTIES.author.name,
+    ),
+    imageCrewIds: relationIdsFrom(
+      page.properties?.[ARTICLE_PROPERTIES.imageCrew.name],
+      "an article",
+      ARTICLE_PROPERTIES.imageCrew.name,
+    ),
   };
 }
 

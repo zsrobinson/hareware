@@ -139,10 +139,22 @@ test("a Meetings row reads its type and its attendees", () => {
 });
 
 test("a meeting with no date reads as empty, so no window can contain it", () => {
-  const meeting = toMeeting({ id: "m1", properties: { Name: title("TBD") } });
+  const meeting = toMeeting({
+    id: "m1",
+    properties: {
+      Name: title("TBD"),
+      Attendees: { type: "relation", relation: [] },
+    },
+  });
 
   expect(meeting.date).toBe("");
   expect(meeting.attendeeIds).toEqual([]);
+});
+
+test("an unreadable attendee relation refuses to compute standing", () => {
+  expect(() =>
+    toMeeting({ id: "m1", properties: { Name: title("Meeting") } }),
+  ).toThrow(/Attendees relation is not readable/);
 });
 
 test("an Article reads its two credits separately", () => {
@@ -159,6 +171,19 @@ test("an Article reads its two credits separately", () => {
   expect(article.authorIds).toEqual(["p1"]);
   expect(article.imageCrewIds).toEqual(["p2"]);
   expect(article.date).toBe("2026-03-04");
+});
+
+test("an unreadable credit relation refuses to compute standing", () => {
+  expect(() =>
+    toContribution({
+      id: "a1",
+      properties: {
+        Headline: title("Something happened"),
+        "Publication Date": { type: "date", date: { start: "2026-03-04" } },
+        Author: { type: "relation", relation: [] },
+      },
+    }),
+  ).toThrow(/Image Crew relation is not readable/);
 });
 
 /*

@@ -81,8 +81,9 @@ applicant actually typed. Reading `values` yields a plausible-looking result in
 which every answer is blank.
 
 Separately, `GET /guilds/{id}/members` returns 403 until the Server Members
-privileged intent is enabled on the application. Nothing here needs it, but its
-absence is worth knowing before someone spends an afternoon on it.
+privileged intent is enabled on the application. The reconciler needs that list
+to suggest links for members who joined before verification; when it cannot be
+read, the page reports the missing data rather than presenting an empty queue.
 
 **Google Groups cannot be written programmatically.** The Admin SDK Directory
 API requires Workspace administrator credentials on the domain that owns the

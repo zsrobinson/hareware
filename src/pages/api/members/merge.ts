@@ -15,6 +15,8 @@
 
 import { env } from "cloudflare:workers";
 import { BadRequest, requireText, rosterRoute } from "~/lib/members/api";
+import { duplicates } from "~/lib/members/match";
+import { people } from "~/lib/members/roster";
 import { mergeMembers } from "~/lib/members/write";
 
 export const prerender = false;
@@ -34,6 +36,20 @@ export const POST = rosterRoute(
     return { keepId, dropId, keepName: requireText(body, "keepName") };
   },
   async ({ keepId, dropId, keepName }) => {
+    const pair = new Set([keepId, dropId]);
+    const stillDuplicate = duplicates(await people(env.NOTION_TOKEN!)).some(
+      (duplicate) =>
+        [...pair].every((id) =>
+          duplicate.people.some((person) => person.pageId === id),
+        ),
+    );
+
+    if (!stillDuplicate) {
+      throw new BadRequest(
+        "those rows are no longer a detected duplicate pair; refresh the reconciler before merging",
+      );
+    }
+
     await mergeMembers(env, keepId, dropId);
 
     return {

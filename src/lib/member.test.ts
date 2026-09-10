@@ -4,7 +4,8 @@ import { GUILD_ID } from "./services/discord/config";
 const workers = vi.hoisted(() => ({ env: {} as Record<string, string> }));
 vi.mock("cloudflare:workers", () => workers);
 
-const { guildMember, guildMembers } = await import("./member");
+const { guildMember, guildMembers, requireGuildMembers } =
+  await import("./member");
 
 const USER = "342850506328117249";
 const CDN = "https://cdn.discordapp.com";
@@ -214,6 +215,16 @@ test.each([
     expect(await guildMembers()).toEqual(new Map());
   },
 );
+
+test("a required guild read exposes Discord refusal instead of claiming it is empty", async () => {
+  workers.env.DISCORD_BOT_TOKEN = "bot";
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response("no", { status: 403 })),
+  );
+
+  await expect(requireGuildMembers()).rejects.toThrow(/Server Members intent/);
+});
 
 test("does not ask discord for the guild without a bot token", async () => {
   const fetchMock = vi.fn();

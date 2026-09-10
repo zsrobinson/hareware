@@ -170,7 +170,7 @@ export function rosterRoute<Input>(
         so there is nobody to leak it to who could not have asked notion
         directly
       */
-      return json({ error: why }, 500);
+      return json({ error: why }, thrown instanceof BadRequest ? 400 : 500);
     }
   };
 }

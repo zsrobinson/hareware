@@ -120,4 +120,5 @@ test("the reconciler carries the roster the group is compared against", async ()
 
   expect(data.roster.map((one) => one.name)).toEqual(["Ada Vance"]);
   expect(data.discordSuggestions).toEqual([]);
+  expect(data.discordProblem).toMatch(/guild member response was not a list/);
 });

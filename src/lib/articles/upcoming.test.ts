@@ -11,22 +11,25 @@ afterEach(() => vi.restoreAllMocks());
 const page = (
   id: string,
   headline: string,
-  date: string | null,
+  status: string,
+  date: string | null = null,
 ): ArticlePage => ({
   id,
   properties: {
     Headline: { type: "title", title: [{ plain_text: headline }] },
-    "Article Status": { type: "status", status: { name: "Scheduled" } },
+    "Article Status": { type: "status", status: { name: status } },
     "Publication Date": { type: "date", date: date ? { start: date } : null },
   },
 });
 
 const article = (headline: string, date: string | null) =>
-  toArticle(page("p", headline, date));
+  toArticle(page("p", headline, "Scheduled", date));
+
+const ALL = ["Section Edited", "Managing Edited", "Scheduled", "Published"];
 
 /** the two responses one call makes: the schema, then the filtered query */
 function notion({
-  options = ["Backlog", "Scheduled"],
+  options = ALL,
   results = [] as ArticlePage[],
   hasMore = false,
 } = {}) {
@@ -56,79 +59,115 @@ function queryBody(mock: { mock: { calls: unknown[] } }) {
   return JSON.parse(typeof init.body === "string" ? init.body : "{}");
 }
 
-test("reads the scheduled articles out of notion", async () => {
-  notion({ results: [page("p1", "Terps lose again", "2026-09-12")] });
-
-  const found = await upcomingArticles("token");
-
-  expect(found.outcome).toBe("scheduled");
-  expect(found.outcome === "scheduled" && found.articles).toHaveLength(1);
-  expect(found.outcome === "scheduled" && found.articles[0]!.headline).toBe(
-    "Terps lose again",
-  );
-});
-
-/*
-  ADR 0009: no notion value is typed into this repo. asking for "scheduled" and
-  filtering on whatever notion spells it is what keeps a recased option from
-  becoming a filter that matches nothing and reports success
-*/
-test("filters on notion's own spelling of the status, not ours", async () => {
-  const fetchMock = notion({ options: ["SCHEDULED"] });
-
-  await upcomingArticles("token");
-
-  expect(queryBody(fetchMock).filter).toEqual({
-    property: "Article Status",
-    status: { equals: "SCHEDULED" },
-  });
-});
-
-test("says the status is gone rather than reporting an empty schedule", async () => {
-  const fetchMock = notion({ options: ["Backlog", "Published"] });
-
-  const found = await upcomingArticles("token");
-
-  expect(found).toEqual({ outcome: "no-such-status" });
-  // and it does not go on to ask notion for rows it cannot identify
-  expect(fetchMock).toHaveBeenCalledTimes(1);
-});
-
-test("reports that notion held more than one query returns", async () => {
-  notion({ results: [page("p1", "One", "2026-09-12")], hasMore: true });
-
-  const found = await upcomingArticles("token");
-
-  expect(found.outcome === "scheduled" && found.truncated).toBe(true);
-});
-
-test("a full page notion has no more of is not truncated", async () => {
-  notion({ results: [page("p1", "One", "2026-09-12")] });
-
-  const found = await upcomingArticles("token");
-
-  expect(found.outcome === "scheduled" && found.truncated).toBe(false);
-});
-
-test("orders the schedule by the day each article publishes", async () => {
+test("groups the three stages, latest first", async () => {
   notion({
     results: [
-      page("p1", "Later", "2026-09-20"),
-      page("p2", "Sooner", "2026-09-12"),
+      page("p1", "Edited by the section", "Section Edited"),
+      page("p2", "Ready to go", "Scheduled", "2026-09-12"),
+      page("p3", "Past the managing editor", "Managing Edited"),
     ],
   });
 
   const found = await upcomingArticles("token");
 
-  expect(
-    found.outcome === "scheduled" && found.articles.map((a) => a.headline),
-  ).toEqual(["Sooner", "Later"]);
+  expect(found.groups.map((group) => group.status)).toEqual([
+    "Scheduled",
+    "Managing Edited",
+    "Section Edited",
+  ]);
+  expect(found.groups.map((group) => group.articles.map((a) => a.headline)));
+  expect(found.groups[0]!.articles.map((a) => a.headline)).toEqual([
+    "Ready to go",
+  ]);
+  expect(found.groups[2]!.articles.map((a) => a.headline)).toEqual([
+    "Edited by the section",
+  ]);
 });
 
 /*
-  an Article can be Scheduled with no Publication Date. dropping those would
-  hide the ones that most need looking at, and putting them first would bury
-  the schedule under them
+  ADR 0009: no notion value is typed into this repo. asking for casefolded
+  names and filtering on whatever notion spells them is what keeps a recased
+  option from becoming a filter that matches nothing and reports success
+*/
+test("filters on notion's own spelling of each status, not ours", async () => {
+  const fetchMock = notion({
+    options: ["SECTION EDITED", "Managing edited", "scheduled"],
+  });
+
+  await upcomingArticles("token");
+
+  expect(queryBody(fetchMock).filter).toEqual({
+    or: [
+      { property: "Article Status", status: { equals: "scheduled" } },
+      { property: "Article Status", status: { equals: "Managing edited" } },
+      { property: "Article Status", status: { equals: "SECTION EDITED" } },
+    ],
+  });
+});
+
+/* one renamed status loses its section, not the other two */
+test("names a status notion no longer has, and still reads the rest", async () => {
+  const fetchMock = notion({
+    options: ["Scheduled", "Section Edited"],
+    results: [page("p1", "Ready to go", "Scheduled", "2026-09-12")],
+  });
+
+  const found = await upcomingArticles("token");
+
+  expect(found.missing).toEqual(["managing edited"]);
+  expect(found.groups.map((group) => group.status)).toEqual([
+    "Scheduled",
+    "Section Edited",
+  ]);
+  expect(queryBody(fetchMock).filter.or).toHaveLength(2);
+});
+
+test("asks notion for nothing when it has none of the three", async () => {
+  const fetchMock = notion({ options: ["Backlog", "Published"] });
+
+  const found = await upcomingArticles("token");
+
+  expect(found.groups).toEqual([]);
+  expect(found.missing).toHaveLength(3);
+  // and it does not go on to query for rows it cannot identify
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test("reports that notion held more than one query returns", async () => {
+  notion({
+    results: [page("p1", "One", "Scheduled", "2026-09-12")],
+    hasMore: true,
+  });
+
+  expect((await upcomingArticles("token")).truncated).toBe(true);
+});
+
+test("a full page notion has no more of is not truncated", async () => {
+  notion({ results: [page("p1", "One", "Scheduled", "2026-09-12")] });
+
+  expect((await upcomingArticles("token")).truncated).toBe(false);
+});
+
+test("orders each group by the day its articles publish", async () => {
+  notion({
+    results: [
+      page("p1", "Later", "Scheduled", "2026-09-20"),
+      page("p2", "Sooner", "Scheduled", "2026-09-12"),
+    ],
+  });
+
+  const found = await upcomingArticles("token");
+
+  expect(found.groups[0]!.articles.map((a) => a.headline)).toEqual([
+    "Sooner",
+    "Later",
+  ]);
+});
+
+/*
+  an Article can hold any of these statuses with no Publication Date — most
+  section-edited ones do. dropping those would hide the ones that most need
+  looking at, and putting them first would bury the schedule under them
 */
 test("an article with no date is last, not missing", () => {
   const ordered = inPublicationOrder([

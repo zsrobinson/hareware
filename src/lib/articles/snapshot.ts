@@ -12,7 +12,7 @@
 */
 
 import { plainText } from "~/lib/services/notion/client";
-import { ARTICLES_DATABASE_ID, ARTICLE_PROPERTIES } from "./config";
+import { ARTICLE_PROPERTIES } from "./config";
 import { optionName, type ArticlePage } from "./page";
 
 // The existing card fields, in the All Articles view's relative order.
@@ -75,15 +75,6 @@ export function articleUrl(
   const id = page.id.replaceAll("-", "");
   return /^[a-f0-9]{32}$/i.test(id) ? `https://www.notion.so/${id}` : undefined;
 }
-
-/**
- * the Articles database itself, for a reply about more than one Article.
- *
- * built by the function a single Article's link goes through, so this file
- * holds one idea of what a notion link is. the id is a constant in this repo,
- * so the validation cannot fail, and the schedule card's link test says so
- */
-export const ARTICLES_URL = articleUrl({ id: ARTICLES_DATABASE_ID })!;
 
 /** The same Article snapshot for show, creation and edits. No reads or writes. */
 export function snapshot(page: ArticlePage): ArticleSnapshot {

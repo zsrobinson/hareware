@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { HANDLED } from "./interactions";
-import { ALIASES, buildCommands, choicesFor } from "./commands";
+import { buildCommands, choicesFor } from "./commands";
 
 const article = () => buildCommands([])[0]!;
 
@@ -133,28 +133,9 @@ test("every subcommand the handler answers to is registered", () => {
   expect([...registered].sort()).toEqual([...HANDLED].sort());
 });
 
-/*
-  discord resolves a subcommand by name and has no aliases, so the only way to
-  answer two names is to register both — and registering a name nothing handles
-  shows the editor "HareWare didn't respond in time"
-*/
-test("every alias is registered as a subcommand of its own", () => {
-  const registered = article().options.map((option) => option.name);
-
-  expect(Object.keys(ALIASES).length).toBeGreaterThan(0);
-  for (const [alias, answers] of Object.entries(ALIASES)) {
-    expect(registered, alias).toContain(alias);
-    expect(registered, answers).toContain(answers);
-  }
-});
-
-test("an alias takes the same options as the subcommand behind it", () => {
-  for (const [alias, answers] of Object.entries(ALIASES))
-    expect(sub(alias)!.options, alias).toEqual(sub(answers)!.options);
-});
-
-test("/article scheduled is the other name for /article upcoming", () => {
-  expect(ALIASES.scheduled).toBe("upcoming");
+/* the schedule is a whole-database read: there is no one Article to pick */
+test("upcoming takes no options", () => {
+  expect(sub("upcoming")!.type).toBe(1);
   expect(sub("upcoming")!.options).toEqual([]);
 });
 

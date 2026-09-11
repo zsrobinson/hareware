@@ -1,11 +1,10 @@
 /*
-  the Articles the club has scheduled, in the order they publish.
+  the tail of the pipeline: the Articles that are edited, waiting, or dated.
 
-  two notion reads rather than one: the schema is asked what it calls the
-  Scheduled status before the data source is asked which Articles hold it. ADR
-  0009 forbids typing a notion value into this repo and a status filter is
-  where that bites hardest — `Scheduled` against an option notion spells
-  differently matches nothing, returns `200`, and reads as an empty schedule.
+  the status names are resolved from the schema before anything is queried by
+  them. ADR 0009 forbids typing a notion value into this repo and a status
+  filter is where that bites hardest — a status spelled differently here
+  matches nothing, returns `200`, and reads as an empty section.
 */
 
 import { fetchSchema, optionNamed } from "./choices";
@@ -13,29 +12,44 @@ import { ARTICLE_PROPERTIES } from "./config";
 import { queryArticles } from "./live";
 import type { Article } from "./page";
 
-/** casefolded, because the schema spells it back — see `optionNamed` */
-export const SCHEDULED = "scheduled";
+/**
+ * the three statuses this lists, latest first.
+ *
+ * casefolded, because the schema spells them back — see `optionNamed`. the
+ * order is the order the sections appear in: an editor reads down from what is
+ * closest to going out
+ */
+export const UPCOMING_STATUSES = [
+  "scheduled",
+  "managing edited",
+  "section edited",
+] as const;
 
-/** the club has never had a tenth of this scheduled at once */
+/** the club has never had a tenth of this in the pipeline at once */
 const PAGE_SIZE = 100;
 
-/**
- * the schedule, or the fact that notion can no longer describe one.
- *
- * a renamed or deleted Scheduled option and an empty schedule are different
- * facts, and an empty list says both — so the first is a state of its own
- * rather than a `[]` that would answer "nothing is scheduled" forever
- */
-export type Upcoming =
-  | {
-      outcome: "scheduled";
-      /** notion's own spelling of the status these were read by */
-      status: string;
-      articles: Article[];
-      /** notion held more than one query returns, so the tail is missing */
-      truncated: boolean;
-    }
-  | { outcome: "no-such-status" };
+/** one section of the reply: a status, and the Articles holding it */
+export type UpcomingGroup = {
+  /** notion's own spelling, which is what the heading says */
+  status: string;
+  articles: Article[];
+};
+
+export type Upcoming = {
+  /** only the statuses notion still has, in `UPCOMING_STATUSES` order */
+  groups: UpcomingGroup[];
+  /**
+   * the statuses notion no longer has, as this file asked for them.
+   *
+   * a renamed status and a status nothing holds are different facts, and an
+   * empty group says both — so a section that cannot be looked up at all is
+   * named rather than quietly dropped, which would read as "nothing is
+   * scheduled" for as long as nobody noticed
+   */
+  missing: string[];
+  /** notion held more than one query returns, so the tail is missing */
+  truncated: boolean;
+};
 
 /**
  * the day an Article publishes, or `null` when it carries no date.
@@ -52,12 +66,12 @@ export function publicationDay(article: Article): string | null {
 }
 
 /**
- * scheduled Articles by the day they publish, undated last.
+ * Articles by the day they publish, undated last.
  *
- * sorted here rather than by notion: an Article can be Scheduled with no
- * Publication Date, and where notion places those in an ordered query is not
- * something anybody here has gone and checked. one rule, written once, and
- * exercised without a token
+ * sorted here rather than by notion: an Article can hold any of these statuses
+ * with no Publication Date, and where notion places those in an ordered query
+ * is not something anybody here has gone and checked. one rule, written once,
+ * and exercised without a token
  */
 export function inPublicationOrder(articles: Article[]): Article[] {
   return [...articles].sort((a, b) => {
@@ -73,31 +87,45 @@ export function inPublicationOrder(articles: Article[]): Article[] {
 }
 
 /**
- * every scheduled Article, read live from notion.
+ * every Article in the last three stages, read live from notion.
  *
  * throws are the caller's to handle, as everywhere else Articles are read: it
  * is the one that knows what to say to an editor who is waiting
  */
 export async function upcomingArticles(token: string): Promise<Upcoming> {
-  const status = optionNamed(
-    await fetchSchema(token),
-    ARTICLE_PROPERTIES.status.name,
-    SCHEDULED,
-  );
-  if (!status) return { outcome: "no-such-status" };
+  const schema = await fetchSchema(token);
+
+  const wanted = UPCOMING_STATUSES.map((status) => ({
+    asked: status,
+    name: optionNamed(schema, ARTICLE_PROPERTIES.status.name, status),
+  }));
+
+  const found = wanted.filter((status) => status.name !== null);
+  const missing = wanted
+    .filter((status) => status.name === null)
+    .map((status) => status.asked);
+
+  /* nothing left to filter on, so there is nothing to ask notion for */
+  if (found.length === 0) return { groups: [], missing, truncated: false };
 
   const { articles, hasMore } = await queryArticles(token, {
     page_size: PAGE_SIZE,
     filter: {
-      property: ARTICLE_PROPERTIES.status.name,
-      status: { equals: status },
+      or: found.map((status) => ({
+        property: ARTICLE_PROPERTIES.status.name,
+        status: { equals: status.name },
+      })),
     },
   });
 
   return {
-    outcome: "scheduled",
-    status,
-    articles: inPublicationOrder(articles),
+    groups: found.map((status) => ({
+      status: status.name!,
+      articles: inPublicationOrder(
+        articles.filter((article) => article.status === status.name),
+      ),
+    })),
+    missing,
     truncated: hasMore,
   };
 }

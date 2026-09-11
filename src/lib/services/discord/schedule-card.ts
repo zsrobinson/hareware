@@ -4,9 +4,8 @@ import {
   textDisplay,
   type Container,
 } from "~/lib/services/discord/message";
-import { ARTICLES_URL } from "~/lib/articles/snapshot";
 import type { Article } from "~/lib/articles/page";
-import { publicationDay } from "~/lib/articles/upcoming";
+import { publicationDay, type Upcoming } from "~/lib/articles/upcoming";
 import { palette } from "./palette";
 
 /**
@@ -14,43 +13,62 @@ import { palette } from "./palette";
  *
  * a container over that budget is refused whole rather than trimmed, so going
  * over shows the editor a failed command and not a shorter list. the headroom
- * left is for the heading and the line saying what was cut
+ * left is for the headings and the line saying what was cut
  */
 const SCHEDULE_BUDGET = 3500;
 
-/** enough of a headline to recognise it beside a date */
+/** enough of a headline to recognise it beside a section */
 const HEADLINE = 100;
 
-/** The schedule as one container: a line per Article, soonest first. */
-export function scheduleCard(
-  articles: Article[],
-  truncated: boolean,
-): Container {
-  const lines = articles.map(
-    (article) =>
-      `- ${publicationDay(article) ?? "Undated"} **${displayText(article.headline, HEADLINE)}**`,
-  );
+/** what a row with no Section reads as; every Article is supposed to have one */
+const NO_SECTION = "No section";
 
-  const shown: string[] = [];
+/** `**Section** (Date) | Headline`, with the date dropped when there isn't one */
+function line(article: Article): string {
+  const section = displayText(article.section ?? "", 40) || NO_SECTION;
+  const day = publicationDay(article);
+
+  return `- **${section}**${day ? ` (${day})` : ""} | ${displayText(article.headline, HEADLINE)}`;
+}
+
+/** The schedule as one container: a section per status, each counted. */
+export function scheduleCard(upcoming: Upcoming): Container {
+  /* a status nothing holds is not a section worth a heading, so it is left out
+     rather than drawn as a zero */
+  const sections = upcoming.groups
+    .filter((group) => group.articles.length > 0)
+    .map((group) => ({
+      heading: `### ${displayText(group.status, 40)} (${group.articles.length})`,
+      lines: group.articles.map(line),
+    }));
+
+  const body: string[] = [];
   let spent = 0;
-  for (const line of lines) {
-    if (spent + line.length + 1 > SCHEDULE_BUDGET) break;
-    shown.push(line);
-    spent += line.length + 1;
+  let drawn = 0;
+  for (const section of sections) {
+    const cost =
+      section.heading.length +
+      section.lines.reduce((total, text) => total + text.length + 1, 0);
+    if (spent + cost > SCHEDULE_BUDGET) break;
+
+    body.push(section.heading, ...section.lines);
+    spent += cost;
+    drawn += section.lines.length;
   }
 
   /*
-    two different ways the list can be short of the truth, and they can both be
-    true at once — so they are told additively rather than as a ternary that
-    picks one. flattening them is the shape `docs/agents/silent-failures.md`
-    calls four outcomes collapsed into `ok`: the editor is told the list was
-    cut here and never that notion held a tail beyond it
+    three different ways the reply can be short of the truth, and they can be
+    true at once — so they are said additively rather than as a ternary picking
+    one. flattening them is the shape `docs/agents/silent-failures.md` calls
+    four outcomes collapsed into `ok`
   */
-  const dropped = lines.length - shown.length;
-  const rest = [
-    /* soonest first, so what falls off the end is the furthest out */
-    dropped > 0 ? `…and ${dropped} more, further out.` : "",
-    truncated ? "Notion holds more than one query returns." : "",
+  const dropped = sections.reduce((n, s) => n + s.lines.length, 0) - drawn;
+  const notes = [
+    dropped > 0 ? `…and ${dropped} more that did not fit.` : "",
+    upcoming.truncated ? "Notion holds more than one query returns." : "",
+    upcoming.missing.length
+      ? `Notion has no ${upcoming.missing.join(" or ")} status any more.`
+      : "",
   ].filter(Boolean);
 
   return {
@@ -59,20 +77,11 @@ export function scheduleCard(
        scheduled Article out of the same palette */
     accent_color: palette("green").accent,
     components: [
-      {
-        type: 9,
-        components: [textDisplay("### Upcoming articles")],
-        accessory: {
-          type: 2,
-          style: 5,
-          label: "Open in Notion",
-          url: ARTICLES_URL,
-        },
-      },
       textDisplay(
         [
-          ...(shown.length ? shown : ["_Nothing is scheduled._"]),
-          ...(rest.length ? [`_${rest.join(" ")}_`] : []),
+          "## Upcoming Articles",
+          ...(body.length ? body : ["_Nothing is scheduled or in editing._"]),
+          ...(notes.length ? [`_${notes.join(" ")}_`] : []),
         ].join("\n"),
       ),
     ],

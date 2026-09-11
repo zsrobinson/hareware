@@ -15,9 +15,7 @@
 
 import { articleResponse } from "./article-response";
 import { scheduleCard } from "./schedule-card";
-import { ALIASES } from "./commands";
-import { ARTICLE_PROPERTIES } from "~/lib/articles/config";
-import { SCHEDULED, type Upcoming } from "~/lib/articles/upcoming";
+import type { Upcoming } from "~/lib/articles/upcoming";
 import {
   IS_COMPONENTS_V2,
   type CommandMessage,
@@ -232,12 +230,13 @@ function optionOf(
   `deferEphemeral()` here and follows up, rather than trying to fit a write
   inside three seconds
 */
-type Handler = (
-  interaction: Interaction,
-  deps: InteractionDeps,
-) => MessageResponse | Promise<MessageResponse>;
-
-const HANDLERS: Record<string, Handler> = {
+const SUBCOMMANDS: Record<
+  string,
+  (
+    interaction: Interaction,
+    deps: InteractionDeps,
+  ) => MessageResponse | Promise<MessageResponse>
+> = {
   ping: (interaction) =>
     ephemeral(
       `HareWare is listening. Discord says you are **${who(interaction)}**.`,
@@ -333,25 +332,6 @@ const HANDLERS: Record<string, Handler> = {
         ? { request: { kind: "delete", pageId } }
         : refuse("Pick an Article from the list HareWare offers.");
     }),
-};
-
-/**
- * the handlers, plus one entry per alias pointing at the same function.
- *
- * an alias reaches this file as an ordinary subcommand — discord registers it
- * as one, having no aliases of its own — and `commands.ts` is where the
- * pairing is written down. an alias whose subcommand has no handler is dropped
- * rather than bound to `undefined`, so it goes missing from `HANDLED` and the
- * registration test says so
- */
-const SUBCOMMANDS: Record<string, Handler> = {
-  ...HANDLERS,
-  ...Object.fromEntries(
-    Object.entries(ALIASES).flatMap(([alias, name]) => {
-      const handler = HANDLERS[name];
-      return handler ? [[alias, handler] as const] : [];
-    }),
-  ),
 };
 
 /**
@@ -588,12 +568,13 @@ async function show(
 }
 
 /**
- * `/article upcoming` — every scheduled Article, read live from notion.
+ * `/article upcoming` — the last three stages of the pipeline, read live.
  *
  * two reads where `show` makes one, and answered inline for the same reason:
  * ADR 0009 measures the schema at about half a second and a filtered query at
- * about seven tenths, well inside discord's three. every branch says
- * something, including the one where notion no longer has the status
+ * about seven tenths, well inside discord's three. a status notion no longer
+ * has is reported on the card rather than refused here, so renaming one loses
+ * its section and not the other two
  */
 async function upcoming(deps: InteractionDeps): Promise<MessageResponse> {
   if (!deps.upcoming) return ephemeral(NO_NOTION);
@@ -609,16 +590,7 @@ async function upcoming(deps: InteractionDeps): Promise<MessageResponse> {
     );
   }
 
-  /* the club renaming the option is not the club scheduling nothing, and an
-     empty list would report the first as the second indefinitely */
-  if (found.outcome === "no-such-status")
-    return ephemeral(
-      `Notion has no "${SCHEDULED}" option on ${ARTICLE_PROPERTIES.status.name} any more, so HareWare cannot tell which articles are scheduled.`,
-    );
-
-  return ephemeral({
-    components: [scheduleCard(found.articles, found.truncated)],
-  });
+  return ephemeral({ components: [scheduleCard(found)] });
 }
 
 /**

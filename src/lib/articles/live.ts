@@ -66,14 +66,30 @@ export function forget() {
   snapshot = undefined;
 }
 
-async function query(body: Record<string, unknown>, token: string) {
+/**
+ * the Articles data source, queried — the one place that knows the endpoint.
+ *
+ * `hasMore` is reported rather than dropped because a caller that asked for a
+ * complete answer and got a page of one has no other way to tell
+ */
+export async function queryArticles(
+  token: string,
+  body: Record<string, unknown>,
+): Promise<{ articles: Article[]; hasMore: boolean }> {
   const response = (await notion(
     `data_sources/${ARTICLES_DATA_SOURCE_ID}/query`,
     token,
     body,
-  )) as { results: ArticlePage[] };
+  )) as { results: ArticlePage[]; has_more?: boolean };
 
-  return response.results.map(toArticle);
+  return {
+    articles: response.results.map(toArticle),
+    hasMore: response.has_more === true,
+  };
+}
+
+async function query(body: Record<string, unknown>, token: string) {
+  return (await queryArticles(token, body)).articles;
 }
 
 /**

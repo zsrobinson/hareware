@@ -137,6 +137,12 @@ const SUBCOMMANDS: Subcommand[] = [
     options: () => [articleOption()],
   },
   {
+    name: "upcoming",
+    description:
+      "List the articles that are scheduled, managing edited or section edited.",
+    options: () => [],
+  },
+  {
     name: "new",
     description: "Create an approved article in Notion before writing begins.",
     options: (choices) => [

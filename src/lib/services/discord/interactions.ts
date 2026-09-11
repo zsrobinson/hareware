@@ -14,6 +14,8 @@
 */
 
 import { articleResponse } from "./article-response";
+import { scheduleCard } from "./schedule-card";
+import type { Upcoming } from "~/lib/articles/upcoming";
 import {
   IS_COMPONENTS_V2,
   type CommandMessage,
@@ -62,6 +64,9 @@ const AUTOCOMPLETE_BUDGET_MS = 2000;
 
 /** below this a substring search matches most of the corpus, so it is not run */
 const MIN_SEARCH = 2;
+
+/** every read command with nowhere to read from says the same thing */
+const NO_NOTION = "HareWare cannot reach Notion right now.";
 
 /**
  * an option as discord sends it back, which is not the option as we registered
@@ -141,6 +146,8 @@ export type InteractionDeps = {
   search?: (text: string) => Promise<Article[]>;
   /** one Article, read live from notion */
   page?: (pageId: string) => Promise<ArticlePage>;
+  /** every scheduled Article, in the order they publish */
+  upcoming?: () => Promise<Upcoming>;
   /**
    * the write, which happens after the reply.
    *
@@ -236,6 +243,8 @@ const SUBCOMMANDS: Record<
     ),
 
   show: (interaction, deps) => show(interaction, deps),
+
+  upcoming: (_interaction, deps) => upcoming(deps),
 
   new: (interaction, deps) =>
     write(interaction, deps, (subcommand) => {
@@ -545,7 +554,7 @@ async function show(
   if (!pageId)
     return ephemeral("Pick an Article from the list HareWare offers.");
 
-  if (!deps.page) return ephemeral("HareWare cannot reach Notion right now.");
+  if (!deps.page) return ephemeral(NO_NOTION);
 
   try {
     return ephemeral(articleResponse(await deps.page(pageId)));
@@ -556,6 +565,32 @@ async function show(
       "Notion did not answer, so HareWare cannot show that Article. Try again, or open it in Notion.",
     );
   }
+}
+
+/**
+ * `/article upcoming` — the last three stages of the pipeline, read live.
+ *
+ * two reads where `show` makes one, and answered inline for the same reason:
+ * ADR 0009 measures the schema at about half a second and a filtered query at
+ * about seven tenths, well inside discord's three. a status notion no longer
+ * has is reported on the card rather than refused here, so renaming one loses
+ * its section and not the other two
+ */
+async function upcoming(deps: InteractionDeps): Promise<MessageResponse> {
+  if (!deps.upcoming) return ephemeral(NO_NOTION);
+
+  let found: Upcoming;
+  try {
+    found = await deps.upcoming();
+  } catch (error) {
+    console.error("[article] could not read the schedule", error);
+
+    return ephemeral(
+      "Notion did not answer, so HareWare cannot say what is scheduled. Try again, or open the Articles database in Notion.",
+    );
+  }
+
+  return ephemeral({ components: [scheduleCard(found)] });
 }
 
 /**

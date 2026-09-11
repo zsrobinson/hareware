@@ -383,6 +383,65 @@ test("the read commands are gated on the editorial board role too", async () => 
   expect(text(reply)).toContain("Editorial Board");
 });
 
+/* ---- the schedule -------------------------------------------------------- */
+
+const schedule = (over: InteractionDeps = {}) =>
+  deps({
+    upcoming: () =>
+      Promise.resolve({
+        groups: [
+          {
+            status: "Scheduled",
+            articles: [
+              row({ status: "Scheduled", publicationDate: "2026-09-12" }),
+            ],
+          },
+        ],
+        missing: [],
+        truncated: false,
+      }),
+    ...over,
+  });
+
+test("/article upcoming answers with the pipeline, sectioned and counted", async () => {
+  const reply = asMessage(
+    await handleInteraction(command("upcoming"), schedule()),
+  );
+
+  expect(reply.type).toBe(4);
+  expect(text(reply)).toContain("Upcoming Articles");
+  expect(text(reply)).toContain("### Scheduled (1)");
+  expect(text(reply)).toContain("2026-09-12");
+  expect(text(reply)).toContain("Terps lose again");
+});
+
+test("/article upcoming says something when notion does not answer", async () => {
+  const reply = asMessage(
+    await handleInteraction(
+      command("upcoming"),
+      schedule({ upcoming: () => Promise.reject(new Error("notion is down")) }),
+    ),
+  );
+
+  expect(reply.type).toBe(4);
+  expect(text(reply)).toContain("Notion");
+});
+
+test("/article upcoming refuses rather than reading for somebody off the board", async () => {
+  const reply = asMessage(
+    await handleInteraction(
+      command("upcoming", [], ["nope"]),
+      schedule({
+        upcoming: () => {
+          throw new Error("must not read notion for somebody off the board");
+        },
+      }),
+    ),
+  );
+
+  expect(text(reply)).toContain("Editorial Board");
+});
+
 /* ---- autocomplete -------------------------------------------------------- */
 
 const AUTOCOMPLETE_RESULT = 8;

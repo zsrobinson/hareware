@@ -4,6 +4,7 @@ import { record } from "~/lib/log";
 import { DISCORD_PUBLIC_KEY } from "~/lib/services/discord/config";
 import { handleInteraction } from "~/lib/services/discord/interactions";
 import { readArticle, recentArticles, search } from "~/lib/articles/live";
+import { upcomingArticles } from "~/lib/articles/upcoming";
 import { notionIO, runEdit } from "~/lib/articles/edit";
 import { verifyInteraction } from "~/lib/services/discord/verify";
 
@@ -51,6 +52,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
       : undefined,
     page: env.NOTION_TOKEN
       ? (pageId) => readArticle(env.NOTION_TOKEN!, pageId)
+      : undefined,
+    upcoming: env.NOTION_TOKEN
+      ? () => upcomingArticles(env.NOTION_TOKEN!)
       : undefined,
 
     /*

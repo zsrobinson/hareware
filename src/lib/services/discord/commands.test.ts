@@ -133,6 +133,12 @@ test("every subcommand the handler answers to is registered", () => {
   expect([...registered].sort()).toEqual([...HANDLED].sort());
 });
 
+/* the schedule is a whole-database read: there is no one Article to pick */
+test("upcoming takes no options", () => {
+  expect(sub("upcoming")!.type).toBe(1);
+  expect(sub("upcoming")!.options).toEqual([]);
+});
+
 test("the article picker is autocompleted, not a choice list", () => {
   /*
     138 articles against discord's cap of 25 choices: listing them is not an

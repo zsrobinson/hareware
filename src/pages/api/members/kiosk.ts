@@ -1,15 +1,5 @@
-/*
-  the kiosk's own roster, re-read after somebody was created or corrected.
-
-  the same shape `/attendance` hands the island as `initialData`, from the same
-  function, so arriving at the page costs no second request and a refetch
-  cannot disagree with what was server-rendered.
-
-  `today` and `meeting` are carried as search params rather than recomputed
-  here. The kiosk is a laptop left open through an evening, and a refetch that
-  worked out "today" for itself would roll the meeting select forward past
-  midnight, onto a meeting nobody in the room is at.
-*/
+/* `today` and `meeting` come from the page, so a refetch after midnight does
+   not move the kiosk onto another meeting. */
 
 import { env } from "cloudflare:workers";
 import { BadRequest, rosterRead } from "~/lib/members/api";
@@ -27,7 +17,7 @@ export const GET = rosterRead(async (request) => {
   return kioskData(env, today, url.searchParams.get("meeting"));
 });
 
-/* a real calendar day, so `2026-02-30` is refused rather than rolled over */
+/* a real calendar day: `2026-02-30` is refused, not rolled over */
 function isDay(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
 

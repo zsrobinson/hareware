@@ -1,14 +1,7 @@
 /*
-  who satisfies a set of thresholds over a window of time.
-
-  this is the whole point of ADR 0010, and it is a pure function over rows so
-  that the club's constitution can be tested against fixtures rather than
-  against notion. nothing here fetches anything.
-
-  the constitution makes a member eligible to vote if, within the past year,
-  they attended 3 meetings OR made 2 contributions OR volunteered once. the
-  masthead is the same question with different numbers. so there is one
-  function, and "voting" and "masthead" are argument sets — see `PRESETS`.
+  who meets a set of thresholds over a window: voting eligibility and the
+  masthead are the same question with different numbers (`PRESETS`). Pure, so
+  the constitution is tested against fixtures. ADR 0010.
 */
 
 import { plural } from "~/lib/utils";
@@ -16,16 +9,8 @@ import { ALUM_STATUS, MEETING_TYPE, type MeetingType } from "./config";
 import type { ContributionRecord, MeetingRecord, Person } from "./records";
 
 /**
- * the thresholds, as three independent clauses.
- *
- * each is the *minimum* that satisfies its clause. an omitted clause is not
- * part of the question — the masthead asks about contributions and says
- * nothing about attendance, and a `0` there would mean "everybody qualifies",
- * which is a different and much worse answer than "this clause does not apply".
- *
- * all three omitted means nothing can qualify. that is deliberate: it is a
- * question with no criteria, and answering it with the whole roster would be
- * a confident wrong answer to a query somebody mis-typed.
+ * the minimum for each clause. An omitted clause is not part of the question,
+ * which `0` would not express; with all three omitted nobody qualifies
  */
 export type Thresholds = {
   /** general body meetings attended */
@@ -44,21 +29,9 @@ export type Criteria = {
   from: string;
   to: string;
   thresholds: Thresholds;
-  /**
-   * how the clauses that are set combine.
-   *
-   * `"or"` is the constitution's rule and the default every preset uses. an
-   * omitted clause is not part of the question in either mode, so `"and"`
-   * requires every clause that is set and ignores the ones that are not
-   */
+  /** how the clauses that are set combine; the constitution's rule is `"or"` */
   combine: Combine;
-  /**
-   * whether an `Alum` is excluded regardless of what they did.
-   *
-   * true for voting, because the constitution restricts it to current members.
-   * false for the masthead, because an alum who wrote something this year is
-   * printed beside everyone else who did
-   */
+  /** whether an `Alum` is excluded regardless of what they did: voting, not the masthead */
   currentStudentsOnly: boolean;
 };
 
@@ -75,21 +48,13 @@ export type Standing = {
   /** articles + images, which is what the contribution clause tests */
   contributions: number;
   qualifies: boolean;
-  /** which clauses they met, so the page can point at the counts that answer */
+  /** which clauses they met */
   met: Met;
   /** the clauses they met, in the words the page prints */
   reasons: string[];
   /** excluded by `currentStudentsOnly` despite meeting a clause */
   excludedAsAlum: boolean;
-  /**
-   * their Status select is empty or unrecognised.
-   *
-   * such a person is **not** excluded, and is flagged instead. every one of the
-   * 49 rows that predate ADR 0010 is in this state, and a rule that silently
-   * denied them would disenfranchise the entire club at the first election.
-   * erring toward visibility is the same instinct as refusing an ambiguous
-   * member match rather than guessing at it
-   */
+  /** their Status is empty. Flagged, never excluded: most of the roster has none */
   statusUnknown: boolean;
 };
 
@@ -98,16 +63,7 @@ function within(day: string, from: string, to: string): boolean {
   return day >= from && day <= to;
 }
 
-/**
- * everyone's standing, whether or not they qualify.
- *
- * the whole roster rather than only the qualifying rows, because the page has
- * to be able to show somebody why they fell short — "2 meetings" is the answer
- * to the question people actually ask, and a filtered list cannot give it.
- *
- * sorted by qualifying first, then by name, so the answer to the question is
- * at the top and the near-misses are findable underneath
- */
+/** everyone's standing, qualifying first, so the page can show why somebody fell short */
 export function standings(
   people: Person[],
   meetings: MeetingRecord[],
@@ -121,25 +77,11 @@ export function standings(
     (c) => c.date && within(c.date, from, to),
   );
 
-  /*
-    counted into maps in one pass each rather than filtered per person: the
-    roster is small today, but this is O(people × events) the naive way and the
-    attendance relation grows by a whole meeting's worth of rows every week
-  */
-  /* through `MEETING_TYPE`: a second spelling here would make `tally` return
-     zero counts, silently, for whichever type somebody re-worded */
   const attended = tally(inWindow, MEETING_TYPE.generalBody);
   const volunteered = tally(inWindow, MEETING_TYPE.volunteer);
 
-  /*
-    counted from the articles, never from `person.contributions`.
-
-    Members carries a `Contributions` formula and it is tempting to read it
-    here instead of the corpus above — it is one property already in hand. It
-    is an all-time total. Every clause on this page is asked over `from`..`to`,
-    so substituting it would enfranchise anybody who ever contributed, in an
-    election, with the counts on screen looking entirely reasonable
-  */
+  /* from the articles, never `person.contributions`: that formula is all-time
+     and every clause here is over the window */
   const wrote = new Map<string, number>();
   const shot = new Map<string, number>();
   for (const article of published) {
@@ -163,7 +105,7 @@ export function standings(
     );
 }
 
-/** how many meetings of one type each member attended */
+/** attendances of one meeting type, per member */
 function tally(
   meetings: MeetingRecord[],
   type: MeetingType,
@@ -172,11 +114,7 @@ function tally(
 
   for (const meeting of meetings) {
     if (meeting.type !== type) continue;
-    /*
-      a member listed twice on one meeting is one attendance. notion permits a
-      relation to hold the same page twice, and a double-tap on the kiosk is
-      the likeliest way it happens
-    */
+    /* notion lets a relation hold the same page twice */
     for (const id of new Set(meeting.attendeeIds)) bump(counts, id);
   }
 
@@ -197,12 +135,8 @@ type Counts = {
 function score(person: Person, criteria: Criteria, counts: Counts): Standing {
   const { thresholds, combine, currentStudentsOnly } = criteria;
 
-  /*
-    an image credit counts the same as writing, per ADR 0010, so the clause
-    tests the sum. they are reported separately as well because an editor
-    looking at a masthead wants to know which of the two a person did — and
-    somebody credited on both sides of one article legitimately counts twice
-  */
+  /* an image credit counts the same as writing (ADR 0010); both credits on
+     one article count twice */
   const contributions = counts.articles + counts.images;
 
   const met: Met = {
@@ -217,11 +151,7 @@ function score(person: Person, criteria: Criteria, counts: Counts): Standing {
   if (met.contributions) reasons.push(plural(contributions, "contribution"));
   if (met.volunteer) reasons.push(plural(counts.volunteer, "volunteer event"));
 
-  /*
-    under "and", a clause nobody set is still not part of the question, so the
-    test is over the clauses present rather than over all three — otherwise the
-    masthead, which sets one, could never be answered conjunctively at all
-  */
+  /* under "and", only the clauses that are set */
   const asked = (["meetings", "contributions", "volunteer"] as const).filter(
     (clause) => thresholds[clause] !== undefined,
   );
@@ -230,9 +160,6 @@ function score(person: Person, criteria: Criteria, counts: Counts): Standing {
       ? asked.length > 0 && asked.every((clause) => met[clause])
       : reasons.length > 0;
 
-  /* through the constant, never the literal: `ALUM_STATUS` is the one status
-     value a rule depends on, and `alumOptionMissing` is what tells a page
-     notion no longer has it */
   const excludedAsAlum = currentStudentsOnly && person.status === ALUM_STATUS;
 
   return {
@@ -263,14 +190,7 @@ export type Preset = {
   months: number;
 };
 
-/**
- * the two questions the club actually asks.
- *
- * written down here so the constitution's rule lives in one place instead of
- * being recalled each spring — but they are defaults on a form, not constants
- * the code enforces. the thresholds belong to whoever owns the rule, and an
- * editor changing them must not need a deployment
- */
+/** the club's two questions, as defaults on the form rather than enforced rules */
 export const PRESETS: Preset[] = [
   {
     id: "voting",

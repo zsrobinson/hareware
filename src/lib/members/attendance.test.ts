@@ -10,8 +10,7 @@ test("a removal is removed", () => {
   expect(mergeAttendance(["a", "b"], ["a", "b"], ["a"])).toEqual(["a"]);
 });
 
-/* the whole reason this file exists: two laptops each holding [a, b], each
-   adding one person. before the merge, whoever wrote second deleted the other */
+/* two laptops each holding [a, b] add one person apiece */
 test("a second device's addition survives this device's write", () => {
   const current = ["a", "b", "d"]; // the other laptop already added d
   const known = ["a", "b"]; // this laptop never saw d
@@ -27,8 +26,6 @@ test("a removal still applies even when the other device has been busy", () => {
   ]);
 });
 
-/* a device can only remove what it knew about. it cannot delete somebody it
-   never saw, because to it that person is indistinguishable from a stranger */
 test("a person this device never knew is never removed", () => {
   expect(mergeAttendance(["a", "z"], ["a"], ["a"])).toEqual(["a", "z"]);
 });
@@ -59,14 +56,7 @@ test("an empty meeting takes the first arrival", () => {
   expect(mergeAttendance([], [], ["a"])).toEqual(["a"]);
 });
 
-/*
-  order is part of the contract, not an accident.
-
-  the kiosk holds `present` in insertion order and reverses it to draw newest
-  first, so the merge has to keep the order notion's relation is already in and
-  put arrivals on the end. Returning them any other way put the person who just
-  signed in at the bottom of the list they were watching
-*/
+/* the kiosk draws newest first, so arrivals must land last */
 test("insertion order survives the merge, with arrivals last", () => {
   expect(mergeAttendance(["a", "b"], ["a", "b"], ["a", "b", "c"])).toEqual([
     "a",
@@ -104,11 +94,7 @@ test("a remove takes one out and leaves the order alone", () => {
   expect(applyIntent(["a"], { kind: "remove", pageId: "z" })).toEqual(["a"]);
 });
 
-/*
-  the race the intents exist for: two people tap while the first write is still
-  in flight. as whole lists, both are computed from ["a"] and whoever writes
-  second drops the other. as intents, each applies to what it finds
-*/
+/* two taps while the first write is in flight */
 test("intents queued against the same list both survive", () => {
   const first = applyIntents(["a"], [{ kind: "add", pageId: "b" }]);
   const both = applyIntents(first, [{ kind: "add", pageId: "c" }]);
@@ -116,8 +102,7 @@ test("intents queued against the same list both survive", () => {
   expect(both).toEqual(["a", "b", "c"]);
 });
 
-/* the screen draws notion's answer plus whatever has not finished writing, and
-   the one currently writing is in both. applying it twice must not double it */
+/* the tap being written is in both notion's answer and the queue */
 test("an intent already reflected in the answer draws the same", () => {
   expect(applyIntents(["a", "b"], [{ kind: "add", pageId: "b" }])).toEqual([
     "a",
@@ -141,8 +126,7 @@ test("an order already drawn is kept, and arrivals go on the end", () => {
   expect(stableOrder(["a", "b"], ["a", "b", "c"])).toEqual(["a", "b", "c"]);
 });
 
-/* notion answers a relation in whatever order it likes, and a write that came
-   back reshuffled moved rows under a room that was still signing in */
+/* notion does not keep a relation's order */
 test("a reshuffled answer does not reorder the screen", () => {
   expect(stableOrder(["a", "b", "c"], ["c", "a", "b"])).toEqual([
     "a",

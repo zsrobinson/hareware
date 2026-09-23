@@ -30,14 +30,7 @@ function watchNotion(): string[] {
   return asked;
 }
 
-/*
-  the point of Members' `Contributions` formula.
-
-  drawing the kiosk used to mean reading every article the club has ever
-  published — two requests today, one more every few years — to render an
-  all-time count beside a name. This goes red the day somebody reaches for the
-  corpus again from here
-*/
+/* the kiosk's counts come from the Contributions formula, not the article corpus */
 test("the attendance read never touches the article corpus", async () => {
   const asked = watchNotion();
 
@@ -83,12 +76,7 @@ test("a candidate carries the count notion computed for their row", async () => 
   expect(data.candidates.map((person) => person.contributions)).toEqual([4]);
 });
 
-/*
-  the roster travels to the page because the google group comparison happens in
-  the browser: an editor exports the group's members and the file is diffed
-  against these rows without going anywhere. A page missing the roster would
-  compare against nothing and report that everybody is already a member
-*/
+/* the roster is what the browser compares the Google Group export against */
 test("the reconciler carries the roster the group is compared against", async () => {
   const { reconcilerData } = await import("./views");
 
@@ -127,8 +115,6 @@ test("the reconciler carries the roster the group is compared against", async ()
   expect(data.discordProblem).toBeNull();
 });
 
-/* a fallback offered in silence reads as notion's answer, and hides the alum
-   check that only a live list can make */
 test("an unreadable Status schema is reported, not offered as notion's", async () => {
   watchNotion();
 

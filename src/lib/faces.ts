@@ -1,11 +1,6 @@
 /*
-  the discord picture beside a name.
-
-  one request for the whole guild, then a lookup per id, so a page of avatars
-  costs the same as a page with one. an id that does not come back is drawn as
-  a ghost, and a member who left, a bot token that expired and a row with no
-  discord id are all that same ghost: none of them has a picture, and none of
-  them may take the page down.
+  discord profiles for a page's ids, from one guild read. An id that does not
+  resolve, for whatever reason, has no entry and is drawn without a picture.
 */
 
 import { guildMembers, type Profile } from "./member";

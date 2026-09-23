@@ -1,11 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 
-/*
-  every route under this folder answers with the roster or writes to it, so
-  each one found here must refuse a request with no session before it reads
-  anything. A new route that forgets the gate goes red here without anybody
-  having to remember to write its test
-*/
+/* every route found here must refuse an anonymous request before reading
+   anything, so a new route that skips the gate goes red without a test of its own */
 
 vi.mock("cloudflare:workers", () => ({
   env: { SESSION_SECRET: "s".repeat(32), NOTION_TOKEN: "secret" },

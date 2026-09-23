@@ -1,16 +1,4 @@
-/*
-  reading the three databases standing is computed from.
-
-  every function here is a read and a shape conversion, and nothing here
-  decides anything — `standing.ts` holds the rules and never touches the
-  network, which is what lets the constitution be tested against fixtures.
-
-  all three reads pull every row through the client's `queryAll`, which follows
-  notion's cursor. the roster is fifty people, the meetings database a few
-  hundred rows and the article corpus two requests' worth, so paging is about
-  correctness rather than volume: a silently short answer is the worst shape a
-  bug can take in something an election rests on.
-*/
+/* reading Members, Meetings and Articles into the shapes in `records.ts`. */
 
 import {
   notion,
@@ -33,7 +21,6 @@ import {
 import type { ContributionRecord, MeetingRecord, Person } from "./records";
 import { easternNow } from "~/lib/eastern";
 
-/** every notion property shape these three databases hand back */
 type Property = RelationProperty & {
   type?: string;
   title?: { plain_text: string }[] | null;
@@ -44,7 +31,6 @@ type Property = RelationProperty & {
   formula?: { type?: string; number?: number | null } | null;
 };
 
-/** a row of any of the three, as notion answers a page or a query */
 export type Page = { id: string; properties: Record<string, Property> };
 
 function text(property: Property | undefined): string {
@@ -52,32 +38,21 @@ function text(property: Property | undefined): string {
 }
 
 /**
- * a Notion date's Eastern calendar day, or `""` when it has none. A date with
- * a time is an instant, and 9pm Eastern is already tomorrow in UTC; one
- * without is a bare day with no instant to convert. See `startsOn`
+ * a notion date's Eastern day, or `""`. Only a date with a time is converted:
+ * a bare day has no instant. See silent-failures.md
  */
 function easternDay(start: string | null | undefined): string {
   if (!start) return "";
   return start.includes("T") ? easternNow(new Date(start)).date : start;
 }
 
-/**
- * a formula property's number, or 0 when it does not have one.
- *
- * notion answers a number formula as `{ formula: { type: "number", number } }`
- * and a formula of any other type with no `number` at all — as does a property
- * the integration cannot read. Counting those as zero keeps a bad schema off
- * the screen as a missing badge rather than as `NaN contributions`
- */
+/** a formula's number, or 0 when it has none (another type, or unreadable) */
 function formulaNumber(property: Property | undefined): number {
   const value = property?.formula?.number;
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-/**
- * a relation's ids, whole. A relation the integration cannot reach is omitted
- * from the page and would otherwise read as empty
- */
+/** a relation's ids, whole, refusing one that is missing rather than empty */
 async function relation(
   page: Page,
   name: string,
@@ -94,7 +69,6 @@ async function relation(
   return relationIds(page.id, property, token);
 }
 
-/** a Members row as the roster sees it */
 export function toPerson(page: Page): Person {
   const status =
     page.properties?.[MEMBER_PROPERTIES.status.name]?.select?.name ?? null;
@@ -103,8 +77,7 @@ export function toPerson(page: Page): Person {
   return {
     pageId: page.id,
     name: text(page.properties?.[MEMBER_PROPERTIES.name.name]),
-    /* never `""` — the difference between "no id" and "empty id" is the
-       difference between a row we may link and a row we may not */
+    /* never `""`: a row with no id is one that may be linked */
     discordId:
       text(page.properties?.[MEMBER_PROPERTIES.discordId.name]) || null,
     email: email?.trim() || null,
@@ -119,19 +92,11 @@ export async function people(token: string): Promise<Person[]> {
   return (await queryAll<Page>(MEMBERS_DATA_SOURCE_ID, token)).map(toPerson);
 }
 
-/** one Members row, read fresh */
 export async function member(token: string, pageId: string): Promise<Person> {
   return toPerson((await notion(`pages/${pageId}`, token)) as Page);
 }
 
-/**
- * the Status select's options, as notion currently has them.
- *
- * read rather than hardcoded so renaming an option is an edit in notion and
- * nothing else. `alumOptionMissing` is the guard on the one option a rule
- * depends on. Throws when the schema has no Status select, which a renamed
- * property looks like, rather than answering an empty list
- */
+/** notion's live Status options. Throws when there is no Status select, as after a rename */
 export async function statusOptions(token: string): Promise<string[]> {
   const schema = (await notion(
     `data_sources/${MEMBERS_DATA_SOURCE_ID}`,
@@ -156,19 +121,10 @@ export async function statusOptions(token: string): Promise<string[]> {
     .filter((name): name is string => Boolean(name));
 }
 
-/**
- * every meeting, with attendee lists notion did not cut short.
- *
- * a query answers at most 25 entries of a relation, and a general body meeting
- * is thirty people, so counting straight from the query would leave five of
- * them one meeting short of a vote with nothing to show for it
- */
 export async function meetings(token: string): Promise<MeetingRecord[]> {
   const pages = await queryAll<Page>(MEETINGS_DATA_SOURCE_ID, token);
   const records: MeetingRecord[] = [];
 
-  /* one at a time: only a truncated relation costs a read, a handful a
-     semester */
   for (const page of pages) {
     records.push({
       pageId: page.id,
@@ -191,21 +147,8 @@ export async function meetings(token: string): Promise<MeetingRecord[]> {
 }
 
 /**
- * every published Article, reduced to the two credits that count.
- *
- * read by `standing.ts` alone, and it needs the dates: the counting there is
- * over a window, which Members' `Contributions` formula cannot express. The
- * kiosk's all-time badge comes from that formula instead, so this corpus is no
- * longer read to draw a screen.
- *
- * an article with no Publication Date has not published and counts toward
- * nothing, and there are enough of those — the tracker holds pitches and
- * approved-but-unwritten rows by design, per ADR 0006 — that asking notion to
- * drop them is worth the filter.
- *
- * the window is *not* pushed down with it. standing re-asks the same question
- * over different date ranges, and a caller that changed the range would be
- * comparing against a differently-filtered corpus without noticing
+ * every published Article's two credits. The window is not pushed into the
+ * filter: standing asks over several ranges of the same corpus
  */
 async function contributions(token: string): Promise<ContributionRecord[]> {
   const pages = await queryAll<Page>(ARTICLES_DATA_SOURCE_ID, token, {
@@ -241,22 +184,13 @@ async function contributions(token: string): Promise<ContributionRecord[]> {
   return records;
 }
 
-/** everything standing needs, read together */
 export type Corpus = {
   people: Person[];
   meetings: MeetingRecord[];
   contributions: ContributionRecord[];
 };
 
-/**
- * all three databases, concurrently.
- *
- * they share nothing and the page needs all three, so serialising them would
- * add two round trips to every question an editor asks. `together` is what
- * keeps that from becoming a burst: these are four requests rather than three,
- * because `contributions` pages, and four in one tick is over notion's budget
- * before any of them has answered
- */
+/** all three databases for standing, through `together` to stay inside notion's budget */
 export async function corpus(token: string): Promise<Corpus> {
   const [read, met, wrote] = await together([
     () => people(token),

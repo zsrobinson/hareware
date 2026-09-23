@@ -22,14 +22,7 @@ const page = (over: Record<string, unknown> = {}) => ({
   },
 });
 
-/*
-  the merge is this page's one irreversible action, run before an election, on
-  the records the election is counted from. Notion carries at most 25 entries
-  of a relation inside a page object and says so with `has_more` alone — and an
-  officer at the weekly editorial board passes 25 attendances inside a year.
-  Taking the page's copy writes a truncated union onto the survivor and then
-  archives the original, so the twenty-sixth onward are gone with nothing said
-*/
+/* a relation cut short at 25 must be read in full before the union is written */
 test("a truncated relation is read in full before the union is written", async () => {
   const asked: string[] = [];
   let written: Record<string, { relation: { id: string }[] }> | undefined;
@@ -53,8 +46,6 @@ test("a truncated relation is read in full before the union is written", async (
       if (String(url).includes("/properties/")) {
         return new Response(
           JSON.stringify({
-            /* the whole list, which is what this endpoint answers with: the
-               page object's twenty-five were a prefix of it */
             results: [
               { relation: { id: "a1" } },
               { relation: { id: "a2" } },
@@ -87,8 +78,6 @@ test("a truncated relation is read in full before the union is written", async (
   );
 });
 
-/* the extra read is a round trip per relation, so it happens only for the ones
-   notion actually cut short */
 test("a relation notion answered in full costs no second read", async () => {
   const fetched = vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === "PATCH") return new Response("{}");
@@ -103,8 +92,6 @@ test("a relation notion answered in full costs no second read", async () => {
   ).toEqual([]);
 });
 
-/* a relation the integration cannot reach is omitted from the payload, which
-   is indistinguishable from empty unless the property itself is checked */
 test("an unreadable relation refuses the merge rather than emptying it", async () => {
   vi.stubGlobal(
     "fetch",
@@ -145,8 +132,7 @@ const discord = (id: string) => ({
   "Discord ID": { rich_text: [{ plain_text: id }] },
 });
 
-/* two rows carrying two accounts are two people who share a name, and folding
-   one into the other would hand one of them the other's history */
+/* two accounts are two people who share a name */
 test("refuses two rows linked to different Discord accounts", async () => {
   const patched = merging(
     page(discord("574376763006648349")),

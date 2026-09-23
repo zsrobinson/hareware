@@ -1,30 +1,21 @@
-/*
-  the guild's members, as discord's REST api answers for them: one member with
-  their roles, or the whole list. What a role means is the caller's business.
-*/
+/* the guild's members over REST: one with their roles, or the whole list. */
 
 import { sendPatiently } from "~/lib/rate-limit";
 import { GUILD_ID } from "./config";
 
-/** what the ui draws. never what it decides anything from */
+/** what the ui draws; never decided from */
 export type Profile = {
   /** server nickname, else discord display name, else username */
   displayName: string;
-  /** the @handle under it, for telling two people with one name apart */
+  /** the @handle */
   username: string;
-  /** ready to put in a src, already resolved to guild or account avatar */
+  /** the guild avatar, else the account's, else discord's default */
   avatarUrl: string;
 };
 
-/** the member's roles and profile, from one request */
 type GuildMember = { roleIds: string[]; profile: Profile };
 
-/**
- * What asking Discord about somebody came back as. "absent" and "unreachable"
- * are separate: one is a fact about them, the other that we could not find
- * out. Saying the first when the second happened is a lie that survives a
- * retry.
- */
+/** "absent" is a fact about them; "unreachable" means we could not find out */
 export type MemberLookup =
   | ({ status: "member" } & GuildMember)
   /** no such member: they left the guild, or were never in it */
@@ -32,33 +23,23 @@ export type MemberLookup =
   /** discord did not answer, or could not be asked */
   | { status: "unreachable" };
 
-/**
- * Discord's "Unknown Member". Its siblings, 10004 Unknown Guild and 10013
- * Unknown User, arrive with the same 404 and are about us, not their
- * membership.
- */
+/** "Unknown Member". 10004 Unknown Guild and 10013 Unknown User share its 404 */
 const UNKNOWN_MEMBER = 10007;
 
-/** the `code` out of discord's error body, or undefined if it had none */
 async function errorCode(response: Response) {
   try {
     const body = (await response.json()) as { code?: unknown };
     return typeof body.code === "number" ? body.code : undefined;
   } catch {
-    /* an error body that is not json tells us nothing, and "nothing" is not
-       evidence that somebody left */
     return undefined;
   }
 }
 
-/** discord's member object for somebody in the guild, or why we have none */
 export async function lookupMember(
   token: string,
   userId: string,
 ): Promise<MemberLookup> {
   try {
-    /* a 429 says nothing about membership, so it is waited out rather than
-       read as an answer */
     const response = await sendPatiently(
       () =>
         fetch(
@@ -68,12 +49,7 @@ export async function lookupMember(
       "discord member lookup",
     );
 
-    /*
-      A 404 is not one fact: Discord answers it both for a member who has left
-      and for a guild it will not show us, meaning a wrong GUILD_ID or the bot
-      removed. Only the first is about them, and the refusal page says so by
-      name, so the error code has to decide.
-    */
+    /* a 404 is also a wrong GUILD_ID or a removed bot; the code decides */
     if (response.status === 404) {
       const code = await errorCode(response);
 
@@ -83,8 +59,6 @@ export async function lookupMember(
       return { status: "unreachable" };
     }
 
-    /* anything else — a rate limit, a revoked token, discord having a bad day
-       — says nothing about whether they are a member */
     if (!response.ok) {
       console.error("[discord] discord answered", response.status);
       return { status: "unreachable" };
@@ -102,8 +76,6 @@ export async function lookupMember(
       };
     };
 
-    /* a 200 whose body is not the shape we asked for is discord behaving
-       oddly, not a member who happens to hold no roles */
     if (!Array.isArray(member.roles)) {
       console.error("[discord] member lookup returned no roles array");
       return { status: "unreachable" };
@@ -117,14 +89,12 @@ export async function lookupMember(
       profile: readProfile(userId, member),
     };
   } catch (error) {
-    /* An outage denies rather than grants: the caller reads this as permission
-       as well as identity. */
     console.error("[discord] could not reach discord", error);
     return { status: "unreachable" };
   }
 }
 
-/** discord's cap on one page of the member list */
+/** discord's cap on one page */
 const PAGE = 1000;
 
 /**
@@ -172,7 +142,6 @@ export async function listMembers(
   }
 }
 
-/** a string field from discord, kept only when it is a non-empty one */
 const text = (value: unknown) =>
   typeof value === "string" && value ? value : undefined;
 
@@ -193,12 +162,6 @@ function readProfile(
   const username = text(user.username);
 
   return {
-    /*
-      most specific first. the nickname is what the club actually calls each
-      other, and it is the name beside every message in the server — a panel
-      that used the account name instead would be naming a different person as
-      far as anyone reading it is concerned
-    */
     displayName:
       text(member.nick) ?? text(user.global_name) ?? username ?? userId,
     username: username ?? userId,
@@ -209,7 +172,7 @@ function readProfile(
 const CDN = "https://cdn.discordapp.com";
 const SIZE = 64;
 
-/** animated avatars are the ones whose hash is prefixed, and only as gif */
+/** an animated avatar's hash starts `a_` and is only a gif */
 const extension = (hash: string) => (hash.startsWith("a_") ? "gif" : "png");
 
 function avatarUrl(
@@ -217,8 +180,6 @@ function avatarUrl(
   guildAvatar: string | undefined,
   userAvatar: string | undefined,
 ) {
-  /* a per-server avatar overrides the account one, the same way discord shows
-     it in the member list */
   if (guildAvatar) {
     return `${CDN}/guilds/${GUILD_ID}/users/${userId}/avatars/${guildAvatar}.${extension(guildAvatar)}?size=${SIZE}`;
   }
@@ -227,8 +188,7 @@ function avatarUrl(
     return `${CDN}/avatars/${userId}/${userAvatar}.${extension(userAvatar)}?size=${SIZE}`;
   }
 
-  /* an account that never set one gets a discord default, chosen from the id
-     the way discord chooses it, so the fallback still differs person to person */
+  /* discord's own default, chosen from the id the way discord does */
   const index = Number((BigInt(userId) >> 22n) % 6n);
   return `${CDN}/embed/avatars/${index}.png`;
 }

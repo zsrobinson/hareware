@@ -1,16 +1,3 @@
-/*
-  linking a Members row to a discord account from the kiosk.
-
-  the id is checked against the guild rather than accepted: the island offers
-  an autocomplete over the member list, but the island is not trusted for any
-  of this — a snowflake typed into a request by hand would attach somebody's
-  whole contribution history to an account that is not in the club.
-
-  a snowflake already on another row is refused for the same reason from the
-  other side. Two rows carrying one discord id is precisely the duplicate the
-  reconciler exists to find, and creating one here would be creating work.
-*/
-
 import {
   BadRequest,
   requireFreeDiscordId,

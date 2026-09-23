@@ -1,13 +1,4 @@
-/*
-  who the signed-in member is, as discord currently has them.
-
-  the session cookie holds one thing — the discord user id — and everything
-  shown about a member is read live. that is not extra work: the admin check
-  already asks discord for the member on every request, and the reply carries
-  the profile alongside the roles, so one lookup answers both "may they" and
-  "what are they called". change your nickname or avatar and the next page load
-  has it, with nothing cached anywhere to go stale
-*/
+/* guild members as discord has them now, read live with the bot token. ADR 0008. */
 
 import { env } from "cloudflare:workers";
 import {
@@ -19,7 +10,7 @@ import {
 
 export type { MemberLookup, Profile };
 
-/** discord's member object for somebody in the guild, or why we have none */
+/** somebody's roles and profile, or why we have none */
 export async function guildMember(userId: string): Promise<MemberLookup> {
   const token = env.DISCORD_BOT_TOKEN;
   /* no token is our own misconfiguration, not a fact about the member */
@@ -28,11 +19,7 @@ export async function guildMember(userId: string): Promise<MemberLookup> {
   return lookupMember(token, userId);
 }
 
-/**
- * every member of the guild, by user id, failing rather than answering short.
- * Callers choose whether that failure is material or whether a page of
- * names without avatars is still useful.
- */
+/** every guild member by user id; throws rather than answering short */
 export async function readGuildMembers(
   token = env.DISCORD_BOT_TOKEN,
 ): Promise<Map<string, Profile>> {
@@ -40,7 +27,7 @@ export async function readGuildMembers(
   return listMembers(token);
 }
 
-/** Every guild member where an empty fallback is acceptable, such as avatars. */
+/** every guild member, or none when discord fails: for avatars, where that is fine */
 export async function guildMembers(): Promise<Map<string, Profile>> {
   try {
     return await readGuildMembers();

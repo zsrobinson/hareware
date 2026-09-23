@@ -15,11 +15,7 @@ const member = (id: string, name: string, discordId?: string): Person => ({
   contributions: 0,
 });
 
-/*
-  two real-shaped snowflakes differing only in their last digit. 19 digits is
-  past what a double can hold exactly, so anything that parses one as a number
-  matches both — which would credit an article to the wrong person permanently
-*/
+/* equal as doubles: a snowflake must never be compared as a number */
 const ZACH = "1234567890123456789";
 const NEIGHBOUR = "1234567890123456780";
 
@@ -41,10 +37,6 @@ test("one row carrying the discord id is a match", () => {
 });
 
 test("a snowflake is compared as text, not as a number", () => {
-  /*
-    the two ids differ only in their nineteenth digit and are equal as floats.
-    matching by id must find neither of them for the other
-  */
   const result = matchMembers(
     [member("m1", "Zachary Robinson", ZACH)],
     NEIGHBOUR,
@@ -106,11 +98,6 @@ test("nothing matching at all is absent", () => {
 });
 
 test("two rows sharing one discord id are refused, and both are named", () => {
-  /*
-    picking the first would attribute articles to the wrong person for good,
-    and nothing downstream could tell. the pages are named so somebody can go
-    and merge them
-  */
   const result = matchMembers(
     [member("m1", "Zachary Robinson", ZACH), member("m2", "Zach R", ZACH)],
     ZACH,

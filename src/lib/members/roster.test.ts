@@ -13,7 +13,7 @@ const richText = (text: string) => ({
   rich_text: [{ plain_text: text }],
 });
 
-/** one Meetings row with these properties, read the way the kiosk reads it */
+/** one Meetings row, read through `meetings` */
 async function toMeeting(row: { id: string; properties: object }) {
   vi.stubGlobal(
     "fetch",
@@ -22,7 +22,7 @@ async function toMeeting(row: { id: string; properties: object }) {
   return (await meetings("token"))[0]!;
 }
 
-/** one Articles row with these properties, read the way standing reads it */
+/** one Articles row, read through `corpus` */
 async function toContribution(row: { id: string; properties: object }) {
   vi.stubGlobal(
     "fetch",
@@ -57,8 +57,6 @@ test("a Members row reads into a Person", () => {
   });
 });
 
-/* the difference between "no id" and "empty id" is the difference between a row
-   we may link and a row we may not */
 test("an empty Discord ID reads as null, never as an empty string", () => {
   const person = toPerson({
     id: "p1",
@@ -68,11 +66,6 @@ test("an empty Discord ID reads as null, never as an empty string", () => {
   expect(person.discordId).toBeNull();
 });
 
-/*
-  the all-time count notion computes as `prop("Articles Count") +
-  prop("Images Count")`, so a screen that only wants the total does not read
-  every article the club has published to work it out
-*/
 test("the Contributions formula reads as its number", () => {
   const person = toPerson({
     id: "p1",
@@ -88,8 +81,7 @@ test("the Contributions formula reads as its number", () => {
   expect(person.contributions).toBe(3);
 });
 
-/* a property the integration cannot read is omitted from the payload entirely,
-   and a badge reading "NaN contributions" is the loud end of a quiet problem */
+/* an unreadable property is omitted, and must not become NaN */
 test("a missing Contributions property counts as none rather than NaN", () => {
   const person = toPerson({ id: "p1", properties: { Name: title("Ada") } });
 
@@ -126,9 +118,7 @@ test("a missing email and a missing status are null rather than absent", () => {
   expect(person.status).toBeNull();
 });
 
-/* the options belong to notion and the pickers read them from the schema, so
-   an option this repository has never seen is a label and not an error. only
-   an empty select is "we do not know", which is what the reconciler chases */
+/* an option this repository has never seen is a label, not an error */
 test("a Status notion has and we do not is kept, not coerced to unknown", () => {
   const person = toPerson({
     id: "p1",
@@ -169,9 +159,7 @@ test("a meeting with no date reads as empty, so no window can contain it", async
   expect(meeting.attendeeIds).toEqual([]);
 });
 
-/* 9pm Eastern on the 9th is 1am UTC on the 10th, and the meeting happened on
-   the 9th: a UTC day would count it toward the wrong window and put it on
-   the wrong day in the kiosk */
+/* 9pm Eastern on the 9th is 1am UTC on the 10th */
 test("a meeting with a time falls on its Eastern day", async () => {
   const meeting = await toMeeting({
     id: "m1",
@@ -224,8 +212,6 @@ test("an article published at night falls on its Eastern day", async () => {
   expect(article.date).toBe("2026-03-31");
 });
 
-/* a renamed Status property reads as a schema with no options, which callers
-   used to take for "could not read" and say nothing about */
 test("a schema with no Status select is refused, not read as no options", async () => {
   vi.stubGlobal(
     "fetch",
@@ -248,14 +234,7 @@ test("an unreadable credit relation refuses to compute standing", async () => {
   ).rejects.toThrow(/Image Crew relation is not readable/);
 });
 
-/*
-  the cap where it is actually needed.
-
-  `together` has its own test, and a helper can be perfectly tested while
-  nothing calls it: this is the one that goes red if `corpus` is written back
-  as a `Promise.all`. `/standing` reads all three databases on every visit, and
-  four notion requests in one tick is over the budget before any has answered.
-*/
+/* goes red if `corpus` becomes a `Promise.all` */
 test("corpus never has more than two notion requests in flight", async () => {
   let running = 0;
   let most = 0;
@@ -281,12 +260,7 @@ test("corpus never has more than two notion requests in flight", async () => {
   expect(most).toBeGreaterThan(1);
 });
 
-/*
-  notion answers a relation with at most 25 entries wherever it appears inside
-  a page and flags the rest with `has_more`. A general body meeting is thirty
-  people, so counting straight from the query leaves five of them a meeting
-  short of a vote, and nothing about the answer looks short
-*/
+/* a general body meeting is more than the 25 a query shows */
 test("a truncated attendee relation is read in full, not counted short", async () => {
   const asked: string[] = [];
 
@@ -303,8 +277,7 @@ test("a truncated attendee relation is read in full, not counted short", async (
                 id: "m1",
                 properties: {
                   Name: title("General Body"),
-                  /* the shape notion really answers with: the property id is
-                     already percent-encoded when it arrives */
+                  /* notion sends the property id already percent-encoded */
                   Attendees: {
                     type: "relation",
                     id: "c%3CLo",
@@ -341,22 +314,12 @@ test("a truncated attendee relation is read in full, not counted short", async (
   const [meeting] = await meetings("token");
 
   expect(meeting!.attendeeIds).toEqual(["p1", "p2", "p3"]);
-  /*
-    the id exactly as notion gave it, never encoded again.
-
-    measured against the real database: `c%3CLo` answers with the twelve
-    related pages, and `c%253CLo` — the same id through `encodeURIComponent` —
-    answers 200 with an empty list. An empty relation is the one wrong answer
-    that does no harm here and great harm in `recordAttendance`, which merges
-    against what notion holds: an empty answer for a meeting of thirty reads as
-    an empty room, and the next tap writes that back
-  */
+  /* verbatim: encoded again, notion answers 200 with an empty list */
   expect(asked[1]).toContain("/pages/m1/properties/c%3CLo");
   expect(asked[1]).not.toContain("c%253CLo");
 });
 
-/* the extra read is a whole round trip per meeting, so it happens only for the
-   meetings notion actually cut short */
+/* the extra read happens only for a relation notion cut short */
 test("a relation notion answered in full costs no second read", async () => {
   const fetched = vi.fn(
     async () =>

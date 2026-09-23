@@ -1,28 +1,8 @@
 /*
-  the one shape every roster mutation route takes.
-
-  six routes back the three pages ADR 0010 adds, and each of them has to do the
-  same four things before and after the one line that matters: check
-  @Editorial Board against discord, read a json body that came from a browser
-  and is therefore a stranger, write an Invocation, and turn a thrown error
-  into a status rather than a stack trace. Written six times, one of those gets
-  forgotten — and the one that gets forgotten is the check, because it is the
-  only one whose absence nothing visibly breaks.
-
-  so the route files below `~/pages/api/members` contain no auth code at all.
-  They hand `rosterRoute` a parser and a body, and it is not possible to write
-  one that skips the gate.
-
-  the islands are not trusted for any of this. A page that only renders a
-  button for an editor is a page whose button anybody can `fetch` — the check
-  belongs on the server side of every one of these, exactly as ADR 0007 has it
-  for the admin pages themselves.
-
-  the GET routes the islands refetch through are behind the same `admission`
-  as the mutations, and deliberately behind the *same function* rather than the
-  same rule written twice. The reads answer with the roster: every name, email
-  and discord id the club has. A gate re-implemented beside the one that works
-  is how the copy that is wrong ends up on the route nobody was watching.
+  the wrapper every route under `~/pages/api/members` goes through: the
+  @Editorial Board gate, body parsing, the Invocation and the error status. The
+  routes hold no auth code, so none can skip the gate; `gate.test.ts` holds
+  every route to it. ADR 0007.
 */
 
 import { env } from "cloudflare:workers";
@@ -38,43 +18,24 @@ import { statusOptions } from "./roster";
 
 export { BadRequest };
 
-/**
- * what a roster mutation records about itself.
- *
- * its own action rather than the sync's. These share a subject — who the
- * roster thinks somebody is — but not a provenance, and provenance is the
- * whole point of the row: somebody auditing an election has to be able to ask
- * "what did people change about the roster" and get merges and attendance,
- * without the hourly cron's creates buried in the same answer.
- *
- * one value for all six routes, at the granularity `article-edit` already
- * uses. the summary says which one it was
- */
+/* separate from the sync's action, so an audit can ask what people changed;
+   the summary says which edit it was */
 const ACTION: Invocation["action"] = "roster-edit";
 
-/** what a mutation hands back: a line for the log, and anything the island needs */
 type MutationResult = {
-  /** the log line, in the words the log page prints */
+  /** the log line */
   summary: string;
-  /** returned to the caller as json; the island re-renders from it */
+  /** returned to the island as json */
   data?: Record<string, unknown>;
 };
 
-/**
- * whether the caller may be here, and who they are if so.
- *
- * a union rather than a nullable member: "not admitted" carries the response
- * that refuses them, so a route cannot hold half the answer and reach past it.
- * Every route below `~/pages/api/members`, read or write, starts here
- */
 type RouteAccess =
   { admitted: true; actor: string } | { admitted: false; refusal: Response };
 
 async function admission(request: Request): Promise<RouteAccess> {
   const access = await adminAccess(request);
 
-  /* the status the admin pages refuse with, so an outage reads as 503 rather
-     than as a refusal. ADR 0007's amendment */
+  /* the admin pages' statuses, so an outage is a 503 and not a refusal */
   if (!access.allowed) {
     const { status, title } = DENIALS[access.denial];
     return {
@@ -86,17 +47,7 @@ async function admission(request: Request): Promise<RouteAccess> {
   return { admitted: true, actor: access.who.session.discordUserId };
 }
 
-/**
- * a GET route the islands refetch through after a mutation.
- *
- * these answer the shapes in `~/lib/members/views`, which the pages also hand
- * down as `initialData`, so arriving at a page costs no second request and
- * every write updates what is on screen without a reload.
- *
- * nothing is written and nothing is logged. An Invocation records what a
- * person did to the roster, and re-reading it is not one of those — a row per
- * refetch would bury the merges the log exists to show
- */
+/** a GET route the islands refetch a view through. Reads are not logged */
 export function rosterRead<T>(
   load: (request: Request) => Promise<T>,
 ): APIRoute {
@@ -113,24 +64,13 @@ export function rosterRead<T>(
   };
 }
 
-/**
- * the secrets a mutation talks to notion and discord with, checked here once.
- * Discord's is optional: most routes never use it, and those that do refuse
- * without it
- */
+/** checked once here; the routes that need discord's refuse without it */
 type Tokens = { notion: string; discord: string | undefined };
 
 /**
- * a POST route that mutates the roster.
- *
- * `parse` validates the decoded body and throws `BadRequest` with a message
- * safe to show a person; `run` performs the write. The split exists so a bad
- * body is a 400 that never reaches notion — a `null` page id sent to a relation
- * write is accepted by notion and quietly empties it.
- *
- * every outcome is logged, including the failures, because the point of the
- * log under ADR 0007 is that a thing which did not happen leaves a trace too.
- * A merge that threw halfway is precisely the row somebody needs to find later
+ * a POST route that mutates the roster. `parse` throws `BadRequest` so a bad
+ * body never reaches notion, which accepts a `null` relation id and empties
+ * the relation. Every outcome is logged, failures included
  */
 export function rosterRoute<Input>(
   parse: (body: unknown) => Input,
@@ -179,7 +119,6 @@ export function rosterRoute<Input>(
       return json({ ok: true, summary, ...(data ?? {}) }, 200);
     } catch (thrown) {
       const why = thrown instanceof Error ? thrown.message : String(thrown);
-      /* a stale link or merge is a refusal, not a fault */
       const refused = thrown instanceof BadRequest;
 
       await record(env.DB, {
@@ -190,13 +129,7 @@ export function rosterRoute<Input>(
         actor: who.actor,
       });
 
-      /*
-        the message is returned rather than swallowed. these all wrap notion,
-        whose refusals say useful things — a property that is not readable, a
-        page in the trash — and the person reading it holds @Editorial Board,
-        so there is nobody to leak it to who could not have asked notion
-        directly
-      */
+      /* notion's message is useful, and only an editor can read it */
       return json({ error: why }, refused ? 400 : 500);
     }
   };
@@ -212,7 +145,7 @@ function json(body: unknown, status: number) {
   });
 }
 
-/** a required string field, refused rather than coerced when it is missing */
+/** a required string field, trimmed */
 export function requireText(body: unknown, field: string): string {
   const value = (body as Record<string, unknown> | null)?.[field];
   if (typeof value !== "string" || !value.trim()) {
@@ -228,9 +161,8 @@ export function optionalText(body: unknown, field: string): string | null {
 }
 
 /**
- * a Notion page id, with or without its dashes, in the dashed lowercase form
- * notion answers with so it compares equal to ids read from the roster. These
- * go into url paths, so anything else is refused
+ * a Notion page id with or without dashes, in the dashed form notion answers
+ * with so it compares equal to roster ids. These go into url paths
  */
 function notionId(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -248,14 +180,13 @@ function notionId(value: unknown): string | null {
   return `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`;
 }
 
-/** a required Notion page id */
 export function requirePageId(body: unknown, field: string): string {
   const id = notionId((body as Record<string, unknown> | null)?.[field]);
   if (!id) throw new BadRequest(`${field} is not a Notion id`);
   return id;
 }
 
-/** an optional list of Notion page ids; absent is different from empty and stays so */
+/** an optional list of Notion page ids; absent stays distinct from empty */
 export function optionalList(
   body: unknown,
   field: string,
@@ -274,9 +205,7 @@ export function requireList(body: unknown, field: string): string[] {
   return ids as string[];
 }
 
-/* notion's email property refuses a malformed address with a 400 whose
-   message names the property and not the value, so the shape is checked here
-   where the reply can say what to fix */
+/* notion refuses a malformed address without naming it, so the reply here does */
 export function requireEmail(body: unknown, field: string): string {
   const email = requireText(body, field);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -285,10 +214,7 @@ export function requireEmail(body: unknown, field: string): string {
   return email;
 }
 
-/**
- * refuses a status Notion does not have. Notion's `select` accepts a name it
- * has never seen and adds it, which is how a fourth status appears by typo
- */
+/** refuses a status notion lacks: a `select` write adds any name it is given */
 export async function requireStatus(
   token: string,
   status: string,
@@ -302,9 +228,8 @@ export async function requireStatus(
 }
 
 /**
- * the guild account a Discord id names, refused when it is not in the server
- * or another row already carries it: two rows with one id is the duplicate
- * the reconciler exists to find. `pageId` is the row being written, if any
+ * the account a Discord id names, refused when it is not in the server or a
+ * row other than `pageId` already carries it
  */
 export async function requireFreeDiscordId(
   token: string | undefined,

@@ -32,9 +32,7 @@ test("every address in an export is found, whatever the columns are", () => {
   ]);
 });
 
-/* the column names have changed before and are not ours to depend on. a reader
-   that looked for one and found nothing would report an empty group, which
-   reads as "add everybody again" rather than as a failure */
+/* the export's columns have changed before */
 test("a file with no header is read the same way", () => {
   expect([...emailsInExport("ana@terpmail.umd.edu\nben@umd.edu")]).toEqual([
     "ana@terpmail.umd.edu",
@@ -64,8 +62,6 @@ test("somebody on the roster and not in the group is missing", () => {
   expect(diff.missing.map((one) => one.name)).toEqual(["Ben"]);
 });
 
-/* the address on the row was typed by a person, the one in the group came back
-   from google, and either may carry capitals or a stray space */
 test("a difference of case or whitespace is not a difference", () => {
   const diff = compareToGroup(
     [person({ pageId: "p1", email: "  Ana@Terpmail.umd.edu " })],
@@ -75,12 +71,7 @@ test("a difference of case or whitespace is not a difference", () => {
   expect(diff.missing).toEqual([]);
 });
 
-/*
-  a row with no address is neither in the group nor addable to it, and the
-  earlier version of this page filtered those rows out before counting. That is
-  the silent omission ADR 0010 keeps refusing: somebody nobody can reach looks
-  exactly like somebody already reached
-*/
+/* somebody nobody can reach must not look like somebody already reached */
 test("a row with no email is named, not counted as present", () => {
   const diff = compareToGroup(
     [
@@ -98,8 +89,7 @@ test("a row with no email is named, not counted as present", () => {
   ]);
 });
 
-/* alumni, mostly. but a typo in a notion email looks exactly the same from
-   here, which is why they are shown rather than dropped */
+/* alumni, and typos in notion, which is why they are shown */
 test("an address in the group that no row claims is reported", () => {
   const diff = compareToGroup(
     [person({ pageId: "p1", email: "ana@terpmail.umd.edu" })],
@@ -137,8 +127,7 @@ test("a row with no address is missing rather than malformed", () => {
   expect(emailProblem(null)).toBe("missing");
 });
 
-/* worse than missing, because the row looks filled in and nothing else on the
-   page questions it. `t@w.w` is on the real roster */
+/* `t@w.w` is on the real roster */
 test("text that cannot be an address is malformed", () => {
   expect(emailProblem("not an address")).toBe("malformed");
   expect(emailProblem("bay@terpmail")).toBe("malformed");
@@ -146,15 +135,12 @@ test("text that cannot be an address is malformed", () => {
   expect(emailProblem("bay@@umd.edu")).toBe("malformed");
 });
 
-/* loose on purpose: only sending mail can say whether it is deliverable, and
-   this only has to catch what cannot possibly be an address */
 test("an odd but well-shaped address is not called malformed", () => {
   expect(emailProblem("t@w.w")).toBe("outside");
   expect(emailProblem("a.b+c@sub.domain.co.uk")).toBe("outside");
 });
 
-/* google does not auto-add these, and it is also what a mistyped terpmail
-   looks like — `terpmial.umd.edu` is a real answer on a real application */
+/* `terpmial.umd.edu` is a real answer on a real application */
 test("a real address at neither university domain is outside", () => {
   expect(emailProblem("iortiz1@terpmial.umd.edu")).toBe("outside");
   expect(emailProblem("someone@gmail.com")).toBe("outside");

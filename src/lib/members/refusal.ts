@@ -1,5 +1,5 @@
 /**
- * a request refused for a reason the person can act on. Imports nothing, so
- * `write.ts` can throw it without reaching the Worker's bindings.
+ * a refusal whose message the person can act on; answered 400. Its own file so
+ * `write.ts` can throw it without importing the Worker's bindings
  */
 export class BadRequest extends Error {}

@@ -43,13 +43,7 @@ const member = (
   },
 });
 
-/**
- * stands in for discord's one read, notion's one query and each create.
- *
- * returns the spy on creates, because "what did it write" is the question every
- * test here asks — a summary that says three and a roster that grew by five is
- * the failure mode worth catching
- */
+/** discord's read, notion's query and each create; returns the spy on creates */
 function mockSources(requests: unknown[], members: unknown[]) {
   const created = vi.fn();
 
@@ -121,8 +115,6 @@ test("an applicant nobody on the roster matches gets a row", async () => {
   expect(body.properties.Email.email).toBe("bay@terpmail.umd.edu");
 });
 
-/* one row per person, under the sync's own action: an audit asking where a
-   row came from must not find it among the edits people made */
 test("each created row is logged under the automation's action", async () => {
   mockSources([request("1", "Bay Hoffman", "bay@terpmail.umd.edu")], []);
 
@@ -137,8 +129,7 @@ test("each created row is logged under the automation's action", async () => {
   });
 });
 
-/* a renamed form question answers null for everybody at once, and the cron
-   saying nothing is waiting would hide exactly that */
+/* a renamed form question makes every application incomplete at once */
 test("an application missing an answer is counted as waiting", async () => {
   mockSources(
     [

@@ -1,12 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { sendPatiently } from "./rate-limit";
 
-/*
-  the waits are real `setTimeout`s, so the clock is faked and advanced by hand.
-  that is also what lets `Retry-After` be tested as a *duration* rather than as
-  "it retried eventually": the assertion is that nothing goes out before the
-  server said it could.
-*/
+/* the clock is faked, so `Retry-After` is tested as a duration */
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
@@ -37,8 +32,7 @@ test("nothing is sent again until Retry-After has elapsed", async () => {
 
   const answered = sendPatiently(send, "notion databases/x");
 
-  /* the default backoff is half a second, so a retry here would mean the
-     header was ignored rather than merely that the timing is loose */
+  /* the default backoff is shorter, so a retry here would mean the header was ignored */
   await vi.advanceTimersByTimeAsync(1_900);
   expect(send).toHaveBeenCalledTimes(1);
 
@@ -77,8 +71,6 @@ test("running out of retries throws an error that says it was rate limited", asy
   expect(send).toHaveBeenCalledTimes(4);
 });
 
-/* only a 429 is retried: a 403 retried three times is three requests spent on
-   the same refusal, and the caller is what knows what a status means */
 test("any other failure is handed straight back", async () => {
   const send = vi.fn().mockResolvedValue(new Response("nope", { status: 403 }));
 
@@ -88,8 +80,7 @@ test("any other failure is handed straight back", async () => {
   expect(send).toHaveBeenCalledTimes(1);
 });
 
-/* a date-form or malformed header is absence, falling back to the backoff,
-   rather than `NaN` in a timer, which fires at once */
+/* a date-form or malformed header falls back to the backoff; NaN would fire at once */
 test.each([
   ["Wed, 21 Oct 2026 07:28:00 GMT", 500],
   ["", 500],

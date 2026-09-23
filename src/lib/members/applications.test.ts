@@ -15,13 +15,7 @@ async function read(raw: Record<string, unknown>) {
   return (await approvedApplications("token"))[0]!;
 }
 
-/*
-  the trap that cost an afternoon. every entry carries both `values` and
-  `response`: `values` echoes the question's configured options — for a
-  free-text field, an array holding one empty string — while `response` holds
-  what the applicant typed. Reading `values` produces a complete-looking result
-  in which every answer is blank, and nothing about it looks wrong
-*/
+/* what was typed is in `response`; `values` is `[""]` for a free-text field */
 test("an answer is read from `response`, never from the `values` decoy", async () => {
   const application = await read({
     id: "1545474779111497810",
@@ -48,14 +42,7 @@ test("an answer is read from `response`, never from the `values` decoy", async (
   expect(application.email).toBe("bay@terpmail.umd.edu");
 });
 
-/*
-  matched on the label rather than on position: a question added in the middle
-  of the form would shift every index by one and move everybody's email into
-  their name.
-
-  the labels here are the club's own, read from the live form on 2026-09-08, so
-  this test fails if somebody rewords a question past the keyword it is found by
-*/
+/* the club's own labels, from the live form on 2026-09-08 */
 test("fields are found by what the question asks, not by their order", async () => {
   const application = await read({
     id: "1",
@@ -78,12 +65,7 @@ test("fields are found by what the question asks, not by their order", async () 
   expect(application.gradYear).toBe("2028");
 });
 
-/*
-  the accepted cost of matching on a keyword, pinned so it is a decision rather
-  than a surprise: a question reworded past its keyword reads as unanswered.
-  That surfaces on the reconciler as an application missing a field, which is
-  the safe direction — the wrong value written into Notion is the other one
-*/
+/* a question reworded past its keyword reads as unanswered, never as a wrong value */
 test("a question reworded past its keyword reads as unanswered", async () => {
   const application = await read({
     id: "1",
@@ -105,8 +87,6 @@ test("a question that was not answered reads as null, not as an empty string", a
   expect(application.name).toBeNull();
 });
 
-/* the rules checkbox is a response like any other, and its label mentions
-   nothing we look for — but excluding it keeps the keyword search honest */
 test("the terms checkbox is not treated as an answer", async () => {
   const application = await read({
     id: "1",

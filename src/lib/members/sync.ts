@@ -56,11 +56,12 @@ export async function syncApplications(
     await createFromApplication(token, application);
     created += 1;
 
-    /* one row per member, so the log says where each row came from */
+    /* one row per member, so the log says where each row came from. A roster
+       edit, not the run's action: `reportFailure` reads the last row under
+       that action to decide whether a failure is new */
     await record(env.DB, {
       source: "cron",
-      /* the registry's action for this automation */
-      action: "application-sync",
+      action: "roster-edit",
       outcome: "ok",
       summary: `created a Members row for ${application.name ?? application.username} from their application`,
     });

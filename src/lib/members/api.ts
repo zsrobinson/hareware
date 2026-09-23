@@ -19,8 +19,8 @@ import { errorMessage } from "~/lib/utils";
 
 export { BadRequest };
 
-/* separate from the sync's action, so an audit can ask what people changed;
-   the summary says which edit it was */
+/* shared with the sync's per-member rows; `source` and `actor` tell a
+   person's edit from the cron's, and the summary says which edit it was */
 const ACTION: Invocation["action"] = "roster-edit";
 
 type MutationResult = {

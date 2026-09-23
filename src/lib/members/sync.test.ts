@@ -115,15 +115,19 @@ test("an applicant nobody on the roster matches gets a row", async () => {
   expect(body.properties.Email.email).toBe("bay@terpmail.umd.edu");
 });
 
-test("each created row is logged under the automation's action", async () => {
+/* under the run's own action, a created row would read as this run's outcome
+   and re-arm the failure alert mid-run */
+test("each created row is logged as a roster edit, apart from the run", async () => {
   mockSources([request("1", "Bay Hoffman", "bay@terpmail.umd.edu")], []);
 
   await syncApplications(env, today);
 
   expect(log.record).toHaveBeenCalledTimes(1);
+  const [, row] = log.record.mock.calls[0]!;
+  expect(row.action).not.toBe(automation("applications")!.action);
   expect(log.record).toHaveBeenCalledWith(undefined, {
     source: "cron",
-    action: automation("applications")!.action,
+    action: "roster-edit",
     outcome: "ok",
     summary: "created a Members row for Bay Hoffman from their application",
   });

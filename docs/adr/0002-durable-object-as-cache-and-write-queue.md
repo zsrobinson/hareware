@@ -1,12 +1,14 @@
 # 2. A Durable Object as the cache and Notion write queue
 
-**Status:** Superseded by [ADR 0006](0006-hareware-is-a-reminder-bot.md) — 2026-09-03
+**Status:** Superseded by [ADR 0006](0006-hareware-is-a-reminder-bot.md) —
+2026-09-03
 
 > Never built. The Durable Object existed to batch writes from an
-> inline-editable Article board; there is no board and HareWare no longer writes
-> to Notion at all, so there is nothing left to serialise. The reasoning below
-> stands on its own terms and is kept for the next person who hits a global rate
-> limit from Workers.
+> inline-editable Article board, and there is no board. HareWare does write to
+> Notion now ([ADR 0009](0009-editor-commands-in-discord.md),
+> [ADR 0010](0010-standing-is-computed.md)), but one edit at a time, serially,
+> and backing off on a 429, which needs no coordination point. The reasoning
+> below is kept for whoever next hits a global rate limit from Workers.
 
 ## Context
 
@@ -39,13 +41,14 @@ Durable Object is the platform's answer for that. Choosing KV would have meant
 adding the Durable Object later anyway, once inline editing put three editors on
 the board at the same time.
 
-SQLite-backed Durable Objects are available on the Workers **free** plan, so this
-does not commit the club to a paid plan when the project moves to a club account.
+SQLite-backed Durable Objects are available on the Workers **free** plan, so
+this does not commit the club to a paid plan when the project moves to a club
+account.
 
 The cost is a concept to learn and one more moving part in the request path. It
-also becomes a bottleneck by construction — that is the point, and it is only
-correct as long as there is exactly one of these objects. Sharding it by anything
-would silently restore the original problem.
+also becomes a bottleneck by construction, which is intended, and it is only
+correct as long as there is exactly one of these objects. Sharding it by
+anything would silently restore the original problem.
 
 Note that the cache holds nothing authoritative: it is reconstructible from
 Notion and WordPress at any time, so it does not make HareWare a system of

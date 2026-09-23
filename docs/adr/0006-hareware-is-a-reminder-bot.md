@@ -1,8 +1,35 @@
 # 6. HareWare is a reminder bot, not an article tracker
 
-**Status:** Accepted — 2026-09-03
+**Status:** Accepted — 2026-09-03. Partly superseded by ADRs 0007, 0009 and
+0010; see below.
 
 Supersedes ADR 0002 and ADR 0003. Amends ADR 0001 and ADR 0004.
+
+> **What still holds.** HareWare is not the article tracker. The tracker stays
+> in Notion, maintained by hand, and nothing HareWare does depends on its
+> workflow state being current. Editorial rules do not live in Notion
+> automations. The social reminder reads WordPress, which is ground truth about
+> what published. Building our own tracker is still rejected, and Google Sheets
+> is still the designated successor to Notion.
+>
+> **What no longer holds.** The inventory in the Decision section is out of
+> date:
+>
+> - _No sign-in and no database of our own_ —
+>   [ADR 0007](0007-an-admin-panel-over-an-invocation-log.md) brought back
+>   Discord sign-in and added a D1 invocation log, which is never authoritative.
+> - _No Discord application, posting through channel webhooks_ — the reminders
+>   post as the bot, and [ADR 0009](0009-editor-commands-in-discord.md) added
+>   `/article` slash commands.
+> - _The Articles database is not read or written by anything_ — ADR 0009's
+>   commands write Articles as a second way to make an edit editors would
+>   otherwise make in Notion, and [ADR 0010](0010-standing-is-computed.md) reads
+>   publication dates to compute standing. Neither reads the tracker's workflow
+>   state to decide anything, so the argument below is unaffected.
+> - _The reminder bot is the whole product_ — ADR 0010 added the attendance
+>   kiosk, the reconciler and the standing page. Standing is a coordination
+>   tool, allowed because it is derived from records of what happened rather
+>   than from hand-maintained state.
 
 ## Context
 
@@ -24,10 +51,10 @@ wrong on all three:
 - A recurring (`Every day`) trigger sends **no page data at all**. The webhook
   action offers a URL and headers and nothing else, because no page is in
   context.
-- Date properties trigger only **on edit**. There is no "when this date
-  arrives" trigger, and no way to filter a recurring run down to pages matching
-  today. (Notion does offer date-property _notification_ reminders — "1 day
-  before" — but those send an in-Notion notification and cannot call a webhook.)
+- Date properties trigger only **on edit**. There is no "when this date arrives"
+  trigger, and no way to filter a recurring run down to pages matching today.
+  (Notion does offer date-property _notification_ reminders — "1 day before" —
+  but those send an in-Notion notification and cannot call a webhook.)
 - Database automations cannot be triggered by other automations, and whether an
   API write fires one is undocumented.
 
@@ -58,11 +85,11 @@ What remains for the tracker is planning: the in-flight overview, catching
 Articles approved but never written, the pitch backlog, and the mapping from a
 Byline to the Member behind it. All of it is consulted weekly at most.
 
-That distinction is the load-bearing one:
+That distinction decides it:
 
-> **A coordination tool has to be accurate or it is dangerous — someone acts on
-> it and gets it wrong. A planning tool can be 80% accurate and still be worth
-> having.**
+> A coordination tool has to be accurate or it is dangerous — someone acts on it
+> and gets it wrong. A planning tool can be 80% accurate and still be worth
+> having.
 
 The tracker began as the first and became the second, while still being
 maintained as though it were the first. Integrating HareWare with it would make
@@ -96,14 +123,13 @@ than by software.
 ## Consequences
 
 **The tracker is free to be sloppy.** Nothing anyone acts on depends on it being
-current, so it can decay over a busy semester without breaking a feature. That
-is the point, not a regression.
+current, so it can decay over a busy semester without breaking a feature.
 
 **Notion is nearly untouched by software.** One integration token reads the
 Meetings database. The Articles database is not read or written by anything.
 
-**The _Posted to Instagram_ property was removed.** It existed so the board could
-show what social had left to do. The daily reminder answers that question
+**The _Posted to Instagram_ property was removed.** It existed so the board
+could show what social had left to do. The daily reminder answers that question
 directly and from WordPress, so the column was tracking something nobody had to
 look up any more. Marking a post done moves to the reminder message itself.
 
@@ -127,28 +153,8 @@ Notion, and — contrary to what that ADR said — historical rows were backfill
 by hand. Its "Historical rows are not backported" section is amended to record
 what was actually done.
 
-**Discord OAuth is parked, not deleted**, on `issue-19-discord-oauth`. Nothing
-of it is on `main`. It is the natural starting point if a signed-in surface ever
-returns.
-
-**Amended by [ADR 0007](0007-an-admin-panel-over-an-invocation-log.md),
-2026-09-04.** Two of the removals below did not hold: an admin panel brings back
-Discord sign-in and adds D1, to hold a log of what the bot did and buttons to
-re-run it. The reasoning here is otherwise unchanged, and the rule that nothing
-in D1 is authoritative is what makes that allowable.
-
-**Amended by [ADR 0009](0009-editor-commands-in-discord.md), 2026-09-04.** The
-revisit below happened: editors now change Articles from Discord slash
-commands. That does not reopen tracker integration — nothing reads the tracker
-to decide anything, and the commands are an input to it rather than an output.
-Note also that this file's rejection of "event-driven webhooks from Notion" was
-about **database automations**; Notion's integration webhooks are a different
-mechanism and carry none of those three limits.
-
-**Revisit this when the club wants something a ping cannot do** — most likely a
-log of what the bot did, or Discord slash commands for editorial approvals. Both
-were designed and deferred; both need the parked OAuth work or a Discord
-application. Until then, the reminder bot is the whole product.
+**Discord OAuth is parked, not deleted**, on `issue-19-discord-oauth`. (ADR 0007
+later brought it back.)
 
 **If someone proposes building an article tracker, read this file first.** The
 idea recurs, and the reasoning above is not obvious from the outside.
@@ -189,6 +195,6 @@ reading your own data. Worth reconsidering only if the tracker leaves Notion.
 ### Event-driven webhooks from Notion into HareWare
 
 Rejected on the three product limits in Context. It was the preferred design for
-most of the discussion — it is genuinely more responsive, and it reacts to
-transitions rather than re-deriving state — and it lost to the fact that Notion
-cannot fire on the events we needed.
+most of the discussion, being more responsive, and lost because Notion's
+database automations cannot fire on the events we needed. Notion's integration
+webhooks are a separate mechanism; ADR 0009 covers them.

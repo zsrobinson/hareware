@@ -1,6 +1,6 @@
 # 8. Sessions with nothing stored, and an identity read live
 
-**Status:** Accepted — 2026-09-04
+**Status:** Accepted — 2026-09-04. Refusal statuses revised 2026-09-05.
 
 Follows [ADR 0007](0007-an-admin-panel-over-an-invocation-log.md), which brought
 back sign-in and had to decide how a session is kept.
@@ -8,9 +8,8 @@ back sign-in and had to decide how a session is kept.
 ## Context
 
 The admin pages need to know two things about whoever is asking: **who they
-are**, and **whether they hold `@Editorial Board`**. Those look like one
-question and are not, and conflating them is how this went wrong twice before
-landing here.
+are**, and **whether they hold `@Editorial Board`**. Two earlier attempts went
+wrong by treating those as one question answered at sign-in.
 
 The obvious shape is a session table: a row per sign-in, holding the member's id
 and whatever was true about them at the time. It is also the shape that carries
@@ -35,32 +34,25 @@ alongside the roles, so one call answers both "may they" and "what are they
 called", and the two cannot disagree. See `src/lib/member.ts` and
 `src/lib/admin.ts`.
 
-**Reading it there rather than at sign-in is the point.** The guild lookup knows
-the **server nickname** — what the club calls each other, and the name beside
-every message in Discord. The OAuth `/users/@me` call has no idea it exists.
+**Reading it there rather than at sign-in matters.** The guild lookup knows the
+**server nickname** — what the club calls each other, and the name beside every
+message in Discord. The OAuth `/users/@me` call has no idea it exists.
 Per-server avatars come along for the same reason.
 
 **An unreachable Discord denies.** Failing open on the surface that names who
-did what is not a trade worth making, so a lookup that cannot be completed is a
-refusal.
-
-> **Amended 2026-09-05.** This paragraph used to end "`guildMember()` returns
-> null for every way of not being there — no bot token, left the server, an
-> outage — and the admin surface answers all of them with `404`." Neither half
-> holds now. `guildMember()` returns `member`, `absent` or `unreachable`, and
-> the admin surface answers 401, 403 or 503 with a page saying which. Denying on
-> an outage is unchanged and still right; what changed is that it now says so
-> instead of claiming the page does not exist. ADR 0007's amendment of
-> 2026-09-04 has the reasoning.
+did what is not worth it, so a lookup that cannot be completed is a refusal.
+`guildMember()` distinguishes a `member`, somebody `absent` from the server, and
+Discord being `unreachable`, and the admin tools answer 401, 403 or 503 with a
+page saying which (ADR 0007).
 
 ## Consequences
 
-**A session cannot be revoked before it expires.** This is the real cost, and
-seven days is the only bound on a stolen cookie. It is bearable because the
-thing worth revoking is not the session but the role, and the role is checked
-against Discord on every admin request: remove it and access is gone on the next
-page load, cookie or no cookie. Rotating `SESSION_SECRET` signs everybody out,
-which is the escape hatch.
+**A session cannot be revoked before it expires.** Seven days is the only bound
+on a stolen cookie. It is bearable because the thing worth revoking is not the
+session but the role, and the role is checked against Discord on every admin
+request: remove it and access is gone on the next page load, cookie or no
+cookie. Rotating `SESSION_SECRET` signs everybody out, which is the escape
+hatch.
 
 **One Discord request per admin page view.** ADR 0007 already accepted this for
 the role check. Identity rides along at no additional cost, and pages that
@@ -73,6 +65,7 @@ avoids. An earlier attempt put the name in the cookie and was reverted for it.
 If a future surface needs a name without a Discord request, that is a new
 decision, not an optimisation.
 
-**Nothing here decides admission.** `Profile` is what the UI draws. `admin` is
-what the pages gate on. They arrive together and are deliberately separate
-types, so a change to what is displayed cannot become a change to who gets in.
+**The profile never decides admission.** `Profile` is what the UI draws; the
+viewer's `admin` and `denial` are what the guard reads. They arrive together
+from one lookup but are separate fields, so a change to what is displayed cannot
+become a change to who gets in.

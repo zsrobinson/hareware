@@ -163,8 +163,8 @@ test("an alum is on the masthead, because that question is not about standing", 
   expect(standing.excludedAsAlum).toBe(false);
 });
 
-/* the 49 rows predating ADR 0010 all look like this, and a rule that denied
-   them would disenfranchise the club at the first election it ran */
+/* every row predating ADR 0010 has no status, so denying them would
+   disenfranchise the club at its first election */
 test("an unset status is flagged rather than treated as alum", () => {
   const standing = only(
     [meeting(), meeting(), meeting()],

@@ -2,12 +2,17 @@
 
 An Astro app on Cloudflare Workers for [The Hare](https://theumdhare.com):
 public tools that turn published articles into Instagram posts, InDesign copy
-and newsletter content, plus a Discord bot that posts the club's recurring
-reminders on a cron.
+and newsletter content; a Discord bot that posts the club's recurring reminders
+on a cron; an `/article` slash command for editing Articles from Discord; and
+the membership pages (attendance kiosk, reconciler, standing) that work out who
+may vote.
 
-HareWare does **not** integrate with the article tracker, and proposals that it
-should are answered by
-[ADR 0006](docs/adr/0006-hareware-is-a-reminder-bot.md). Read it first.
+HareWare is **not** the article tracker. The tracker stays in Notion, maintained
+by hand, and nothing here may depend on its workflow state being current.
+[ADR 0006](docs/adr/0006-hareware-is-a-reminder-bot.md) has the argument, and
+its opening note says which of its original limits ADRs 0007, 0009 and 0010 have
+since lifted. Read it before proposing anything that reads the tracker to decide
+something.
 
 ## Where things are
 
@@ -16,6 +21,8 @@ src/lib/
   services/{discord,notion,wordpress}/  how to talk to each outside system
   automations/                          what runs on a schedule
   articles/                             Article behavior and Notion's shapes
+  members/                              the roster: applications, matching,
+                                        kiosk, reconciler and standing
   db/ log.ts                            the invocation record
   session · auth · admin · member       who is asking, and whether they may
   admin-routes · admin-guard · denial   which tools need the role, and the gate
@@ -24,12 +31,14 @@ src/pages/api/                          the routes those answer
 
 Three outside systems, and everything about talking to one lives in its folder:
 credentials, quirks, and the shapes it returns. **Nothing in `services/` knows
-what a reminder is**, so a watcher or a slash command can reach for the same
-client the automations use.
+what a reminder is**, so the slash commands and the membership pages use the
+same clients the automations do.
 
 Discord payloads and presentation stay in `services/discord`; Article behavior
 stays in `articles`. Dependencies point from the Discord adapter into Article
-modules, never back from Article modules into Discord.
+modules, never back from Article modules into Discord. `members/` reads Discord
+data (applications, the member list) through `services/discord`, but never
+builds a Discord message.
 
 An automation is an entry in `src/lib/automations/registry.ts` — id, hour,
 channel, and the function that runs it — plus its module. The registry is what
@@ -60,9 +69,10 @@ viewer once, leaves it in `locals.admission`, and rewrites anybody it refuses to
 `admitted(Astro.locals)`, which hands back the member or throws, so reaching the
 page is the permission and a page whose route fell off `ADMIN_ROUTES` fails
 loudly rather than quietly serving. That last part only holds while every gated
-page actually calls it, so `nav.test.ts` checks that too. A refusal says which of
-four things is wrong rather than claiming the page does not exist; ADR 0007's
-amendment is why, and `~/lib/denial` is the one table those four live in.
+page actually calls it, so `nav.test.ts` checks that too. A refusal says which
+of four things is wrong rather than claiming the page does not exist; ADR 0007
+explains why, and `~/lib/denial` is the one table those four live in. The
+`/api/members/*` routes refuse with the same statuses.
 
 `~/lib/admin-guard` must not import `~/lib/admin` at the top level. Middleware
 is in every route's module graph, the prerendered `/custom` is built by node,
@@ -72,13 +82,13 @@ is why `admin-routes` and `denial` import nothing.
 
 ## Working here
 
-`main` is protected: every change goes through a pull request, and both
-`Verify` (types, lint, tests, formatting) and `Workers Builds` must pass.
+`main` is protected: every change goes through a pull request, and both `Verify`
+(types, lint, tests, formatting) and `Workers Builds` must pass.
 
-Run what CI runs before pushing — `npx astro check`, `npm run lint`,
-`npm test`, `npm run format:check`. If the type checker starts claiming
-`D1Database` or `cloudflare:workers` do not exist, run `npm run types`: the
-generated declarations are gitignored and a branch switch can leave them absent.
+Run what CI runs before pushing — `npx astro check`, `npm run lint`, `npm test`,
+`npm run format:check`. If the type checker starts claiming `D1Database` or
+`cloudflare:workers` do not exist, run `npm run types`: the generated
+declarations are gitignored and a branch switch can leave them absent.
 
 **A stale copy is worse than a missing one**, because it fails the other way:
 `astro check` passes locally against weaker types and CI fails on the same

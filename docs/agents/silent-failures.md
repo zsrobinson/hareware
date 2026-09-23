@@ -23,8 +23,8 @@ the bot and stopped after it, with no code change to blame.
 
 **`allowed_mentions` does not gate a mention inside a Components V2 text
 display.** An empty `roles` array notifies the role exactly as though the field
-were absent. The only way not to ping is not to write the markup —
-`defuse()` in `src/lib/services/discord/post-message.ts` is that, and it is why
+were absent. The only way not to ping is not to write the markup — `defuse()` in
+`src/lib/services/discord/post-message.ts` is that, and it is why
 `REMINDERS_NO_PING` rewrites the text rather than clearing a field.
 
 **A button missing `custom_id` invalidates the whole message.** Discord refuses
@@ -32,6 +32,21 @@ to render it rather than dropping the button, so an interaction response that
 strips `custom_id` while editing a message shows the user "HareWare didn't
 respond in time" — even though the endpoint returned `200` with a body Discord
 read. `togglePosted()` keeps the id for this reason.
+
+**Join requests answer `200 {}` when the bot may not read them.** Every other
+guild endpoint refuses with a clean `403`; `GET /guilds/{id}/requests` returns
+an empty object — no list, no count. The bot read fifty-one applications while
+it held Administrator, and `{}` the moment its role was narrowed to Manage
+Server; a status-code check called that success, and the sync would have
+reported "no new applications" every hour. Reading applications needs **Kick
+Members**. `approvedJoinRequests()` in
+`src/lib/services/discord/join-requests.ts` refuses an answer carrying neither a
+list nor a count, and names the permission.
+
+**A join-request answer is in `response`, not `values`.** Each entry in
+`form_responses` carries both. `values` echoes the question's configured options
+and holds one empty string for every free-text field, so reading it produces a
+complete-looking set of applications in which every answer is blank.
 
 ## Notion
 
@@ -51,6 +66,26 @@ enough to hold the Eastern day under any offset and filter in code, as
 lands it on the previous evening, so a meeting with no time set is missed every
 time. `startsOn()` compares those as strings and only converts the ones with a
 `T` in them.
+
+**A relation stops at 25 entries inside a page object.** A `pages/{id}` read and
+a data source query both truncate it, and `has_more` on the property is the only
+sign. A general body meeting is thirty people: standing silently stopped
+counting the twenty-sixth onward, and the kiosk, which merges into the attendee
+list before writing it back, deleted the back half of the room on the next tap.
+`relationIds()` in `src/lib/services/notion/client.ts` reads the rest from the
+property item endpoint, and only when `has_more` says to.
+
+**A property id goes into the URL verbatim.** Notion returns ids already
+percent-encoded (`c%3CLo`), so `encodeURIComponent` asks for a property that
+does not exist — and Notion answers `200` with an empty relation rather than a
+`404`. A caller merging against that writes the empty list back.
+
+**A relation whose target is not shared with the integration disappears.**
+Notion drops it from the schema and reads its value as `[]`, which looks like an
+empty field. A write appending to it deletes the entries nobody could see. Check
+the schema before writing a relation, as `notSharing()` in
+`src/lib/articles/choices.ts` does, and treat absent and empty as different
+answers.
 
 ## Cloudflare and Astro
 
@@ -92,8 +127,8 @@ real post to a real channel.
 
 # The shapes they take in our own code
 
-The entries above are other people's systems. These are ours, and every bug
-this project has had is one of two shapes. Both type check. Both return `200`.
+The entries above are other people's systems. These are ours, and every bug this
+project has had is one of two shapes. Both type check. Both return `200`.
 
 ## Two representations of one fact, allowed to disagree
 

@@ -102,20 +102,9 @@ export type Standing = {
 const GENERAL_BODY: MeetingType = "General Body";
 const VOLUNTEER: MeetingType = "Volunteer Event";
 
-/**
- * a notion date reduced to its day.
- *
- * notion returns `2026-09-07` for a date-only property and a full ISO
- * timestamp when someone sets a time, and the two have to compare the same way
- */
-function day(date: string): string {
-  return date.slice(0, 10);
-}
-
 /** inclusive on both ends — ISO days compare correctly as strings */
-function within(date: string, from: string, to: string): boolean {
-  const at = day(date);
-  return at >= from && at <= to;
+function within(day: string, from: string, to: string): boolean {
+  return day >= from && day <= to;
 }
 
 /**

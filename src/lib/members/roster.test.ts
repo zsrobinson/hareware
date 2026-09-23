@@ -5,6 +5,7 @@ import {
   toPerson,
   meetings,
   people,
+  statusOptions,
 } from "./roster";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -151,6 +152,22 @@ test("a meeting with no date reads as empty, so no window can contain it", () =>
   expect(meeting.attendeeIds).toEqual([]);
 });
 
+/* 9pm Eastern on the 9th is 1am UTC on the 10th, and the meeting happened on
+   the 9th: a UTC day would count it toward the wrong window and put it on
+   the wrong day in the kiosk */
+test("a meeting with a time falls on its Eastern day", () => {
+  const meeting = toMeeting({
+    id: "m1",
+    properties: {
+      Name: title("General Body Meeting"),
+      Date: { type: "date", date: { start: "2026-09-10T01:00:00.000Z" } },
+      Attendees: { type: "relation", relation: [] },
+    },
+  });
+
+  expect(meeting.date).toBe("2026-09-09");
+});
+
 test("an unreadable attendee relation refuses to compute standing", () => {
   expect(() =>
     toMeeting({ id: "m1", properties: { Name: title("Meeting") } }),
@@ -171,6 +188,34 @@ test("an Article reads its two credits separately", () => {
   expect(article.authorIds).toEqual(["p1"]);
   expect(article.imageCrewIds).toEqual(["p2"]);
   expect(article.date).toBe("2026-03-04");
+});
+
+test("an article published at night falls on its Eastern day", () => {
+  const article = toContribution({
+    id: "a1",
+    properties: {
+      Headline: title("Something happened"),
+      "Publication Date": {
+        type: "date",
+        date: { start: "2026-04-01T02:30:00.000Z" },
+      },
+      Author: { type: "relation", relation: [] },
+      "Image Crew": { type: "relation", relation: [] },
+    },
+  });
+
+  expect(article.date).toBe("2026-03-31");
+});
+
+/* a renamed Status property reads as a schema with no options, which callers
+   used to take for "could not read" and say nothing about */
+test("a schema with no Status select is refused, not read as no options", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify({ properties: {} }))),
+  );
+
+  await expect(statusOptions("secret")).rejects.toThrow(/no readable Status/);
 });
 
 test("an unreadable credit relation refuses to compute standing", () => {

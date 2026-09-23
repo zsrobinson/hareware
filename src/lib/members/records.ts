@@ -42,7 +42,7 @@ export type Person = {
 export type MeetingRecord = {
   pageId: string;
   name: string;
-  /** `YYYY-MM-DD`; a row with no date cannot fall in a window and is dropped */
+  /** the Eastern `YYYY-MM-DD`; a row with no date cannot fall in a window and is dropped */
   date: string;
   /** null when the select is empty — such a row counts toward nothing */
   type: string | null;
@@ -54,7 +54,7 @@ export type MeetingRecord = {
 export type ContributionRecord = {
   pageId: string;
   headline: string;
-  /** the Publication Date. an unpublished article has none and is dropped */
+  /** the Publication Date's Eastern day. an unpublished article has none and is dropped */
   date: string;
   authorIds: string[];
   imageCrewIds: string[];

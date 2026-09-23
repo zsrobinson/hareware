@@ -27,9 +27,16 @@
 
 import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
-import { editorialBoardMember } from "~/lib/admin";
+import { adminAccess } from "~/lib/admin";
+import { DENIALS } from "~/lib/denial";
 import { record } from "~/lib/log";
 import type { Invocation } from "~/lib/db/schema";
+import { readGuildMembers, type Profile } from "~/lib/member";
+import type { Person } from "./records";
+import { BadRequest } from "./refusal";
+import { statusOptions } from "./roster";
+
+export { BadRequest };
 
 /**
  * what a roster mutation records about itself.
@@ -53,9 +60,6 @@ export type MutationResult = {
   data?: Record<string, unknown>;
 };
 
-/** a body that failed to parse, thrown so the parser can be a plain function */
-export class BadRequest extends Error {}
-
 /**
  * whether the caller may be here, and who they are if so.
  *
@@ -63,25 +67,23 @@ export class BadRequest extends Error {}
  * that refuses them, so a route cannot hold half the answer and reach past it.
  * Every route below `~/pages/api/members`, read or write, starts here
  */
-export type Admission =
+type RouteAccess =
   { admitted: true; actor: string } | { admitted: false; refusal: Response };
 
-export async function admission(request: Request): Promise<Admission> {
-  const member = await editorialBoardMember(request);
+async function admission(request: Request): Promise<RouteAccess> {
+  const access = await adminAccess(request);
 
-  /* the same answer the admin pages give: for anybody who may not be here,
-     this route does not exist */
-  if (!member) {
+  /* the status the admin pages refuse with, so an outage reads as 503 rather
+     than as a refusal. ADR 0007's amendment */
+  if (!access.allowed) {
+    const { status, title } = DENIALS[access.denial];
     return {
       admitted: false,
-      refusal: new Response("not found", {
-        status: 404,
-        headers: { "cache-control": "private, no-store" },
-      }),
+      refusal: json({ error: title, denial: access.denial }, status),
     };
   }
 
-  return { admitted: true, actor: member.discordUserId };
+  return { admitted: true, actor: access.who.session.discordUserId };
 }
 
 /**
@@ -106,7 +108,7 @@ export function rosterRead<T>(
       return json(await load(request), 200);
     } catch (thrown) {
       const why = thrown instanceof Error ? thrown.message : String(thrown);
-      return json({ error: why }, 500);
+      return json({ error: why }, thrown instanceof BadRequest ? 400 : 500);
     }
   };
 }
@@ -154,12 +156,14 @@ export function rosterRoute<Input>(
       return json({ ok: true, summary, ...(data ?? {}) }, 200);
     } catch (thrown) {
       const why = thrown instanceof Error ? thrown.message : String(thrown);
+      /* a stale link or merge is a refusal, not a fault */
+      const refused = thrown instanceof BadRequest;
 
       await record(env.DB, {
         source: "button",
         action: ACTION,
-        outcome: "failed",
-        summary: `roster edit failed: ${why}`,
+        outcome: refused ? "skipped" : "failed",
+        summary: `roster edit ${refused ? "refused" : "failed"}: ${why}`,
         actor: who.actor,
       });
 
@@ -170,7 +174,7 @@ export function rosterRoute<Input>(
         so there is nobody to leak it to who could not have asked notion
         directly
       */
-      return json({ error: why }, thrown instanceof BadRequest ? 400 : 500);
+      return json({ error: why }, refused ? 400 : 500);
     }
   };
 }
@@ -200,23 +204,104 @@ export function optionalText(body: unknown, field: string): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-/** an optional array of strings; absent is different from empty and stays so */
+/**
+ * a Notion page id, with or without its dashes, in the dashed lowercase form
+ * notion answers with so it compares equal to ids read from the roster. These
+ * go into url paths, so anything else is refused
+ */
+function notionId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+
+  const hex = /^[0-9a-f]{32}$/i.test(value)
+    ? value
+    : /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          value,
+        )
+      ? value.replaceAll("-", "")
+      : null;
+  if (!hex) return null;
+
+  const id = hex.toLowerCase();
+  return `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`;
+}
+
+/** a required Notion page id */
+export function requirePageId(body: unknown, field: string): string {
+  const id = notionId((body as Record<string, unknown> | null)?.[field]);
+  if (!id) throw new BadRequest(`${field} is not a Notion id`);
+  return id;
+}
+
+/** an optional list of Notion page ids; absent is different from empty and stays so */
 export function optionalList(
   body: unknown,
   field: string,
 ): string[] | undefined {
   const value = (body as Record<string, unknown> | null)?.[field];
   if (value === undefined || value === null) return undefined;
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-    throw new BadRequest(`${field} must be a list of ids`);
-  }
-  return value as string[];
+  return requireList(body, field);
 }
 
 export function requireList(body: unknown, field: string): string[] {
   const value = (body as Record<string, unknown> | null)?.[field];
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-    throw new BadRequest(`${field} must be a list of ids`);
+  const ids = Array.isArray(value) ? value.map(notionId) : [null];
+  if (ids.includes(null)) {
+    throw new BadRequest(`${field} must be a list of Notion ids`);
   }
-  return value as string[];
+  return ids as string[];
+}
+
+/* notion's email property refuses a malformed address with a 400 whose
+   message names the property and not the value, so the shape is checked here
+   where the reply can say what to fix */
+export function requireEmail(body: unknown, field: string): string {
+  const email = requireText(body, field);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new BadRequest(`${email} is not an email address`);
+  }
+  return email;
+}
+
+/**
+ * refuses a status Notion does not have. Notion's `select` accepts a name it
+ * has never seen and adds it, which is how a fourth status appears by typo
+ */
+export async function requireStatus(status: string): Promise<void> {
+  const options = await statusOptions(env.NOTION_TOKEN!);
+  if (!options.includes(status)) {
+    throw new BadRequest(
+      `${status} is not one of the statuses Notion has: ${options.join(", ")}`,
+    );
+  }
+}
+
+/**
+ * the guild account a Discord id names, refused when it is not in the server
+ * or another row already carries it: two rows with one id is the duplicate
+ * the reconciler exists to find. `pageId` is the row being written, if any
+ */
+export async function requireFreeDiscordId(
+  discordId: string,
+  roster: Person[],
+  pageId: string | null,
+): Promise<Profile> {
+  const profile = (await readGuildMembers(env.DISCORD_BOT_TOKEN)).get(
+    discordId,
+  );
+  if (!profile) {
+    throw new BadRequest(
+      "that account is not in the server, so an editor has to send them an invite first",
+    );
+  }
+
+  const taken = roster.find(
+    (person) => person.discordId === discordId && person.pageId !== pageId,
+  );
+  if (taken) {
+    throw new BadRequest(
+      `${taken.name} already has that Discord account, so the two rows are the same person — merge them in the reconciler`,
+    );
+  }
+
+  return profile;
 }

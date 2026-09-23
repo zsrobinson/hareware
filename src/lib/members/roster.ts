@@ -30,6 +30,7 @@ import {
   MEMBER_PROPERTIES,
 } from "./config";
 import type { ContributionRecord, MeetingRecord, Person } from "./records";
+import { easternNow } from "~/lib/eastern";
 
 /** every notion property shape these three databases hand back */
 type Property = {
@@ -51,6 +52,16 @@ type Page = { id: string; properties: Record<string, Property> };
 
 function text(property: Property | undefined): string {
   return plainText(property?.title ?? property?.rich_text).trim();
+}
+
+/**
+ * a Notion date's Eastern calendar day, or `""` when it has none. A date with
+ * a time is an instant, and 9pm Eastern is already tomorrow in UTC; one
+ * without is a bare day with no instant to convert. See `startsOn`
+ */
+function easternDay(start: string | null | undefined): string {
+  if (!start) return "";
+  return start.includes("T") ? easternNow(new Date(start)).date : start;
 }
 
 /**
@@ -105,13 +116,18 @@ export async function people(token: string): Promise<Person[]> {
   return (await queryAll<Page>(MEMBERS_DATA_SOURCE_ID, token)).map(toPerson);
 }
 
+/** one Members row, read fresh */
+export async function member(token: string, pageId: string): Promise<Person> {
+  return toPerson((await notion(`pages/${pageId}`, token)) as Page);
+}
+
 /**
  * the Status select's options, as notion currently has them.
  *
  * read rather than hardcoded so renaming an option is an edit in notion and
  * nothing else. `alumOptionMissing` is the guard on the one option a rule
- * depends on; an empty answer means the schema could not be read, and callers
- * fall back rather than offering nobody a status
+ * depends on. Throws when the schema has no Status select, which a renamed
+ * property looks like, rather than answering an empty list
  */
 export async function statusOptions(token: string): Promise<string[]> {
   const schema = (await notion(
@@ -125,7 +141,12 @@ export async function statusOptions(token: string): Promise<string[]> {
   };
 
   const options =
-    schema.properties?.[MEMBER_PROPERTIES.status.name]?.select?.options ?? [];
+    schema.properties?.[MEMBER_PROPERTIES.status.name]?.select?.options;
+  if (!options) {
+    throw new Error(
+      `Members has no readable ${MEMBER_PROPERTIES.status.name} select`,
+    );
+  }
 
   return options
     .map((option) => option.name?.trim())
@@ -137,7 +158,9 @@ export function toMeeting(page: Page): MeetingRecord {
   return {
     pageId: page.id,
     name: text(page.properties?.[MEETING_PROPERTIES.name.name]),
-    date: page.properties?.[MEETING_PROPERTIES.date.name]?.date?.start ?? "",
+    date: easternDay(
+      page.properties?.[MEETING_PROPERTIES.date.name]?.date?.start,
+    ),
     type: page.properties?.[MEETING_PROPERTIES.type.name]?.select?.name ?? null,
     attendeeIds: relationIdsFrom(
       page.properties?.[MEETING_PROPERTIES.attendees.name],
@@ -179,9 +202,9 @@ export function toContribution(page: Page): ContributionRecord {
   return {
     pageId: page.id,
     headline: text(page.properties?.[ARTICLE_PROPERTIES.headline.name]),
-    date:
-      page.properties?.[ARTICLE_PROPERTIES.publicationDate.name]?.date?.start ??
-      "",
+    date: easternDay(
+      page.properties?.[ARTICLE_PROPERTIES.publicationDate.name]?.date?.start,
+    ),
     authorIds: relationIdsFrom(
       page.properties?.[ARTICLE_PROPERTIES.author.name],
       "an article",

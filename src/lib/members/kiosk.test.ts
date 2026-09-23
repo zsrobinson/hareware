@@ -117,11 +117,6 @@ describe("defaultMeeting", () => {
     );
   });
 
-  it("compares a timestamped date by its day", () => {
-    const timed = meeting("2026-09-07T19:00:00.000-04:00");
-    expect(defaultMeeting([timed], "2026-09-07")).toBe(timed);
-  });
-
   it("is null when nothing has happened yet", () => {
     expect(defaultMeeting([meeting("2026-12-01")], "2026-09-07")).toBeNull();
     expect(defaultMeeting([], "2026-09-07")).toBeNull();

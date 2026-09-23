@@ -15,7 +15,12 @@
 */
 
 import { env } from "cloudflare:workers";
-import { BadRequest, requireText, rosterRoute } from "~/lib/members/api";
+import {
+  BadRequest,
+  requirePageId,
+  requireText,
+  rosterRoute,
+} from "~/lib/members/api";
 import { resolveApplication } from "~/lib/members/match";
 import { people } from "~/lib/members/roster";
 import { linkApplication } from "~/lib/members/write";
@@ -26,7 +31,7 @@ export const prerender = false;
 export const POST = rosterRoute(
   (body) => ({
     applicationId: requireText(body, "applicationId"),
-    pageId: requireText(body, "pageId"),
+    pageId: requirePageId(body, "pageId"),
   }),
   async ({ applicationId, pageId }) => {
     const [applications, roster] = await Promise.all([

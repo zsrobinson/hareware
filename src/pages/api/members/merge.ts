@@ -14,7 +14,7 @@
 */
 
 import { env } from "cloudflare:workers";
-import { BadRequest, requireText, rosterRoute } from "~/lib/members/api";
+import { BadRequest, requirePageId, rosterRoute } from "~/lib/members/api";
 import { duplicates } from "~/lib/members/match";
 import { people } from "~/lib/members/roster";
 import { mergeMembers } from "~/lib/members/write";
@@ -23,8 +23,8 @@ export const prerender = false;
 
 export const POST = rosterRoute(
   (body) => {
-    const keepId = requireText(body, "keepId");
-    const dropId = requireText(body, "dropId");
+    const keepId = requirePageId(body, "keepId");
+    const dropId = requirePageId(body, "dropId");
 
     /* `mergeMembers` returns quietly on this, which is right for a library and
        wrong for a button: an editor who managed to send it deserves to be told
@@ -33,30 +33,29 @@ export const POST = rosterRoute(
       throw new BadRequest("a row cannot be merged into itself");
     }
 
-    return { keepId, dropId, keepName: requireText(body, "keepName") };
+    return { keepId, dropId };
   },
-  async ({ keepId, dropId, keepName }) => {
-    const pair = new Set([keepId, dropId]);
-    const stillDuplicate = duplicates(await people(env.NOTION_TOKEN!)).some(
-      (duplicate) =>
-        [...pair].every((id) =>
-          duplicate.people.some((person) => person.pageId === id),
-        ),
+  async ({ keepId, dropId }) => {
+    const roster = await people(env.NOTION_TOKEN!);
+    const pair = duplicates(roster).find((duplicate) =>
+      [keepId, dropId].every((id) =>
+        duplicate.people.some((person) => person.pageId === id),
+      ),
     );
 
-    if (!stillDuplicate) {
+    if (!pair) {
       throw new BadRequest(
         "those rows are no longer a detected duplicate pair; refresh the reconciler before merging",
       );
     }
 
+    const name = (id: string) =>
+      pair.people.find((person) => person.pageId === id)!.name;
+
     await mergeMembers(env, keepId, dropId);
 
     return {
-      /* the name is carried in the body only so the log line can say who this
-         was about — the page knows it, and re-reading notion to recover a
-         string for a log entry would be a request spent on prose */
-      summary: `merged a duplicate Members row into ${keepName}`,
+      summary: `merged ${name(dropId)}'s duplicate Members row into ${name(keepId)}`,
       data: { keepId, dropId },
     };
   },

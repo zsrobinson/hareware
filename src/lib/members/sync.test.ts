@@ -1,5 +1,9 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { automation } from "~/lib/automations/registry";
 import { syncApplications } from "./sync";
+
+const log = vi.hoisted(() => ({ record: vi.fn() }));
+vi.mock("~/lib/log", () => log);
 
 const env = {
   NOTION_TOKEN: "secret",
@@ -68,7 +72,10 @@ function mockSources(requests: unknown[], members: unknown[]) {
   return created;
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
+});
 
 test("a missing NOTION_TOKEN is misconfigured, and names the secret", async () => {
   const result = await syncApplications(
@@ -112,6 +119,46 @@ test("an applicant nobody on the roster matches gets a row", async () => {
   expect(body.properties.Name.title[0].text.content).toBe("Bay Hoffman");
   expect(body.properties["Discord ID"].rich_text[0].text.content).toBe("1");
   expect(body.properties.Email.email).toBe("bay@terpmail.umd.edu");
+});
+
+/* one row per person, under the sync's own action: an audit asking where a
+   row came from must not find it among the edits people made */
+test("each created row is logged under the automation's action", async () => {
+  mockSources([request("1", "Bay Hoffman", "bay@terpmail.umd.edu")], []);
+
+  await syncApplications(env, today);
+
+  expect(log.record).toHaveBeenCalledTimes(1);
+  expect(log.record).toHaveBeenCalledWith(undefined, {
+    source: "cron",
+    action: automation("applications")!.action,
+    outcome: "ok",
+    summary: "created a Members row for Bay Hoffman from their application",
+  });
+});
+
+/* a renamed form question answers null for everybody at once, and the cron
+   saying nothing is waiting would hide exactly that */
+test("an application missing an answer is counted as waiting", async () => {
+  mockSources(
+    [
+      {
+        ...request("1", "Bay Hoffman", "bay@terpmail.umd.edu"),
+        form_responses: [
+          { label: "Full name", response: "Bay Hoffman", values: [""] },
+          { label: "Contact", response: "bay@terpmail.umd.edu", values: [""] },
+        ],
+      },
+    ],
+    [],
+  );
+
+  const result = await syncApplications(env, today);
+
+  expect(result.outcome).toBe("skipped");
+  expect(result.summary).toContain(
+    "1 needs review on the reconciler (1 missing a name or email)",
+  );
 });
 
 test("only the applications matching nothing are created", async () => {

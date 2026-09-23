@@ -23,7 +23,7 @@ import {
 } from "~/lib/services/notion/client";
 import { easternDayWindow, startsOn } from "~/lib/services/notion/dates";
 import { easternTime, type EasternNow } from "~/lib/eastern";
-import { MEETING_PROPERTIES } from "~/lib/members/config";
+import { MEETING_PROPERTIES, type MeetingType } from "~/lib/members/config";
 import { misconfigured, ok, skipped, type Result } from "./registry";
 import {
   BOARD_CHANNEL_ID,
@@ -94,12 +94,15 @@ export async function sendMeetingReminder(
     migration bridge nobody is reminded of is a permanent special case — this
     is the line that tells somebody the constant can go
   */
-  const untyped = page.properties[MEETING_PROPERTIES.type.name]?.select?.name
+  const untyped = meetingType(page)
     ? ""
     : " (matched on its title: this row has no Type set)";
 
   return ok(`${verb} meeting reminder for "${name}"${untyped}`);
 }
+
+/** the `Type` a meeting must carry for the board reminder to claim it */
+const BOARD_MEETING_TYPE: MeetingType = "Editorial Board";
 
 /**
  * today's meeting of the kind we care about, if there is one.
@@ -107,9 +110,6 @@ export async function sendMeetingReminder(
  * the window-plus-predicate shape is not optional — `easternDayWindow` explains
  * why asking Notion for one day does not work
  */
-/** the `Type` a meeting must carry for the board reminder to claim it */
-const BOARD_MEETING_TYPE = "Editorial Board";
-
 async function findTodaysMeeting(
   token: string,
   source: string,
@@ -142,7 +142,7 @@ async function findTodaysMeeting(
  * to change.
  */
 function isBoardMeeting(page: NotionPage): boolean {
-  const type = page.properties[MEETING_PROPERTIES.type.name]?.select?.name;
+  const type = meetingType(page);
 
   /* an explicitly typed row is answered by its type, including when the answer
      is no — a General Body meeting whose title happens to begin "Editorial
@@ -154,6 +154,12 @@ function isBoardMeeting(page: NotionPage): boolean {
     .trim()
     .toLowerCase()
     .startsWith(MEETING_TITLE_PREFIX.toLowerCase());
+}
+
+function meetingType(page: NotionPage): string | undefined {
+  return (
+    page.properties[MEETING_PROPERTIES.type.name]?.select?.name ?? undefined
+  );
 }
 
 /**

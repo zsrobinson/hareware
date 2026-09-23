@@ -10,32 +10,24 @@
 */
 
 import { env } from "cloudflare:workers";
-import { BadRequest, requireText, rosterRoute } from "~/lib/members/api";
+import { requireEmail, requirePageId, rosterRoute } from "~/lib/members/api";
+import { member } from "~/lib/members/roster";
 import { updateMember } from "~/lib/members/write";
 
 export const prerender = false;
 
 export const POST = rosterRoute(
-  (body) => {
-    const email = requireText(body, "email");
-    /* notion's email property refuses a malformed address with a 400 whose
-       message names the property and not the value, so the shape is checked
-       here where the reply can say what to fix */
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      throw new BadRequest(`${email} is not an email address`);
-    }
+  (body) => ({
+    pageId: requirePageId(body, "pageId"),
+    email: requireEmail(body, "email"),
+  }),
+  async ({ pageId, email }) => {
+    const person = await member(env.NOTION_TOKEN!, pageId);
 
-    return {
-      pageId: requireText(body, "pageId"),
-      name: requireText(body, "name"),
-      email,
-    };
-  },
-  async ({ pageId, name, email }) => {
     await updateMember(env, pageId, { email });
 
     return {
-      summary: `set ${name}'s email from the kiosk`,
+      summary: `set ${person.name}'s email from the kiosk`,
       data: { pageId, email },
     };
   },

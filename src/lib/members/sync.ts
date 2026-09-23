@@ -115,7 +115,9 @@ export async function syncApplications(
     */
     await record(env.DB, {
       source: "cron",
-      action: "roster-edit",
+      /* the registry's action for this automation, so an audit finds these
+         rows under the sync and not among the edits people made */
+      action: "application-sync",
       outcome: "ok",
       summary: `created a Members row for ${application.name ?? application.username} from their application`,
     });
@@ -129,20 +131,19 @@ export async function syncApplications(
 /**
  * how many of each kind the cron left for a person, and what to call them.
  *
- * one list, in the order the summary reads. Written as data rather than as
- * four fields and four additions because that shape had the count, the sum and
- * the wording in three separate places, and `similar` had to be added to all
- * three — the fourth edit is the one somebody forgets
+ * keyed by every status the cron defers on, so adding an arm to `Resolution`
+ * is a compile error here rather than an application nobody is told about
  */
-const DEFERS = [
-  { status: "linkable", say: (n: number) => `${n} to link` },
-  { status: "similar", say: (n: number) => `${n} near an existing name` },
-  { status: "ambiguous", say: (n: number) => `${n} ambiguous` },
-  { status: "conflicted", say: (n: number) => `${n} conflicted` },
-] as const satisfies readonly {
-  status: Resolution["status"];
-  say: (n: number) => string;
-}[];
+const DEFERS: Record<
+  Exclude<Resolution["status"], "new" | "linked">,
+  (n: number) => string
+> = {
+  linkable: (n) => `${n} to link`,
+  similar: (n) => `${n} near an existing name`,
+  ambiguous: (n) => `${n} ambiguous`,
+  conflicted: (n) => `${n} conflicted`,
+  incomplete: (n) => `${n} missing a name or email`,
+};
 
 /**
  * the second sentence of the summary.
@@ -158,9 +159,9 @@ const DEFERS = [
  * never goes down
  */
 function leftovers(resolutions: Resolution[]): string {
-  const counted = DEFERS.map((defer) => ({
-    ...defer,
-    n: resolutions.filter((one) => one.status === defer.status).length,
+  const counted = Object.entries(DEFERS).map(([status, say]) => ({
+    say,
+    n: resolutions.filter((one) => one.status === status).length,
   }));
 
   const total = counted.reduce((sum, one) => sum + one.n, 0);

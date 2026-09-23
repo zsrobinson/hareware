@@ -58,8 +58,8 @@ export type Application = {
   email: string | null;
   /** free text on purpose — "Dec 2027" and "It depends" are both real answers */
   gradYear: string | null;
-  /** `YYYY-MM-DD`, the day they applied */
-  applied: string;
+  /** `YYYY-MM-DD`, the day they applied, or null when discord did not say */
+  applied: string | null;
 };
 
 /**
@@ -94,7 +94,7 @@ export function toApplication(raw: RawRequest): Application {
     name: answer(responses, "name"),
     email: answer(responses, "email"),
     gradYear: answer(responses, "year"),
-    applied: (raw.created_at ?? "").slice(0, 10),
+    applied: raw.created_at?.slice(0, 10) || null,
   };
 }
 
@@ -173,6 +173,14 @@ export async function approvedApplications(
     }
 
     const page = answer.guild_join_requests;
+
+    /* a count of applications we were not given is a short answer, not an
+       empty one */
+    if (!page && (answer.total ?? 0) > applications.length) {
+      throw new Error(
+        `discord counted ${answer.total} join requests and returned no list`,
+      );
+    }
 
     if (!page?.length) break;
 

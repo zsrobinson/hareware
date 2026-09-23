@@ -120,3 +120,55 @@ test("an unreadable relation refuses the merge rather than emptying it", async (
     /not readable/,
   );
 });
+
+/** a merge's reads answered with these two pages; returns the survivor's patch */
+function merging(keep: object, drop: object) {
+  const patched = vi.fn();
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        patched(String(url), JSON.parse(init.body as string));
+        return new Response("{}");
+      }
+      return new Response(
+        JSON.stringify(String(url).includes("keep") ? keep : drop),
+      );
+    }),
+  );
+
+  return patched;
+}
+
+const discord = (id: string) => ({
+  "Discord ID": { rich_text: [{ plain_text: id }] },
+});
+
+/* two rows carrying two accounts are two people who share a name, and folding
+   one into the other would hand one of them the other's history */
+test("refuses two rows linked to different Discord accounts", async () => {
+  const patched = merging(
+    page(discord("574376763006648349")),
+    page(discord("342850506328117249")),
+  );
+
+  await expect(mergeMembers(env, "keep", "drop")).rejects.toThrow(/two people/);
+  expect(patched).not.toHaveBeenCalled();
+});
+
+test("the survivor gains a status only where it had none", async () => {
+  const status = (name: string | null) => ({
+    Status: { select: name ? { name } : null },
+  });
+
+  const gains = merging(page(status(null)), page(status("Grad")));
+  await mergeMembers(env, "keep", "drop");
+  expect(gains.mock.calls[0]![1].properties.Status).toEqual({
+    select: { name: "Grad" },
+  });
+
+  const keeps = merging(page(status("Undergrad")), page(status("Grad")));
+  await mergeMembers(env, "keep", "drop");
+  expect(keeps.mock.calls[0]![1].properties.Status).toBeUndefined();
+});

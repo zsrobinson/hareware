@@ -123,11 +123,6 @@ test("the window is inclusive of both ends", () => {
   expect(standing.contributions).toBe(2);
 });
 
-test("a full timestamp compares as its day", () => {
-  const standing = only([], [article({ date: "2026-12-31T18:41:17.187Z" })]);
-  expect(standing.contributions).toBe(1);
-});
-
 test("an article with no publication date counts for nothing", () => {
   const standing = only([], [article({ date: "" })]);
   expect(standing.contributions).toBe(0);

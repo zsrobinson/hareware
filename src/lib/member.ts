@@ -132,58 +132,57 @@ export async function guildMember(userId: string): Promise<MemberLookup> {
   }
 }
 
-/** the guild in one request, which is what the list endpoint's cap allows */
-const EVERYBODY = 1000;
+/** discord's cap on one page of the member list */
+const PAGE = 1000;
 
 /**
- * every member of the guild, by user id.
+ * every member of the guild, by user id, failing rather than answering short.
  *
- * one request for the whole server rather than one per person, which is what
- * makes a page of avatars affordable. It needs the Server Members privileged
- * intent; without it Discord answers 403. Callers choose whether that failure
- * is material or whether a page of names without avatars is still useful.
+ * It needs the Server Members privileged intent; without it Discord answers
+ * 403. Callers choose whether that failure is material or whether a page of
+ * names without avatars is still useful.
  */
-async function readGuildMembers(
+export async function readGuildMembers(
   token = env.DISCORD_BOT_TOKEN,
 ): Promise<Map<string, Profile>> {
   if (!token) throw new Error("DISCORD_BOT_TOKEN is not set");
 
-  const response = await sendPatiently(
-    () =>
-      fetch(
-        `https://discord.com/api/v10/guilds/${GUILD_ID}/members?limit=${EVERYBODY}`,
-        { headers: { authorization: `Bot ${token}` } },
-      ),
-    "discord member list",
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      `Discord answered ${response.status} while reading guild members; check the Server Members intent`,
-    );
-  }
-
-  const members: unknown = await response.json();
-  if (!Array.isArray(members)) {
-    throw new Error("Discord's guild member response was not a list");
-  }
-
   const profiles = new Map<string, Profile>();
+  let after = "0";
 
-  for (const entry of members as Record<string, unknown>[]) {
-    const member = entry as Parameters<typeof readProfile>[1];
-    const userId = text(member.user?.id);
-    if (userId) profiles.set(userId, readProfile(userId, member));
+  for (;;) {
+    const response = await sendPatiently(
+      () =>
+        fetch(
+          `https://discord.com/api/v10/guilds/${GUILD_ID}/members?limit=${PAGE}&after=${after}`,
+          { headers: { authorization: `Bot ${token}` } },
+        ),
+      "discord member list",
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Discord answered ${response.status} while reading guild members; check the Server Members intent`,
+      );
+    }
+
+    const members: unknown = await response.json();
+    if (!Array.isArray(members)) {
+      throw new Error("Discord's guild member response was not a list");
+    }
+
+    for (const entry of members as Record<string, unknown>[]) {
+      const member = entry as Parameters<typeof readProfile>[1];
+      const userId = text(member.user?.id);
+      if (!userId) continue;
+
+      profiles.set(userId, readProfile(userId, member));
+      /* compared as numbers: snowflakes differ in length */
+      if (BigInt(userId) > BigInt(after)) after = userId;
+    }
+
+    if (members.length < PAGE) return profiles;
   }
-
-  return profiles;
-}
-
-/** Every guild member, failing when Discord did not actually provide a list. */
-export function requireGuildMembers(
-  token?: string,
-): Promise<Map<string, Profile>> {
-  return readGuildMembers(token);
 }
 
 /** Every guild member where an empty fallback is acceptable, such as avatars. */

@@ -15,30 +15,32 @@
 */
 
 import { env } from "cloudflare:workers";
-import { BadRequest, requireText, rosterRoute } from "~/lib/members/api";
-import { statusOptions } from "~/lib/members/roster";
+import {
+  requirePageId,
+  requireStatus,
+  requireText,
+  rosterRoute,
+} from "~/lib/members/api";
+import { member } from "~/lib/members/roster";
 import { updateMember } from "~/lib/members/write";
 
 export const prerender = false;
 
 export const POST = rosterRoute(
   (body) => ({
-    pageId: requireText(body, "pageId"),
-    name: requireText(body, "name"),
+    pageId: requirePageId(body, "pageId"),
     status: requireText(body, "status"),
   }),
-  async ({ pageId, name, status }) => {
-    const options = await statusOptions(env.NOTION_TOKEN!);
-    if (!options.includes(status)) {
-      throw new BadRequest(
-        `${status} is not one of the statuses Notion has: ${options.join(", ")}`,
-      );
-    }
+  async ({ pageId, status }) => {
+    const [person] = await Promise.all([
+      member(env.NOTION_TOKEN!, pageId),
+      requireStatus(status),
+    ]);
 
     await updateMember(env, pageId, { status });
 
     return {
-      summary: `set ${name}'s status to ${status}`,
+      summary: `set ${person.name}'s status to ${status}`,
       data: { pageId, status },
     };
   },

@@ -27,7 +27,7 @@ import type {
   GuildAccount,
   Resolution,
 } from "./match";
-import { requireGuildMembers } from "~/lib/member";
+import { readGuildMembers } from "~/lib/member";
 import type { Profile } from "~/lib/member";
 import type { MeetingRecord, Person } from "./records";
 import { meetings, people, statusOptions } from "./roster";
@@ -40,23 +40,40 @@ export type ViewEnv = {
   DB?: D1Database;
 };
 
+const NO_NOTION = "NOTION_TOKEN is not set, so the roster cannot be read.";
+
+const reason = (thrown: unknown) =>
+  thrown instanceof Error ? thrown.message : String(thrown);
+
 /**
  * notion's Status options, falling back rather than offering nobody a status.
  *
- * an empty answer means the schema could not be read, which is not the same as
- * notion having no options — `alumMissing` beside it is the loud version of
- * that distinction, and it is computed from the live list, never the fallback
+ * an unread schema carries its `problem`, so the fallback never passes for
+ * notion's answer and `alumMissing` is only computed from a list notion gave
  */
-async function statuses(token: string | undefined) {
-  const live = token
-    ? await statusOptions(token).catch(() => [] as string[])
-    : [];
+export async function readStatuses(token: string | undefined) {
+  const unread = (problem: string) => ({
+    live: [] as string[],
+    offered: FALLBACK_MEMBER_STATUSES,
+    alumMissing: false,
+    problem,
+  });
 
-  return {
-    live,
-    offered: live.length ? live : FALLBACK_MEMBER_STATUSES,
-    alumMissing: alumOptionMissing(live),
-  };
+  if (!token) return unread(NO_NOTION);
+
+  try {
+    const live = await statusOptions(token);
+    return {
+      live,
+      offered: live,
+      alumMissing: alumOptionMissing(live),
+      problem: null,
+    };
+  } catch (thrown) {
+    return unread(
+      `Notion's Status options could not be read, so the ones offered are a fallback: ${reason(thrown)}`,
+    );
+  }
 }
 
 /** everything the kiosk draws, minus the discord pictures the page adds */
@@ -70,6 +87,8 @@ export type KioskData = {
   /** the meeting to open on: `asked` where it exists, else today's */
   openingId: string | null;
   statuses: string[];
+  /** why part of this could not be read from notion, or null when all of it was */
+  notionProblem: string | null;
 };
 
 /**
@@ -86,13 +105,19 @@ export async function kioskData(
 ): Promise<KioskData> {
   const token = env.NOTION_TOKEN;
   if (!token) {
-    return { meetings: [], candidates: [], openingId: null, statuses: [] };
+    return {
+      meetings: [],
+      candidates: [],
+      openingId: null,
+      statuses: [],
+      notionProblem: NO_NOTION,
+    };
   }
 
   const [roster, calendar, options] = await together([
     () => people(token),
     () => meetings(token),
-    () => statuses(token),
+    () => readStatuses(token),
   ]);
 
   const chosen = calendar.find((meeting) => meeting.pageId === asked);
@@ -106,6 +131,7 @@ export async function kioskData(
     candidates: roster,
     openingId: opening?.pageId ?? null,
     statuses: options.offered,
+    notionProblem: options.problem,
   };
 }
 
@@ -143,6 +169,8 @@ export type ReconcilerData = {
    * the page somebody opens the morning of an election
    */
   discordProblem: string | null;
+  /** the same, for notion: no token, or a Status schema that could not be read */
+  notionProblem: string | null;
 };
 
 /**
@@ -165,19 +193,18 @@ export async function reconcilerData(env: ViewEnv): Promise<ReconcilerData> {
     token ? people(token) : Promise.resolve([] as Person[]),
     bot
       ? approvedApplications(bot).catch((thrown: unknown) => {
-          applicationProblem =
-            thrown instanceof Error ? thrown.message : String(thrown);
+          applicationProblem = reason(thrown);
           return [] as Application[];
         })
       : Promise.resolve([] as Application[]),
-    /* one request for the whole server. suggestions depend on this list, so a
+    /* the whole server. suggestions depend on this list, so a
        failed read is preserved as a visible problem rather than interpreted as
        a real empty guild */
-    requireGuildMembers(bot).catch((thrown: unknown) => {
-      guildProblem = thrown instanceof Error ? thrown.message : String(thrown);
+    readGuildMembers(bot).catch((thrown: unknown) => {
+      guildProblem = reason(thrown);
       return new Map<string, Profile>();
     }),
-    statuses(token),
+    readStatuses(token),
   ]);
 
   const accounts = [...guild].map(([id, profile]) => ({
@@ -198,5 +225,6 @@ export async function reconcilerData(env: ViewEnv): Promise<ReconcilerData> {
     alumMissing: options.alumMissing,
     discordProblem:
       [applicationProblem, guildProblem].filter(Boolean).join(" ") || null,
+    notionProblem: options.problem,
   };
 }

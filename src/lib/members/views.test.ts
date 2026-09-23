@@ -1,6 +1,10 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { ARTICLES_DATA_SOURCE_ID } from "~/lib/articles/config";
-import { MEETINGS_DATA_SOURCE_ID, MEMBERS_DATA_SOURCE_ID } from "./config";
+import {
+  FALLBACK_MEMBER_STATUSES,
+  MEETINGS_DATA_SOURCE_ID,
+  MEMBERS_DATA_SOURCE_ID,
+} from "./config";
 
 vi.mock("cloudflare:workers", () => ({ env: {} }));
 
@@ -121,4 +125,29 @@ test("the reconciler carries the roster the group is compared against", async ()
   expect(data.roster.map((one) => one.name)).toEqual(["Ada Vance"]);
   expect(data.discordSuggestions).toEqual([]);
   expect(data.discordProblem).toMatch(/guild member response was not a list/);
+});
+
+/* a fallback offered in silence reads as notion's answer, and hides the alum
+   check that only a live list can make */
+test("an unreadable Status schema is reported, not offered as notion's", async () => {
+  watchNotion();
+
+  const data = await kioskData({ NOTION_TOKEN: "secret" }, "2026-09-07", null);
+
+  expect(data.statuses).toEqual(FALLBACK_MEMBER_STATUSES);
+  expect(data.notionProblem).toMatch(/Status options could not be read/);
+});
+
+test("no notion token is reported rather than drawn as an empty roster", async () => {
+  const { reconcilerData } = await import("./views");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify([]))),
+  );
+
+  const kiosk = await kioskData({}, "2026-09-07", null);
+  const reconciler = await reconcilerData({ DISCORD_BOT_TOKEN: "bot" });
+
+  expect(kiosk.notionProblem).toMatch(/NOTION_TOKEN/);
+  expect(reconciler.notionProblem).toMatch(/NOTION_TOKEN/);
 });

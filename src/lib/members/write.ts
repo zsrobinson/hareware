@@ -3,9 +3,8 @@
 
   every one of them is separated from the decision that led to it: `match.ts`
   works out what should happen and returns it, and these functions do it. That
-  is what lets the hard part be tested without a network, and it is also why
-  none of these check anything — by the time one is called, the checking is
-  done.
+  is what lets the hard part be tested without a network. What these check is
+  only what the fresh read they make before writing can show.
 
   all four write Notion rather than D1. Attendance and identity are the records
   an election rests on, and ADR 0010 keeps them somewhere a club member can
@@ -21,6 +20,7 @@ import {
 } from "./config";
 import { mergeAttendance } from "./attendance";
 import type { Person } from "./records";
+import { BadRequest } from "./refusal";
 
 /** what a Members row is made of, in notion's write shapes */
 type MemberFields = {
@@ -246,9 +246,10 @@ type RelationProperty = { relation?: { id: string }[] | null };
  * from a stale read would drop whatever was added in between, permanently and
  * silently.
  *
- * the surviving row keeps its own name and status. It gains the other's
- * relations, and its discord id and email only where it had none — a merge
- * should never overwrite something an editor typed.
+ * the surviving row keeps its own name. It gains the other's relations, and
+ * its discord id, email and status only where it had none — a merge should
+ * never overwrite something an editor typed. Two different discord ids are
+ * two people, and are refused.
  *
  * order matters. The union is written to the survivor first and the duplicate
  * archived second, so a failure between the two leaves a row that is merged
@@ -278,6 +279,14 @@ export async function mergeMembers(
       }
     >;
   }[];
+
+  const keptId = text(keep!.properties?.[MEMBER_PROPERTIES.discordId.name]);
+  const droppedId = text(drop!.properties?.[MEMBER_PROPERTIES.discordId.name]);
+  if (keptId && droppedId && keptId !== droppedId) {
+    throw new BadRequest(
+      "those rows carry different Discord accounts, so they are two people",
+    );
+  }
 
   const union: Record<string, unknown> = {};
   for (const name of MERGED_RELATIONS) {
@@ -310,10 +319,12 @@ export async function mergeMembers(
     union[name] = { relation: [...ids].map((id) => ({ id })) };
   }
 
-  const keptId = text(keep!.properties?.[MEMBER_PROPERTIES.discordId.name]);
-  const droppedId = text(drop!.properties?.[MEMBER_PROPERTIES.discordId.name]);
   const keptEmail = keep!.properties?.[MEMBER_PROPERTIES.email.name]?.email;
   const droppedEmail = drop!.properties?.[MEMBER_PROPERTIES.email.name]?.email;
+  const keptStatus =
+    keep!.properties?.[MEMBER_PROPERTIES.status.name]?.select?.name;
+  const droppedStatus =
+    drop!.properties?.[MEMBER_PROPERTIES.status.name]?.select?.name;
 
   await notion(
     `pages/${keepId}`,
@@ -324,6 +335,7 @@ export async function mergeMembers(
         ...properties({
           ...(keptId ? {} : droppedId ? { discordId: droppedId } : {}),
           ...(keptEmail ? {} : droppedEmail ? { email: droppedEmail } : {}),
+          ...(keptStatus ? {} : droppedStatus ? { status: droppedStatus } : {}),
         }),
       },
     },

@@ -115,11 +115,10 @@ export function defaultMeeting(
 ): MeetingRecord | null {
   const dated = meetings
     .filter((meeting) => meeting.date)
-    .map((meeting) => ({ meeting, day: meeting.date.slice(0, 10) }))
-    .filter((entry) => entry.day <= today)
-    .sort((a, b) => b.day.localeCompare(a.day));
+    .filter((meeting) => meeting.date <= today)
+    .sort((a, b) => b.date.localeCompare(a.date));
 
-  return dated[0]?.meeting ?? null;
+  return dated[0] ?? null;
 }
 
 /**
@@ -167,10 +166,7 @@ export function offerableMeetings(
 
   return meetings
     .filter((meeting) => meeting.date)
-    .filter(
-      (meeting) =>
-        meeting.date.slice(0, 10) >= from || meeting.pageId === pinned,
-    )
+    .filter((meeting) => meeting.date >= from || meeting.pageId === pinned)
     .sort((a, b) => b.date.localeCompare(a.date));
 }
 

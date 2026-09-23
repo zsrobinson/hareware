@@ -16,7 +16,7 @@ import { env } from "cloudflare:workers";
 import {
   optionalList,
   requireList,
-  requireText,
+  requirePageId,
   rosterRoute,
 } from "~/lib/members/api";
 import { knownOrSafe } from "~/lib/members/attendance";
@@ -27,7 +27,7 @@ export const prerender = false;
 
 export const POST = rosterRoute(
   (body) => ({
-    meetingId: requireText(body, "meetingId"),
+    meetingId: requirePageId(body, "meetingId"),
     /* an empty list is valid and means "everybody I knew about was a mistake" */
     memberIds: requireList(body, "memberIds"),
     /* optional so a caller that omits it can only add, never remove */

@@ -12,45 +12,35 @@
 */
 
 import { env } from "cloudflare:workers";
-import { BadRequest, requireText, rosterRoute } from "~/lib/members/api";
+import {
+  BadRequest,
+  requireFreeDiscordId,
+  requirePageId,
+  requireText,
+  rosterRoute,
+} from "~/lib/members/api";
 import { people } from "~/lib/members/roster";
 import { updateMember } from "~/lib/members/write";
-import { requireGuildMembers } from "~/lib/member";
 
 export const prerender = false;
 
 export const POST = rosterRoute(
   (body) => ({
-    pageId: requireText(body, "pageId"),
-    name: requireText(body, "name"),
+    pageId: requirePageId(body, "pageId"),
     discordId: requireText(body, "discordId"),
   }),
-  async ({ pageId, name, discordId }) => {
-    const [guild, roster] = await Promise.all([
-      requireGuildMembers(env.DISCORD_BOT_TOKEN),
-      people(env.NOTION_TOKEN!),
-    ]);
+  async ({ pageId, discordId }) => {
+    const roster = await people(env.NOTION_TOKEN!);
 
-    const profile = guild.get(discordId);
-    if (!profile) {
-      throw new BadRequest(
-        "that account is not in the server, so an editor has to send them an invite first",
-      );
-    }
+    const person = roster.find((one) => one.pageId === pageId);
+    if (!person) throw new BadRequest("that row is no longer on the roster");
 
-    const taken = roster.find(
-      (person) => person.discordId === discordId && person.pageId !== pageId,
-    );
-    if (taken) {
-      throw new BadRequest(
-        `${taken.name} already has that Discord account, so the two rows are the same person — merge them in the reconciler`,
-      );
-    }
+    const profile = await requireFreeDiscordId(discordId, roster, pageId);
 
     await updateMember(env, pageId, { discordId });
 
     return {
-      summary: `linked ${name} to ${profile.username} on Discord from the kiosk`,
+      summary: `linked ${person.name} to ${profile.username} on Discord from the kiosk`,
       data: { pageId, discordId },
     };
   },

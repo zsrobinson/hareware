@@ -152,6 +152,10 @@ test("the applied day is the date alone", () => {
   ).toBe("2026-09-04");
 });
 
+test("an application with no creation time has no applied day, not an empty one", () => {
+  expect(toApplication({ id: "1", user_id: "u1" }).applied).toBeNull();
+});
+
 /*
   measured against the real guild. On 2026-09-07, with the bot holding
   Administrator, `?status=APPROVED` returned 51 applications. On 2026-09-08,
@@ -185,6 +189,15 @@ test("a count of zero is a real answer and means nobody", async () => {
   answer({ total: 0 });
 
   await expect(approvedApplications("token")).resolves.toEqual([]);
+});
+
+/* a count with nothing to count is applications we were not given */
+test("a count above zero with no list is refused, not read as none", async () => {
+  answer({ total: 5 });
+
+  await expect(approvedApplications("token")).rejects.toThrow(
+    /counted 5 join requests/,
+  );
 });
 
 test("an explicit empty list is a real answer too", async () => {

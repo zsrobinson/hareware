@@ -19,6 +19,7 @@ import type { Profile } from "~/lib/member";
 import type { MeetingRecord, Person } from "./records";
 import { meetings, people, statusOptions } from "./roster";
 import { alumOptionMissing, FALLBACK_MEMBER_STATUSES } from "./config";
+import { errorMessage } from "~/lib/utils";
 
 type ViewEnv = {
   NOTION_TOKEN?: string;
@@ -26,9 +27,6 @@ type ViewEnv = {
 };
 
 const NO_NOTION = "NOTION_TOKEN is not set, so the roster cannot be read.";
-
-const reason = (thrown: unknown) =>
-  thrown instanceof Error ? thrown.message : String(thrown);
 
 /**
  * notion's Status options, or the fallback with a `problem` saying so;
@@ -54,7 +52,7 @@ export async function readStatuses(token: string | undefined) {
     };
   } catch (thrown) {
     return unread(
-      `Notion's Status options could not be read, so the ones offered are a fallback: ${reason(thrown)}`,
+      `Notion's Status options could not be read, so the ones offered are a fallback: ${errorMessage(thrown)}`,
     );
   }
 }
@@ -139,12 +137,12 @@ export async function reconcilerData(env: ViewEnv): Promise<ReconcilerData> {
     token ? people(token) : Promise.resolve([] as Person[]),
     bot
       ? approvedApplications(bot).catch((thrown: unknown) => {
-          applicationProblem = reason(thrown);
+          applicationProblem = errorMessage(thrown);
           return [] as Application[];
         })
       : Promise.resolve([] as Application[]),
     readGuildMembers(bot).catch((thrown: unknown) => {
-      guildProblem = reason(thrown);
+      guildProblem = errorMessage(thrown);
       return new Map<string, Profile>();
     }),
     readStatuses(token),

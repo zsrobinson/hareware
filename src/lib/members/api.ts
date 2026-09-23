@@ -15,6 +15,7 @@ import { readGuildMembers, type Profile } from "~/lib/member";
 import type { Person } from "./records";
 import { BadRequest } from "./refusal";
 import { statusOptions } from "./roster";
+import { errorMessage } from "~/lib/utils";
 
 export { BadRequest };
 
@@ -58,7 +59,7 @@ export function rosterRead<T>(
     try {
       return json(await load(request), 200);
     } catch (thrown) {
-      const why = thrown instanceof Error ? thrown.message : String(thrown);
+      const why = errorMessage(thrown);
       return json({ error: why }, thrown instanceof BadRequest ? 400 : 500);
     }
   };
@@ -118,7 +119,7 @@ export function rosterRoute<Input>(
 
       return json({ ok: true, summary, ...(data ?? {}) }, 200);
     } catch (thrown) {
-      const why = thrown instanceof Error ? thrown.message : String(thrown);
+      const why = errorMessage(thrown);
       const refused = thrown instanceof BadRequest;
 
       await record(env.DB, {

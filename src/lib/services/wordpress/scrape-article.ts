@@ -1,6 +1,7 @@
 import { parseHTML } from "linkedom";
 import { scrub, scrubFragment } from "./scrub-html";
 import { ORIGIN, toArticleLink, toArticleSlug } from "./article-url";
+import { errorMessage } from "~/lib/utils";
 
 /**
  * everything we need off a post, in one request. _links looks redundant next to
@@ -222,7 +223,7 @@ async function fetchPost(slug: string): Promise<WordPressPost> {
     } catch (thrown) {
       // a refused connection or dns wobble is no less worth falling back on
       // than a refusal we can read a status off
-      const reason = thrown instanceof Error ? thrown.message : String(thrown);
+      const reason = errorMessage(thrown);
       throw new Unavailable(`${slug}: ${reason}`);
     }
 

@@ -184,9 +184,10 @@ function attendeesOf(data: KioskData | undefined, meetingId: string): string[] {
  * a failed write simply leaves the queue, and the row returns to whatever
  * notion last said. No rollback, because nothing was overwritten.
  *
- * `data` seeds the list and is then out of the way: the attendees have a cache
- * entry of their own that nothing revalidates, so a roster refetch landing
- * mid-write cannot take a tap back off the screen
+ * `data` seeds the list once it is a read of this meeting, and is then out of
+ * the way: the attendees have a cache entry of their own that nothing
+ * revalidates, so a roster refetch landing mid-write cannot take a tap back
+ * off the screen
  */
 /**
  * one tap: what it changes, and what to say once notion has taken it.
@@ -204,21 +205,24 @@ export function useAttendance(meetingId: string, data: KioskData) {
   const key = rosterKeys.attendees(meetingId);
   const mutationKey = rosterKeys.attendance(meetingId);
 
+  /* the route pins the meeting it was asked about as `openingId`, which is
+     what tells a read of this meeting from the page's opening snapshot shown
+     while that read is in flight. Nothing re-reads this list, so seeding it
+     from the snapshot would keep a stale one */
+  const read = (data.openingId ?? "") === meetingId ? data : undefined;
+
   /*
     a query rather than state, for the cache and nothing else: it is where the
     writes put their answer, and it survives the island being remounted by a
     navigation. `staleTime: Infinity` is what makes it a record rather than a
-    read — notion is asked once, by the page, and after that this list only
-    moves when somebody at the laptop moves it
+    read — it is seeded once from a read of this meeting, and after that this
+    list only moves when somebody at the laptop moves it
   */
   const { data: recorded } = useQuery({
     queryKey: key,
-    queryFn: () =>
-      attendeesOf(
-        queries.getQueryData<KioskData>(rosterKeys.kiosk(meetingId)),
-        meetingId,
-      ),
-    initialData: () => attendeesOf(data, meetingId),
+    queryFn: () => attendeesOf(read, meetingId),
+    enabled: read !== undefined,
+    initialData: read && (() => attendeesOf(read, meetingId)),
     staleTime: Infinity,
   });
 
@@ -270,7 +274,9 @@ export function useAttendance(meetingId: string, data: KioskData) {
 
   return {
     /** who is in the room: notion's answer, then everything still queued */
-    present: applyIntents(recorded, queued),
+    present: applyIntents(recorded ?? [], queued),
+    /** whether notion has said who is in the room yet */
+    known: recorded !== undefined,
     /** whether any write is still in flight, for the one word that says so */
     saving: queued.length > 0,
     /** enqueue one tap. it draws at once and writes in its turn */

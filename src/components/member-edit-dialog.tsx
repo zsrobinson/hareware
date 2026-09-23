@@ -120,11 +120,7 @@ function Body({
     setBusy(true);
 
     try {
-      await postJson(path, {
-        pageId: person.pageId,
-        name: person.name,
-        ...body,
-      });
+      await postJson(path, { pageId: person.pageId, ...body });
 
       onSaved(next);
       notify.ok(said);

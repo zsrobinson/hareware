@@ -5,7 +5,8 @@ import { Reconciler } from "~/components/reconciler";
 import { viewerState } from "~/lib/admin";
 import { admitted } from "~/lib/admin-guard";
 import { reconcilerData } from "~/lib/members/views";
-import { ALUM_STATUS } from "~/lib/members/config";
+import AlumMissing from "~/components/alum-missing.astro";
+import Problem from "~/components/problem.astro";
 import { faces } from "~/lib/faces";
 
 /* Reaching this page is the permission: the guard already refused anybody it
@@ -41,23 +42,14 @@ const rosterFaces = await faces([
       attendance across two rows and denies them a vote they earned.
     </p>
 
-    {
-      data.alumMissing && (
-        <p class="border-destructive/50 bg-destructive/10 text-destructive rounded-lg border p-3 text-sm">
-          Notion's Status options no longer include "{ALUM_STATUS}", which is
-          the value the voting rule excludes on. Restore that option, or nobody
-          will be excluded as an alum. Options Notion has:{" "}
-          {data.liveStatuses.join(", ")}.
-        </p>
-      )
-    }
-
+    {data.notionProblem && <Problem>{data.notionProblem}</Problem>}
+    {data.alumMissing && <AlumMissing options={data.liveStatuses} />}
     {
       data.discordProblem && (
-        <p class="border-destructive/50 bg-destructive/10 text-destructive rounded-lg border p-3 text-sm">
+        <Problem>
           Discord could not be read completely, so application and account
           suggestions may be unavailable: {data.discordProblem}
-        </p>
+        </Problem>
       )
     }
 

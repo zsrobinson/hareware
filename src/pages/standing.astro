@@ -5,8 +5,11 @@ import { StandingTable } from "~/components/standing-table";
 import { viewerState } from "~/lib/admin";
 import { admitted } from "~/lib/admin-guard";
 import { easternNow } from "~/lib/eastern";
-import { corpus, statusOptions, type Corpus } from "~/lib/members/roster";
-import { ALUM_STATUS, alumOptionMissing } from "~/lib/members/config";
+import { corpus, type Corpus } from "~/lib/members/roster";
+import { readStatuses } from "~/lib/members/views";
+import { ALUM_STATUS } from "~/lib/members/config";
+import AlumMissing from "~/components/alum-missing.astro";
+import Problem from "~/components/problem.astro";
 import { faces } from "~/lib/faces";
 
 /* Reaching this page is the permission: the guard already refused anybody it
@@ -36,19 +39,9 @@ const rosterFaces = await faces(
   (rows?.people ?? []).map((person) => person.discordId),
 );
 
-/*
-  the one place a renamed notion option could change who votes.
-
-  every other Status label is notion's to spell — the pickers read the schema.
-  `standing.ts` compares against `ALUM_STATUS` to exclude alumni, so if notion
-  no longer has that option the rule matches nobody and every alum quietly
-  qualifies. Refusing to answer at all would be worse on the morning of an
-  election, so the page answers and says loudly that it cannot be trusted
-*/
-const liveStatuses = token
-  ? await statusOptions(token).catch(() => [] as string[])
-  : [];
-const alumMissing = alumOptionMissing(liveStatuses);
+/* standing excludes alumni by `ALUM_STATUS`, so a renamed option would let
+   every alum qualify: the page still answers, and says it cannot be trusted */
+const statuses = await readStatuses(token);
 
 /* eastern, because the window's ends are compared against notion dates the
    club would name in its own timezone */
@@ -58,15 +51,14 @@ const today = easternNow(new Date()).date;
 <Dashboard title="Standing" viewer={viewerState(who)}>
   <div class="space-y-4">
     {
-      alumMissing && (
-        <p class="border-destructive/50 bg-destructive/10 text-destructive rounded-lg border p-3 text-sm">
-          Notion's Status options no longer include "{ALUM_STATUS}", which is
-          the value that keeps alumni out of a vote. Until an editor restores
-          that option or the rule is changed in code, nobody is being excluded
-          as an alum. Options Notion has: {liveStatuses.join(", ")}.
-        </p>
+      token && statuses.problem && (
+        <Problem>
+          Nothing here confirms that "{ALUM_STATUS}" is still the option alumni
+          are excluded on. {statuses.problem}
+        </Problem>
       )
     }
+    {statuses.alumMissing && <AlumMissing options={statuses.live} />}
 
     {
       rows ? (

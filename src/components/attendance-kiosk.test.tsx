@@ -23,6 +23,7 @@ import {
   within,
 } from "@testing-library/react";
 import { configure, fireEvent } from "@testing-library/dom";
+import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mergeAttendance } from "~/lib/members/attendance";
@@ -37,6 +38,7 @@ import type { KioskData } from "~/lib/members/views";
   test's room already signed in
 */
 let AttendanceKiosk: typeof import("./attendance-kiosk").AttendanceKiosk;
+let notify: typeof import("~/lib/notify").notify;
 
 vi.mock("~/lib/notify", () => ({
   notify: { ok: vi.fn(), failed: vi.fn() },
@@ -73,15 +75,20 @@ const initial: KioskData = {
   })),
   openingId: "m1",
   statuses: ["Undergrad", "Grad", "Alum"],
+  notionProblem: null,
 };
 
 /** notion, as far as the page can tell: slow, and indifferent to order */
 type Fake = {
   attendees: string[];
   writes: { known: string[]; memberIds: string[] }[];
-  /* held open by the test that wants to look at the screen while every write
-     is still in flight. Resolved by default, so the rest run at full speed */
+  /* held open by a test that looks at the screen before notion answers.
+     Resolved by default, so the rest run at full speed */
   gate: Promise<void>;
+  /** whether a write is refused rather than recorded */
+  refuse: boolean;
+  /** what a re-read of the roster answers, for the tests that switch meeting */
+  kiosk: KioskData | null;
 };
 
 let fake: Fake;
@@ -89,8 +96,15 @@ let fake: Fake;
 beforeEach(async () => {
   vi.resetModules();
   ({ AttendanceKiosk } = await import("./attendance-kiosk"));
+  ({ notify } = await import("~/lib/notify"));
 
-  fake = { attendees: [], writes: [], gate: Promise.resolve() };
+  fake = {
+    attendees: [],
+    writes: [],
+    gate: Promise.resolve(),
+    refuse: false,
+    kiosk: null,
+  };
   /*
     the stub closes over *this* test's fake, not the variable.
 
@@ -118,6 +132,13 @@ beforeEach(async () => {
            is the whole situation under test */
         await new Promise((done) => setTimeout(done, 10));
 
+        if (notion.refuse) {
+          return new Response(JSON.stringify({ error: "notion refused" }), {
+            status: 502,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
         notion.attendees = mergeAttendance(
           notion.attendees,
           body.known,
@@ -136,28 +157,26 @@ beforeEach(async () => {
         );
       }
 
+      if (url.startsWith("/api/members/kiosk") && notion.kiosk) {
+        await notion.gate;
+        return new Response(JSON.stringify(notion.kiosk), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+
       throw new Error(`unexpected request to ${url}`);
     }),
   );
 });
 
-afterEach(async () => {
+afterEach(() => {
   cleanup();
-  /* a test that ends mid-queue leaves writes running, and an unmounted island
-     still finishes them. Letting them land here keeps them out of the next
-     test's notion */
-  await new Promise((done) => setTimeout(done, 120));
   vi.unstubAllGlobals();
 });
 
-function draw() {
+function draw(data = initial) {
   return render(
-    <AttendanceKiosk
-      initial={initial}
-      today="2026-09-08"
-      faces={{}}
-      guild={[]}
-    />,
+    <AttendanceKiosk initial={data} today="2026-09-08" faces={{}} guild={[]} />,
   );
 }
 
@@ -291,4 +310,91 @@ test("somebody another device signed in survives this device's writes", async ()
   await waitFor(() => expect(fake.attendees).toContain("p9"));
 
   expect(fake.attendees).toEqual(["p1", "p9", "p2"]);
+});
+
+/* the promise the kiosk makes: nobody is shown as present whom notion refused */
+test("a write that failed takes the tap back off the screen", async () => {
+  fake.refuse = true;
+  draw();
+
+  act(() => signIn(NAMES[0]!));
+  expect(order()).toEqual([NAMES[0]]);
+
+  await waitFor(() => expect(signedIn()).toHaveLength(0));
+  expect(notify.failed).toHaveBeenCalledWith(
+    expect.stringContaining("notion refused"),
+  );
+});
+
+test("the offers are the listbox's options, with nothing between them", () => {
+  draw();
+
+  fireEvent.change(screen.getByLabelText("Type your name"), {
+    target: { value: "Ana" },
+  });
+  const offers = screen.getByRole("listbox");
+
+  expect(within(offers).getAllByRole("option")).toHaveLength(1);
+  expect(within(offers).queryAllByRole("listitem")).toHaveLength(0);
+});
+
+/* a row somebody else's device signed in, which this roster does not hold */
+test("a signed-in row this roster does not know has nothing to edit", () => {
+  draw({
+    ...initial,
+    meetings: [{ ...initial.meetings[0]!, attendeeIds: ["p9"] }],
+  });
+
+  const row = within(screen.getByRole("list", { name: "Signed in" })).getByRole(
+    "listitem",
+  );
+
+  expect(row.textContent).toContain("Someone not on this list");
+  expect(within(row).getAllByRole("button")).toEqual([
+    within(row).getByRole("button", { name: /^Remove/ }),
+  ]);
+});
+
+/* the page's snapshot is minutes old by the time a meeting is switched to,
+   and another laptop may have signed people into it since */
+test("switching meeting shows who that meeting's read says is in", async () => {
+  const later = {
+    pageId: "m2",
+    name: "Writers' Room 2026-09-10",
+    date: "2026-09-10",
+    type: "General Body",
+    attendeeIds: [],
+  };
+  const data = { ...initial, meetings: [later, ...initial.meetings] };
+  fake.kiosk = {
+    ...data,
+    meetings: [{ ...later, attendeeIds: ["p3"] }, ...initial.meetings],
+    openingId: "m2",
+  };
+
+  let release = () => {};
+  fake.gate = new Promise<void>((done) => (release = done));
+
+  draw(data);
+  /* base-ui's select picks on the pointer sequence, which a bare click is not */
+  const user = userEvent.setup();
+  await user.click(screen.getByLabelText("Meeting"));
+  await user.click(
+    await screen.findByRole("option", { name: /Writers' Room/ }),
+  );
+
+  /* not "nobody": nothing has been read about this meeting yet */
+  expect(screen.getByText("Reading who is signed in…")).toBeTruthy();
+
+  release();
+
+  await waitFor(() => expect(order()).toEqual(["Cass Lin"]));
+});
+
+test("a part of notion the kiosk could not read is said on screen", () => {
+  draw({ ...initial, notionProblem: "Members has no readable Status select" });
+
+  expect(screen.getByRole("alert").textContent).toBe(
+    "Members has no readable Status select",
+  );
 });

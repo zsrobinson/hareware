@@ -44,7 +44,12 @@ import {
 import { MemberEntry } from "~/components/member-entry";
 import { MemberFace } from "~/components/member-face";
 import type { Faces } from "~/lib/faces";
-import type { Duplicate, Resolution } from "~/lib/members/match";
+import { notify } from "~/lib/notify";
+import {
+  WHY_ALIKE,
+  type Duplicate,
+  type Resolution,
+} from "~/lib/members/match";
 import { postJson } from "~/lib/post-json";
 import { plural } from "~/lib/utils";
 import type { Person } from "~/lib/members/records";
@@ -75,6 +80,9 @@ type Props = {
   faces: Faces;
 };
 
+/** what the last write for a row answered */
+type Said = { ok: boolean; text: string };
+
 /**
  * one heading and what is under it.
  *
@@ -93,7 +101,8 @@ function Section({
   title: string;
   /** one short line, only where how the list was arrived at is not obvious */
   how?: string;
-  count: number;
+  /** null while there is nothing to count yet, which is not the same as none */
+  count: number | null;
   /**
    * what to say when there is nothing in it, in four or five words.
    *
@@ -106,13 +115,17 @@ function Section({
 }) {
   return (
     <Collapsible defaultOpen render={<section />}>
-      <CollapsibleTrigger className="group flex w-full items-center gap-2 text-left">
-        {/* base-ui puts `data-panel-open` on the trigger, not on the icon
-            inside it, so the variant has to reach up to the group */}
-        <ChevronDownIcon className="text-muted-foreground size-4 transition-transform duration-200 group-data-[panel-open]:rotate-180" />
-        <h2 className="text-lg font-medium">{title}</h2>
-        <Badge variant={count > 0 ? "default" : "outline"}>{count}</Badge>
-      </CollapsibleTrigger>
+      <h2 className="text-lg font-medium">
+        <CollapsibleTrigger className="group flex w-full items-center gap-2 text-left">
+          {/* base-ui puts `data-panel-open` on the trigger, not on the icon
+              inside it, so the variant has to reach up to the group */}
+          <ChevronDownIcon className="text-muted-foreground size-4 transition-transform duration-200 group-data-[panel-open]:rotate-180" />
+          {title}
+          {count !== null && (
+            <Badge variant={count > 0 ? "default" : "outline"}>{count}</Badge>
+          )}
+        </CollapsibleTrigger>
+      </h2>
       <CollapsibleContent className="space-y-2 pt-2">
         {how && <p className="text-muted-foreground text-sm">{how}</p>}
         {clear && count === 0 ? <Cleared>{clear}</Cleared> : children}
@@ -143,7 +156,7 @@ function ManualAdd({
   faces: Faces;
   statuses: string[];
   busy: boolean;
-  said?: string;
+  said?: Said;
   onAdd: (fields: { name: string; email: string; status?: string }) => void;
 }) {
   const [name, setName] = useState(application.name ?? "");
@@ -157,8 +170,8 @@ function ManualAdd({
         the form gave no {missing.join(" or ")}
       </Badge>
 
-      {said ? (
-        <Note>{said}</Note>
+      {said?.ok ? (
+        <Note>{said.text}</Note>
       ) : (
         <div className="flex flex-wrap items-end gap-2">
           <div className="space-y-1.5">
@@ -209,17 +222,10 @@ function ManualAdd({
           </Button>
         </div>
       )}
+      {said && !said.ok && <Note>{said.text}</Note>}
     </div>
   );
 }
-
-/** how two rows came to be listed together, in the words the page uses */
-const WHY_ALIKE: Record<Duplicate["on"], string> = {
-  name: "the same name",
-  email: "the same email",
-  "near-name": "one letter apart",
-  "same-ends": "a middle name on one and not the other",
-};
 
 /* the first two are exact matches and almost always one person; the other two
    are guesses, and a page that shouted equally about both would train an
@@ -274,7 +280,9 @@ function Applicant({
               says {application.gradYear}
             </Badge>
           )}
-          <Badge variant="outline">applied {application.applied}</Badge>
+          {application.applied && (
+            <Badge variant="outline">applied {application.applied}</Badge>
+          )}
         </div>
       </div>
     </div>
@@ -314,24 +322,22 @@ function Sections({ initial, faces }: Props) {
   */
   const refresh = useRefresh(rosterKeys.reconciler());
 
-  /*
-    a corrected row goes into the cache rather than costing a re-read.
-    Everything else on this page re-reads, because a link or a merge changes
-    what the *other* sections should say; an address does not
-  */
+  /* a corrected row is patched in so its chip changes at once, and re-read
+     too: its status, address or account also decides the server-computed
+     sections */
   const patch = usePatch<ReconcilerData>(rosterKeys.reconciler());
 
-  /* what each row has been told about itself. a row that has been acted on
-     stays on screen saying so rather than vanishing: this page is worked
-     through top to bottom, and a list that reorders itself under somebody
-     loses their place */
-  const [said, setSaid] = useState<Record<string, string>>({});
+  /* what each row's last write answered. a success locks the row until the
+     re-read takes it away; a failure stays beside it and leaves it open to try
+     again */
+  const [said, setSaid] = useState<Record<string, Said>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [merging, setMerging] = useState<{
     keep: Person;
     drop: Person;
   } | null>(null);
-  const [copied, setCopied] = useState(false);
+  /* the text that was copied, so a different export is not called copied */
+  const [copied, setCopied] = useState<string | null>(null);
   /*
     the google group's own member list, as exported by an editor.
 
@@ -350,12 +356,18 @@ function Sections({ initial, faces }: Props) {
     setBusy(key);
     try {
       const { summary } = await run();
-      setSaid((prev) => ({ ...prev, [key]: summary ?? "Done." }));
+      const text = summary ?? "Done.";
+      setSaid((prev) => ({ ...prev, [key]: { ok: true, text } }));
+      /* a toast, because the re-read removes the row and its note with it */
+      notify.ok(text);
       await refresh();
     } catch (thrown) {
       setSaid((prev) => ({
         ...prev,
-        [key]: thrown instanceof Error ? thrown.message : String(thrown),
+        [key]: {
+          ok: false,
+          text: thrown instanceof Error ? thrown.message : String(thrown),
+        },
       }));
     } finally {
       setBusy(null);
@@ -393,6 +405,9 @@ function Sections({ initial, faces }: Props) {
   const emails = (diff?.missing ?? [])
     .map((person) => person.email)
     .filter((email): email is string => Boolean(email));
+  /* comma-separated because that is the shape the group's bulk-add field
+     accepts; a newline-separated list has to be cleaned up by hand */
+  const blob = emails.join(", ");
   /* flagged rather than dropped: google does not auto-add these, and an
      address nobody can add is still an address somebody has to deal with */
   const external = emails.filter((email) => isExternalAddress(email));
@@ -452,7 +467,7 @@ function Sections({ initial, faces }: Props) {
                   >
                     <Button
                       size="sm"
-                      disabled={busy !== null || Boolean(said[key])}
+                      disabled={busy !== null || said[key]?.ok}
                       onClick={() =>
                         void act(key, () =>
                           postJson("/api/members/link", {
@@ -466,7 +481,7 @@ function Sections({ initial, faces }: Props) {
                     </Button>
                   </MemberEntry>
                 </div>
-                {said[key] && <Note>{said[key]}</Note>}
+                {said[key] && <Note>{said[key].text}</Note>}
               </div>
             );
           })}
@@ -558,7 +573,7 @@ function Sections({ initial, faces }: Props) {
                             </Button>
                           ))}
                       </MemberEntry>
-                      {said[key] && <Note>{said[key]}</Note>}
+                      {said[key] && <Note>{said[key].text}</Note>}
                     </li>
                   );
                 })}
@@ -585,12 +600,11 @@ function Sections({ initial, faces }: Props) {
                       key={status}
                       size="sm"
                       variant="outline"
-                      disabled={busy !== null || Boolean(said[key])}
+                      disabled={busy !== null || said[key]?.ok}
                       onClick={() =>
                         void act(key, () =>
                           postJson("/api/members/status", {
                             pageId: person.pageId,
-                            name: person.name,
                             status,
                           }),
                         )
@@ -600,7 +614,7 @@ function Sections({ initial, faces }: Props) {
                     </Button>
                   ))}
                 </MemberEntry>
-                {said[key] && <Note>{said[key]}</Note>}
+                {said[key] && <Note>{said[key].text}</Note>}
               </div>
             );
           })}
@@ -638,7 +652,7 @@ function Sections({ initial, faces }: Props) {
                   }
                   onEdit={(field) => setEditing({ field, person })}
                 >
-                  {account && !said[key] && (
+                  {account && !said[key]?.ok && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -647,7 +661,6 @@ function Sections({ initial, faces }: Props) {
                         void act(key, () =>
                           postJson("/api/members/discord", {
                             pageId: person.pageId,
-                            name: person.name,
                             discordId: account.id,
                           }),
                         )
@@ -657,7 +670,7 @@ function Sections({ initial, faces }: Props) {
                     </Button>
                   )}
                 </MemberEntry>
-                {said[key] && <Note>{said[key]}</Note>}
+                {said[key] && <Note>{said[key].text}</Note>}
               </div>
             );
           })}
@@ -715,7 +728,7 @@ function Sections({ initial, faces }: Props) {
       <Section
         title="Missing from Google Group"
         how="Google gives software no way to read this group, so it is compared by hand."
-        count={diff ? diff.missing.length : 0}
+        count={diff ? diff.missing.length : null}
       >
         <div className="space-y-3 rounded-lg border p-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -743,10 +756,16 @@ function Sections({ initial, faces }: Props) {
                 const file = event.target.files?.[0];
                 if (!file) return;
 
-                void file.text().then((text) => {
-                  setInGroup(emailsInExport(text));
-                  setExportName(file.name);
-                });
+                file.text().then(
+                  (text) => {
+                    setInGroup(emailsInExport(text));
+                    setExportName(file.name);
+                  },
+                  (thrown: unknown) =>
+                    notify.failed(
+                      `Could not read ${file.name}: ${thrown instanceof Error ? thrown.message : String(thrown)}`,
+                    ),
+                );
               }}
             />
           </div>
@@ -767,7 +786,7 @@ function Sections({ initial, faces }: Props) {
               {plural(diff.unreachable.length, "member")}{" "}
               {diff.unreachable.length === 1 ? "has" : "have"} no address at
               all, so nothing below can reach them and no paste will fix it.
-              They are listed under Email addresses worth a look.
+              They are listed under Missing email field.
             </p>
           )}
 
@@ -815,10 +834,7 @@ function Sections({ initial, faces }: Props) {
                 id="group-blob"
                 readOnly
                 rows={Math.min(emails.length + 1, 10)}
-                /* comma-separated because that is the shape the group's
-                   bulk-add field accepts; a newline-separated list has to be
-                   cleaned up by hand */
-                value={emails.join(", ")}
+                value={blob}
                 className="font-mono text-xs"
               />
 
@@ -830,17 +846,17 @@ function Sections({ initial, faces }: Props) {
                      still selectable by hand, so a failure leaves the tick
                      off rather than throwing */
                   void navigator.clipboard
-                    .writeText(emails.join(", "))
-                    .then(() => setCopied(true))
-                    .catch(() => setCopied(false));
+                    .writeText(blob)
+                    .then(() => setCopied(blob))
+                    .catch(() => setCopied(null));
                 }}
               >
-                {copied ? (
+                {copied === blob ? (
                   <CheckIcon className="size-4" />
                 ) : (
                   <CopyIcon className="size-4" />
                 )}
-                {copied
+                {copied === blob
                   ? "Copied"
                   : `Copy ${plural(emails.length, "address", "addresses")}`}
               </Button>
@@ -865,14 +881,15 @@ function Sections({ initial, faces }: Props) {
       <MemberEditDialog
         editing={editing}
         onClose={() => setEditing(null)}
-        onSaved={(person: Person) =>
+        onSaved={(person: Person) => {
           patch((current) => ({
             ...current,
             roster: current.roster.map((one) =>
               one.pageId === person.pageId ? person : one,
             ),
-          }))
-        }
+          }));
+          void refresh();
+        }}
         guild={guild}
         statuses={statuses}
       />
@@ -908,7 +925,6 @@ function Sections({ initial, faces }: Props) {
                   postJson("/api/members/merge", {
                     keepId: keep.pageId,
                     dropId: drop.pageId,
-                    keepName: keep.name,
                   }),
                 );
               }}

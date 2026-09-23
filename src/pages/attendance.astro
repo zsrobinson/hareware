@@ -14,7 +14,7 @@ import { kioskData } from "~/lib/members/views";
 const who = admitted(Astro.locals);
 
 /* the room can see this screen, and it lists everybody's name and email
-   domain. nothing may cache any of it */
+   address. nothing may cache any of it */
 Astro.response.headers.set("cache-control", "private, no-store");
 
 /* eastern, and fixed here rather than worked out again on every refetch: this

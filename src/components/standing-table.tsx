@@ -8,7 +8,7 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Link } from "~/components/ui/link";
 import { Switch } from "~/components/ui/switch";
-import { duplicates } from "~/lib/members/match";
+import { duplicates, WHY_ALIKE } from "~/lib/members/match";
 import { MemberFace } from "~/components/member-face";
 import type { Faces } from "~/lib/faces";
 import type { Corpus } from "~/lib/members/roster";
@@ -324,7 +324,7 @@ export function StandingTable({
             {unresolved.slice(0, 5).map((group) => (
               <li key={`${group.on}:${group.value}`}>
                 {group.people.map((person) => person.name).join(" · ")}{" "}
-                <span className="text-xs">(same {group.on})</span>
+                <span className="text-xs">({WHY_ALIKE[group.on]})</span>
               </li>
             ))}
             {unresolved.length > 5 && (

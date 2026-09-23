@@ -493,3 +493,11 @@ export function suggestDiscordLinks(
     (suggestion) => proposed.get(suggestion.account.id) === 1,
   );
 }
+
+/** how two rows came to be listed together, in the words the pages use */
+export const WHY_ALIKE: Record<Duplicate["on"], string> = {
+  name: "the same name",
+  email: "the same email",
+  "near-name": "one letter apart",
+  "same-ends": "a middle name on one and not the other",
+};

@@ -31,6 +31,7 @@ import type { Person } from "~/lib/members/records";
   first one's roster
 */
 let Reconciler: typeof import("./reconciler").Reconciler;
+let notify: typeof import("~/lib/notify").notify;
 
 vi.mock("~/lib/notify", () => ({
   notify: { ok: vi.fn(), failed: vi.fn() },
@@ -60,6 +61,7 @@ const initial: ReconcilerData = {
   liveStatuses: ["Undergrad", "Grad", "Alum"],
   alumMissing: false,
   discordProblem: null,
+  notionProblem: null,
 };
 
 const EXPORT = `Email address,Nickname,Join date
@@ -70,6 +72,7 @@ graduated@gmail.com,Old Friend,2024-09-01
 beforeEach(async () => {
   vi.resetModules();
   ({ Reconciler } = await import("./reconciler"));
+  ({ notify } = await import("~/lib/notify"));
 
   /* the page is seeded by its props and only refetches after a write, so
      nothing here should reach the network. A stub that throws says so loudly */
@@ -92,16 +95,51 @@ afterEach(() => {
   about a list says which section it means
 */
 function section(title: string) {
-  return screen.getByRole("heading", { name: title }).closest("section")!;
+  return heading(title).closest("section")!;
+}
+
+/** a section's heading, whose name also carries its count */
+function heading(title: string) {
+  return screen.getByRole("heading", {
+    name: (name) => name.replace(/\s*\d+$/, "") === title,
+  });
 }
 
 /** hands the page an export, the way the file picker does */
-async function upload(csv: string) {
+async function upload(csv: string, name = "members.csv") {
   const input = screen.getByLabelText(/Export CSV/);
-  const file = new File([csv], "members.csv", { type: "text/csv" });
+  const file = new File([csv], name, { type: "text/csv" });
 
   fireEvent.change(input, { target: { files: [file] } });
-  await waitFor(() => screen.getByText(/stayed in this browser/));
+  await waitFor(() =>
+    screen.getByText(new RegExp(`${name}, which stayed in this browser`)),
+  );
+}
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+
+/**
+ * the routes, as far as the page can tell: a re-read answers `read()`, and a
+ * write answers `write(path)`. Returns what was written, in order
+ */
+function serve(read: () => ReconcilerData, write: (path: string) => Response) {
+  const posted: { path: string; body: unknown }[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string, init?: RequestInit) => {
+      if (init?.method !== "POST") return json(read());
+      posted.push({
+        path: String(input),
+        body: JSON.parse(init.body as string) as unknown,
+      });
+      return write(String(input));
+    }),
+  );
+  return posted;
 }
 
 test("nothing is claimed about the group before a file is handed over", () => {
@@ -141,6 +179,10 @@ test("a row with no address is counted against the group, not listed twice", asy
   await upload(EXPORT);
 
   expect(screen.getByText(/1 member has no address at all/)).toBeTruthy();
+  /* and points at a section that exists */
+  expect(
+    screen.getByText(/They are listed under Missing email field\./),
+  ).toBeTruthy();
   /* counted beside the group, and named once under Missing email field */
   expect(
     within(section("Missing from Google Group")).queryByText("Cass Lin"),
@@ -150,8 +192,7 @@ test("a row with no address is counted against the group, not listed twice", asy
   ).toBeTruthy();
 });
 
-/* the three ways an address can be unusable, in one section: the two that are
-   wrong counted in the heading, and the merely empty ones below them */
+/* text that is not an address and an address at the wrong domain */
 test("an unusable address and an outside one share a section", () => {
   render(
     <Reconciler
@@ -316,4 +357,186 @@ test("an application the form gave nothing for is added by hand", async () => {
     email: "ada@terpmail.umd.edu",
     discordId: "d1",
   });
+});
+
+test("a section's heading holds its toggle rather than sitting inside it", () => {
+  render(<Reconciler initial={initial} faces={{}} />);
+
+  const title = heading("Missing email field");
+
+  expect(title.closest("button")).toBeNull();
+  expect(within(title).getByRole("button")).toBeTruthy();
+});
+
+test("the group's section has no count until a file is handed over", async () => {
+  render(<Reconciler initial={initial} faces={{}} />);
+
+  const count = () =>
+    within(heading("Missing from Google Group")).queryByText(/^\d+$/);
+
+  expect(count()).toBeNull();
+
+  await upload(EXPORT);
+
+  expect(count()?.textContent).toBe("1");
+});
+
+test("a different export is not called copied", async () => {
+  Object.defineProperty(navigator, "clipboard", {
+    value: { writeText: vi.fn(async () => {}) },
+    configurable: true,
+  });
+  render(<Reconciler initial={initial} faces={{}} />);
+  await upload(EXPORT);
+
+  fireEvent.click(screen.getByRole("button", { name: "Copy 1 address" }));
+  await waitFor(() => screen.getByRole("button", { name: "Copied" }));
+
+  await upload("graduated@gmail.com", "later.csv");
+
+  expect(screen.getByRole("button", { name: "Copy 2 addresses" })).toBeTruthy();
+});
+
+test("a file the browser cannot read says so", async () => {
+  render(<Reconciler initial={initial} faces={{}} />);
+
+  const file = new File([""], "broken.csv", { type: "text/csv" });
+  file.text = () => Promise.reject(new Error("the disk said no"));
+  fireEvent.change(screen.getByLabelText(/Export CSV/), {
+    target: { files: [file] },
+  });
+
+  await waitFor(() =>
+    expect(notify.failed).toHaveBeenCalledWith(
+      expect.stringContaining("the disk said no"),
+    ),
+  );
+});
+
+const unsorted = person({ pageId: "p7", name: "Nell Price", status: null });
+
+test("a write that failed can be tried again", async () => {
+  const data = { ...initial, roster: [unsorted], unknownStatus: [unsorted] };
+  let refuse = true;
+  const posted = serve(
+    () => data,
+    () =>
+      refuse
+        ? json({ error: "notion refused" }, 502)
+        : json({ summary: "status set" }),
+  );
+
+  render(<Reconciler initial={data} faces={{}} />);
+  const statuses = within(section("Missing status field"));
+
+  fireEvent.click(statuses.getByRole("button", { name: "Grad" }));
+  await waitFor(() => statuses.getByText("notion refused"));
+
+  refuse = false;
+  fireEvent.click(statuses.getByRole("button", { name: "Grad" }));
+
+  await waitFor(() => expect(posted).toHaveLength(2));
+  /* the route reads the name from notion, not from what the page believed */
+  expect(posted[1]).toEqual({
+    path: "/api/members/status",
+    body: { pageId: "p7", status: "Grad" },
+  });
+});
+
+test("a link is confirmed even though the re-read takes its row away", async () => {
+  const row = person({
+    pageId: "p8",
+    name: "Ada Vance",
+    email: "ada@terpmail.umd.edu",
+  });
+  const data: ReconcilerData = {
+    ...initial,
+    roster: [row],
+    resolutions: [
+      {
+        status: "linkable",
+        on: "email",
+        person: row,
+        application: {
+          id: "a1",
+          discordId: "d1",
+          username: "ada",
+          name: "Ada Vance",
+          email: "ada@terpmail.umd.edu",
+          gradYear: null,
+          applied: "2026-09-08",
+        },
+      },
+    ],
+  };
+  serve(
+    () => ({ ...data, resolutions: [] }),
+    () => json({ summary: "Linked Ada Vance" }),
+  );
+
+  render(<Reconciler initial={data} faces={{}} />);
+  fireEvent.click(screen.getByRole("button", { name: "This is them" }));
+
+  await waitFor(() => screen.getByText("No applicants waiting"));
+  expect(notify.ok).toHaveBeenCalledWith("Linked Ada Vance");
+});
+
+/* the list of rows with no status is worked out by the server, so patching
+   the roster alone left the row sitting in it */
+test("a status set from a chip takes the row out of the status section", async () => {
+  const data = { ...initial, roster: [unsorted], unknownStatus: [unsorted] };
+  const sorted = { ...unsorted, status: "Grad" };
+  const posted = serve(
+    () => ({ ...data, roster: [sorted], unknownStatus: [] }),
+    () => json({ summary: "status set" }),
+  );
+
+  render(<Reconciler initial={data} faces={{}} />);
+  fireEvent.click(
+    within(section("Missing Discord ID")).getByRole("button", {
+      name: "Set status",
+    }),
+  );
+  fireEvent.click(
+    within(screen.getByRole("dialog")).getByRole("button", { name: "Grad" }),
+  );
+
+  await waitFor(() =>
+    within(section("Missing status field")).getByText(
+      "Every member has a status",
+    ),
+  );
+  expect(posted).toEqual([
+    { path: "/api/members/status", body: { pageId: "p7", status: "Grad" } },
+  ]);
+});
+
+/* discord does not always say when somebody applied */
+test("an application with no date says nothing about one", () => {
+  render(
+    <Reconciler
+      initial={{
+        ...initial,
+        resolutions: [
+          {
+            status: "incomplete",
+            missing: ["name"],
+            application: {
+              id: "a2",
+              discordId: "d2",
+              username: "undated",
+              name: null,
+              email: "u@terpmail.umd.edu",
+              gradYear: null,
+              applied: null,
+            },
+          },
+        ],
+      }}
+      faces={{}}
+    />,
+  );
+
+  expect(screen.getByText("the form gave no name")).toBeTruthy();
+  expect(screen.queryByText(/^applied/)).toBeNull();
 });

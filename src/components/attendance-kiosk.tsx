@@ -85,11 +85,9 @@ async function createPerson(
   return { pageId, name, email };
 }
 
-const dayOf = (meeting: MeetingRecord) => meeting.date.slice(0, 10);
-
 /** the date the calendar holds, then the name with its own date taken off */
 const describe = (meeting: MeetingRecord) =>
-  `${dayOf(meeting)} ${meetingLabel(meeting.name) || "Untitled"}`;
+  `${meeting.date} ${meetingLabel(meeting.name) || "Untitled"}`;
 
 /* the route's own message where there is one — notion's refusals say useful
    things, and everybody at this laptop holds @Editorial Board */
@@ -131,8 +129,8 @@ function Kiosk({ initial, today, faces, guild }: Props) {
     meetingId === (initial.openingId ?? ""),
   );
 
-  const { meetings, candidates, statuses } = data;
-  const { present, saving, tap } = useAttendance(meetingId, data);
+  const { meetings, candidates, statuses, notionProblem } = data;
+  const { present, known, saving, tap } = useAttendance(meetingId, data);
 
   const patchRoster = usePatch<KioskData>(rosterKeys.kiosk(meetingId));
 
@@ -315,6 +313,14 @@ function Kiosk({ initial, today, faces, guild }: Props) {
   return (
     <div className="grid items-start gap-8 lg:grid-cols-2">
       <div className="space-y-6">
+        {notionProblem && (
+          <p
+            role="alert"
+            className="border-destructive/50 bg-destructive/10 text-destructive rounded-lg border p-3 text-sm"
+          >
+            {notionProblem}
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <Label htmlFor="kiosk-meeting" className="text-muted-foreground">
             Meeting
@@ -409,7 +415,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
                   );
 
                   return (
-                    <li key={person.pageId}>
+                    <li key={person.pageId} role="presentation">
                       <button
                         type="button"
                         id={`kiosk-match-${index}`}
@@ -524,11 +530,14 @@ function Kiosk({ initial, today, faces, guild }: Props) {
         </h2>
 
         {present.length === 0 ? (
-          <p className="text-muted-foreground text-sm">Nobody yet.</p>
+          <p className="text-muted-foreground text-sm">
+            {known ? "Nobody yet." : "Reading who is signed in…"}
+          </p>
         ) : (
           <ul aria-label="Signed in" className="divide-y rounded-lg border">
             {signedIn.map((pageId) => {
-              const person = byId.get(pageId) ?? {
+              const listed = byId.get(pageId);
+              const person = listed ?? {
                 pageId,
                 name: "Someone not on this list",
                 discordId: null,
@@ -545,11 +554,16 @@ function Kiosk({ initial, today, faces, guild }: Props) {
                 >
                   <div className="min-w-0 flex-1">
                     {/* every chip and every edit lives here: the person has
-                        tapped, and this is the one row they are looking at */}
+                        tapped, and this is the one row they are looking at.
+                        None for a row this roster does not hold, whose fields
+                        here are made up */}
                     <MemberEntry
                       person={person}
                       faces={faces}
-                      onEdit={(field) => setEditing({ field, person })}
+                      onEdit={
+                        listed &&
+                        ((field) => setEditing({ field, person: listed }))
+                      }
                     />
                   </div>
                   {/* removing is possible only because `setAttendees` replaces

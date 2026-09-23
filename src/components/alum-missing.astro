@@ -1,0 +1,18 @@
+---
+import Problem from "~/components/problem.astro";
+import { ALUM_STATUS } from "~/lib/members/config";
+
+type Props = {
+  /** the Status options Notion does have */
+  options: string[];
+};
+
+const { options } = Astro.props;
+---
+
+<Problem>
+  Notion's Status options no longer include "{ALUM_STATUS}", which is the value
+  that keeps alumni out of a vote. Until an editor restores that option or the
+  rule is changed in code, nobody is being excluded as an alum. Options Notion
+  has: {options.join(", ")}.
+</Problem>

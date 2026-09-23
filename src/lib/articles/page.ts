@@ -73,6 +73,14 @@ export function isArticle(page: ArticlePage): boolean {
 */
 const NO_TIMESTAMP = "1970-01-01T00:00:00.000Z";
 
+/** one of the Articles properties, as the page carries it */
+export function propertyOf(
+  page: ArticlePage,
+  key: keyof typeof ARTICLE_PROPERTIES,
+): ArticleProperty | undefined {
+  return page.properties?.[ARTICLE_PROPERTIES[key].name];
+}
+
 /**
  * the chosen option's name, whichever of the two shapes it arrived in.
  *
@@ -127,38 +135,24 @@ export function readableProperties(
 }
 
 /**
- * an Article, flattened to what the picker and the card need.
+ * an Article, flattened to what the picker needs.
  *
  * everything is read off the page rather than out of a store, so this is the
- * only shape either of them ever sees
+ * only shape it ever sees
  */
 export type Article = {
   pageId: string;
   headline: string;
   lastEdited: string;
-  section: string | null;
-  status: string | null;
-  imageStatus: string | null;
-  authorByline: string | null;
-  publicationDate: string | null;
 };
 
 /** a notion page as an Article */
 export function toArticle(page: ArticlePage): Article {
-  const property = (key: keyof typeof ARTICLE_PROPERTIES) =>
-    page.properties?.[ARTICLE_PROPERTIES[key].name];
-
-  const headline = plainText(property("headline")?.title).trim();
-  const byline = plainText(property("authorByline")?.rich_text).trim();
+  const headline = plainText(propertyOf(page, "headline")?.title).trim();
 
   return {
     pageId: page.id,
     headline: headline || UNTITLED,
     lastEdited: page.last_edited_time ?? NO_TIMESTAMP,
-    section: optionName(property("section")),
-    status: optionName(property("status")),
-    imageStatus: optionName(property("imageStatus")),
-    authorByline: byline || null,
-    publicationDate: property("publicationDate")?.date?.start ?? null,
   };
 }

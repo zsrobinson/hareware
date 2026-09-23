@@ -28,7 +28,7 @@ export const SESSION_COOKIE = "__Host-hareware-session";
  * bound on a stolen one. a week is short enough to matter and long enough that
  * nobody signs in twice in a meeting
  */
-export const SESSION_DAYS = 7;
+const SESSION_DAYS = 7;
 
 const LIFETIME_SECONDS = SESSION_DAYS * 24 * 60 * 60;
 

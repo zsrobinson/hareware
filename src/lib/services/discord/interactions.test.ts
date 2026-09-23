@@ -331,11 +331,6 @@ test("answers /article with no subcommand at all", async () => {
 const row = (over: Partial<Article> = {}): Article => ({
   pageId: PAGE,
   headline: "Terps lose again",
-  section: "News",
-  status: "Written",
-  imageStatus: null,
-  authorByline: "Zachary",
-  publicationDate: null,
   lastEdited: "2026-09-01T00:00:00.000Z",
   ...over,
 });
@@ -987,12 +982,6 @@ test("a new article with no headline is refused before anything is written", asy
   expect(text(reply).toLowerCase()).toContain("headline");
   expect(seen.requests).toEqual([]);
 });
-
-/*
-  the picker reads notion directly, because a cache fed by webhooks is never
-  "immediately": a webhook took nine seconds once and sixty-five the next time,
-  so an edit made in notion sat behind whichever it happened to be
-*/
 
 /*
   the picker holds the hundred most recently edited Articles, which is nearly

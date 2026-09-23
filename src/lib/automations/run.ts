@@ -2,13 +2,8 @@ import { easternNow, type EasternNow } from "~/lib/eastern";
 import { record } from "~/lib/log";
 import { refreshCommands } from "~/lib/services/discord/refresh-commands";
 import { reportFailure } from "./alert";
-import {
-  AUTOMATIONS,
-  type Automation,
-  type AutomationId,
-  failed,
-  type Result,
-} from "./registry";
+import { failed, type Result } from "~/lib/result";
+import { AUTOMATIONS, type Automation, type AutomationId } from "./registry";
 
 /** which automations a caller wants. empty means all of them */
 export type Which = Set<AutomationId>;
@@ -16,21 +11,18 @@ export type Which = Set<AutomationId>;
 export const ALL: Which = new Set(AUTOMATIONS.map((a) => a.id));
 
 /**
- * which schedule fires the reminders.
- *
- * this is load-bearing rather than cosmetic. the article index syncs every
- * minute, and the reminders are due when the *eastern hour* matches — so
- * without a check on which schedule woke us, every minute of 8am would be a
- * fresh 8am and the club would be pinged sixty times.
+ * which schedule fires the reminders. must match `triggers.crons` in
+ * wrangler.jsonc: the reminders are due by eastern hour, so any other schedule
+ * ticking inside 8am would send them again on every tick.
  */
-export const REMINDER_CRON = "0 * * * *";
+const REMINDER_CRON = "0 * * * *";
 
 /**
- * the cron entry, for both schedules.
+ * the cron entry.
  *
- * hourly decides what is due by eastern hour rather than the schedule encoding
- * one, which is what keeps it from drifting across daylight saving — see
- * `~/lib/eastern`. the minute schedule only syncs.
+ * decides what is due by eastern hour rather than the schedule encoding one,
+ * which is what keeps it from drifting across daylight saving — see
+ * `~/lib/eastern`.
  */
 export async function runScheduled(controller: ScheduledController, env: Env) {
   const eastern = easternNow(new Date(controller.scheduledTime));
@@ -39,9 +31,7 @@ export async function runScheduled(controller: ScheduledController, env: Env) {
     each automation carries its own hour, so a second one at a different time
     is a registry entry rather than a branch here.
 
-    `REMINDERS_IGNORE_HOUR` still ignores the hour, but never the schedule: it
-    exists to see a reminder without waiting for 8am, and on the minute cron it
-    would mean sixty of them
+    `REMINDERS_IGNORE_HOUR` ignores the hour, but never the schedule
   */
   const hourly = controller.cron === REMINDER_CRON;
   const due = new Set(
@@ -70,20 +60,10 @@ export async function runScheduled(controller: ScheduledController, env: Env) {
   }
 
   /*
-    after the reminders, and on every tick of either schedule.
-
-    every minute because this is what makes the article index right, and how
-    right it is is the whole feel of the thing: notion delivers webhooks
-    at-most-once and out of order, so the rebuild is not a backstop for a rare
-    failure — it is the only guarantee the picker ever matches notion, and an
-    hour of that guarantee is long enough to read as broken. two notion
-    requests a minute against a budget of three a second is nothing. see
-    ADR 0009.
-
-    *after* because it reads notion and writes d1 with no deadline of its own,
-    and at 8am eastern it shares a tick with the reminders. a slow notion
-    delaying the command surface costs a picker an hour of new options; the same delay in
-    front of the reminders costs the club its morning ping
+    after the reminders, because it reads notion with no deadline of its own.
+    a slow notion delaying the command surface costs a picker an hour of new
+    options; the same delay in front of the reminders costs the club its
+    morning ping
   */
   await refreshTheCommandSurface(env);
 }
@@ -177,9 +157,9 @@ async function recordRun(
 }
 
 /**
- * the article index, the picker options, and the command surface.
+ * the picker options and the command surface.
  *
- * a row is written only when something went wrong. a healthy sync happens
+ * a row is written only when something went wrong. a healthy refresh happens
  * twenty-four times a day, and logging each one would bury the two reminders
  * the log exists to make legible — while a silent failure here is exactly what
  * ADR 0007 says must never look like nothing happened

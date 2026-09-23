@@ -2,8 +2,8 @@
   finding the Members row behind a discord user.
 
   ADR 0009: an article's writer is picked with discord's native user picker, so
-  what arrives is a snowflake and a display name and nothing else. only 9 of 48
-  Members carry a Discord ID, so the id match is the *rare* path — the common
+  what arrives is a snowflake and a display name and nothing else. most
+  Members carry no Discord ID, so the id match is the *rare* path — the common
   one is matching the name, and writing the id onto the row it finds, so the
   roster backfills itself as editors credit people.
 
@@ -109,7 +109,7 @@ function toMember(page: MemberPage): Member {
 }
 
 /** the patch that would put `discordId` on a row */
-export function linkPatch(discordId: string): LinkPatch {
+function linkPatch(discordId: string): LinkPatch {
   return {
     properties: {
       [MEMBER_PROPERTIES.discordId.name]: {
@@ -167,7 +167,7 @@ export function matchMembers(
 /**
  * writes a discord id onto an existing Members row.
  *
- * this is the backfill ADR 0009 is built around: 39 of 48 rows carry no id, so
+ * this is the backfill ADR 0009 is built around: most rows carry no id, so
  * the common credit is a name match, and doing it here means the roster fills
  * itself in as editors work rather than in somebody's afternoon
  */
@@ -202,7 +202,7 @@ export async function createMember(
   return toMember(page);
 }
 
-/** every Members row. 48 of them, so one request unless the club triples */
+/** every Members row */
 async function allMembers(token: string): Promise<MemberPage[]> {
   return queryAll<MemberPage>(MEMBERS_DATA_SOURCE_ID, token);
 }

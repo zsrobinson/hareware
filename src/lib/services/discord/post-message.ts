@@ -56,7 +56,7 @@ export type DiscordMessage = {
   mentionRoleIds?: string[];
 };
 
-export class DiscordPostError extends Error {}
+class DiscordPostError extends Error {}
 
 /** `<@&123>` as discord writes it, wherever it appears in a line */
 const ROLE_MENTION = /<@&(\d+)>/g;

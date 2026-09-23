@@ -4,7 +4,7 @@
 
 import { failed, ok, type Result } from "~/lib/result";
 import { record } from "~/lib/log";
-import { assertProperties, optionNamed, type Schema } from "./choices";
+import { fetchSchema, notSharing, optionNamed, type Schema } from "./choices";
 import { ARTICLE_PROPERTIES, ARTICLES_DATA_SOURCE_ID } from "./config";
 import {
   createMember,
@@ -34,6 +34,7 @@ import {
   type PlanResult,
 } from "./write";
 import { notion, plainText } from "~/lib/services/notion/client";
+import { readArticle } from "./live";
 
 /** the discord user who ran the command */
 export type Actor = { id: string; name: string };
@@ -86,7 +87,7 @@ export type EditRequest =
 export type EditIO = {
   /** the Articles schema, which is the data-loss guard's evidence */
   schema: () => Promise<Schema>;
-  /** one Article, live. never the index */
+  /** one Article, live */
   page: (pageId: string) => Promise<ArticlePage>;
   /** notion answers a PATCH with the whole updated page */
   patch: (pageId: string, body: PatchBody) => Promise<ArticlePage>;
@@ -108,13 +109,31 @@ export type EditResult =
     }
   | { status: "failed"; explanation: string; pageId?: string; notes: string[] };
 
+/** the sentence an edit that landed leads with, in the log and the reply */
+export function editSentence(
+  status: Exclude<EditResult["status"], "failed">,
+): string {
+  switch (status) {
+    case "created":
+      return "Created article.";
+    case "deleted":
+      return "Moved article to Notion's Trash.";
+    case "unchanged":
+      return "Article is unchanged.";
+    case "updated":
+      return "Updated article.";
+  }
+}
+
 export function editSummary(result: EditResult): string {
   const summary =
     result.status === "failed"
       ? result.explanation
       : result.status === "deleted"
-        ? "Moved article to Notion's Trash."
-        : `${result.status === "created" ? "Created article. " : result.status === "unchanged" ? "Unchanged. " : ""}${changesSummary(result.changes)}`;
+        ? editSentence("deleted")
+        : result.status === "updated"
+          ? changesSummary(result.changes)
+          : `${editSentence(result.status)} ${changesSummary(result.changes)}`;
   return [summary, ...result.notes].join(" — ");
 }
 
@@ -402,17 +421,10 @@ async function credit(
     co-author. `assertProperties` is the only thing that can tell absent from
     empty
   */
-  /* widened: the config names are a union of literals, and a property the
-     schema is missing arrives as plain text */
-  const pair: string[] = [text.name, relation.name];
-  const unshared = assertProperties(schema).filter((miss) =>
-    pair.includes(miss.name),
-  );
-  if (unshared.length > 0)
+  const unshared = notSharing(schema, [text.name, relation.name]);
+  if (unshared)
     return refused(
-      `Notion is not sharing ${unshared
-        .map((miss) => `${miss.name} (${miss.found ?? "absent"})`)
-        .join(", ")}, so HareWare will not write a credit it cannot read back.`,
+      `${unshared}, so HareWare will not write a credit it cannot read back.`,
     );
 
   if (
@@ -556,14 +568,9 @@ export function notionIO(env: Env): EditIO {
   const token = () => env.NOTION_TOKEN!;
 
   return {
-    schema: () =>
-      notion(
-        `data_sources/${ARTICLES_DATA_SOURCE_ID}`,
-        token(),
-      ) as Promise<Schema>,
+    schema: () => fetchSchema(token()),
 
-    page: (pageId) =>
-      notion(`pages/${pageId}`, token()) as Promise<ArticlePage>,
+    page: (pageId) => readArticle(token(), pageId),
 
     patch: (pageId, body) =>
       notion(`pages/${pageId}`, token(), body, "PATCH") as Promise<ArticlePage>,

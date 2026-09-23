@@ -2,15 +2,14 @@
   what the pickers offer, read out of notion's own schema.
 
   nothing here stores anything. the schema is read and the command surface is
-  registered in the same invocation, so the options never need to outlive it —
-  a D1 table used to sit between the two halves and was pure ceremony.
+  registered in the same invocation, so the options never need to outlive it.
 
   no status, section or image status is written down in this repo. adding one
   is something the club does in notion, and the commands re-register from what
   is read here — which is also why the casing traps (`Not started`, not
   `Not Started`) cannot be introduced. see ADR 0009.
 
-  nothing in this file builds a discord payload. it reads a schema and stores
+  nothing in this file builds a discord payload. it reads a schema and returns
   option names; what a command registration looks like is somebody else's
   problem, and keeping it that way is what lets this be tested without one.
 */
@@ -70,9 +69,27 @@ export function assertProperties(schema: Schema): MissingProperty[] {
 }
 
 /**
+ * "Notion is not sharing …" for the properties the schema is missing, among
+ * `names` when given, or null when it has them all
+ */
+export function notSharing(
+  schema: Schema,
+  names?: readonly string[],
+): string | null {
+  const missing = assertProperties(schema).filter(
+    (miss) => !names || names.includes(miss.name),
+  );
+  if (missing.length === 0) return null;
+
+  return `Notion is not sharing ${missing
+    .map((miss) => `${miss.name} (${miss.found ?? "absent"})`)
+    .join(", ")}`;
+}
+
+/**
  * the options for each picker, in notion's own order.
  *
- * the order is stored rather than sorted because it is the order the club put
+ * the order is kept rather than sorted because it is the order the club put
  * them in — Backlog before Published — and a picker sorted alphabetically
  * would read as a list of unrelated words.
  *

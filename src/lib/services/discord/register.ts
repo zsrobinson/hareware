@@ -11,12 +11,9 @@
   definition of
 */
 
-import type { Result } from "~/lib/result";
+import { failed, misconfigured, ok, type Result } from "~/lib/result";
 import type { CommandPayload } from "./commands";
 import { DISCORD_APPLICATION_ID, GUILD_ID } from "./config";
-
-/** what a registration attempt reports */
-export type RegisterResult = Result;
 
 /**
  * puts the payload on discord, every time it is asked.
@@ -32,13 +29,12 @@ export type RegisterResult = Result;
 export async function registerCommands(
   env: Env,
   payload: CommandPayload,
-): Promise<RegisterResult> {
+): Promise<Result> {
   const token = env.DISCORD_BOT_TOKEN;
   if (!token) {
-    return {
-      outcome: "misconfigured",
-      summary: "DISCORD_BOT_TOKEN is not set; commands were not registered",
-    };
+    return misconfigured(
+      "DISCORD_BOT_TOKEN is not set; commands were not registered",
+    );
   }
 
   try {
@@ -63,20 +59,15 @@ export async function registerCommands(
     const said = await response.text();
 
     if (!response.ok) {
-      return {
-        outcome: "failed",
-        summary: `discord refused the commands: ${response.status} ${said.slice(0, 300)}`,
-      };
+      return failed(
+        `discord refused the commands: ${response.status} ${said.slice(0, 300)}`,
+      );
     }
 
-    return {
-      outcome: "ok",
-      summary: `registered ${payload.length} command(s) on the guild`,
-    };
+    return ok(`registered ${payload.length} command(s) on the guild`);
   } catch (error) {
-    return {
-      outcome: "failed",
-      summary: `could not reach discord to register commands: ${String(error)}`,
-    };
+    return failed(
+      `could not reach discord to register commands: ${String(error)}`,
+    );
   }
 }

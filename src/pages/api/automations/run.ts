@@ -63,8 +63,8 @@ export const POST: APIRoute = async ({ request }) => {
   const query = new URL(request.url).searchParams;
 
   /*
-    `?sync=1` refreshes the article index, the picker options and the command
-    surface, and fires no reminders.
+    `?sync=1` refreshes the picker options and the command surface, and fires
+    no reminders.
 
     it exists because the sync otherwise only runs on the hourly tick, which
     means a change to it cannot be exercised without waiting up to an hour and

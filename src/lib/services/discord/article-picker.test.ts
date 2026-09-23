@@ -5,11 +5,6 @@ import type { Article } from "~/lib/articles/page";
 const row = (over: Partial<Article> = {}): Article => ({
   pageId: "page-1",
   headline: "Terps lose again, somehow",
-  section: "News",
-  status: "Written",
-  imageStatus: "Not started",
-  authorByline: "Sam Rivera",
-  publicationDate: null,
   lastEdited: "2026-09-01T12:00:00.000Z",
   ...over,
 });

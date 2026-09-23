@@ -10,10 +10,10 @@
   seconds, so those answer DEFER and follow up. autocomplete cannot defer at
   all — there is no such response type — so its read is raced against a
   deadline and answers an empty dropdown rather than nothing. the reads arrive
-  as `deps`, which is what keeps this file testable without D1 or notion.
+  as `deps`, which is what keeps this file testable without notion.
 */
 
-import { articleResponse } from "./article-response";
+import { articleResponse, editResponse } from "./article-response";
 import {
   IS_COMPONENTS_V2,
   markup,
@@ -62,7 +62,7 @@ const APPLICATION_COMMAND_AUTOCOMPLETE_RESULT = 8;
  * how long the whole autocomplete answer gets.
  *
  * discord's three seconds are hard and there is no deferred autocomplete
- * response, so a slow D1 read has to become an empty dropdown well before the
+ * response, so a slow notion read has to become an empty dropdown well before the
  * deadline rather than a "HareWare didn't respond in time" on every keystroke
  */
 const AUTOCOMPLETE_BUDGET_MS = 2000;
@@ -138,12 +138,12 @@ type Interaction = {
 /**
  * the reads a command needs, as functions rather than an `Env`.
  *
- * the route supplies the real ones; a test hands over two closures. keeping
- * `D1Database` and the notion token out of this file is what lets every branch
- * below — including the ones that fail — be exercised without either
+ * the route supplies the real ones; a test hands over closures. keeping the
+ * notion token out of this file is what lets every branch below — including
+ * the ones that fail — be exercised without it
  */
 export type InteractionDeps = {
-  /** the most recently edited Articles — the matching happens in `pick` */
+  /** the most recently edited Articles — the matching happens in `suggestions` */
   articles?: () => Promise<Article[]>;
   /** headlines containing this text, for work too old to be in the recent set */
   search?: (text: string) => Promise<Article[]>;
@@ -517,12 +517,12 @@ function write(
     let message: CommandMessage;
 
     try {
-      message = articleResponse(await edit(parsed.request, actor));
+      message = editResponse(await edit(parsed.request, actor));
     } catch (error) {
       /* `runEdit` promises not to throw, and this is what happens when that
          promise is broken — the editor still gets a sentence */
       console.error("[article] an edit threw rather than answering", error);
-      message = articleResponse({
+      message = editResponse({
         status: "failed",
         explanation:
           "HareWare could not confirm the edit. Check the Article in Notion and /log.",

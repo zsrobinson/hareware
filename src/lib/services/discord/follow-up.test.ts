@@ -1,6 +1,6 @@
 import { markup, textMessage } from "./message";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { followUp, TOKEN_LIFETIME_MS } from "./follow-up";
+import { followUp } from "./follow-up";
 
 /**
  * the json body of the one request that was sent.
@@ -128,8 +128,4 @@ test("a missing application id or token is misconfigured rather than a bad reque
   ).toBe("misconfigured");
   // and nothing was sent to a url with an empty segment in it
   expect(fetchMock).not.toHaveBeenCalled();
-});
-
-test("the token's lifetime is the fifteen minutes discord gives it", () => {
-  expect(TOKEN_LIFETIME_MS).toBe(15 * 60 * 1000);
 });

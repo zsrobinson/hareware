@@ -23,21 +23,11 @@ import {
   type CommandMessage,
 } from "./message";
 
-/**
- * how long the interaction token is good for.
- *
- * fifteen minutes from the interaction, not from the deferral. nothing here
- * enforces it — it is discord's clock — but a caller queueing work behind a
- * retry needs the number, and after it the follow-up comes back 401 with the
- * editor's spinner still spinning
- */
-export const TOKEN_LIFETIME_MS = 15 * 60 * 1000;
-
 /** what an editor sees when a command produced no words of its own */
 const NOTHING_SAID = markup`HareWare finished, but had nothing to say about it. That is a bug. Check \`/log\`.`;
 
 /** the message a deferred interaction turned into */
-export function followUpUrl(applicationId: string, interactionToken: string) {
+function followUpUrl(applicationId: string, interactionToken: string) {
   return `https://discord.com/api/v10/webhooks/${applicationId}/${interactionToken}/messages/@original`;
 }
 

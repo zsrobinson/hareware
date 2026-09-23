@@ -18,7 +18,7 @@ import { buildCommands, MAX_CHOICES } from "./commands";
 import { registerCommands } from "./register";
 import { failed, misconfigured, type Result } from "~/lib/result";
 import {
-  assertProperties,
+  notSharing,
   extractChoices,
   fetchSchema,
 } from "~/lib/articles/choices";
@@ -47,14 +47,8 @@ export async function refreshCommands(env: Env): Promise<Result> {
     read back — but that only speaks when somebody tries to credit a Member,
     which could be weeks. this says so the same day
   */
-  const missing = assertProperties(schema);
-  if (missing.length > 0) {
-    return misconfigured(
-      `notion is not sharing ${missing
-        .map((miss) => `${miss.name} (${miss.found ?? "absent"})`)
-        .join(", ")}`,
-    );
-  }
+  const missing = notSharing(schema);
+  if (missing) return misconfigured(missing);
 
   const choices = extractChoices(schema);
 
@@ -94,5 +88,5 @@ export async function refreshCommands(env: Env): Promise<Result> {
   if (result.outcome === "ok" && cut.length > 0)
     return misconfigured(`${result.summary}, but ${cut.join("; ")}`);
 
-  return { outcome: result.outcome, summary: result.summary };
+  return result;
 }

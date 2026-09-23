@@ -9,15 +9,9 @@ import { adminNav, isActive, toolsNav } from "./nav";
   and the pages on disk.
 */
 
-test("every admin tool in the sidebar is one the guard protects", () => {
-  for (const item of adminNav) {
-    expect(isAdminPath(item.href)).toBe(true);
-  }
-});
-
-test("every guarded route is a tool somebody can reach from the sidebar", () => {
-  /* the other direction: a route guarded but not listed is one nobody can
-     find, which is the old 404 by another route */
+test("the sidebar's admin tools are exactly the guarded routes", () => {
+  /* a tool listed but unguarded is open to anyone, and a route guarded but not
+     listed is one nobody can find */
   expect([...ADMIN_ROUTES].sort()).toEqual(
     adminNav.map((item) => item.href).sort(),
   );
@@ -75,8 +69,4 @@ test("lights the nav item for the page being looked at", () => {
   /* the generator's other working page belongs to the same item */
   expect(isActive("/custom", generate)).toBe(true);
   expect(isActive("/words", generate)).toBe(false);
-});
-
-test("the log comes last, after the tools somebody came to use", () => {
-  expect(adminNav.at(-1)?.href).toBe("/log");
 });

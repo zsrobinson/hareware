@@ -41,7 +41,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     /*
       supplied here rather than imported inside the handler, so every branch of
       it — including the ones that fail — is reachable from a test without a
-      d1 binding or a notion token
+      notion token
     */
     articles: env.NOTION_TOKEN
       ? () => recentArticles(env.NOTION_TOKEN!)

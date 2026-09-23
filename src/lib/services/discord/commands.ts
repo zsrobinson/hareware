@@ -7,23 +7,8 @@
   `refresh-commands.ts` is what does that, and `register.ts` is what puts the
   payload on the guild.
 */
+import type { ChoiceOption } from "~/lib/articles/choices";
 import { ARTICLE_PROPERTIES } from "~/lib/articles/config";
-
-/**
- * a select option read out of the notion schema.
- *
- * declared here rather than imported from the notion service on purpose — this
- * module is a payload builder and knows nothing about where the rows came
- * from, so the cron, a webhook and a test can all supply them
- */
-export type ChoiceInput = {
-  /** the notion property name, verbatim: "Article Status" */
-  property: string;
-  /** the option name, verbatim: "Not started" — casing included */
-  name: string;
-  /** notion's own ordering, which is the order the picker shows */
-  position: number;
-};
 
 const SUB_COMMAND = 1;
 /** discord will not show a 26th choice, in a registration or an autocomplete */
@@ -60,16 +45,9 @@ export type ApplicationCommand = {
 /** what a PUT to the guild commands endpoint takes: every command, at once */
 export type CommandPayload = ApplicationCommand[];
 
-/**
- * the choices for one notion property, in notion's order.
- *
- * exported and folded in already, though `/article ping` takes no options,
- * because it is the shape every other subcommand needs: adding `/article
- * status` later is an entry in the table below rather than a restructuring of
- * how choices reach the payload
- */
+/** the choices for one notion property, in notion's order */
 export function choicesFor(
-  choices: ChoiceInput[],
+  choices: ChoiceOption[],
   property: string,
 ): CommandChoice[] {
   return (
@@ -94,7 +72,7 @@ type Subcommand = {
   name: string;
   description: string;
   /** takes the notion choices, so a picker is data rather than a code change */
-  options: (choices: ChoiceInput[]) => CommandOption[];
+  options: (choices: ChoiceOption[]) => CommandOption[];
 };
 
 const STRING = 3;
@@ -111,8 +89,8 @@ const USER = 6;
 /**
  * the article picker, which every subcommand about one article takes first.
  *
- * autocompleted rather than choice-listed: there are 138 articles and discord
- * caps a choice list at 25, so the suggestions are computed per keystroke from
+ * autocompleted rather than choice-listed: there are more articles than
+ * discord's 25-choice cap, so the suggestions are computed per keystroke from
  * notion. the value that comes back is a notion page id
  */
 const articleOption = (): CommandOption => ({
@@ -267,7 +245,7 @@ const SUBCOMMANDS: Subcommand[] = [
  * ADR 0009: no notion value is typed into this repo
  */
 function chooser(
-  choices: ChoiceInput[],
+  choices: ChoiceOption[],
   name: string,
   property: string,
   description: string,
@@ -324,7 +302,7 @@ function creditOptions(credit: "author" | "image"): CommandOption[] {
 }
 
 /** the payload to register: `/article`, with everything notion currently offers */
-export function buildCommands(choices: ChoiceInput[]): CommandPayload {
+export function buildCommands(choices: ChoiceOption[]): CommandPayload {
   return [
     {
       name: "article",

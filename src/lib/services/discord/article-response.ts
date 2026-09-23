@@ -7,7 +7,11 @@ import {
 import { card } from "./article-card";
 import { articleUrl } from "~/lib/articles/snapshot";
 import { ARTICLE_PROPERTIES } from "~/lib/articles/config";
-import type { ArticleChange, EditResult } from "~/lib/articles/edit";
+import {
+  editSentence,
+  type ArticleChange,
+  type EditResult,
+} from "~/lib/articles/edit";
 import type { ArticlePage } from "~/lib/articles/page";
 
 const bold = (value: string) => `**${displayText(value, 100)}**`;
@@ -50,28 +54,37 @@ function fallback(
   };
 }
 
-export function articleResponse(
-  result: ArticlePage | EditResult,
-): CommandMessage {
-  if ("status" in result && result.status === "failed") {
-    const notes = result.notes.map((note) => displayText(note, 200));
+/** `/article show`: the card alone */
+export function articleResponse(page: ArticlePage): CommandMessage {
+  return withCard([], page, "Could not display the article.", []);
+}
+
+/** the reply to an edit: what it did, then the card */
+export function editResponse(result: EditResult): CommandMessage {
+  const notes = result.notes.map((note) => displayText(note, 200));
+  if (result.status === "failed")
     return fallback(
       [displayText(result.explanation, 700), ...notes].join("\n"),
       result.pageId ? { id: result.pageId } : undefined,
     );
-  }
-  const page = "status" in result ? result.page : result;
-  const lines =
-    "status" in result
-      ? [
-          ...(result.status === "created"
-            ? ["Created article."]
-            : result.status === "deleted"
-              ? ["Moved article to Notion's Trash."]
-              : result.changes.map(receipt)),
-          ...result.notes.map((note) => displayText(note, 200)),
-        ]
-      : [];
+  const said =
+    result.status === "created" || result.status === "deleted"
+      ? [editSentence(result.status)]
+      : result.changes.map(receipt);
+  return withCard(
+    [...said, ...notes],
+    result.page,
+    editSentence(result.status),
+    notes,
+  );
+}
+
+function withCard(
+  lines: string[],
+  page: ArticlePage,
+  confirmation: string,
+  notes: string[],
+): CommandMessage {
   try {
     const snapshot = card(page);
     const message: CommandMessage = {
@@ -96,20 +109,6 @@ export function articleResponse(
     return message;
   } catch (error) {
     console.error("[article] could not render the article snapshot", error);
-    const confirmation =
-      "status" in result
-        ? result.status === "created"
-          ? "Created article."
-          : result.status === "deleted"
-            ? "Moved article to Notion's Trash."
-            : result.status === "unchanged"
-              ? "Article is unchanged."
-              : "Updated article."
-        : "Could not display the article.";
-    const notes =
-      "status" in result
-        ? result.notes.map((note) => displayText(note, 200))
-        : [];
     return fallback(
       [
         `${confirmation} Open it in Notion to see its properties.`,

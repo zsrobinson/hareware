@@ -23,11 +23,8 @@ export {
   MEMBER_PROPERTIES,
 } from "~/lib/members/config";
 
-/** the database container; `data_sources/{id}` is what actually holds rows */
-export const ARTICLES_DATABASE_ID = "22cbe415-e24c-80aa-9043-e851d9ed4534";
-
 /**
- * the data source inside it.
+ * the Articles data source, which is what holds the rows.
  *
  * pinned rather than resolved through `dataSource()` on every call: that is an
  * extra request in front of every autocomplete, and this id changes only if

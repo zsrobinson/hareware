@@ -10,7 +10,7 @@
 import { easternNow } from "~/lib/eastern";
 
 /** the same calendar date, shifted by whole days, still as `YYYY-MM-DD` */
-export function shiftDate(date: string, days: number) {
+function shiftDate(date: string, days: number) {
   const shifted = new Date(`${date}T00:00:00Z`);
   shifted.setUTCDate(shifted.getUTCDate() + days);
   return shifted.toISOString().slice(0, 10);

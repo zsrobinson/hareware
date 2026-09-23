@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { articleResponse } from "./article-response";
+import { articleResponse, editResponse } from "./article-response";
 import type { ArticlePage } from "~/lib/articles/page";
 
 const page: ArticlePage = {
@@ -11,7 +11,7 @@ const page: ArticlePage = {
 };
 
 test("a successful edit leads with the B2c sentence and shares the show card", () => {
-  const reply = articleResponse({
+  const reply = editResponse({
     status: "updated",
     page,
     changes: [
@@ -30,7 +30,7 @@ test.each([
   ["News", "News"],
   [null, null],
 ])("receipt handles %s → %s", (before, after) => {
-  const receipt = articleResponse({
+  const receipt = editResponse({
     status: before === after ? "unchanged" : "updated",
     page,
     changes: [{ property: "section", before, after }],
@@ -42,7 +42,7 @@ test.each([
 });
 
 test("creation shares the card and preserves member notes", () => {
-  const message = articleResponse({
+  const message = editResponse({
     status: "created",
     page,
     changes: [],
@@ -53,7 +53,7 @@ test("creation shares the card and preserves member notes", () => {
 });
 
 test("deletion says the Article moved to Notion's recoverable Trash", () => {
-  const message = articleResponse({
+  const message = editResponse({
     status: "deleted",
     page: { ...page, in_trash: true },
     changes: [],
@@ -65,7 +65,7 @@ test("deletion says the Article moved to Notion's recoverable Trash", () => {
 
 test("relation changes use the resolved name and counts, never raw relation ids", () => {
   const message = JSON.stringify(
-    articleResponse({
+    editResponse({
       status: "updated",
       page,
       changes: [
@@ -87,7 +87,7 @@ test("relation changes use the resolved name and counts, never raw relation ids"
 
 test("a failed article write retains partial member notes and a Notion link", () => {
   const message = JSON.stringify(
-    articleResponse({
+    editResponse({
       status: "failed",
       explanation: "The article update could not be confirmed.",
       pageId: page.id,
@@ -101,7 +101,7 @@ test("a failed article write retains partial member notes and a Notion link", ()
 });
 
 test("an oversized display still confirms the write, preserves notes and links to Notion", () => {
-  const message = articleResponse({
+  const message = editResponse({
     status: "updated",
     page,
     changes: Array.from({ length: 30 }, () => ({

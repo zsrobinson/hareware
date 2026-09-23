@@ -7,7 +7,7 @@ import {
   type Block,
 } from "~/lib/services/discord/post-message";
 import { easternNow, type EasternNow } from "~/lib/eastern";
-import { failed, misconfigured, ok, skipped, type Result } from "./registry";
+import { failed, misconfigured, ok, skipped, type Result } from "~/lib/result";
 import { postedId } from "~/lib/services/discord/posted-button";
 import { toArticleSlug } from "~/lib/services/wordpress/article-url";
 import { getRecentArticles } from "~/lib/services/wordpress/get-recent-articles";

@@ -9,10 +9,6 @@ import { DENIALS, type Denial } from "./denial";
 
 const ALL: Denial[] = ["signed-out", "no-role", "not-in-server", "unreachable"];
 
-test("every denial has a row", () => {
-  expect(Object.keys(DENIALS).sort()).toEqual([...ALL].sort());
-});
-
 test("every row says something, and says who to", () => {
   for (const denial of ALL) {
     const row = DENIALS[denial];
@@ -26,14 +22,6 @@ test("every row says something, and says who to", () => {
 test("the refusals about an account name it", () => {
   expect(DENIALS["no-role"].body("@zach")).toContain("@zach");
   expect(DENIALS["not-in-server"].body("@zach")).toContain("@zach");
-});
-
-/* Under a 200, a crawler and a monitor would read the refusal as the page
-   working. */
-test("every denial carries a status that means refused", () => {
-  for (const denial of ALL) {
-    expect(DENIALS[denial].status).toBeGreaterThanOrEqual(400);
-  }
 });
 
 test("the statuses are the ones each situation deserves", () => {

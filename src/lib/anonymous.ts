@@ -24,7 +24,7 @@ export function shared(cacheControl: string | null) {
 }
 
 /** the message, so a test can assert the reason rather than the wording */
-export function anonymityError(pathname: string, cacheControl: string | null) {
+function anonymityError(pathname: string, cacheControl: string | null) {
   return (
     `${pathname} renders a viewer but sets "cache-control: ${cacheControl ?? ""}". ` +
     "Either drop `viewer` so the account panel is revealed client-side, " +

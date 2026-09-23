@@ -13,7 +13,8 @@
 
 import { plainText } from "~/lib/services/notion/client";
 import { ARTICLE_PROPERTIES } from "./config";
-import { optionName, type ArticlePage } from "./page";
+import { propertyOf, type ArticlePage } from "./page";
+import { current } from "./write";
 
 // The existing card fields, in the All Articles view's relative order.
 const ROWS = [
@@ -78,32 +79,24 @@ export function articleUrl(
 
 /** The same Article snapshot for show, creation and edits. No reads or writes. */
 export function snapshot(page: ArticlePage): ArticleSnapshot {
-  const property = (key: keyof typeof ARTICLE_PROPERTIES) =>
-    page.properties?.[ARTICLE_PROPERTIES[key].name];
-
   const rows = ROWS.map((key): SnapshotRow => {
-    const value = property(key);
-    const text =
-      key === "publicationDate"
-        ? (value?.date?.start ?? null)
-        : key === "authorByline" || key === "imageByline"
-          ? plainText(value?.rich_text) || null
-          : optionName(value);
+    /* no row is a relation, so the value is text or nothing */
+    const text = current(page, key);
 
     return {
       label: ARTICLE_PROPERTIES[key].name,
-      value: text,
+      value: typeof text === "string" ? text : null,
       status:
         key === "status" || key === "imageStatus"
-          ? { color: value?.status?.color ?? null }
+          ? { color: propertyOf(page, key)?.status?.color ?? null }
           : null,
     };
   });
 
   return {
-    title: plainText(property("headline")?.title),
+    title: plainText(propertyOf(page, "headline")?.title),
     url: articleUrl(page),
-    accentColor: property("status")?.status?.color ?? null,
+    accentColor: propertyOf(page, "status")?.status?.color ?? null,
     rows,
   };
 }

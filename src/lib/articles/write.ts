@@ -16,9 +16,9 @@
 */
 
 import { plainText } from "~/lib/services/notion/client";
-import { assertProperties, type Schema } from "./choices";
+import { notSharing, type Schema } from "./choices";
 import { ARTICLE_PROPERTIES } from "./config";
-import { optionName, relationIds, type ArticlePage } from "./page";
+import { optionName, propertyOf, relationIds, type ArticlePage } from "./page";
 
 /** the key of an Articles property, as `config.ts` names it */
 export type PropertyKey = keyof typeof ARTICLE_PROPERTIES;
@@ -114,7 +114,7 @@ function relationValue(ids: string[]): PropertyValue {
 
 /** Read raw values once for planning, confirmation and logging. */
 export function current(page: ArticlePage, property: PropertyKey): ChangeValue {
-  const value = page.properties?.[ARTICLE_PROPERTIES[property].name];
+  const value = propertyOf(page, property);
   switch (ARTICLE_PROPERTIES[property].type) {
     case "title":
       return plainText(value?.title).trim() || null;
@@ -192,19 +192,13 @@ function refusal(
   schema: Schema,
   properties: PropertyKey[],
 ): string | undefined {
-  /* widened to string: the names are a union of literals, and a missing
-     property arrives from the schema as plain text */
-  const names: string[] = properties.map((key) => ARTICLE_PROPERTIES[key].name);
-  const missing = assertProperties(schema).filter((miss) =>
-    names.includes(miss.name),
+  const missing = notSharing(
+    schema,
+    properties.map((key) => ARTICLE_PROPERTIES[key].name),
   );
-  if (missing.length === 0) return undefined;
-
-  return `notion is not sharing ${missing
-    .map((miss) => `${miss.name} (${miss.found ?? "absent"})`)
-    .join(
-      ", ",
-    )}; refusing to write it rather than overwriting what we cannot see`;
+  return missing
+    ? `${missing}; refusing to write it rather than overwriting what we cannot see`
+    : undefined;
 }
 
 /* ---- planning ----------------------------------------------------------- */

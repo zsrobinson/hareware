@@ -78,11 +78,7 @@ test("merges a pair the fresh roster still groups, naming both from notion", asy
   });
 
   expect(response.status).toBe(200);
-  expect(writes.mergeMembers).toHaveBeenCalledWith(
-    expect.objectContaining({ NOTION_TOKEN: "secret" }),
-    KEEP,
-    DROP,
-  );
+  expect(writes.mergeMembers).toHaveBeenCalledWith("secret", KEEP, DROP);
   expect(log.record).toHaveBeenCalledWith(undefined, {
     source: "button",
     action: "roster-edit",

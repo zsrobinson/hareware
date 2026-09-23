@@ -14,7 +14,6 @@ import {
   text,
 } from "~/lib/services/discord/post-message";
 import {
-  dataSource,
   propertyOfType,
   query,
   richText,
@@ -23,14 +22,17 @@ import {
 } from "~/lib/services/notion/client";
 import { easternDayWindow, startsOn } from "~/lib/services/notion/dates";
 import { easternTime, type EasternNow } from "~/lib/eastern";
-import { MEETING_PROPERTIES, type MeetingType } from "~/lib/members/config";
+import {
+  MEETINGS_DATA_SOURCE_ID,
+  MEETING_PROPERTIES,
+  MEETING_TYPE,
+} from "~/lib/members/config";
 import { misconfigured, ok, skipped, type Result } from "./registry";
 import {
   BOARD_CHANNEL_ID,
   MEETING_DATE_PROPERTY,
   MEETING_MENTION_ROLE_ID,
   MEETING_TITLE_PREFIX,
-  MEETINGS_DATABASE_ID,
 } from "./config";
 
 export async function sendMeetingReminder(
@@ -42,7 +44,6 @@ export async function sendMeetingReminder(
   const missing = [
     !env.NOTION_TOKEN && "NOTION_TOKEN",
     !env.DISCORD_BOT_TOKEN && "DISCORD_BOT_TOKEN",
-    !MEETINGS_DATABASE_ID && "MEETINGS_DATABASE_ID",
   ].filter(Boolean);
   /* not `ok`: nothing ran, and a row saying otherwise is the failure ADR 0007
      exists to prevent */
@@ -50,7 +51,7 @@ export async function sendMeetingReminder(
     return misconfigured(`meeting reminder unset: ${missing.join(", ")}`);
 
   const token = env.NOTION_TOKEN!;
-  const source = await dataSource(MEETINGS_DATABASE_ID!, token);
+  const source = MEETINGS_DATA_SOURCE_ID;
   const property = await propertyOfType(
     source,
     token,
@@ -101,9 +102,6 @@ export async function sendMeetingReminder(
   return ok(`${verb} meeting reminder for "${name}"${untyped}`);
 }
 
-/** the `Type` a meeting must carry for the board reminder to claim it */
-const BOARD_MEETING_TYPE: MeetingType = "Editorial Board";
-
 /**
  * today's meeting of the kind we care about, if there is one.
  *
@@ -147,7 +145,7 @@ function isBoardMeeting(page: NotionPage): boolean {
   /* an explicitly typed row is answered by its type, including when the answer
      is no — a General Body meeting whose title happens to begin "Editorial
      Board" must not ping the board */
-  if (type) return type === BOARD_MEETING_TYPE;
+  if (type) return type === MEETING_TYPE.editorialBoard;
 
   // titles carry stray trailing spaces, so compare a trimmed lowercase form
   return title(page)

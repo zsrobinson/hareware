@@ -3,7 +3,7 @@ import { mergeMembers } from "./write";
 
 afterEach(() => vi.unstubAllGlobals());
 
-const env = { NOTION_TOKEN: "secret" } as unknown as Env;
+const TOKEN = "secret";
 
 /** a relation as notion puts it inside a page object, cut short or not */
 const relation = (ids: string[], hasMore = false) => ({
@@ -75,7 +75,7 @@ test("a truncated relation is read in full before the union is written", async (
     }),
   );
 
-  await mergeMembers(env, "keep", "drop");
+  await mergeMembers(TOKEN, "keep", "drop");
 
   const kept = written!.Attendance.relation.map((one) => one.id);
 
@@ -96,7 +96,7 @@ test("a relation notion answered in full costs no second read", async () => {
   });
   vi.stubGlobal("fetch", fetched);
 
-  await mergeMembers(env, "keep", "drop");
+  await mergeMembers(TOKEN, "keep", "drop");
 
   expect(
     fetched.mock.calls.filter(([url]) => String(url).includes("/properties/")),
@@ -116,7 +116,7 @@ test("an unreadable relation refuses the merge rather than emptying it", async (
     }),
   );
 
-  await expect(mergeMembers(env, "keep", "drop")).rejects.toThrow(
+  await expect(mergeMembers(TOKEN, "keep", "drop")).rejects.toThrow(
     /not readable/,
   );
 });
@@ -153,7 +153,9 @@ test("refuses two rows linked to different Discord accounts", async () => {
     page(discord("342850506328117249")),
   );
 
-  await expect(mergeMembers(env, "keep", "drop")).rejects.toThrow(/two people/);
+  await expect(mergeMembers(TOKEN, "keep", "drop")).rejects.toThrow(
+    /two people/,
+  );
   expect(patched).not.toHaveBeenCalled();
 });
 
@@ -163,12 +165,12 @@ test("the survivor gains a status only where it had none", async () => {
   });
 
   const gains = merging(page(status(null)), page(status("Grad")));
-  await mergeMembers(env, "keep", "drop");
+  await mergeMembers(TOKEN, "keep", "drop");
   expect(gains.mock.calls[0]![1].properties.Status).toEqual({
     select: { name: "Grad" },
   });
 
   const keeps = merging(page(status("Undergrad")), page(status("Grad")));
-  await mergeMembers(env, "keep", "drop");
+  await mergeMembers(TOKEN, "keep", "drop");
   expect(keeps.mock.calls[0]![1].properties.Status).toBeUndefined();
 });

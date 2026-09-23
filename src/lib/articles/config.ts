@@ -11,18 +11,6 @@
   reads them is.
 */
 
-/*
-  Members moved to `~/lib/members/config` when ADR 0010 made it a domain of its
-  own — it now carries emails, a student status and an attendance history, none
-  of which Articles has an opinion about. Re-exported rather than repointed
-  everywhere, because a byline resolving to a person is still an Articles
-  concern and this is the file that concern reads its names from.
-*/
-export {
-  MEMBERS_DATA_SOURCE_ID,
-  MEMBER_PROPERTIES,
-} from "~/lib/members/config";
-
 /**
  * the Articles data source, which is what holds the rows.
  *

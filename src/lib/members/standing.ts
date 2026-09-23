@@ -12,7 +12,7 @@
 */
 
 import { plural } from "~/lib/utils";
-import { ALUM_STATUS, type MeetingType } from "./config";
+import { ALUM_STATUS, MEETING_TYPE, type MeetingType } from "./config";
 import type { ContributionRecord, MeetingRecord, Person } from "./records";
 
 /**
@@ -93,15 +93,6 @@ export type Standing = {
   statusUnknown: boolean;
 };
 
-/*
-  the two types that count, named from `MEETING_TYPES` rather than spelled
-  again. `config.ts` claims to be the one place notion's select options are
-  written down, and a second spelling here would make `tally` return zero
-  counts — silently, and only for whichever type somebody re-worded
-*/
-const GENERAL_BODY: MeetingType = "General Body";
-const VOLUNTEER: MeetingType = "Volunteer Event";
-
 /** inclusive on both ends — ISO days compare correctly as strings */
 function within(day: string, from: string, to: string): boolean {
   return day >= from && day <= to;
@@ -135,8 +126,10 @@ export function standings(
     roster is small today, but this is O(people × events) the naive way and the
     attendance relation grows by a whole meeting's worth of rows every week
   */
-  const attended = tally(inWindow, GENERAL_BODY);
-  const volunteered = tally(inWindow, VOLUNTEER);
+  /* through `MEETING_TYPE`: a second spelling here would make `tally` return
+     zero counts, silently, for whichever type somebody re-worded */
+  const attended = tally(inWindow, MEETING_TYPE.generalBody);
+  const volunteered = tally(inWindow, MEETING_TYPE.volunteer);
 
   /*
     counted from the articles, never from `person.contributions`.

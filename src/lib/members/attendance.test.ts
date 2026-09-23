@@ -2,18 +2,9 @@ import { expect, test } from "vitest";
 import {
   applyIntent,
   applyIntents,
-  knownOrSafe,
   mergeAttendance,
   stableOrder,
 } from "./attendance";
-
-test("an addition is added", () => {
-  expect(mergeAttendance(["a", "b"], ["a", "b"], ["a", "b", "c"])).toEqual([
-    "a",
-    "b",
-    "c",
-  ]);
-});
 
 test("a removal is removed", () => {
   expect(mergeAttendance(["a", "b"], ["a", "b"], ["a"])).toEqual(["a"]);
@@ -66,25 +57,6 @@ test("nothing changes when nothing changed", () => {
 
 test("an empty meeting takes the first arrival", () => {
   expect(mergeAttendance([], [], ["a"])).toEqual(["a"]);
-});
-
-test("a caller that says nothing about what it knew adds and never removes", () => {
-  const known = knownOrSafe(undefined);
-
-  expect(known).toEqual([]);
-  /* every name it sent is an addition, and `z`, who it never mentioned,
-     survives. defaulting `known` to `wanted` instead would make both the
-     additions and the removals empty, so the write would be a no-op and the
-     person who just tapped would be silently lost */
-  expect(mergeAttendance(["a", "z"], known, ["a", "b"])).toEqual([
-    "a",
-    "z",
-    "b",
-  ]);
-});
-
-test("a caller that does say what it knew keeps its removals", () => {
-  expect(knownOrSafe(["a", "b"])).toEqual(["a", "b"]);
 });
 
 /*

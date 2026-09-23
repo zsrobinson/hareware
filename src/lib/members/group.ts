@@ -26,6 +26,7 @@
   the export answers the real question every time and remembers nothing.
 */
 
+import { normaliseEmail } from "./match";
 import type { Person } from "./records";
 
 /** the domains that auto-add, spelled as the university spells them */
@@ -50,7 +51,7 @@ export const GROUP_MEMBERS_URL =
 export function emailsInExport(csv: string): Set<string> {
   const found = csv.match(/[^\s,;<>"']+@[^\s,;<>"']+\.[^\s,;<>"']+/g) ?? [];
 
-  return new Set(found.map((email) => email.trim().toLowerCase()));
+  return new Set(found.map(normaliseEmail));
 }
 
 /** what the comparison found */
@@ -84,7 +85,7 @@ export function compareToGroup(
   const claimed = new Set<string>();
 
   for (const person of roster) {
-    const email = person.email?.trim().toLowerCase();
+    const email = normaliseEmail(person.email);
 
     if (!email) {
       /* a row with no address is unreachable whatever it says about
@@ -119,7 +120,7 @@ export function compareToGroup(
  * is better than a missing email silently passed over
  */
 export function isExternalAddress(email: string | null): boolean {
-  const domain = (email ?? "").trim().toLowerCase().split("@")[1] ?? "";
+  const domain = normaliseEmail(email).split("@")[1] ?? "";
 
   return !UNIVERSITY_DOMAINS.includes(domain);
 }
@@ -152,10 +153,9 @@ export type EmailProblem = "missing" | "malformed" | "outside";
 const SHAPED_LIKE_AN_ADDRESS = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 
 export function emailProblem(email: string | null): EmailProblem | null {
-  const address = (email ?? "").trim();
-  if (!address) return "missing";
-  if (!SHAPED_LIKE_AN_ADDRESS.test(address)) return "malformed";
-  if (isExternalAddress(address)) return "outside";
+  if (!email) return "missing";
+  if (!SHAPED_LIKE_AN_ADDRESS.test(email)) return "malformed";
+  if (isExternalAddress(email)) return "outside";
 
   return null;
 }
@@ -171,9 +171,33 @@ export function emailProblem(email: string | null): EmailProblem | null {
  */
 export function identifiesNobody(person: Person): boolean {
   return (
-    !person.email?.trim() &&
+    !person.email &&
     !person.discordId &&
     person.contributions === 0 &&
     !person.status
   );
+}
+
+/**
+ * the roster's unusable addresses, each list sorted by name so it does not
+ * reshuffle between visits.
+ *
+ * text that is not an address and a real address outside the university are
+ * one list, because the fix and the question are the same for both
+ */
+export function emailProblems(roster: Person[]): {
+  missing: Person[];
+  wrongDomain: Person[];
+} {
+  const sorted = [...roster].sort((a, b) => a.name.localeCompare(b.name));
+
+  return {
+    missing: sorted.filter(
+      (person) => emailProblem(person.email) === "missing",
+    ),
+    wrongDomain: sorted.filter((person) => {
+      const problem = emailProblem(person.email);
+      return problem === "malformed" || problem === "outside";
+    }),
+  };
 }

@@ -48,6 +48,10 @@ export const MEMBER_PROPERTIES = {
   contributions: { name: "Contributions", type: "formula" },
   /** the other side of Meetings' `Attendees` */
   attendance: { name: "Attendance", type: "relation" },
+  /** the Articles this person wrote */
+  articles: { name: "Articles", type: "relation" },
+  /** the Articles this person made images for */
+  images: { name: "Images", type: "relation" },
 } as const;
 
 /**
@@ -102,16 +106,9 @@ export function alumOptionMissing(options: string[]): boolean {
   return options.length > 0 && !options.includes(ALUM_STATUS);
 }
 
-/** the meetings database container; `data_sources/{id}` holds the rows */
-export const MEETINGS_DATABASE_ID = "22cbe415e24c80299d53e9fa048f0ca5";
-
 /**
- * the data source inside it.
- *
- * pinned rather than resolved on every call, the same way Articles is. the
- * meeting reminder still resolves it through `dataSource()` because it also
- * discovers which property holds the date, and changing that is not this
- * document's business
+ * the Meetings data source. `databases/{id}` holds no rows and has no query
+ * endpoint; the data source inside it does
  */
 export const MEETINGS_DATA_SOURCE_ID = "22cbe415-e24c-80d8-ba6b-000b75be27d3";
 
@@ -134,13 +131,9 @@ export const MEETING_PROPERTIES = {
  * magazine design sessions have no type of their own. they are not a kind of
  * meeting anybody counts, so giving them one would imply otherwise
  */
-export const MEETING_TYPES = [
-  "General Body",
-  "Volunteer Event",
-  "Editorial Board",
-] as const;
-export type MeetingType = (typeof MEETING_TYPES)[number];
-
-export function isMeetingType(value: string | null): value is MeetingType {
-  return (MEETING_TYPES as readonly string[]).includes(value ?? "");
-}
+export const MEETING_TYPE = {
+  generalBody: "General Body",
+  volunteer: "Volunteer Event",
+  editorialBoard: "Editorial Board",
+} as const;
+export type MeetingType = (typeof MEETING_TYPE)[keyof typeof MEETING_TYPE];

@@ -1,5 +1,7 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
+import { toast } from "sonner";
 import type { EditableField } from "~/components/member-entry";
+import { StatusPicker } from "~/components/status-picker";
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
@@ -11,11 +13,10 @@ import {
 } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import { normaliseName } from "~/lib/articles/member";
-import { shownName } from "~/lib/members/kiosk";
-import { notify } from "~/lib/notify";
+import { normaliseName } from "~/lib/members/match";
 import type { Person } from "~/lib/members/records";
 import { postJson } from "~/lib/post-json";
+import { errorMessage } from "~/lib/utils";
 
 /*
   the Members database, edited by the person it is about, at the meeting.
@@ -47,7 +48,6 @@ type Props = {
   guild: GuildOption[];
   /** notion's own Status options, read from the schema on every page load */
   statuses: string[];
-  /** discord profiles, so a linked row is titled by the handle the room knows */
 };
 
 export function MemberEditDialog({
@@ -83,7 +83,7 @@ function Body({
   statuses,
 }: Props & { editing: Editing }) {
   const { field, person } = editing;
-  const called = shownName(person);
+  const called = person.name;
   const [busy, setBusy] = useState(false);
   const [discordId, setDiscordId] = useState(person.discordId ?? "");
   const [query, setQuery] = useState("");
@@ -123,10 +123,10 @@ function Body({
       await postJson(path, { pageId: person.pageId, ...body });
 
       onSaved(next);
-      notify.ok(said);
+      toast.success(said);
       onClose();
     } catch (thrown) {
-      notify.failed(thrown instanceof Error ? thrown.message : String(thrown));
+      toast.error(errorMessage(thrown));
     } finally {
       setBusy(false);
     }
@@ -139,25 +139,20 @@ function Body({
           <DialogTitle>{called}'s status</DialogTitle>
           <DialogDescription>Alumni do not vote.</DialogDescription>
         </DialogHeader>
-        <div className="flex flex-wrap gap-2">
-          {statuses.map((status) => (
-            <Button
-              key={status}
-              variant={person.status === status ? "default" : "outline"}
-              disabled={busy}
-              onClick={() =>
-                void save(
-                  "/api/members/status",
-                  { status },
-                  { ...person, status },
-                  `Status set to ${status}`,
-                )
-              }
-            >
-              {status}
-            </Button>
-          ))}
-        </div>
+        <StatusPicker
+          statuses={statuses}
+          value={person.status}
+          hideLabel
+          disabled={busy}
+          onPick={(status) =>
+            void save(
+              "/api/members/status",
+              { status },
+              { ...person, status },
+              `Status set to ${status}`,
+            )
+          }
+        />
       </>
     );
   }

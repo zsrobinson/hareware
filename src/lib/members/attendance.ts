@@ -46,21 +46,6 @@ export function mergeAttendance(
 }
 
 /**
- * the safe reading of a device that did not say what it knew.
- *
- * an empty `known`, not `wanted`. Empty means every name it sent is an
- * addition and none is a removal, which is union-only: an older page, or a
- * caller that forgets the field, can add somebody and can never delete one.
- *
- * `wanted` looks like the natural default and is the wrong one. It makes the
- * additions and the removals both empty, so the write becomes a no-op and a
- * person who tapped their name is silently not recorded. A test pins this
- */
-export function knownOrSafe(known: string[] | undefined): string[] {
-  return known ?? [];
-}
-
-/**
  * one tap, before it has been anywhere.
  *
  * a tap is an intent and not a list. holding it that way is what makes a

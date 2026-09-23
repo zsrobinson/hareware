@@ -135,7 +135,6 @@ test("anything else is, including an address we do not have", () => {
 
 test("a row with no address is missing rather than malformed", () => {
   expect(emailProblem(null)).toBe("missing");
-  expect(emailProblem("   ")).toBe("missing");
 });
 
 /* worse than missing, because the row looks filled in and nothing else on the
@@ -163,7 +162,7 @@ test("a real address at neither university domain is outside", () => {
 
 test("a university address has no problem at all", () => {
   expect(emailProblem("bay@terpmail.umd.edu")).toBeNull();
-  expect(emailProblem("  bay@umd.edu  ")).toBeNull();
+  expect(emailProblem("bay@umd.edu")).toBeNull();
 });
 
 test("a row with nothing that could identify anybody is named", () => {

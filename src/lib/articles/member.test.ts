@@ -1,24 +1,18 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import {
-  matchMembers,
-  normaliseName,
-  resolveMember,
-  type MemberPage,
-} from "./member";
-import { MEMBERS_DATA_SOURCE_ID } from "./config";
+import type { Person } from "~/lib/members/records";
+import { MEMBERS_DATA_SOURCE_ID } from "~/lib/members/config";
+import { matchMembers, resolveMember } from "./member";
 
 const env = { NOTION_TOKEN: "notion-token" } as unknown as Env;
 
-/** a Members row, as notion returns it */
-const member = (id: string, name: string, discordId?: string): MemberPage => ({
-  id,
-  properties: {
-    Name: { type: "title", title: [{ plain_text: name }] },
-    "Discord ID": {
-      type: "rich_text",
-      rich_text: discordId ? [{ plain_text: discordId }] : [],
-    },
-  },
+/** a Members row, as the roster reads it */
+const member = (id: string, name: string, discordId?: string): Person => ({
+  pageId: id,
+  name,
+  discordId: discordId ?? null,
+  email: null,
+  status: null,
+  contributions: 0,
 });
 
 /*
@@ -31,21 +25,6 @@ const NEIGHBOUR = "1234567890123456780";
 
 beforeEach(() => vi.clearAllMocks());
 afterEach(() => vi.unstubAllGlobals());
-
-/* ---- normalising a name ------------------------------------------------- */
-
-test("names match across case, accents, punctuation and spacing", () => {
-  expect(normaliseName("Gale de Silva")).toBe(normaliseName("gale de silva"));
-  expect(normaliseName("Zoë O'Brien")).toBe(normaliseName("Zoe OBrien"));
-  expect(normaliseName("  Matthew   Gray ")).toBe(
-    normaliseName("Matthew Gray"),
-  );
-  expect(normaliseName("Matt G.")).toBe(normaliseName("matt g"));
-});
-
-test("different people do not normalise to the same name", () => {
-  expect(normaliseName("Matthew Gray")).not.toBe(normaliseName("Mathew Gray"));
-});
 
 /* ---- matching ----------------------------------------------------------- */
 
@@ -167,7 +146,19 @@ test("an empty Discord ID cell is absence, not a match on the empty string", () 
 
 test("resolving queries the Members data source and matches what came back", async () => {
   const fetchMock = vi.fn(async () =>
-    Response.json({ results: [member("m1", "Zachary Robinson")] }),
+    Response.json({
+      results: [
+        {
+          id: "m1",
+          properties: {
+            Name: {
+              type: "title",
+              title: [{ plain_text: "Zachary Robinson" }],
+            },
+          },
+        },
+      ],
+    }),
   );
   vi.stubGlobal("fetch", fetchMock);
 

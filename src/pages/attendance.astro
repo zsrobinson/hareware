@@ -57,10 +57,9 @@ const data = await kioskData(
   stays a page prop rather than joining the query the kiosk refetches
 */
 const guild = await guildMembers();
-const rosterFaces = await faces(
-  data.candidates.map((person) => person.discordId),
-  async () => guild,
-);
+/* every account rather than the roster's, so one linked from the Discord chip
+   tonight has its picture too */
+const rosterFaces = await faces([...guild.keys()], async () => guild);
 const guildOptions = [...guild].map(([id, profile]) => ({
   id,
   username: profile.username,

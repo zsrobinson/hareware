@@ -2,7 +2,13 @@ import { useState } from "react";
 import { Button } from "./ui/button";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
-export function CopyButton({ id }: { id: string }) {
+export function CopyButton({
+  id,
+  label = "Copy",
+}: {
+  id: string;
+  label?: string;
+}) {
   const [copied, setCopied] = useState(false);
 
   return (
@@ -29,6 +35,7 @@ export function CopyButton({ id }: { id: string }) {
             console.error("could not write to the clipboard", error);
           });
       }}
+      aria-label={label}
       variant="outline"
       size="icon"
       className="px-3"

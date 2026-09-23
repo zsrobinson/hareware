@@ -53,7 +53,7 @@ export { BadRequest };
 const ACTION: Invocation["action"] = "roster-edit";
 
 /** what a mutation hands back: a line for the log, and anything the island needs */
-export type MutationResult = {
+type MutationResult = {
   /** the log line, in the words the log page prints */
   summary: string;
   /** returned to the caller as json; the island re-renders from it */
@@ -114,6 +114,13 @@ export function rosterRead<T>(
 }
 
 /**
+ * the secrets a mutation talks to notion and discord with, checked here once.
+ * Discord's is optional: most routes never use it, and those that do refuse
+ * without it
+ */
+type Tokens = { notion: string; discord: string | undefined };
+
+/**
  * a POST route that mutates the roster.
  *
  * `parse` validates the decoded body and throws `BadRequest` with a message
@@ -127,11 +134,27 @@ export function rosterRead<T>(
  */
 export function rosterRoute<Input>(
   parse: (body: unknown) => Input,
-  run: (input: Input, actor: string) => Promise<MutationResult>,
+  run: (input: Input, tokens: Tokens) => Promise<MutationResult>,
 ): APIRoute {
   return async ({ request }) => {
     const who = await admission(request);
     if (!who.admitted) return who.refusal;
+
+    if (!env.NOTION_TOKEN) {
+      const why = "NOTION_TOKEN is not set";
+      await record(env.DB, {
+        source: "button",
+        action: ACTION,
+        outcome: "misconfigured",
+        summary: `roster edit not attempted: ${why}`,
+        actor: who.actor,
+      });
+      return json({ error: why }, 500);
+    }
+    const tokens = {
+      notion: env.NOTION_TOKEN,
+      discord: env.DISCORD_BOT_TOKEN,
+    };
 
     let input: Input;
     try {
@@ -143,7 +166,7 @@ export function rosterRoute<Input>(
     }
 
     try {
-      const { summary, data } = await run(input, who.actor);
+      const { summary, data } = await run(input, tokens);
 
       await record(env.DB, {
         source: "button",
@@ -266,8 +289,11 @@ export function requireEmail(body: unknown, field: string): string {
  * refuses a status Notion does not have. Notion's `select` accepts a name it
  * has never seen and adds it, which is how a fourth status appears by typo
  */
-export async function requireStatus(status: string): Promise<void> {
-  const options = await statusOptions(env.NOTION_TOKEN!);
+export async function requireStatus(
+  token: string,
+  status: string,
+): Promise<void> {
+  const options = await statusOptions(token);
   if (!options.includes(status)) {
     throw new BadRequest(
       `${status} is not one of the statuses Notion has: ${options.join(", ")}`,
@@ -281,13 +307,12 @@ export async function requireStatus(status: string): Promise<void> {
  * the reconciler exists to find. `pageId` is the row being written, if any
  */
 export async function requireFreeDiscordId(
+  token: string | undefined,
   discordId: string,
   roster: Person[],
   pageId: string | null,
 ): Promise<Profile> {
-  const profile = (await readGuildMembers(env.DISCORD_BOT_TOKEN)).get(
-    discordId,
-  );
+  const profile = (await readGuildMembers(token)).get(discordId);
   if (!profile) {
     throw new BadRequest(
       "that account is not in the server, so an editor has to send them an invite first",

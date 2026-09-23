@@ -8,7 +8,6 @@ import {
   offerableMeetings,
   searchCandidates,
   discordHandle,
-  shownName,
 } from "./kiosk";
 import type { MeetingRecord, Person } from "./records";
 
@@ -182,7 +181,7 @@ describe("initials", () => {
   });
 });
 
-describe("shownName and discordHandle", () => {
+describe("discordHandle", () => {
   const face = {
     "1": {
       username: "zsrobinson",
@@ -190,14 +189,6 @@ describe("shownName and discordHandle", () => {
       avatarUrl: "https://cdn.discordapp.com/avatars/1.png",
     },
   };
-
-  /* the handle names the linked account and belongs on the chip. as a title it
-     hid the name somebody walks up to the kiosk looking for */
-  it("titles a row with the notion name even when a discord row is linked", () => {
-    expect(
-      shownName(person({ name: "Zachary Robinson", discordId: "1" })),
-    ).toBe("Zachary Robinson");
-  });
 
   it("gives the chip the discord handle where the row is linked", () => {
     expect(

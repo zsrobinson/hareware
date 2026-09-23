@@ -38,10 +38,10 @@ import type { KioskData } from "~/lib/members/views";
   test's room already signed in
 */
 let AttendanceKiosk: typeof import("./attendance-kiosk").AttendanceKiosk;
-let notify: typeof import("~/lib/notify").notify;
+let toast: typeof import("sonner").toast;
 
-vi.mock("~/lib/notify", () => ({
-  notify: { ok: vi.fn(), failed: vi.fn() },
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 /*
@@ -96,7 +96,7 @@ let fake: Fake;
 beforeEach(async () => {
   vi.resetModules();
   ({ AttendanceKiosk } = await import("./attendance-kiosk"));
-  ({ notify } = await import("~/lib/notify"));
+  ({ toast } = await import("sonner"));
 
   fake = {
     attendees: [],
@@ -303,13 +303,18 @@ test("somebody another device signed in survives this device's writes", async ()
   act(() => signIn(NAMES[0]!));
   await waitFor(() => expect(fake.attendees).toEqual(["p1"]));
 
-  fake.attendees = [...fake.attendees, "p9"];
+  fake.attendees = [...fake.attendees, "p3"];
 
   act(() => signIn(NAMES[1]!));
-  await waitFor(() => expect(fake.writes).toHaveLength(2));
-  await waitFor(() => expect(fake.attendees).toContain("p9"));
+  await waitFor(() => expect(signedIn()).toHaveLength(3));
 
-  expect(fake.attendees).toEqual(["p1", "p9", "p2"]);
+  act(() => signIn(NAMES[3]!));
+  await waitFor(() => expect(fake.writes).toHaveLength(3));
+  await waitFor(() => expect(screen.queryByText("saving…")).toBeNull());
+
+  expect(order().sort()).toEqual(
+    ["Ana Diaz", "Ben Okafor", "Cass Lin", "Dev Patel"].sort(),
+  );
 });
 
 /* the promise the kiosk makes: nobody is shown as present whom notion refused */
@@ -321,7 +326,7 @@ test("a write that failed takes the tap back off the screen", async () => {
   expect(order()).toEqual([NAMES[0]]);
 
   await waitFor(() => expect(signedIn()).toHaveLength(0));
-  expect(notify.failed).toHaveBeenCalledWith(
+  expect(toast.error).toHaveBeenCalledWith(
     expect.stringContaining("notion refused"),
   );
 });
@@ -397,4 +402,15 @@ test("a part of notion the kiosk could not read is said on screen", () => {
   expect(screen.getByRole("alert").textContent).toBe(
     "Members has no readable Status select",
   );
+});
+
+test("a new member's status choices are one labelled group", () => {
+  draw();
+
+  fireEvent.change(screen.getByLabelText("Type your name"), {
+    target: { value: "Fern Ortiz" },
+  });
+
+  const status = screen.getByRole("group", { name: "Status" });
+  expect(within(status).getAllByRole("button")).toHaveLength(3);
 });

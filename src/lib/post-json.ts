@@ -15,7 +15,7 @@
 */
 
 /** what every mutation route says back, whatever else it adds */
-export type Said = { summary?: string; error?: string };
+type Said = { summary?: string; error?: string };
 
 /**
  * posts json and returns the parsed body.
@@ -43,8 +43,8 @@ export async function postJson<T = unknown>(
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  /* a route that failed before it could answer json — a 404 from the gate, say
-     — leaves nothing to parse, and the status is then the only thing to say */
+  /* a failure that never reached a route — a proxy's error page, say — leaves
+     nothing to parse, and the status is then the only thing to say */
   const said = (await response.json().catch(() => ({}))) as T & Said;
 
   if (!response.ok) {

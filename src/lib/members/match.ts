@@ -13,9 +13,26 @@
   reconciler, and the unattended cron acts on exactly one of them.
 */
 
-import { normaliseName } from "~/lib/articles/member";
-import type { Application } from "~/lib/services/discord/join-requests";
+import type { Application } from "./applications";
 import type { Person } from "./records";
+
+/**
+ * a name reduced to what two spellings of one person share.
+ *
+ * casefolded, accents stripped, punctuation dropped and whitespace collapsed,
+ * so "Zoë O'Brien" and "zoe obrien" are one person. it goes no further than
+ * that: "Matthew" and "Mathew" stay two people, because a matcher loose enough
+ * to join them is loose enough to join two real members
+ */
+export function normaliseName(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[^\p{Letter}\p{Number}\s]/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
 
 /** an email reduced to what two spellings of one address share */
 export function normaliseEmail(email: string | null): string {
@@ -113,12 +130,12 @@ export function resolveApplication(
   );
   if (missing.length > 0) return { status: "incomplete", application, missing };
 
-  const emailMatches = email
-    ? free.filter((person) => normaliseEmail(person.email) === email)
-    : [];
-  const nameMatches = name
-    ? free.filter((person) => normaliseName(person.name) === name)
-    : [];
+  const emailMatches = free.filter(
+    (person) => normaliseEmail(person.email) === email,
+  );
+  const nameMatches = free.filter(
+    (person) => normaliseName(person.name) === name,
+  );
 
   /*
     the confident case, and the one the kiosk is designed to produce: the
@@ -150,9 +167,9 @@ export function resolveApplication(
     };
   }
 
-  const similar = name
-    ? free.filter((person) => nearName(normaliseName(person.name), name))
-    : [];
+  const similar = free.filter((person) =>
+    nearName(normaliseName(person.name), name),
+  );
 
   if (similar.length > 0)
     return { status: "similar", application, people: similar };
@@ -172,7 +189,7 @@ export function resolveApplication(
  * that actually happen when somebody types their own name at a kiosk; two edits
  * starts joining unrelated short names
  */
-export function nearName(a: string, b: string): boolean {
+function nearName(a: string, b: string): boolean {
   if (!a || !b || a === b) return false;
   if (Math.abs(a.length - b.length) > 1) return false;
 
@@ -340,21 +357,12 @@ function nearDuplicates(people: Person[]): Duplicate[] {
       }
 
       const ends = firstAndLast(a.name) || firstAndLast(b.name);
-      if (
-        ends &&
-        firstAndLast(a.name) === ends &&
-        firstAndLast(b.name) === ends
-      ) {
-        found.push({
-          on: "same-ends",
-          value: `${a.name} · ${b.name}`,
-          people: [a, b],
-        });
-        continue;
-      }
+      const sameEnds =
+        firstAndLast(a.name) === ends && firstAndLast(b.name) === ends;
+      /* or one carries a middle name and the other does not */
+      const oneMiddle = one === ends || two === ends;
 
-      /* one carries a middle name and the other does not */
-      if (ends && (one === ends || two === ends)) {
+      if (ends && (sameEnds || oneMiddle)) {
         found.push({
           on: "same-ends",
           value: `${a.name} · ${b.name}`,
@@ -500,4 +508,24 @@ export const WHY_ALIKE: Record<Duplicate["on"], string> = {
   email: "the same email",
   "near-name": "one letter apart",
   "same-ends": "a middle name on one and not the other",
+};
+
+/* exact matches are almost always one person; the other two are guesses, and a
+   page that shouted equally about both would train an editor to ignore the
+   ones that matter */
+export const SURE: Record<Duplicate["on"], boolean> = {
+  name: true,
+  email: true,
+  "near-name": false,
+  "same-ends": false,
+};
+
+/** why an application needs a person to pick its row, in the words the pages use */
+export const WHY_UNDECIDED: Record<
+  Extract<Resolution, { people: Person[] }>["status"],
+  string
+> = {
+  similar: "too close to call",
+  conflicted: "two rows disagree",
+  ambiguous: "could be either",
 };

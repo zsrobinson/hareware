@@ -3,12 +3,16 @@ import {
   AtSignIcon,
   CheckIcon,
   ChevronDownIcon,
-  CopyIcon,
   ExternalLinkIcon,
   GraduationCapIcon,
   MailIcon,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
+import { CopyButton } from "~/components/copy-button";
+import { NewMemberForm, type NewMember } from "~/components/new-member-form";
+import { AlumMissing, Problem } from "~/components/problem";
+import { StatusPicker } from "~/components/status-picker";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -27,15 +31,14 @@ import {
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
-import { defaultStatus } from "~/lib/members/config";
 import {
   compareToGroup,
   emailProblem,
+  emailProblems,
   emailsInExport,
   GROUP_MEMBERS_URL,
   identifiesNobody,
   isExternalAddress,
-  type EmailProblem,
 } from "~/lib/members/group";
 import {
   MemberEditDialog,
@@ -44,20 +47,20 @@ import {
 import { MemberEntry } from "~/components/member-entry";
 import { MemberFace } from "~/components/member-face";
 import type { Faces } from "~/lib/faces";
-import { notify } from "~/lib/notify";
 import {
+  SURE,
   WHY_ALIKE,
-  type Duplicate,
+  WHY_UNDECIDED,
   type Resolution,
 } from "~/lib/members/match";
 import { postJson } from "~/lib/post-json";
-import { plural } from "~/lib/utils";
+import { errorMessage, plural } from "~/lib/utils";
 import type { Person } from "~/lib/members/records";
 import { rosterKeys } from "~/lib/members/query-keys";
 import { RosterQueries } from "~/lib/members/roster-queries";
 import { usePatch, useRefresh, useRosterQuery } from "~/lib/members/queries";
 import type { ReconcilerData } from "~/lib/members/views";
-import type { Application } from "~/lib/services/discord/join-requests";
+import type { Application } from "~/lib/members/applications";
 
 /*
   everything that needs a human, on one page. one rule between the sections:
@@ -157,12 +160,8 @@ function ManualAdd({
   statuses: string[];
   busy: boolean;
   said?: Said;
-  onAdd: (fields: { name: string; email: string; status?: string }) => void;
+  onAdd: (member: NewMember) => void;
 }) {
-  const [name, setName] = useState(application.name ?? "");
-  const [email, setEmail] = useState(application.email ?? "");
-  const [status, setStatus] = useState(() => defaultStatus(statuses));
-
   return (
     <div className="space-y-3 p-4">
       <Applicant application={application} faces={faces} />
@@ -173,76 +172,26 @@ function ManualAdd({
       {said?.ok ? (
         <Note>{said.text}</Note>
       ) : (
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="space-y-1.5">
-            <Label htmlFor={`add-name-${application.id}`}>Name</Label>
-            <Input
-              id={`add-name-${application.id}`}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`add-email-${application.id}`}>Email</Label>
-            <Input
-              id={`add-email-${application.id}`}
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Status</Label>
-            <div className="flex flex-wrap gap-2">
-              {statuses.map((one) => (
-                <Button
-                  key={one}
-                  type="button"
-                  size="sm"
-                  variant={status === one ? "secondary" : "outline"}
-                  aria-pressed={status === one}
-                  onClick={() => setStatus(one)}
-                >
-                  {one}
-                </Button>
-              ))}
-            </div>
-          </div>
-          <Button
-            disabled={busy || !name.trim() || !email.trim()}
-            onClick={() =>
-              onAdd({
-                name: name.trim(),
-                email: email.trim(),
-                ...(status ? { status } : {}),
-              })
-            }
-          >
-            Add member
-          </Button>
-        </div>
+        <NewMemberForm
+          id={`add-${application.id}`}
+          initialName={application.name ?? ""}
+          initialEmail={application.email ?? ""}
+          statuses={statuses}
+          busy={busy}
+          submit="Add member"
+          onAdd={onAdd}
+        />
       )}
       {said && !said.ok && <Note>{said.text}</Note>}
     </div>
   );
 }
 
-/* the first two are exact matches and almost always one person; the other two
-   are guesses, and a page that shouted equally about both would train an
-   editor to ignore the ones that matter */
-const SURE: Record<Duplicate["on"], boolean> = {
-  name: true,
-  email: true,
-  "near-name": false,
-  "same-ends": false,
-};
-
 /**
- * an applicant, drawn to line up with the roster rows beside them.
+ * an applicant, drawn like the roster rows beside them.
  *
- * they have no Members row yet, so there is no `Person` and no linked face —
- * but the account is in the guild, and that picture is the one thing that
- * makes an application recognisable as somebody the room knows
+ * they have no Members row yet, but the account is in the guild, and its
+ * picture is what makes an application recognisable as somebody the room knows
  */
 function Applicant({
   application,
@@ -251,27 +200,29 @@ function Applicant({
   application: Application;
   faces: Faces;
 }) {
-  const called = application.name ?? application.username;
-
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-3">
-      <MemberFace
-        discordId={application.discordId}
-        name={called}
-        faces={faces}
-        size="default"
-      />
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="truncate font-medium">{called}</div>
-        <div className="flex flex-wrap items-center gap-1">
+    <MemberEntry
+      person={{
+        pageId: application.id,
+        name: application.name ?? application.username,
+        discordId: application.discordId,
+        email: application.email,
+        status: null,
+        contributions: 0,
+      }}
+      faces={faces}
+      badges={
+        <>
           <Badge variant="outline">
             <AtSignIcon />
             {application.username}
           </Badge>
-          <Badge variant={application.email ? "outline" : "destructive"}>
-            <MailIcon />
-            {application.email ?? "no email given"}
-          </Badge>
+          {!application.email && (
+            <Badge variant="destructive">
+              <MailIcon />
+              no email given
+            </Badge>
+          )}
           {/* the graduation year is read and deliberately never stored — ADR
               0010 on why a kept one is wrong more often than it is useful */}
           {application.gradYear && (
@@ -283,9 +234,9 @@ function Applicant({
           {application.applied && (
             <Badge variant="outline">applied {application.applied}</Badge>
           )}
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }
 
@@ -306,6 +257,10 @@ function Sections({ initial, faces }: Props) {
     roster,
     discordSuggestions,
     guild,
+    liveStatuses,
+    alumMissing,
+    discordProblem,
+    notionProblem,
   } = useRosterQuery(
     rosterKeys.reconciler(),
     "/api/members/reconciler",
@@ -336,8 +291,6 @@ function Sections({ initial, faces }: Props) {
     keep: Person;
     drop: Person;
   } | null>(null);
-  /* the text that was copied, so a different export is not called copied */
-  const [copied, setCopied] = useState<string | null>(null);
   /*
     the google group's own member list, as exported by an editor.
 
@@ -359,15 +312,12 @@ function Sections({ initial, faces }: Props) {
       const text = summary ?? "Done.";
       setSaid((prev) => ({ ...prev, [key]: { ok: true, text } }));
       /* a toast, because the re-read removes the row and its note with it */
-      notify.ok(text);
+      toast.success(text);
       await refresh();
     } catch (thrown) {
       setSaid((prev) => ({
         ...prev,
-        [key]: {
-          ok: false,
-          text: thrown instanceof Error ? thrown.message : String(thrown),
-        },
+        [key]: { ok: false, text: errorMessage(thrown) },
       }));
     } finally {
       setBusy(null);
@@ -412,25 +362,7 @@ function Sections({ initial, faces }: Props) {
      address nobody can add is still an address somebody has to deal with */
   const external = emails.filter((email) => isExternalAddress(email));
 
-  /*
-    one pass over the roster for the three ways an address can be unusable.
-    Sorted by name inside each so the lists do not reshuffle between visits
-  */
-  const problems = roster
-    .map((person) => ({ person, problem: emailProblem(person.email) }))
-    .filter((one) => one.problem !== null)
-    .sort((a, b) => a.person.name.localeCompare(b.person.name));
-
-  const of = (kind: EmailProblem) =>
-    problems.filter((one) => one.problem === kind).map((one) => one.person);
-
-  const missing = of("missing");
-  /* one section, because the fix is the same and so is the question an editor
-     asks of it: text that is not an address, and a real address at neither
-     university domain, are both "this is not the address we expect" */
-  const wrongDomain = [...of("malformed"), ...of("outside")].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  const { missing, wrongDomain } = emailProblems(roster);
 
   /*
     every unlinked row, not only the ones a name matches. an empty section
@@ -447,6 +379,19 @@ function Sections({ initial, faces }: Props) {
 
   return (
     <div className="space-y-10">
+      {(notionProblem || alumMissing || discordProblem) && (
+        <div className="space-y-2">
+          {notionProblem && <Problem>{notionProblem}</Problem>}
+          {alumMissing && <AlumMissing options={liveStatuses} />}
+          {discordProblem && (
+            <Problem>
+              Discord could not be read completely, so application and account
+              suggestions may be unavailable: {discordProblem}
+            </Problem>
+          )}
+        </div>
+      )}
+
       <Section
         title="Discord applicants needing attention"
         how="Approved applications the hourly sync would not act on by itself."
@@ -494,10 +439,12 @@ function Sections({ initial, faces }: Props) {
               statuses={statuses}
               busy={busy !== null}
               said={said[`add:${one.application.id}`]}
-              onAdd={(fields) =>
+              onAdd={({ name, email, status }) =>
                 void act(`add:${one.application.id}`, () =>
                   postJson("/api/members/create", {
-                    ...fields,
+                    name,
+                    email,
+                    ...(status ? { status } : {}),
                     discordId: one.application.discordId,
                   }),
                 )
@@ -508,13 +455,7 @@ function Sections({ initial, faces }: Props) {
             <div key={one.application.id} className="space-y-3 p-4">
               <div className="flex flex-wrap items-start gap-2">
                 <Applicant application={one.application} faces={faces} />
-                <Badge variant="destructive">
-                  {one.status === "similar"
-                    ? "too close to call"
-                    : one.status === "conflicted"
-                      ? "two rows disagree"
-                      : "could be either"}
-                </Badge>
+                <Badge variant="destructive">{WHY_UNDECIDED[one.status]}</Badge>
               </div>
               <ul className="space-y-3 border-l-2 pl-4">
                 {one.people.map((person) => (
@@ -595,24 +536,22 @@ function Sections({ initial, faces }: Props) {
             return (
               <div key={person.pageId} className="p-4">
                 <MemberEntry person={person} faces={faces}>
-                  {statuses.map((status) => (
-                    <Button
-                      key={status}
-                      size="sm"
-                      variant="outline"
-                      disabled={busy !== null || said[key]?.ok}
-                      onClick={() =>
-                        void act(key, () =>
-                          postJson("/api/members/status", {
-                            pageId: person.pageId,
-                            status,
-                          }),
-                        )
-                      }
-                    >
-                      {status}
-                    </Button>
-                  ))}
+                  <StatusPicker
+                    statuses={statuses}
+                    value={null}
+                    label={`${person.name}'s status`}
+                    hideLabel
+                    size="sm"
+                    disabled={busy !== null || said[key]?.ok}
+                    onPick={(status) =>
+                      void act(key, () =>
+                        postJson("/api/members/status", {
+                          pageId: person.pageId,
+                          status,
+                        }),
+                      )
+                    }
+                  />
                 </MemberEntry>
                 {said[key] && <Note>{said[key].text}</Note>}
               </div>
@@ -762,8 +701,8 @@ function Sections({ initial, faces }: Props) {
                     setExportName(file.name);
                   },
                   (thrown: unknown) =>
-                    notify.failed(
-                      `Could not read ${file.name}: ${thrown instanceof Error ? thrown.message : String(thrown)}`,
+                    toast.error(
+                      `Could not read ${file.name}: ${errorMessage(thrown)}`,
                     ),
                 );
               }}
@@ -830,36 +769,16 @@ function Sections({ initial, faces }: Props) {
               <label className="sr-only" htmlFor="group-blob">
                 Emails to paste into the group
               </label>
-              <Textarea
-                id="group-blob"
-                readOnly
-                rows={Math.min(emails.length + 1, 10)}
-                value={blob}
-                className="font-mono text-xs"
-              />
-
-              <Button
-                variant="outline"
-                onClick={() => {
-                  /* the clipboard rejects when the document is not focused
-                     or permission was refused, and the textarea above is
-                     still selectable by hand, so a failure leaves the tick
-                     off rather than throwing */
-                  void navigator.clipboard
-                    .writeText(blob)
-                    .then(() => setCopied(blob))
-                    .catch(() => setCopied(null));
-                }}
-              >
-                {copied === blob ? (
-                  <CheckIcon className="size-4" />
-                ) : (
-                  <CopyIcon className="size-4" />
-                )}
-                {copied === blob
-                  ? "Copied"
-                  : `Copy ${plural(emails.length, "address", "addresses")}`}
-              </Button>
+              <div className="flex items-start gap-2">
+                <Textarea
+                  id="group-blob"
+                  readOnly
+                  rows={Math.min(emails.length + 1, 10)}
+                  value={blob}
+                  className="font-mono text-xs"
+                />
+                <CopyButton id="group-blob" label="Copy the addresses" />
+              </div>
             </>
           )}
 

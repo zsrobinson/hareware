@@ -95,9 +95,10 @@ test("the reconciler carries the roster the group is compared against", async ()
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
-      if (String(url).includes("discord.com")) {
-        return new Response(JSON.stringify({ guild_join_requests: [] }));
+      if (String(url).includes("/requests")) {
+        return Response.json({ guild_join_requests: [] });
       }
+      if (String(url).includes("/members")) return Response.json([]);
 
       return new Response(
         JSON.stringify({
@@ -120,11 +121,10 @@ test("the reconciler carries the roster the group is compared against", async ()
   const data = await reconcilerData({
     NOTION_TOKEN: "secret",
     DISCORD_BOT_TOKEN: "bot",
-  } as never);
+  });
 
   expect(data.roster.map((one) => one.name)).toEqual(["Ada Vance"]);
-  expect(data.discordSuggestions).toEqual([]);
-  expect(data.discordProblem).toMatch(/guild member response was not a list/);
+  expect(data.discordProblem).toBeNull();
 });
 
 /* a fallback offered in silence reads as notion's answer, and hides the alum

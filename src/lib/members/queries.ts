@@ -36,8 +36,9 @@ import {
 } from "~/lib/members/attendance";
 import type { KioskData } from "~/lib/members/views";
 import { rosterKeys } from "~/lib/members/query-keys";
-import { notify } from "~/lib/notify";
+import { toast } from "sonner";
 import { postJson } from "~/lib/post-json";
+import { errorMessage } from "~/lib/utils";
 
 /**
  * the errors already toasted about.
@@ -112,9 +113,7 @@ export function useRosterQuery<T extends object>(
     if (!isError || !error || reported.has(error)) return;
 
     reported.add(error);
-    notify.failed(
-      `Could not refresh: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    toast.error(`Could not refresh: ${errorMessage(error)}`);
   }, [isError, error]);
 
   return data;
@@ -259,12 +258,10 @@ export function useAttendance(meetingId: string, data: KioskData) {
       queries.setQueryData<string[]>(key, (current) =>
         stableOrder(current ?? [], attendeeIds),
       );
-      notify.ok(say);
+      toast.success(say);
     },
     onError: (thrown) =>
-      notify.failed(
-        `Not saved: ${thrown instanceof Error ? thrown.message : String(thrown)}. Try again.`,
-      ),
+      toast.error(`Not saved: ${errorMessage(thrown)}. Try again.`),
   });
 
   const queued = useMutationState({

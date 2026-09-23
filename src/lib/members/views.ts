@@ -16,8 +16,7 @@
 */
 
 import { together } from "~/lib/services/notion/client";
-import { approvedApplications } from "~/lib/services/discord/join-requests";
-import type { Application } from "~/lib/services/discord/join-requests";
+import { approvedApplications, type Application } from "./applications";
 
 import { defaultMeeting, offerableMeetings } from "./kiosk";
 import { duplicates, resolveApplications, suggestDiscordLinks } from "./match";
@@ -34,10 +33,9 @@ import { meetings, people, statusOptions } from "./roster";
 import { alumOptionMissing, FALLBACK_MEMBER_STATUSES } from "./config";
 
 /** the bindings these reads need, so nothing here reaches for a global */
-export type ViewEnv = {
+type ViewEnv = {
   NOTION_TOKEN?: string;
   DISCORD_BOT_TOKEN?: string;
-  DB?: D1Database;
 };
 
 const NO_NOTION = "NOTION_TOKEN is not set, so the roster cannot be read.";

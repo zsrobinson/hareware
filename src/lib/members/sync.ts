@@ -21,7 +21,7 @@ import type { EasternNow } from "~/lib/eastern";
 import { misconfigured, ok, skipped, type Result } from "~/lib/result";
 import { record } from "~/lib/log";
 import { plural } from "~/lib/utils";
-import { approvedApplications } from "~/lib/services/discord/join-requests";
+import { approvedApplications } from "./applications";
 import { resolveApplications, safeToCreate, type Resolution } from "./match";
 import { people } from "./roster";
 import { createFromApplication } from "./write";
@@ -57,14 +57,16 @@ export async function syncApplications(
 ): Promise<Result> {
   /* inert until the club sets these up, the same way every other automation is
      — see ADR 0006's "setup outside the repo" */
-  const missing = [
-    !env.NOTION_TOKEN && "NOTION_TOKEN",
-    !env.DISCORD_BOT_TOKEN && "DISCORD_BOT_TOKEN",
-  ].filter(Boolean);
+  const token = env.NOTION_TOKEN;
+  const bot = env.DISCORD_BOT_TOKEN;
   /* not `ok`: nothing ran, and a row saying otherwise is the failure ADR 0007
      exists to prevent */
-  if (missing.length > 0)
-    return misconfigured(`application sync unset: ${missing.join(", ")}`);
+  if (!token || !bot) {
+    const missing = [!token && "NOTION_TOKEN", !bot && "DISCORD_BOT_TOKEN"];
+    return misconfigured(
+      `application sync unset: ${missing.filter(Boolean).join(", ")}`,
+    );
+  }
 
   /*
     two different services holding nothing in common, and both answers are
@@ -72,8 +74,8 @@ export async function syncApplications(
     trip to a job that already has a write budget to spend
   */
   const [applications, roster] = await Promise.all([
-    approvedApplications(env.DISCORD_BOT_TOKEN!),
-    people(env.NOTION_TOKEN!),
+    approvedApplications(bot),
+    people(token),
   ]);
 
   const resolutions = resolveApplications(roster, applications);
@@ -105,7 +107,7 @@ export async function syncApplications(
   let created = 0;
   for (const application of creatable) {
     if (created > 0) await pause(BETWEEN_WRITES_MS);
-    await createFromApplication(env, application);
+    await createFromApplication(token, application);
     created += 1;
 
     /*

@@ -14,7 +14,6 @@
   times a semester.
 */
 
-import { env } from "cloudflare:workers";
 import {
   BadRequest,
   requirePageId,
@@ -24,7 +23,7 @@ import {
 import { resolveApplication } from "~/lib/members/match";
 import { people } from "~/lib/members/roster";
 import { linkApplication } from "~/lib/members/write";
-import { approvedApplications } from "~/lib/services/discord/join-requests";
+import { approvedApplications } from "~/lib/members/applications";
 
 export const prerender = false;
 
@@ -33,10 +32,10 @@ export const POST = rosterRoute(
     applicationId: requireText(body, "applicationId"),
     pageId: requirePageId(body, "pageId"),
   }),
-  async ({ applicationId, pageId }) => {
+  async ({ applicationId, pageId }, tokens) => {
     const [applications, roster] = await Promise.all([
-      approvedApplications(env.DISCORD_BOT_TOKEN!),
-      people(env.NOTION_TOKEN!),
+      approvedApplications(tokens.discord),
+      people(tokens.notion),
     ]);
 
     const application = applications.find((one) => one.id === applicationId);
@@ -62,7 +61,7 @@ export const POST = rosterRoute(
       );
     }
 
-    await linkApplication(env, resolution.person, application);
+    await linkApplication(tokens.notion, resolution.person, application);
 
     return {
       summary: `linked ${application.name ?? application.username}'s application to ${resolution.person.name} on ${resolution.on}`,

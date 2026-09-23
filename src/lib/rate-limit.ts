@@ -13,7 +13,7 @@
 */
 
 /** thrown when the budget was still exhausted after every attempt */
-export class RateLimited extends Error {}
+class RateLimited extends Error {}
 
 /**
  * how many times a 429 is retried before giving up.
@@ -46,7 +46,7 @@ const sleep = (ms: number) => new Promise((wake) => setTimeout(wake, ms));
  * server's clock to agree with ours to mean anything. A malformed value is
  * absence rather than `NaN` going into a timer
  */
-export function retryAfterMs(header: string | null): number | undefined {
+function retryAfterMs(header: string | null): number | undefined {
   if (!header) return undefined;
 
   const seconds = Number(header.trim());

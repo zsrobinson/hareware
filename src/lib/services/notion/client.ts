@@ -1,11 +1,9 @@
 /*
   talking to Notion.
 
-  everything here is about the API and nothing about reminders — a watcher on a
-  database, a slash command that looks a page up, and the meeting reminder all
-  want the same three things: resolve a data source, read its schema, query it.
-  they were inside the meeting reminder, which meant the second caller would
-  have copied them.
+  everything here is about the API and nothing about any one caller: every
+  caller wants the same things — read a data source's schema, query it — and a
+  second copy of them is how they drift.
 
   what is deliberately NOT here: which database, which property, what a row
   means. that belongs to whatever is asking.
@@ -31,8 +29,6 @@ export type NotionProperty = {
   title?: { plain_text: string }[];
   rich_text?: { plain_text: string }[];
   date?: { start: string } | null;
-  /* the meeting reminder reads Meetings' `Type` to tell a board meeting from a
-     general body one — see ADR 0010 */
   select?: { name?: string | null } | null;
 };
 
@@ -79,30 +75,6 @@ export async function notion(
   }
 
   return response.json();
-}
-
-/**
- * the data source inside a database.
- *
- * a database is a container in the current API and holds no properties of its
- * own — the schema and the rows both live on a data source inside it, so
- * `databases/{id}/query` is not an endpoint and `databases/{id}` comes back
- * with an empty `properties`. this is the first thing every caller needs and
- * the first thing every caller gets wrong
- */
-export async function dataSource(
-  databaseId: string,
-  token: string,
-): Promise<string> {
-  const database = (await notion(`databases/${databaseId}`, token)) as {
-    data_sources: { id: string }[];
-  };
-
-  const source = database.data_sources[0]?.id;
-  if (!source)
-    throw new NotionError(`database ${databaseId} has no data source`);
-
-  return source;
 }
 
 /**
@@ -153,8 +125,7 @@ export async function query(
  * `query` above returns one page and is right for a caller that wants the
  * first few; this is for the ones that need all of them. Notion caps a page at
  * 100 and reports more with a cursor, so a caller reading only the first gets
- * a plausible answer quietly missing everybody after the hundredth — a whole
- * class of bug that reads as "that member has no articles".
+ * a plausible answer quietly missing every row after the hundredth.
  *
  * generic in the row so each caller keeps its own shape; this knows only how
  * notion pages a response
@@ -175,12 +146,26 @@ export async function queryAll<T>(
     })) as { results: T[]; has_more?: boolean; next_cursor?: string | null };
 
     rows.push(...response.results);
-    cursor = response.has_more
-      ? (response.next_cursor ?? undefined)
-      : undefined;
+    cursor = next(response, `data_sources/${source}/query`);
   } while (cursor);
 
   return rows;
+}
+
+/**
+ * the cursor to the next page, or undefined on the last. `has_more` with no
+ * cursor is a short answer with no way to finish it, so it throws rather than
+ * returning what it has
+ */
+function next(
+  page: { has_more?: boolean; next_cursor?: string | null },
+  path: string,
+): string | undefined {
+  if (!page.has_more) return undefined;
+  if (!page.next_cursor) {
+    throw new NotionError(`notion said ${path} has more but gave no cursor`);
+  }
+  return page.next_cursor;
 }
 
 /** the plain text of a page's title property, whatever that property is called */
@@ -221,10 +206,9 @@ export function plainText(
  * how many notion reads a page may have in flight at once.
  *
  * the budget is about three requests a second per integration, and two lanes
- * rather than three because the reads in a lane are not one request each:
- * `contributions()` pages twice back to back and `queryAll` will page further
- * as the article corpus grows, so two lanes already produce three or four
- * requests in a second. The retry in `notion()` above is the backstop; this is
+ * rather than three because the reads in a lane are not one request each: a
+ * `queryAll` over a large data source pages back to back, so two lanes already
+ * produce three or four requests in a second. The retry in `notion()` above is the backstop; this is
  * the thing that keeps it from being needed
  */
 const LANES = 2;
@@ -253,32 +237,56 @@ export async function together<
   return done as Results<T>;
 }
 
+/** a relation property as notion puts it inside a page object */
+export type RelationProperty = {
+  /** the property's own id, which the property item endpoint is keyed by */
+  id?: string;
+  relation?: { id: string }[] | null;
+  /** notion's only sign that `relation` was cut short at 25 */
+  has_more?: boolean;
+};
+
 /**
  * every id in a relation property, including the ones a page object omits.
  *
  * notion truncates a relation to 25 entries wherever it appears inside a page
  * — a `pages/{id}` read and a data source query alike — and says so only with
- * `has_more` on the property. Nothing else about the answer looks short. A
- * general body meeting is thirty people, so the twenty-sixth onward were
- * simply not there: read for standing they were never counted, and read
- * before a write they were merged against and deleted.
+ * `has_more` on the property. Nothing else about the answer looks short.
  *
- * the property item endpoint is the documented way to the whole list, and it
- * pages. `property` is the property's own id from the page object, not its
- * name, and it goes into the path **verbatim**.
+ * the page's own copy where it is whole, and a second read through the
+ * property item endpoint only where it was cut short
+ */
+export async function relationIds(
+  pageId: string,
+  property: RelationProperty,
+  token: string,
+): Promise<string[]> {
+  if (!property.has_more) {
+    return (property.relation ?? []).map((related) => related.id);
+  }
+  if (!property.id) {
+    throw new NotionError(
+      `a relation on ${pageId} was cut short and carries no id to read the rest by`,
+    );
+  }
+
+  return pagedRelation(pageId, property.id, token);
+}
+
+/**
+ * the whole of a relation from the property item endpoint, which pages.
+ *
+ * `property` is the property's own id from the page object, not its name, and
+ * it goes into the path **verbatim**.
  *
  * verbatim is load-bearing. notion hands these ids back already
  * percent-encoded — `c%3CLo`, `%5CClH` — so encoding them again asks for a
  * property that does not exist. Measured against the real database: the id as
  * given answers with twelve related pages, and the same id put through
  * `encodeURIComponent` answers `200` with an empty list. Not a 404, not an
- * error; an empty relation.
- *
- * that shape is the worst one this could take. `recordAttendance` merges the
- * device's list against what notion currently holds, so an empty answer for a
- * meeting of thirty reads as an empty room, and the next tap writes that back
+ * error; an empty relation, which a caller merging against it writes back
  */
-export async function relationIds(
+async function pagedRelation(
   pageId: string,
   property: string,
   token: string,
@@ -287,8 +295,9 @@ export async function relationIds(
   let cursor: string | undefined;
 
   do {
+    const path = `pages/${pageId}/properties/${property}`;
     const page = (await notion(
-      `pages/${pageId}/properties/${property}?page_size=100${
+      `${path}?page_size=100${
         cursor ? `&start_cursor=${encodeURIComponent(cursor)}` : ""
       }`,
       token,
@@ -302,7 +311,7 @@ export async function relationIds(
       if (item.relation?.id) ids.push(item.relation.id);
     }
 
-    cursor = page.has_more ? (page.next_cursor ?? undefined) : undefined;
+    cursor = next(page, path);
   } while (cursor);
 
   return ids;

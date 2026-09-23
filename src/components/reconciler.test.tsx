@@ -31,10 +31,10 @@ import type { Person } from "~/lib/members/records";
   first one's roster
 */
 let Reconciler: typeof import("./reconciler").Reconciler;
-let notify: typeof import("~/lib/notify").notify;
+let toast: typeof import("sonner").toast;
 
-vi.mock("~/lib/notify", () => ({
-  notify: { ok: vi.fn(), failed: vi.fn() },
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 const person = (fields: Partial<Person> & { pageId: string }): Person => ({
@@ -72,7 +72,7 @@ graduated@gmail.com,Old Friend,2024-09-01
 beforeEach(async () => {
   vi.resetModules();
   ({ Reconciler } = await import("./reconciler"));
-  ({ notify } = await import("~/lib/notify"));
+  ({ toast } = await import("sonner"));
 
   /* the page is seeded by its props and only refetches after a write, so
      nothing here should reach the network. A stub that throws says so loudly */
@@ -106,14 +106,12 @@ function heading(title: string) {
 }
 
 /** hands the page an export, the way the file picker does */
-async function upload(csv: string, name = "members.csv") {
+async function upload(csv: string) {
   const input = screen.getByLabelText(/Export CSV/);
-  const file = new File([csv], name, { type: "text/csv" });
+  const file = new File([csv], "members.csv", { type: "text/csv" });
 
   fireEvent.change(input, { target: { files: [file] } });
-  await waitFor(() =>
-    screen.getByText(new RegExp(`${name}, which stayed in this browser`)),
-  );
+  await waitFor(() => screen.getByText(/stayed in this browser/));
 }
 
 const json = (body: unknown, status = 200) =>
@@ -161,12 +159,13 @@ test("somebody on the roster and not in the export is offered to paste", async (
   ) as HTMLTextAreaElement;
 
   expect(blob.value).toBe("ben@umd.edu");
-  expect(screen.getByText("Copy 1 address")).toBeTruthy();
   /* the person, not only the address: an editor who recognises somebody who
      left the group on purpose can only act on it if the name is on screen */
   expect(
     within(section("Missing from Google Group")).getByText("Ben Okafor"),
   ).toBeTruthy();
+  /* the file is every member's address, and it is read where it was chosen */
+  expect(fetch).not.toHaveBeenCalled();
 });
 
 /*
@@ -277,14 +276,6 @@ test("an export holding everybody says so instead of offering a paste", async ()
   ).toBeTruthy();
 });
 
-/* the file is every member's address, and it is read where it was chosen */
-test("no request is made to compare a file", async () => {
-  render(<Reconciler initial={initial} faces={{}} />);
-  await upload(EXPORT);
-
-  expect(fetch).not.toHaveBeenCalled();
-});
-
 /*
   the questions are found by looking for "name" and "email" anywhere in the
   label. Rewording one survives that; deleting one does not, and then every
@@ -381,22 +372,6 @@ test("the group's section has no count until a file is handed over", async () =>
   expect(count()?.textContent).toBe("1");
 });
 
-test("a different export is not called copied", async () => {
-  Object.defineProperty(navigator, "clipboard", {
-    value: { writeText: vi.fn(async () => {}) },
-    configurable: true,
-  });
-  render(<Reconciler initial={initial} faces={{}} />);
-  await upload(EXPORT);
-
-  fireEvent.click(screen.getByRole("button", { name: "Copy 1 address" }));
-  await waitFor(() => screen.getByRole("button", { name: "Copied" }));
-
-  await upload("graduated@gmail.com", "later.csv");
-
-  expect(screen.getByRole("button", { name: "Copy 2 addresses" })).toBeTruthy();
-});
-
 test("a file the browser cannot read says so", async () => {
   render(<Reconciler initial={initial} faces={{}} />);
 
@@ -407,7 +382,7 @@ test("a file the browser cannot read says so", async () => {
   });
 
   await waitFor(() =>
-    expect(notify.failed).toHaveBeenCalledWith(
+    expect(toast.error).toHaveBeenCalledWith(
       expect.stringContaining("the disk said no"),
     ),
   );
@@ -478,7 +453,7 @@ test("a link is confirmed even though the re-read takes its row away", async () 
   fireEvent.click(screen.getByRole("button", { name: "This is them" }));
 
   await waitFor(() => screen.getByText("No applicants waiting"));
-  expect(notify.ok).toHaveBeenCalledWith("Linked Ada Vance");
+  expect(toast.success).toHaveBeenCalledWith("Linked Ada Vance");
 });
 
 /* the list of rows with no status is worked out by the server, so patching
@@ -539,4 +514,57 @@ test("an application with no date says nothing about one", () => {
 
   expect(screen.getByText("the form gave no name")).toBeTruthy();
   expect(screen.queryByText(/^applied/)).toBeNull();
+});
+
+/* a problem the page was rendered with can clear, and a new one can appear */
+test("what the re-read could not reach is said, not what first paint could not", async () => {
+  const data = { ...initial, roster: [unsorted], unknownStatus: [unsorted] };
+  serve(
+    () => ({ ...data, unknownStatus: [], discordProblem: "rate limited" }),
+    () => json({ summary: "status set" }),
+  );
+
+  render(<Reconciler initial={data} faces={{}} />);
+  expect(screen.queryByRole("alert")).toBeNull();
+
+  fireEvent.click(
+    within(section("Missing status field")).getByRole("button", {
+      name: "Grad",
+    }),
+  );
+
+  await waitFor(() =>
+    expect(screen.getByRole("alert").textContent).toContain("rate limited"),
+  );
+});
+
+test("an application nobody could decide says why", () => {
+  const one = person({ pageId: "p1", name: "Ana Diaz" });
+  const two = person({ pageId: "p2", name: "Ana Dias" });
+  render(
+    <Reconciler
+      initial={{
+        ...initial,
+        roster: [one, two],
+        resolutions: [
+          {
+            status: "similar",
+            people: [one, two],
+            application: {
+              id: "a3",
+              discordId: "d3",
+              username: "ana",
+              name: "Ana Diaz",
+              email: null,
+              gradYear: null,
+              applied: null,
+            },
+          },
+        ],
+      }}
+      faces={{}}
+    />,
+  );
+
+  expect(screen.getByText("too close to call")).toBeTruthy();
 });

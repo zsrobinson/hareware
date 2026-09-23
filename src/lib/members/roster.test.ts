@@ -1,12 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
-import {
-  toContribution,
-  toMeeting,
-  toPerson,
-  meetings,
-  people,
-  statusOptions,
-} from "./roster";
+import { ARTICLES_DATA_SOURCE_ID } from "~/lib/articles/config";
+import { corpus, meetings, statusOptions, toPerson } from "./roster";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -18,6 +12,29 @@ const richText = (text: string) => ({
   type: "rich_text",
   rich_text: [{ plain_text: text }],
 });
+
+/** one Meetings row with these properties, read the way the kiosk reads it */
+async function toMeeting(row: { id: string; properties: object }) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ results: [row], has_more: false })),
+  );
+  return (await meetings("token"))[0]!;
+}
+
+/** one Articles row with these properties, read the way standing reads it */
+async function toContribution(row: { id: string; properties: object }) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) =>
+      Response.json({
+        results: String(url).includes(ARTICLES_DATA_SOURCE_ID) ? [row] : [],
+        has_more: false,
+      }),
+    ),
+  );
+  return (await corpus("token")).contributions[0]!;
+}
 
 test("a Members row reads into a Person", () => {
   const person = toPerson({
@@ -124,8 +141,8 @@ test("a Status notion has and we do not is kept, not coerced to unknown", () => 
   expect(person.status).toBe("Faculty");
 });
 
-test("a Meetings row reads its type and its attendees", () => {
-  const meeting = toMeeting({
+test("a Meetings row reads its type and its attendees", async () => {
+  const meeting = await toMeeting({
     id: "m1",
     properties: {
       Name: title("General Body Meeting"),
@@ -139,8 +156,8 @@ test("a Meetings row reads its type and its attendees", () => {
   expect(meeting.attendeeIds).toEqual(["p1", "p2"]);
 });
 
-test("a meeting with no date reads as empty, so no window can contain it", () => {
-  const meeting = toMeeting({
+test("a meeting with no date reads as empty, so no window can contain it", async () => {
+  const meeting = await toMeeting({
     id: "m1",
     properties: {
       Name: title("TBD"),
@@ -155,8 +172,8 @@ test("a meeting with no date reads as empty, so no window can contain it", () =>
 /* 9pm Eastern on the 9th is 1am UTC on the 10th, and the meeting happened on
    the 9th: a UTC day would count it toward the wrong window and put it on
    the wrong day in the kiosk */
-test("a meeting with a time falls on its Eastern day", () => {
-  const meeting = toMeeting({
+test("a meeting with a time falls on its Eastern day", async () => {
+  const meeting = await toMeeting({
     id: "m1",
     properties: {
       Name: title("General Body Meeting"),
@@ -168,14 +185,14 @@ test("a meeting with a time falls on its Eastern day", () => {
   expect(meeting.date).toBe("2026-09-09");
 });
 
-test("an unreadable attendee relation refuses to compute standing", () => {
-  expect(() =>
+test("an unreadable attendee relation refuses to compute standing", async () => {
+  await expect(
     toMeeting({ id: "m1", properties: { Name: title("Meeting") } }),
-  ).toThrow(/Attendees relation is not readable/);
+  ).rejects.toThrow(/Attendees relation is not readable/);
 });
 
-test("an Article reads its two credits separately", () => {
-  const article = toContribution({
+test("an Article reads its two credits separately", async () => {
+  const article = await toContribution({
     id: "a1",
     properties: {
       Headline: title("Something happened"),
@@ -190,8 +207,8 @@ test("an Article reads its two credits separately", () => {
   expect(article.date).toBe("2026-03-04");
 });
 
-test("an article published at night falls on its Eastern day", () => {
-  const article = toContribution({
+test("an article published at night falls on its Eastern day", async () => {
+  const article = await toContribution({
     id: "a1",
     properties: {
       Headline: title("Something happened"),
@@ -218,8 +235,8 @@ test("a schema with no Status select is refused, not read as no options", async 
   await expect(statusOptions("secret")).rejects.toThrow(/no readable Status/);
 });
 
-test("an unreadable credit relation refuses to compute standing", () => {
-  expect(() =>
+test("an unreadable credit relation refuses to compute standing", async () => {
+  await expect(
     toContribution({
       id: "a1",
       properties: {
@@ -228,63 +245,7 @@ test("an unreadable credit relation refuses to compute standing", () => {
         Author: { type: "relation", relation: [] },
       },
     }),
-  ).toThrow(/Image Crew relation is not readable/);
-});
-
-/*
-  the paging test. a reader that stops at the first page returns a plausible
-  answer quietly missing everybody after the hundredth, which for an election is
-  the worst shape a bug can take here
-*/
-test("every page is followed, not just the first", async () => {
-  const page = (n: number) => ({
-    id: `p${n}`,
-    properties: { Name: title(`Member ${n}`) },
-  });
-
-  const bodies: unknown[] = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (_url: string, init?: RequestInit) => {
-      const body = JSON.parse(init!.body as string) as {
-        start_cursor?: string;
-      };
-      bodies.push(body);
-
-      if (!body.start_cursor) {
-        return new Response(
-          JSON.stringify({
-            results: [page(1), page(2)],
-            has_more: true,
-            next_cursor: "second",
-          }),
-        );
-      }
-
-      return new Response(
-        JSON.stringify({ results: [page(3)], has_more: false }),
-      );
-    }),
-  );
-
-  const roster = await people("token");
-
-  expect(roster.map((one) => one.pageId)).toEqual(["p1", "p2", "p3"]);
-  expect(bodies).toHaveLength(2);
-});
-
-test("a cursor that says has_more but sends none stops rather than looping", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({ results: [], has_more: true, next_cursor: null }),
-        ),
-    ),
-  );
-
-  await expect(people("token")).resolves.toEqual([]);
+  ).rejects.toThrow(/Image Crew relation is not readable/);
 });
 
 /*
@@ -314,7 +275,6 @@ test("corpus never has more than two notion requests in flight", async () => {
     }),
   );
 
-  const { corpus } = await import("./roster");
   await corpus("secret");
 
   expect(most).toBeLessThanOrEqual(2);

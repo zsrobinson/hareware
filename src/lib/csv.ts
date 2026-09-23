@@ -37,7 +37,7 @@ const FORMULA = ["=", "+", "-", "@", "\t", "\r"];
  * a value that needed neither comes back untouched, so an export a human reads
  * in a terminal is not covered in quotes it does not need
  */
-export function csvCell(value: unknown): string {
+function csvCell(value: unknown): string {
   const raw = text(value);
 
   const guarded = FORMULA.some((char) => raw.startsWith(char))

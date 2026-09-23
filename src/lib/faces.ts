@@ -10,11 +10,8 @@
 
 import { guildMembers, type Profile } from "./member";
 
-/** what a face needs to draw. the url is discord's cdn, never proxied here */
-export type Face = { avatarUrl: string; displayName: string; username: string };
-
-/** ids to faces, keyed by discord user id */
-export type Faces = Record<string, Face>;
+/** profiles keyed by discord user id; the url is discord's cdn, never proxied */
+export type Faces = Record<string, Profile>;
 
 export async function faces(
   userIds: (string | null | undefined)[],
@@ -28,13 +25,7 @@ export async function faces(
 
   for (const id of ids) {
     const profile = guild.get(id);
-    if (profile) {
-      found[id] = {
-        avatarUrl: profile.avatarUrl,
-        displayName: profile.displayName,
-        username: profile.username,
-      };
-    }
+    if (profile) found[id] = profile;
   }
 
   return found;

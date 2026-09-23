@@ -14,34 +14,17 @@
   downstream could notice.
 */
 
-import { notion, plainText, queryAll } from "~/lib/services/notion/client";
-import { MEMBERS_DATA_SOURCE_ID, MEMBER_PROPERTIES } from "./config";
-
-/** a Members row, as much of it as we read */
-export type MemberPage = {
-  id: string;
-  properties: Record<
-    string,
-    {
-      type?: string;
-      title?: { plain_text: string }[] | null;
-      rich_text?: { plain_text: string }[] | null;
-    }
-  >;
-};
+import { notion } from "~/lib/services/notion/client";
+import { normaliseName } from "~/lib/members/match";
+import type { Person } from "~/lib/members/records";
+import { people } from "~/lib/members/roster";
+import { createMember as createRow, memberPatch } from "~/lib/members/write";
 
 /** a Members row in the words a reply uses */
-export type Member = {
-  pageId: string;
-  name: string;
-  /** the id the row already carries, or null — never `""` */
-  discordId: string | null;
-};
+export type Member = Pick<Person, "pageId" | "name" | "discordId">;
 
 /** the patch that would write a discord id onto a row */
-export type LinkPatch = {
-  properties: Record<string, { rich_text: { text: { content: string } }[] }>;
-};
+export type LinkPatch = ReturnType<typeof memberPatch>;
 
 /**
  * what a lookup found.
@@ -66,60 +49,6 @@ export type MemberMatch =
   | { status: "unavailable"; reason: string };
 
 /**
- * a name reduced to what two spellings of one person share.
- *
- * casefolded, accents stripped, punctuation dropped and whitespace collapsed,
- * so "Zoë O'Brien" and "zoe obrien" are one person. it goes no further than
- * that: "Matthew" and "Mathew" stay two people, because a matcher loose enough
- * to join them is loose enough to join two real members
- */
-export function normaliseName(name: string): string {
-  return name
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .replace(/[^\p{Letter}\p{Number}\s]/gu, "")
-    .replace(/\s+/gu, " ")
-    .trim();
-}
-
-/**
- * the discord id on a row, as text.
- *
- * text on both sides, always. a snowflake is 19 digits and a double holds 15
- * of them, so anything that parses one as a number matches every id sharing
- * its first fifteen — see `MEMBER_PROPERTIES.discordId`
- */
-function discordIdOf(page: MemberPage): string | null {
-  const text = plainText(
-    page.properties?.[MEMBER_PROPERTIES.discordId.name]?.rich_text,
-  ).trim();
-
-  return text || null;
-}
-
-function toMember(page: MemberPage): Member {
-  return {
-    pageId: page.id,
-    name: plainText(
-      page.properties?.[MEMBER_PROPERTIES.name.name]?.title,
-    ).trim(),
-    discordId: discordIdOf(page),
-  };
-}
-
-/** the patch that would put `discordId` on a row */
-function linkPatch(discordId: string): LinkPatch {
-  return {
-    properties: {
-      [MEMBER_PROPERTIES.discordId.name]: {
-        rich_text: [{ text: { content: discordId } }],
-      },
-    },
-  };
-}
-
-/**
  * which row belongs to a discord user, decided over the whole roster.
  *
  * the whole roster rather than a filtered query because the conflict case only
@@ -127,11 +56,15 @@ function linkPatch(discordId: string): LinkPatch {
  * tell one row carrying an id from two
  */
 export function matchMembers(
-  pages: MemberPage[],
+  roster: Person[],
   discordId: string,
   displayName: string,
 ): MemberMatch {
-  const members = pages.map(toMember);
+  const members: Member[] = roster.map((person) => ({
+    pageId: person.pageId,
+    name: person.name,
+    discordId: person.discordId,
+  }));
 
   const byId = discordId
     ? members.filter((member) => member.discordId === discordId)
@@ -158,7 +91,7 @@ export function matchMembers(
     return {
       status: "linkable",
       member: byName[0]!,
-      patch: linkPatch(discordId),
+      patch: memberPatch({ discordId }),
     };
 
   return { status: "absent" };
@@ -191,20 +124,8 @@ export async function createMember(
   name: string,
   discordId: string,
 ): Promise<Member> {
-  const page = (await notion(`pages`, env.NOTION_TOKEN!, {
-    parent: { type: "data_source_id", data_source_id: MEMBERS_DATA_SOURCE_ID },
-    properties: {
-      [MEMBER_PROPERTIES.name.name]: { title: [{ text: { content: name } }] },
-      ...linkPatch(discordId).properties,
-    },
-  })) as MemberPage;
-
-  return toMember(page);
-}
-
-/** every Members row */
-async function allMembers(token: string): Promise<MemberPage[]> {
-  return queryAll<MemberPage>(MEMBERS_DATA_SOURCE_ID, token);
+  const pageId = await createRow(env.NOTION_TOKEN!, { name, discordId });
+  return { pageId, name, discordId };
 }
 
 /**
@@ -226,11 +147,7 @@ export async function resolveMember(
     return { status: "unavailable", reason: "NOTION_TOKEN is not set" };
 
   try {
-    return matchMembers(
-      await allMembers(env.NOTION_TOKEN),
-      discordId,
-      displayName,
-    );
+    return matchMembers(await people(env.NOTION_TOKEN), discordId, displayName);
   } catch (error) {
     return {
       status: "unavailable",

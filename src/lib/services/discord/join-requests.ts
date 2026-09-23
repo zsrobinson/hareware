@@ -1,10 +1,9 @@
 /*
   reading the applications people fill in to join the server.
 
-  the club's server uses discord's member verification with manual approval, so
-  joining means answering a short form — full name, email, graduation year, and
-  a paragraph — which an editor then approves. those answers are the cleanest
-  identity data the club has, and ADR 0010 makes them the input to the roster.
+  a server using member verification with manual approval asks a short form
+  of everybody joining, which a moderator then approves. What the answers mean
+  is the caller's business; this reads them.
 
   no gateway connection and no privileged intent: this is a plain REST read,
   and it returns the whole history rather than only what is pending.
@@ -46,60 +45,38 @@ type RawRequest = {
   form_responses?: FormResponse[] | null;
 };
 
-/** an approved application, in the words the roster uses */
-export type Application = {
+/** an approved join request, with discord's form shape read out of it */
+export type JoinRequest = {
   /** the join request's own id, used only for paging */
   id: string;
-  discordId: string;
-  /** their discord handle, for a page that has to name somebody with no answers */
+  userId: string;
+  /** the name discord shows for the account */
   username: string;
-  /** what they typed, trimmed; null when the question was not answered */
-  name: string | null;
-  email: string | null;
-  /** free text on purpose — "Dec 2027" and "It depends" are both real answers */
-  gradYear: string | null;
-  /** `YYYY-MM-DD`, the day they applied, or null when discord did not say */
-  applied: string | null;
+  /** discord's timestamp, or null when it gave none */
+  createdAt: string | null;
+  /** each question and what was typed, trimmed; null when left blank */
+  answers: { question: string; answer: string | null }[];
 };
 
-/**
- * the answer to whichever question mentions `keyword`.
- *
- * matched on the label rather than on position, because a question added in
- * the middle of the form would shift every index by one and silently move
- * everybody's email into their name. the cost is that rewording a question in
- * discord past the keyword makes that field read `null` — which surfaces on
- * the reconciler as an application missing a field, rather than as a wrong
- * value written into notion
- */
-function answer(responses: FormResponse[], keyword: string): string | null {
-  const found = responses.find((response) =>
-    (response.label ?? "").toLowerCase().includes(keyword),
-  );
-
-  return found?.response?.trim() || null;
-}
-
-export function toApplication(raw: RawRequest): Application {
-  const responses = (raw.form_responses ?? []).filter(
-    /* the rules checkbox is a response like any other, and its label mentions
-       nothing we look for — but excluding it keeps the keyword search honest */
-    (response) => response.field_type !== "TERMS",
-  );
-
+function toJoinRequest(raw: RawRequest): JoinRequest {
   return {
     id: raw.id,
-    discordId: raw.user_id,
+    userId: raw.user_id,
     username: raw.user?.global_name || raw.user?.username || raw.user_id,
-    name: answer(responses, "name"),
-    email: answer(responses, "email"),
-    gradYear: answer(responses, "year"),
-    applied: raw.created_at?.slice(0, 10) || null,
+    createdAt: raw.created_at || null,
+    answers: (raw.form_responses ?? [])
+      /* the rules checkbox is a response like any other, but not a question
+         anybody answered */
+      .filter((response) => response.field_type !== "TERMS")
+      .map((response) => ({
+        question: response.label ?? "",
+        answer: response.response?.trim() || null,
+      })),
   };
 }
 
 /**
- * every approved application, oldest last.
+ * every approved join request, oldest last.
  *
  * the whole list every time. the endpoint does take `before` and `after`
  * snowflake cursors, so an incremental read is possible, but the results are
@@ -112,10 +89,10 @@ export function toApplication(raw: RawRequest): Application {
  * reason: with the ordering untrustworthy, only the minimum is guaranteed not
  * to skip anybody.
  */
-export async function approvedApplications(
+export async function approvedJoinRequests(
   token: string,
-): Promise<Application[]> {
-  const applications: Application[] = [];
+): Promise<JoinRequest[]> {
+  const requests: JoinRequest[] = [];
   let before: string | undefined;
 
   for (;;) {
@@ -176,7 +153,7 @@ export async function approvedApplications(
 
     /* a count of applications we were not given is a short answer, not an
        empty one */
-    if (!page && (answer.total ?? 0) > applications.length) {
+    if (!page && (answer.total ?? 0) > requests.length) {
       throw new Error(
         `discord counted ${answer.total} join requests and returned no list`,
       );
@@ -184,7 +161,7 @@ export async function approvedApplications(
 
     if (!page?.length) break;
 
-    applications.push(...page.map(toApplication));
+    requests.push(...page.map(toJoinRequest));
     if (page.length < PAGE) break;
 
     /* compared as numbers, not as text: a snowflake is 18 or 19 digits, and
@@ -195,5 +172,5 @@ export async function approvedApplications(
     );
   }
 
-  return applications;
+  return requests;
 }

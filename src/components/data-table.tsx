@@ -89,7 +89,7 @@ export function sortable(label: string) {
   return Header;
 }
 
-export type FacetedFilter = {
+type FacetedFilter = {
   /*
     a column id, not a key of the row.
 
@@ -137,8 +137,10 @@ type Props<T> = {
   facets?: FacetedFilter[];
   searchPlaceholder?: string;
   empty?: string;
-  /** when set, a download button exporting what is currently on screen */
-  /** the filename, without an extension; a date and `.csv` are appended */
+  /**
+   * when set, a download button exporting what is currently on screen, named
+   * this plus a date and `.csv`
+   */
   csv?: string;
 };
 
@@ -218,7 +220,7 @@ export function DataTable<T>({
     download(
       /* the BOM is what makes excel read utf-8 rather than latin-1, which is
          the difference between "Zoë" and "ZoÃ«" in a name column */
-      new Blob(["﻿", toCsv(headers, body)], {
+      new Blob(["\uFEFF", toCsv(headers, body)], {
         type: "text/csv;charset=utf-8",
       }),
       /* only ever called from a button rendered under `csv &&` */

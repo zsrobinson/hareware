@@ -31,3 +31,18 @@ test("a near-match is explained in words, not by its internal tag", () => {
 
   expect(screen.getByRole("alert").textContent).toContain("(one letter apart)");
 });
+
+test("each row of toggles is labelled by the words above it", () => {
+  render(
+    <StandingTable
+      corpus={{ people: [], meetings: [], contributions: [] }}
+      today="2026-09-08"
+      faces={{}}
+    />,
+  );
+
+  expect(screen.getByRole("group", { name: "Preset" })).toBeTruthy();
+  expect(
+    screen.getByRole("group", { name: "Combine thresholds" }),
+  ).toBeTruthy();
+});

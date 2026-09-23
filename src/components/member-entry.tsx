@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
 import { MemberFace } from "~/components/member-face";
 import { Badge } from "~/components/ui/badge";
 import type { Faces } from "~/lib/faces";
-import { discordHandle, shownName } from "~/lib/members/kiosk";
+import { discordHandle } from "~/lib/members/kiosk";
 import type { Person } from "~/lib/members/records";
 import { plural } from "~/lib/utils";
 
@@ -42,6 +42,8 @@ type Props = {
    * knows about it
    */
   note?: ReactNode;
+  /** badges the page adds after the row's own, for what only it knows */
+  badges?: ReactNode;
   /** buttons belonging to this row, drawn opposite the name */
   children?: ReactNode;
 };
@@ -55,7 +57,14 @@ type Props = {
  * an email in another. Three answers to "who is this" that a reader has to
  * learn separately, and only one of them showed a face
  */
-export function MemberEntry({ person, faces, onEdit, note, children }: Props) {
+export function MemberEntry({
+  person,
+  faces,
+  onEdit,
+  note,
+  badges,
+  children,
+}: Props) {
   const credits = person.contributions > 0 && (
     <Badge variant="secondary">
       <PenLineIcon />
@@ -73,7 +82,7 @@ export function MemberEntry({ person, faces, onEdit, note, children }: Props) {
       />
 
       <div className="min-w-0 flex-1 space-y-1">
-        <div className="truncate font-medium">{shownName(person)}</div>
+        <div className="truncate font-medium">{person.name}</div>
         {note && <div className="text-muted-foreground text-sm">{note}</div>}
 
         {onEdit ? (
@@ -102,6 +111,7 @@ export function MemberEntry({ person, faces, onEdit, note, children }: Props) {
               onEdit={() => onEdit("status")}
             />
             {credits}
+            {badges}
           </div>
         ) : (
           /* no `onEdit` means a list somebody is scanning rather than a row
@@ -120,6 +130,7 @@ export function MemberEntry({ person, faces, onEdit, note, children }: Props) {
               </Badge>
             )}
             {credits}
+            {badges}
           </div>
         )}
       </div>

@@ -1,12 +1,15 @@
 import { useMutation } from "@tanstack/react-query";
 import { PlusIcon, XIcon } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   MemberEditDialog,
   type Editing,
   type GuildOption,
 } from "~/components/member-edit-dialog";
 import { MemberEntry } from "~/components/member-entry";
+import { NewMemberForm, type NewMember } from "~/components/new-member-form";
+import { Problem } from "~/components/problem";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -24,18 +27,15 @@ import {
   indistinguishable,
   meetingLabel,
   searchCandidates,
-  shownName,
 } from "~/lib/members/kiosk";
-import { defaultStatus } from "~/lib/members/config";
 import { rosterKeys } from "~/lib/members/query-keys";
 import { RosterQueries } from "~/lib/members/roster-queries";
 import { useAttendance, usePatch, useRosterQuery } from "~/lib/members/queries";
 import type { KioskData } from "~/lib/members/views";
 import type { Intent } from "~/lib/members/attendance";
 import type { MeetingRecord, Person } from "~/lib/members/records";
-import { notify } from "~/lib/notify";
 import { postJson } from "~/lib/post-json";
-import { withParam } from "~/lib/search-params";
+import { errorMessage } from "~/lib/utils";
 
 /*
   a laptop at the front of the room with a queue of people typing their own
@@ -56,7 +56,7 @@ type Props = {
    *
    * `/api/members/kiosk` answers the same type from the same function, so this
    * seeds the query and every later read replaces it in place. Creating
-   * somebody or correcting a row re-reads this rather than asking the room to
+   * somebody or correcting a row patches it rather than asking the room to
    * reload the laptop
    */
   initial: KioskData;
@@ -68,11 +68,7 @@ type Props = {
   guild: GuildOption[];
 };
 
-async function createPerson(
-  name: string,
-  email: string,
-  status: string | null,
-): Promise<{ pageId: string; name: string; email: string }> {
+async function createPerson({ name, email, status }: NewMember) {
   const { pageId } = await postJson<{ pageId?: string }>(
     "/api/members/create",
     { name, email, ...(status ? { status } : {}) },
@@ -82,17 +78,12 @@ async function createPerson(
      checked rather than asserted */
   if (!pageId) throw new Error("the member was created without an id");
 
-  return { pageId, name, email };
+  return pageId;
 }
 
 /** the date the calendar holds, then the name with its own date taken off */
 const describe = (meeting: MeetingRecord) =>
   `${meeting.date} ${meetingLabel(meeting.name) || "Untitled"}`;
-
-/* the route's own message where there is one — notion's refusals say useful
-   things, and everybody at this laptop holds @Editorial Board */
-const reason = (thrown: unknown) =>
-  thrown instanceof Error ? thrown.message : String(thrown);
 
 export function AttendanceKiosk(props: Props) {
   return (
@@ -136,10 +127,6 @@ function Kiosk({ initial, today, faces, guild }: Props) {
 
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  const [newEmail, setNewEmail] = useState("");
-  /* Undergrad through `defaultStatus`, never the head of notion's options —
-     those currently begin with Alum, and an alum does not vote */
-  const [newStatus, setNewStatus] = useState(() => defaultStatus(statuses));
   const [editing, setEditing] = useState<Editing | null>(null);
 
   const search = useRef<HTMLInputElement>(null);
@@ -162,8 +149,6 @@ function Kiosk({ initial, today, faces, guild }: Props) {
   function changeQuery(value: string) {
     setQuery(value);
     setActive(0);
-    setNewEmail("");
-    setNewStatus(defaultStatus(statuses));
   }
 
   /* the next person is already reaching for the keyboard. `preventScroll`
@@ -186,11 +171,9 @@ function Kiosk({ initial, today, faces, guild }: Props) {
       `location.reload()`. Wiping it here is what reloaded the page under
       somebody halfway through signing a room in
     */
-    history.replaceState(
-      history.state,
-      "",
-      withParam(location.href, "meeting", id),
-    );
+    const url = new URL(location.href);
+    url.searchParams.set("meeting", id);
+    history.replaceState(history.state, "", url);
     refocus();
   }
 
@@ -214,20 +197,20 @@ function Kiosk({ initial, today, faces, guild }: Props) {
 
     if (present.includes(person.pageId)) {
       /* they tapped because they were not sure it had registered */
-      notify.ok(`${shownName(person)} was already signed in`);
+      toast.success(`${person.name} was already signed in`);
       refocus();
       return;
     }
 
     record(
       { kind: "add", pageId: person.pageId },
-      `${shownName(person)} is signed in`,
+      `${person.name} is signed in`,
     );
   }
 
   function remove(pageId: string) {
     const person = byId.get(pageId);
-    const name = person ? shownName(person) : "that row";
+    const name = person ? person.name : "that row";
 
     record({ kind: "remove", pageId }, `Removed ${name}`);
   }
@@ -254,16 +237,12 @@ function Kiosk({ initial, today, faces, guild }: Props) {
     queue: it has to finish before there is an id to sign in
   */
   const { mutate: create, isPending: creating } = useMutation({
-    mutationFn: (fields: {
-      name: string;
-      email: string;
-      status: string | null;
-    }) => createPerson(fields.name, fields.email, fields.status),
-    onSuccess: (created, fields) => {
+    mutationFn: createPerson,
+    onSuccess: (pageId, fields) => {
       const added: Person = {
-        pageId: created.pageId,
-        name: created.name,
-        email: created.email,
+        pageId,
+        name: fields.name,
+        email: fields.email,
         discordId: null,
         status: fields.status,
         /* nobody has written anything under a row created a second ago */
@@ -282,20 +261,15 @@ function Kiosk({ initial, today, faces, guild }: Props) {
       changeQuery("");
 
       record(
-        { kind: "add", pageId: created.pageId },
-        `${created.name} was added and is signed in`,
+        { kind: "add", pageId },
+        `${fields.name} was added and is signed in`,
       );
     },
-    onError: (thrown) => notify.failed(`Could not add them: ${reason(thrown)}`),
+    /* the route's own message: notion's refusals say useful things, and
+       everybody at this laptop holds @Editorial Board */
+    onError: (thrown) =>
+      toast.error(`Could not add them: ${errorMessage(thrown)}`),
   });
-
-  function addNewPerson() {
-    const name = query.trim();
-    const email = newEmail.trim();
-    if (!name || !email) return;
-
-    create({ name, email, status: newStatus });
-  }
 
   /*
     newest first on screen, oldest first everywhere else.
@@ -313,14 +287,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
   return (
     <div className="grid items-start gap-8 lg:grid-cols-2">
       <div className="space-y-6">
-        {notionProblem && (
-          <p
-            role="alert"
-            className="border-destructive/50 bg-destructive/10 text-destructive rounded-lg border p-3 text-sm"
-          >
-            {notionProblem}
-          </p>
-        )}
+        {notionProblem && <Problem>{notionProblem}</Problem>}
         <div className="flex flex-wrap items-center gap-2">
           <Label htmlFor="kiosk-meeting" className="text-muted-foreground">
             Meeting
@@ -463,53 +430,21 @@ function Kiosk({ initial, today, faces, guild }: Props) {
                   Nobody on the roster is called <strong>{query.trim()}</strong>{" "}
                   yet. Please use your full first and last name.
                 </p>
-                <div className="space-y-1.5">
-                  <Label htmlFor="kiosk-email">Email</Label>
-                  <Input
-                    id="kiosk-email"
-                    type="email"
-                    value={newEmail}
-                    onChange={(event) => setNewEmail(event.target.value)}
-                    className="h-12 text-base"
-                    autoComplete="off"
-                    placeholder="you@terpmail.umd.edu"
-                    aria-describedby="kiosk-email-why"
-                  />
-                  <p
-                    id="kiosk-email-why"
-                    className="text-muted-foreground text-sm"
-                  >
-                    Use your @terpmail.umd.edu or @umd.edu address.
-                  </p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Status</Label>
-                  {/* outline until it is the one chosen: this is a field
-                      almost nobody has to touch, and the default is right */}
-                  <div className="flex flex-wrap gap-2">
-                    {statuses.map((status) => (
-                      <Button
-                        key={status}
-                        type="button"
-                        variant={newStatus === status ? "secondary" : "outline"}
-                        aria-pressed={newStatus === status}
-                        onClick={() => setNewStatus(status)}
-                      >
-                        {status}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <Button
-                  className="h-12"
-                  disabled={creating || !newEmail.trim()}
-                  onClick={() => addNewPerson()}
-                >
-                  <PlusIcon className="size-4" />
-                  {creating ? "Adding…" : "Add and sign in"}
-                </Button>
+                <NewMemberForm
+                  key={query.trim()}
+                  id="kiosk-new"
+                  name={query.trim()}
+                  statuses={statuses}
+                  busy={creating}
+                  large
+                  submit={
+                    <>
+                      <PlusIcon className="size-4" />
+                      {creating ? "Adding…" : "Add and sign in"}
+                    </>
+                  }
+                  onAdd={(member) => create(member)}
+                />
               </div>
             )}
           </div>
@@ -545,7 +480,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
                 status: null,
                 contributions: 0,
               };
-              const name = shownName(person);
+              const name = person.name;
 
               return (
                 <li

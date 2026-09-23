@@ -75,15 +75,6 @@ export const HAREWARE_ORIGIN: string | undefined =
 export const MEETING_MENTION_ROLE_ID: string | undefined = "669611068938780673";
 
 /**
- * the notion database holding one page per editorial board meeting.
- *
- * this is NOT the Articles database — the reminder looks for a page whose date
- * property is today and links its agenda, which Articles has no notion of
- */
-export const MEETINGS_DATABASE_ID: string | undefined =
-  "22cbe415e24c80299d53e9fa048f0ca5";
-
-/**
  * which meetings the reminder is for, matched against the start of a meeting's
  * title.
  *

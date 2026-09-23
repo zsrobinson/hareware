@@ -54,3 +54,27 @@ test("logs the name on the row, not the one in the request", async () => {
     expect.objectContaining({ summary: "set Ana Reyes's status to Grad" }),
   );
 });
+
+test("no NOTION_TOKEN is refused as misconfigured before anything is asked", async () => {
+  const { env } = (await import("cloudflare:workers")) as unknown as {
+    env: Record<string, string | undefined>;
+  };
+  const fetched = vi.fn();
+  vi.stubGlobal("fetch", fetched);
+  delete env.NOTION_TOKEN;
+
+  const response = await (POST as (context: unknown) => Promise<Response>)({
+    request: new Request("https://hareware.test/api/members/status", {
+      method: "POST",
+      body: JSON.stringify({ pageId: PAGE, status: "Grad" }),
+    }),
+  });
+  env.NOTION_TOKEN = "secret";
+
+  expect(response.status).toBe(500);
+  expect(fetched).not.toHaveBeenCalled();
+  expect(log.record).toHaveBeenCalledWith(
+    undefined,
+    expect.objectContaining({ outcome: "misconfigured" }),
+  );
+});

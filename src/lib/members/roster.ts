@@ -18,6 +18,7 @@ import {
   queryAll,
   relationIds,
   together,
+  type RelationProperty,
 } from "~/lib/services/notion/client";
 import {
   ARTICLES_DATA_SOURCE_ID,
@@ -33,22 +34,18 @@ import type { ContributionRecord, MeetingRecord, Person } from "./records";
 import { easternNow } from "~/lib/eastern";
 
 /** every notion property shape these three databases hand back */
-type Property = {
+type Property = RelationProperty & {
   type?: string;
   title?: { plain_text: string }[] | null;
   rich_text?: { plain_text: string }[] | null;
   email?: string | null;
   date?: { start?: string | null } | null;
   select?: { name?: string | null } | null;
-  relation?: { id: string }[] | null;
   formula?: { type?: string; number?: number | null } | null;
-  /* the property's own id, and notion's word for "this relation is longer
-     than the 25 entries above" */
-  id?: string;
-  has_more?: boolean;
 };
 
-type Page = { id: string; properties: Record<string, Property> };
+/** a row of any of the three, as notion answers a page or a query */
+export type Page = { id: string; properties: Record<string, Property> };
 
 function text(property: Property | undefined): string {
   return plainText(property?.title ?? property?.rich_text).trim();
@@ -77,21 +74,27 @@ function formulaNumber(property: Property | undefined): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-function relationIdsFrom(
-  property: Property | undefined,
-  owner: string,
+/**
+ * a relation's ids, whole. A relation the integration cannot reach is omitted
+ * from the page and would otherwise read as empty
+ */
+async function relation(
+  page: Page,
   name: string,
-): string[] {
+  owner: string,
+  token: string,
+): Promise<string[]> {
+  const property = page.properties?.[name];
   if (!property || !Array.isArray(property.relation)) {
     throw new Error(
       `${owner}'s ${name} relation is not readable, so standing cannot be computed`,
     );
   }
 
-  return property.relation.map((related) => related.id);
+  return relationIds(page.id, property, token);
 }
 
-/** a Members row as standing sees it */
+/** a Members row as the roster sees it */
 export function toPerson(page: Page): Person {
   const status =
     page.properties?.[MEMBER_PROPERTIES.status.name]?.select?.name ?? null;
@@ -153,73 +156,42 @@ export async function statusOptions(token: string): Promise<string[]> {
     .filter((name): name is string => Boolean(name));
 }
 
-/** a Meetings row as standing sees it */
-export function toMeeting(page: Page): MeetingRecord {
-  return {
-    pageId: page.id,
-    name: text(page.properties?.[MEETING_PROPERTIES.name.name]),
-    date: easternDay(
-      page.properties?.[MEETING_PROPERTIES.date.name]?.date?.start,
-    ),
-    type: page.properties?.[MEETING_PROPERTIES.type.name]?.select?.name ?? null,
-    attendeeIds: relationIdsFrom(
-      page.properties?.[MEETING_PROPERTIES.attendees.name],
-      "a meeting",
-      MEETING_PROPERTIES.attendees.name,
-    ),
-  };
-}
-
 /**
  * every meeting, with attendee lists notion did not cut short.
  *
- * a query answers at most 25 entries of a relation and flags the rest with
- * `has_more`. A general body meeting is thirty people, so counting straight
- * from the query would leave five of them one meeting short of a vote with
- * nothing to show for it. The extra read happens only for the meetings that
- * say they were truncated, one at a time, which is a handful a semester
+ * a query answers at most 25 entries of a relation, and a general body meeting
+ * is thirty people, so counting straight from the query would leave five of
+ * them one meeting short of a vote with nothing to show for it
  */
 export async function meetings(token: string): Promise<MeetingRecord[]> {
   const pages = await queryAll<Page>(MEETINGS_DATA_SOURCE_ID, token);
-  const records = pages.map(toMeeting);
+  const records: MeetingRecord[] = [];
 
-  for (const [index, page] of pages.entries()) {
-    const property = page.properties?.[MEETING_PROPERTIES.attendees.name];
-    if (!property?.has_more || !property.id) continue;
-
-    records[index]!.attendeeIds = await relationIds(
-      page.id,
-      property.id,
-      token,
-    );
+  /* one at a time: only a truncated relation costs a read, a handful a
+     semester */
+  for (const page of pages) {
+    records.push({
+      pageId: page.id,
+      name: text(page.properties?.[MEETING_PROPERTIES.name.name]),
+      date: easternDay(
+        page.properties?.[MEETING_PROPERTIES.date.name]?.date?.start,
+      ),
+      type:
+        page.properties?.[MEETING_PROPERTIES.type.name]?.select?.name ?? null,
+      attendeeIds: await relation(
+        page,
+        MEETING_PROPERTIES.attendees.name,
+        "a meeting",
+        token,
+      ),
+    });
   }
 
   return records;
 }
 
-/** an Article reduced to the two credits that count toward standing */
-export function toContribution(page: Page): ContributionRecord {
-  return {
-    pageId: page.id,
-    headline: text(page.properties?.[ARTICLE_PROPERTIES.headline.name]),
-    date: easternDay(
-      page.properties?.[ARTICLE_PROPERTIES.publicationDate.name]?.date?.start,
-    ),
-    authorIds: relationIdsFrom(
-      page.properties?.[ARTICLE_PROPERTIES.author.name],
-      "an article",
-      ARTICLE_PROPERTIES.author.name,
-    ),
-    imageCrewIds: relationIdsFrom(
-      page.properties?.[ARTICLE_PROPERTIES.imageCrew.name],
-      "an article",
-      ARTICLE_PROPERTIES.imageCrew.name,
-    ),
-  };
-}
-
 /**
- * every published Article, filtered in notion rather than here.
+ * every published Article, reduced to the two credits that count.
  *
  * read by `standing.ts` alone, and it needs the dates: the counting there is
  * over a window, which Members' `Contributions` formula cannot express. The
@@ -235,17 +207,38 @@ export function toContribution(page: Page): ContributionRecord {
  * over different date ranges, and a caller that changed the range would be
  * comparing against a differently-filtered corpus without noticing
  */
-export async function contributions(
-  token: string,
-): Promise<ContributionRecord[]> {
-  const rows = await queryAll<Page>(ARTICLES_DATA_SOURCE_ID, token, {
+async function contributions(token: string): Promise<ContributionRecord[]> {
+  const pages = await queryAll<Page>(ARTICLES_DATA_SOURCE_ID, token, {
     filter: {
       property: ARTICLE_PROPERTIES.publicationDate.name,
       date: { is_not_empty: true },
     },
   });
+  const records: ContributionRecord[] = [];
 
-  return rows.map(toContribution);
+  for (const page of pages) {
+    records.push({
+      pageId: page.id,
+      headline: text(page.properties?.[ARTICLE_PROPERTIES.headline.name]),
+      date: easternDay(
+        page.properties?.[ARTICLE_PROPERTIES.publicationDate.name]?.date?.start,
+      ),
+      authorIds: await relation(
+        page,
+        ARTICLE_PROPERTIES.author.name,
+        "an article",
+        token,
+      ),
+      imageCrewIds: await relation(
+        page,
+        ARTICLE_PROPERTIES.imageCrew.name,
+        "an article",
+        token,
+      ),
+    });
+  }
+
+  return records;
 }
 
 /** everything standing needs, read together */

@@ -14,7 +14,6 @@
   other side.
 */
 
-import { env } from "cloudflare:workers";
 import {
   requirePageId,
   requireStatus,
@@ -31,13 +30,13 @@ export const POST = rosterRoute(
     pageId: requirePageId(body, "pageId"),
     status: requireText(body, "status"),
   }),
-  async ({ pageId, status }) => {
+  async ({ pageId, status }, tokens) => {
     const [person] = await Promise.all([
-      member(env.NOTION_TOKEN!, pageId),
-      requireStatus(status),
+      member(tokens.notion, pageId),
+      requireStatus(tokens.notion, status),
     ]);
 
-    await updateMember(env, pageId, { status });
+    await updateMember(tokens.notion, pageId, { status });
 
     return {
       summary: `set ${person.name}'s status to ${status}`,

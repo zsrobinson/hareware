@@ -1,4 +1,5 @@
 import { postJson } from "~/lib/post-json";
+import { errorMessage } from "~/lib/utils";
 import { useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -53,8 +54,7 @@ export function AutomationTriggers({
     } catch (thrown) {
       setSaid((prev) => ({
         ...prev,
-        [automation.id]:
-          thrown instanceof Error ? thrown.message : String(thrown),
+        [automation.id]: errorMessage(thrown),
       }));
     } finally {
       setBusy(null);

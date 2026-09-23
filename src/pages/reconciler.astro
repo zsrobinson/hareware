@@ -5,8 +5,6 @@ import { Reconciler } from "~/components/reconciler";
 import { viewerState } from "~/lib/admin";
 import { admitted } from "~/lib/admin-guard";
 import { reconcilerData } from "~/lib/members/views";
-import AlumMissing from "~/components/alum-missing.astro";
-import Problem from "~/components/problem.astro";
 import { faces } from "~/lib/faces";
 
 /* Reaching this page is the permission: the guard already refused anybody it
@@ -26,13 +24,10 @@ Astro.response.headers.set("cache-control", "private, no-store");
 */
 const data = await reconcilerData(env);
 
-/* the same pictures the kiosk draws, from the guild read `reconcilerData`
-   already made. A row with no linked account falls back to its initials, which
-   is also what a missing bot token gets */
-const rosterFaces = await faces([
-  ...data.roster.map((person) => person.discordId),
-  ...data.discordSuggestions.map((suggestion) => suggestion.account.id),
-]);
+/* every account in the guild rather than the roster's, so applicants and an
+   account linked after a refetch are drawn too. A row with no linked account
+   falls back to its initials, which is also what a missing bot token gets */
+const rosterFaces = await faces(data.guild.map((account) => account.id));
 ---
 
 <Dashboard title="Reconciler" viewer={viewerState(who)}>
@@ -41,17 +36,6 @@ const rosterFaces = await faces([
       Run this before an election. An unresolved duplicate splits somebody's
       attendance across two rows and denies them a vote they earned.
     </p>
-
-    {data.notionProblem && <Problem>{data.notionProblem}</Problem>}
-    {data.alumMissing && <AlumMissing options={data.liveStatuses} />}
-    {
-      data.discordProblem && (
-        <Problem>
-          Discord could not be read completely, so application and account
-          suggestions may be unavailable: {data.discordProblem}
-        </Problem>
-      )
-    }
 
     <Reconciler initial={data} faces={rosterFaces} client:load />
   </div>

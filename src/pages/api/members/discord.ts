@@ -11,7 +11,6 @@
   reconciler exists to find, and creating one here would be creating work.
 */
 
-import { env } from "cloudflare:workers";
 import {
   BadRequest,
   requireFreeDiscordId,
@@ -29,15 +28,20 @@ export const POST = rosterRoute(
     pageId: requirePageId(body, "pageId"),
     discordId: requireText(body, "discordId"),
   }),
-  async ({ pageId, discordId }) => {
-    const roster = await people(env.NOTION_TOKEN!);
+  async ({ pageId, discordId }, tokens) => {
+    const roster = await people(tokens.notion);
 
     const person = roster.find((one) => one.pageId === pageId);
     if (!person) throw new BadRequest("that row is no longer on the roster");
 
-    const profile = await requireFreeDiscordId(discordId, roster, pageId);
+    const profile = await requireFreeDiscordId(
+      tokens.discord,
+      discordId,
+      roster,
+      pageId,
+    );
 
-    await updateMember(env, pageId, { discordId });
+    await updateMember(tokens.notion, pageId, { discordId });
 
     return {
       summary: `linked ${person.name} to ${profile.username} on Discord from the kiosk`,

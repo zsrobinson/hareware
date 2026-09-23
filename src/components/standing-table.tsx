@@ -340,8 +340,12 @@ export function StandingTable({
       {/* the question, set apart from the answer below it */}
       <div className="space-y-4 pb-4">
         <div className="space-y-1.5">
-          <Label>Preset</Label>
-          <div className="flex flex-wrap gap-2">
+          <Label id="standing-preset">Preset</Label>
+          <div
+            role="group"
+            aria-labelledby="standing-preset"
+            className="flex flex-wrap gap-2"
+          >
             {PRESETS.map((one) => (
               <Button
                 key={one.id}
@@ -413,8 +417,12 @@ export function StandingTable({
 
         <div className="flex flex-wrap items-center gap-6">
           <div className="space-y-1.5">
-            <Label>Combine thresholds</Label>
-            <div className="flex gap-2">
+            <Label id="standing-combine">Combine thresholds</Label>
+            <div
+              role="group"
+              aria-labelledby="standing-combine"
+              className="flex gap-2"
+            >
               {(
                 [
                   ["or", "Any (OR)"],

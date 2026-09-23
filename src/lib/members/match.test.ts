@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
-import type { Application } from "~/lib/services/discord/join-requests";
+import type { Application } from "./applications";
 import {
   duplicates,
-  nearName,
+  normaliseName,
   resolveApplication,
   safeToCreate,
   suggestDiscordLinks,
@@ -379,18 +379,25 @@ test("names further apart than one edit are still new", () => {
   expect(resolution.status).toBe("new");
 });
 
+/** whether two names are offered as a near-name pair */
+const near = (a: string, b: string) =>
+  duplicates([
+    person({ pageId: "a", name: a }),
+    person({ pageId: "b", name: b }),
+  ]).some((found) => found.on === "near-name");
+
 test("one edit is one edit, whether inserted, deleted or substituted", () => {
-  expect(nearName("matthew", "mathew")).toBe(true);
-  expect(nearName("mathew", "matthew")).toBe(true);
-  expect(nearName("reyes", "reyez")).toBe(true);
-  expect(nearName("bay hoffman", "bay hoffmann")).toBe(true);
+  expect(near("Matthew", "Mathew")).toBe(true);
+  expect(near("Mathew", "Matthew")).toBe(true);
+  expect(near("Reyes", "Reyez")).toBe(true);
+  expect(near("Bay Hoffman", "Bay Hoffmann")).toBe(true);
 });
 
 test("two edits are too many, and an identical name is not 'near'", () => {
-  expect(nearName("matthew", "mathews")).toBe(false);
-  expect(nearName("bay", "bay")).toBe(false);
-  expect(nearName("", "bay")).toBe(false);
-  expect(nearName("ada vance", "bay hoffman")).toBe(false);
+  expect(near("Matthew", "Mathews")).toBe(false);
+  expect(near("Bay", "Bay")).toBe(false);
+  expect(near("", "Bay")).toBe(false);
+  expect(near("Ada Vance", "Bay Hoffman")).toBe(false);
 });
 
 /*
@@ -500,4 +507,17 @@ test("a row with no name matches nothing", () => {
   );
 
   expect(suggestions).toEqual([]);
+});
+
+test("names match across case, accents, punctuation and spacing", () => {
+  expect(normaliseName("Gale de Silva")).toBe(normaliseName("gale de silva"));
+  expect(normaliseName("Zoë O'Brien")).toBe(normaliseName("Zoe OBrien"));
+  expect(normaliseName("  Matthew   Gray ")).toBe(
+    normaliseName("Matthew Gray"),
+  );
+  expect(normaliseName("Matt G.")).toBe(normaliseName("matt g"));
+});
+
+test("different people do not normalise to the same name", () => {
+  expect(normaliseName("Matthew Gray")).not.toBe(normaliseName("Mathew Gray"));
 });

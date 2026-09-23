@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { useMemo } from "react";
 import { DataTable, sortable } from "~/components/data-table";
 import { MemberFace } from "~/components/member-face";
 import { Badge } from "~/components/ui/badge";
@@ -111,9 +112,11 @@ export function InvocationLog({
   rows: LogRow[];
   faces: Faces;
 }) {
+  const columns = useMemo(() => columnsFor(faces), [faces]);
+
   return (
     <DataTable
-      columns={columnsFor(faces)}
+      columns={columns}
       data={rows}
       facets={[
         { id: "source", label: "Source" },

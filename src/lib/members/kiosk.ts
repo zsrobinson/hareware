@@ -13,7 +13,7 @@
 */
 
 import type { Faces } from "~/lib/faces";
-import { normaliseName } from "~/lib/articles/member";
+import { normaliseName } from "./match";
 import { plural } from "~/lib/utils";
 import type { MeetingRecord, Person } from "./records";
 
@@ -185,17 +185,6 @@ export function initials(name: string): string {
   const last = parts[parts.length - 1]![0]!;
 
   return (parts.length === 1 ? first : first + last).toUpperCase();
-}
-
-/**
- * what to call somebody on screen.
- *
- * always the name on their Notion row. The Discord handle belongs on the
- * Discord chip, where it says which account is linked; using it as the title
- * hid the name the room is actually looking for
- */
-export function shownName(person: Person): string {
-  return person.name;
 }
 
 /** the linked Discord handle, for the chip that names the account */

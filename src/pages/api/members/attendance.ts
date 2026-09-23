@@ -12,14 +12,12 @@
   second tab, a phone opened to check something.
 */
 
-import { env } from "cloudflare:workers";
 import {
   optionalList,
   requireList,
   requirePageId,
   rosterRoute,
 } from "~/lib/members/api";
-import { knownOrSafe } from "~/lib/members/attendance";
 import { recordAttendance } from "~/lib/members/write";
 import { plural } from "~/lib/utils";
 
@@ -30,14 +28,16 @@ export const POST = rosterRoute(
     meetingId: requirePageId(body, "meetingId"),
     /* an empty list is valid and means "everybody I knew about was a mistake" */
     memberIds: requireList(body, "memberIds"),
-    /* optional so a caller that omits it can only add, never remove */
-    known: optionalList(body, "known"),
+    /* absent reads as empty, so a caller that omits it can only add, never
+       remove. Defaulting to `memberIds` would make the write a no-op and lose
+       the person who just tapped */
+    known: optionalList(body, "known") ?? [],
   }),
-  async ({ meetingId, memberIds, known }) => {
+  async ({ meetingId, memberIds, known }, tokens) => {
     const attendees = await recordAttendance(
-      env,
+      tokens.notion,
       meetingId,
-      knownOrSafe(known),
+      known,
       memberIds,
     );
 

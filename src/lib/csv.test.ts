@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { csvCell, toCsv } from "./csv";
+import { toCsv } from "./csv";
+
+/** one value as the cell `toCsv` writes for it */
+const csvCell = (value: unknown) => toCsv(["h"], [[value]]).slice(3, -2);
 
 describe("csvCell", () => {
   it("leaves an ordinary value alone", () => {

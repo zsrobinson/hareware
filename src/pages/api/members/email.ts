@@ -9,7 +9,6 @@
   somebody with only a personal address is still a member.
 */
 
-import { env } from "cloudflare:workers";
 import { requireEmail, requirePageId, rosterRoute } from "~/lib/members/api";
 import { member } from "~/lib/members/roster";
 import { updateMember } from "~/lib/members/write";
@@ -21,10 +20,10 @@ export const POST = rosterRoute(
     pageId: requirePageId(body, "pageId"),
     email: requireEmail(body, "email"),
   }),
-  async ({ pageId, email }) => {
-    const person = await member(env.NOTION_TOKEN!, pageId);
+  async ({ pageId, email }, tokens) => {
+    const person = await member(tokens.notion, pageId);
 
-    await updateMember(env, pageId, { email });
+    await updateMember(tokens.notion, pageId, { email });
 
     return {
       summary: `set ${person.name}'s email from the kiosk`,

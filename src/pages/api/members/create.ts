@@ -13,7 +13,6 @@
   person to reconcile it by hand.
 */
 
-import { env } from "cloudflare:workers";
 import {
   optionalText,
   requireEmail,
@@ -36,18 +35,19 @@ export const POST = rosterRoute(
        creates them from an application, which is nothing but an account */
     discordId: optionalText(body, "discordId"),
   }),
-  async ({ name, email, status, discordId }) => {
-    if (status) await requireStatus(status);
+  async ({ name, email, status, discordId }, tokens) => {
+    if (status) await requireStatus(tokens.notion, status);
 
     if (discordId) {
       await requireFreeDiscordId(
+        tokens.discord,
         discordId,
-        await people(env.NOTION_TOKEN!),
+        await people(tokens.notion),
         null,
       );
     }
 
-    const pageId = await createMember(env, {
+    const pageId = await createMember(tokens.notion, {
       name,
       email,
       ...(status ? { status } : {}),

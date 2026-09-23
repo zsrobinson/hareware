@@ -2,12 +2,7 @@ import { markup, textMessage } from "./message";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { followUp } from "./follow-up";
 
-/**
- * the json body of the one request that was sent.
- *
- * `RequestInit["body"]` is a union that includes streams and blobs, so reading
- * it needs a narrowing somewhere — once here rather than at every assertion
- */
+/** the json body of the one request that was sent */
 function sentBody(mock: { mock: { calls: unknown[] } }) {
   const [, init] = mock.mock.calls[0] as [string, RequestInit];
 
@@ -64,10 +59,6 @@ test("it sends no authorization header, because the token is the credential", as
 });
 
 test("empty content still sends a message rather than nothing", async () => {
-  /*
-    a deferred interaction that never follows up shows "HareWare is thinking…"
-    forever, so there is no path here that sends nothing
-  */
   const fetchMock = vi.fn(async () => okResponse());
   vi.stubGlobal("fetch", fetchMock);
 

@@ -50,11 +50,6 @@ test("a schema notion refused is a failure, not a silent skip", async () => {
   expect((await refreshCommands(env)).outcome).toBe("failed");
 });
 
-/*
-  the alarm for notion quietly stopping sharing something. the write paths
-  refuse too, but only when somebody tries to credit a Member — which could be
-  weeks away. this says so the same day
-*/
 test("reports a property notion has stopped sharing", async () => {
   const without = schema();
   delete (without.properties as Record<string, unknown>)[
@@ -68,10 +63,7 @@ test("reports a property notion has stopped sharing", async () => {
   expect(result.summary).toContain(ARTICLE_PROPERTIES.author.name);
 });
 
-/*
-  a read that half worked. registering it publishes a required picker with no
-  choices in it, and an editor opens an empty dropdown
-*/
+/* a half-worked read would register a required picker with no choices */
 test("refuses when one picker came back with no options", async () => {
   answering(
     schema({

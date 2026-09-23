@@ -2,13 +2,7 @@ import { readFileSync } from "node:fs";
 import { expect, test, vi } from "vitest";
 import { completeDiscordSignOut, returnToOf } from "./auth";
 
-/*
-  where a sign-in may send somebody afterwards.
-
-  `safeReturnTo` is not exported, so these go through the sign-out route, which
-  is the shortest path to it: it takes a returnTo from a form post and answers
-  with the Location it decided on.
-*/
+/* `safeReturnTo`, through the sign-out route's Location header */
 async function redirectedTo(returnTo: string) {
   const body = new FormData();
   body.set("returnTo", returnTo);
@@ -33,13 +27,7 @@ test("refuses a protocol-relative url", async () => {
 });
 
 test("refuses one that becomes protocol-relative after normalisation", async () => {
-  /*
-    the hole this closes: `/..//evil.example` starts with a single slash and
-    resolves to our own origin, because the escape happens inside the path —
-    but `url.pathname` comes back as `//evil.example`, which a browser follows
-    off-site. checking the input and returning the normalised value is what
-    made the two disagree
-  */
+  /* `url.pathname` normalises these to `//evil.example` */
   expect(await redirectedTo("/..//evil.example")).toBe("/generate");
   expect(await redirectedTo("/./..//evil.example")).toBe("/generate");
   expect(await redirectedTo("/x/..//evil.example#f")).toBe("/generate");

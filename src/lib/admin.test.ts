@@ -84,10 +84,7 @@ test("rejects a tampered session cookie", async () => {
   expect(await editorialBoardMember(request)).toBeNull();
 });
 
-/*
-  an outage denies rather than grants. the alternative fails open on the one
-  surface holding the byline-to-member mapping
-*/
+/* an outage denies rather than grants */
 test("denies when discord is unreachable", async () => {
   workers.env.SESSION_SECRET = SECRET;
   workers.env.DISCORD_BOT_TOKEN = "bot";
@@ -109,11 +106,7 @@ test("denies when there is no bot token to ask with", async () => {
   expect(await editorialBoardMember(await signedIn())).toBeNull();
 });
 
-/*
-  the four refusals, told apart. these are the whole point of the change: a
-  page that cannot say which one happened is the page that told a board member
-  during a discord outage that their tools did not exist
-*/
+/* the four refusals, told apart */
 
 test("admits a member holding the role", async () => {
   workers.env.SESSION_SECRET = SECRET;

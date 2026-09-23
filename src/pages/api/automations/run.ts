@@ -8,12 +8,7 @@ import { refreshCommands } from "~/lib/services/discord/refresh-commands";
 
 export const prerender = false;
 
-/**
- * compares without leaking, through timing, how much of a guess was right.
- *
- * length is compared first and separately because it cannot be hidden anyway —
- * the loop below has to stop somewhere
- */
+/** a constant-time comparison */
 function matches(given: string, expected: string) {
   if (given.length !== expected.length) return false;
 
@@ -26,31 +21,18 @@ function matches(given: string, expected: string) {
 }
 
 /*
-  fires the reminders by hand, so one can be seen without waiting for 8am.
-
-  a POST rather than a GET because it posts to discord — nothing that changes
-  the world should be reachable by a link somebody pastes. the secret travels in
-  the Authorization header rather than the url, which cloudflare logs
-
-  this is one-shot on purpose. an environment variable that forces a reminder
-  would be standing state, and a worker cannot unset its own env, so it would
-  keep firing every hour until a human remembered to remove it
+  Fires the automations by hand: a bearer secret from a terminal, or an
+  @Editorial Board session from the panel. The secret goes in the header
+  because Cloudflare logs urls.
 */
 export const POST: APIRoute = async ({ request }) => {
   const expected = env.REMINDERS_TRIGGER_SECRET;
 
-  // unset means the trigger does not exist, rather than that it is open
   if (!expected) {
     return new Response("manual trigger is not configured", { status: 404 });
   }
 
-  /*
-    two ways in, one path out. the bearer secret is for a terminal; the session
-    is for the admin panel's buttons, where a member holding @Editorial Board
-    has already proved who they are
-  */
   const given = request.headers.get("authorization")?.replace(/^Bearer /, "");
-  /* a bearer run legitimately has no actor; a panel run always does */
   const member =
     given && matches(given, expected)
       ? null
@@ -62,15 +44,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   const query = new URL(request.url).searchParams;
 
-  /*
-    `?sync=1` refreshes the picker options and the command surface, and fires
-    no reminders.
-
-    it exists because the sync otherwise only runs on the hourly tick, which
-    means a change to it cannot be exercised without waiting up to an hour and
-    then reading a log to find out. one meaning per request: this returns
-    without touching the reminders rather than doing both
-  */
+  /* `?sync=1` refreshes the command surface only, and runs no automation */
   if (query.get("sync")) {
     const sync = await refreshCommands(env);
 
@@ -80,41 +54,22 @@ export const POST: APIRoute = async ({ request }) => {
     );
   }
 
-  /*
-    `?only=meeting` or `?only=social` to fire one; both by default. the reminders
-    themselves decide there is nothing to say on a quiet day, so firing both is
-    safe
-  */
+  /* `?only=<id>` fires one; all by default */
   const only = query.get("only");
   if (only && !automation(only)) {
     return new Response(`unknown automation: ${only}`, { status: 400 });
   }
 
-  /* validated against the registry rather than a hardcoded pair, so a third
-     automation is reachable here the moment it exists */
   const which: Which = only ? new Set([automation(only)!.id]) : ALL;
 
-  /*
-    `?dry=1` reports what each reminder would post without posting it, and
-    `?silent=1` posts without notifying anyone. production carries neither
-    switch as a secret — deliberately, so a real 8am run pings properly — which
-    left no way to exercise this against the real channels without pinging the
-    editorial board. these are that way.
-
-    a query parameter beats an environment variable for this: it applies to one
-    request rather than standing until somebody remembers to remove it
-  */
+  /* `?dry=1` posts nothing and `?silent=1` pings nobody, for this request only
+     (docs/agents/silent-failures.md) */
   const options: Env = {
     ...env,
     ...(query.get("dry") ? { REMINDERS_DRY_RUN: "1" } : {}),
     ...(query.get("silent") ? { REMINDERS_NO_PING: "1" } : {}),
   };
 
-  /*
-    the session, kept rather than discarded. every panel trigger used to write
-    a row with no actor, which made the one action that pings the whole club the
-    least attributable thing here — the opposite of what ADR 0007 promised
-  */
   const report = await runAutomations(
     options,
     easternNow(new Date()),

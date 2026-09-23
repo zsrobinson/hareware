@@ -1,16 +1,11 @@
-/*
-  The invariant ADR 0005 rests on: a response that renders who you are must
-  never be one a shared cache can hand to somebody else. Pure and total rather
-  than a tripwire in the layout, so it holds in production and not only DEV.
-*/
+/* A response that renders who you are must not be shared-cacheable. ADR 0005. */
 
 /** whatever a page passed about the viewer, in the shape the layout sees it */
 export type Rendered = Record<string, unknown> | null;
 
 /**
- * Whether these props would put one member's details into the html. Any field
- * with a value counts, rather than a list of the fields there happen to be
- * today, so a shape that grows a field grows the guard with it.
+ * Whether these props put a member's details in the html. Any non-empty field
+ * counts.
  */
 export function personal(viewer: Rendered) {
   if (!viewer) return false;
@@ -33,11 +28,8 @@ function anonymityError(pathname: string, cacheControl: string | null) {
 }
 
 /**
- * throws when a response would serve one member's sidebar to everybody.
- *
- * in production it refuses rather than throwing: a page that would leak is
- * downgraded to `private, no-store` and logged, because a 500 for everyone is
- * worse than a page that merely stops being cached
+ * Stops a shared cache serving one member's sidebar to everybody: throws in
+ * dev, and in production makes the response private and logs it.
  */
 export function assertAnonymous({
   pathname,

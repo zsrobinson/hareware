@@ -28,21 +28,15 @@ import { getTaggedText } from "../lib/get-tagged-text";
 const param = Astro.url.searchParams.get("article") || "";
 const invalid = Astro.url.searchParams.get("error") !== null;
 
-/* same as /generate: the export has to reflect the article as it stands now,
-   and this renders who you are into the sidebar either way */
 Astro.response.headers.set("cache-control", "private, no-store");
 
-/* the exporter has two states, and asking for an article is the first of them
-   rather than a bounce back to the post generator's landing page */
 let link: string | undefined;
 let post: Awaited<ReturnType<typeof scrapeArticle>> | null = null;
 
 if (param) {
-  /* check that we have a good article */
   link = toArticleLink(param);
   if (!link) return Astro.redirect("/magazine?error");
 
-  /* tidy up the url when someone hands us a full permalink */
   const slug = toArticleSlug(link);
   if (param !== slug) return Astro.redirect(`/magazine?article=${slug}`);
 

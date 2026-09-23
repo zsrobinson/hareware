@@ -1,11 +1,4 @@
-/*
-  telling somebody when a scheduled run failed — issue #34.
-
-  the bot runs unattended. when it works the evidence is a message in Discord;
-  when it does not, there is nothing at all, and a quiet morning looks the same
-  whether nothing was due or Notion was down. the invocation log made that
-  findable. this is what makes it noticed.
-*/
+/* Posts when a scheduled run fails, so a broken morning does not look quiet. */
 
 import { lastOutcome } from "~/lib/log";
 import type { Automation } from "./registry";
@@ -13,16 +6,8 @@ import { postMessage, text } from "~/lib/services/discord/post-message";
 import { ALERT_CHANNEL_ID, HAREWARE_ORIGIN } from "./config";
 
 /**
- * posts a failure to the alert channel, once per run of bad luck.
- *
- * silent about a failure that was already reported: the previous recorded
- * outcome is the whole flood control, so a reminder broken for a week says so
- * on the first morning and then stops. it starts reporting again only after a
- * run that worked, which is also what "recovered" looks like from here.
- *
- * never throws. a reminder that posted correctly must not be reported as failed
- * because the alert could not be sent, and the alert is the less important of
- * the two
+ * Posts a failure once per streak: silent while the previous run also failed.
+ * Never throws, so a failed alert cannot fail the run it reports.
  */
 export async function reportFailure(
   env: Env,
@@ -30,10 +15,7 @@ export async function reportFailure(
   summary: string,
 ) {
   try {
-    /*
-      read before the new row is written, so this is the outcome of the run
-      before this one rather than of this one
-    */
+    /* read before this run's row is written */
     if ((await lastOutcome(env.DB, automation.action, "cron")) === "failed")
       return;
 
@@ -57,14 +39,9 @@ export async function reportFailure(
             ].join("\n"),
           ),
         ],
-        /*
-          no role mention. a transient Notion wobble at 8am is not worth waking
-          anyone, and the point is that it is written down where somebody looks
-          when a morning was quiet — not that it interrupts them
-        */
+        /* no role mention: this is for whoever looks, not to wake anyone */
       },
       {
-        // a dry run has a human reading the response; it needs no announcement
         dryRun: Boolean(env.REMINDERS_DRY_RUN),
         silent: Boolean(env.REMINDERS_NO_PING),
         testChannelId: env.REMINDERS_TEST_CHANNEL,
@@ -75,7 +52,7 @@ export async function reportFailure(
   }
 }
 
-/** discord takes 4000 characters in a text display; a stack trace can beat it */
+/** under Discord's 4000 characters, which a stack trace can exceed */
 function clip(summary: string, limit = 1200) {
   return summary.length > limit ? `${summary.slice(0, limit)}…` : summary;
 }

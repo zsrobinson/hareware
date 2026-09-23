@@ -43,10 +43,7 @@ test("a schema with everything shared is missing nothing", () => {
 });
 
 test("a relation notion omitted is reported, because its value reads as []", () => {
-  /* the whole point: when Members is not shared with the integration, notion
-     drops `Author` from the schema and the page's value comes back `[]` —
-     identical to an article with no author. an append built on that read would
-     delete co-authors nobody could see */
+  /* an unshared Members drops `Author` from the schema; see `assertProperties` */
   const withoutAuthor = schema();
   delete withoutAuthor.properties["Author"];
 
@@ -117,10 +114,7 @@ test("every property the commands touch is checked, not only the pickers", () =>
 /* ---- finding one option by name ----------------------------------------- */
 
 test("an option is found in the schema whatever case it was asked for", () => {
-  /* what reaches notion is notion's own spelling. asking for "approved" and
-     writing "Approved" is what keeps ADR 0009's rule — no notion value typed
-     into this repo — while still letting `/article new` start an Article
-     somewhere sensible */
+  /* what reaches Notion is Notion's own spelling (ADR 0009) */
   expect(optionNamed(schema(), "Article Status", "approved")).toBe("Approved");
   expect(optionNamed(schema(), "Section", "rabbithole")).toBe("Rabbithole");
 });

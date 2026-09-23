@@ -25,17 +25,13 @@ import { scrapeArticle } from "~/lib/services/wordpress/scrape-article";
 const param = Astro.url.searchParams.get("article") || "";
 const invalid = Astro.url.searchParams.get("error") !== null;
 
-/* the generator has two states: asking which article, and drawing slides for
-   one. /custom is the third way in, for writing that isn't published yet */
 let link: string | undefined;
 let post: Awaited<ReturnType<typeof scrapeArticle>> | null = null;
 
 if (param) {
-  /* check that we have a good article */
   link = toArticleLink(param);
   if (!link) return Astro.redirect("/generate?error");
 
-  /* tidy up the url when someone hands us a full permalink */
   const slug = toArticleSlug(link);
   if (param !== slug) return Astro.redirect(`/generate?article=${slug}`);
 
@@ -49,11 +45,7 @@ if (param) {
 const pageParam = Number(Astro.url.searchParams.get("page") ?? "1");
 const page = isNaN(pageParam) || pageParam < 0 ? 1 : pageParam;
 
-/* the list of articles is not the article. worst case a just-published piece is
-   missing from it for half a minute, and its link still works if pasted in.
-   with an article in hand the export has to reflect it as it stands now, so
-   only the landing state is ever held by a cache — and because that one is
-   shared, its sidebar is the anonymous kind */
+/* only the landing is cached: an article must show as it stands now */
 if (post) {
   Astro.response.headers.set("cache-control", "private, no-store");
 } else {
@@ -64,11 +56,7 @@ if (post) {
 }
 
 const articles = post ? null : await getRecentArticles(page);
-/*
-  only the article view resolves a viewer. the landing is cached, so it must
-  render anonymous html and let the island ask — `undefined` is what says "not
-  known here", as distinct from a resolved "nobody"
-*/
+/* the cached landing passes `undefined`, so the island asks who is viewing */
 const who = post ? viewerState(await viewer(Astro.request)) : undefined;
 ---
 

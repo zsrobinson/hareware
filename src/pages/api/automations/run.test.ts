@@ -1,10 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 
-/*
-  the route reads its secret from `cloudflare:workers`, which only exists inside
-  workerd — astro v6 removed `locals.runtime.env`, whose getter now throws. the
-  module is stubbed with a mutable object so each test can set the environment
-*/
+/* `cloudflare:workers` exists only in workerd, so it is stubbed per test */
 const workers = vi.hoisted(() => ({ env: {} as Record<string, string> }));
 vi.mock("cloudflare:workers", () => workers);
 
@@ -51,10 +47,7 @@ test("refuses a prefix of the right secret", async () => {
   expect(response.status).toBe(401);
 });
 
-/*
-  with no webhook urls set the reminders report themselves unset without
-  reaching the network, which is exactly what a run should say here
-*/
+/* with nothing configured, each automation reports itself unset offline */
 test("runs both reminders for a correct secret", async () => {
   const response = await call(
     { REMINDERS_TRIGGER_SECRET: SECRET },
@@ -92,11 +85,6 @@ test("rejects an unknown reminder name", async () => {
   expect(response.status).toBe(400);
 });
 
-/*
-  production carries neither switch as a secret, so before these existed the
-  only way to exercise the trigger against the real channels was to post for
-  real and ping the editorial board. it happened twice
-*/
 test("?dry=1 reports without posting anything", async () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   const fetchMock = vi.fn();

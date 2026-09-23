@@ -1,16 +1,7 @@
 /*
-  Routes verified Discord interactions: button presses, slash commands, and the
-  pickers editors type into.
-
-  a button press needs no store — discord hands us the message the button
-  belongs to, so the message is itself the record of what has been posted, and
-  the three-second deadline is never in play.
-
-  a command is not like that. anything that writes to notion will miss three
-  seconds, so those answer DEFER and follow up. autocomplete cannot defer at
-  all — there is no such response type — so its read is raced against a
-  deadline and answers an empty dropdown rather than nothing. the reads arrive
-  as `deps`, which is what keeps this file testable without notion.
+  Routes verified Discord interactions: button presses, slash commands and
+  autocomplete. Writes miss Discord's three seconds, so they DEFER and follow
+  up; autocomplete cannot defer, so its read races a deadline. ADR 0009.
 */
 
 import { articleResponse, editResponse } from "./article-response";
@@ -47,7 +38,7 @@ import {
 } from "./interaction-response";
 import { POSTED_PREFIX, togglePosted } from "./posted-button";
 
-/** interaction types, of which we answer four */
+/** interaction types */
 const PING = 1;
 const APPLICATION_COMMAND = 2;
 const MESSAGE_COMPONENT = 3;
@@ -59,29 +50,19 @@ const UPDATE_MESSAGE = 7;
 const APPLICATION_COMMAND_AUTOCOMPLETE_RESULT = 8;
 
 /**
- * how long the whole autocomplete answer gets.
- *
- * discord's three seconds are hard and there is no deferred autocomplete
- * response, so a slow notion read has to become an empty dropdown well before the
- * deadline rather than a "HareWare didn't respond in time" on every keystroke
+ * Autocomplete's budget, under Discord's hard three seconds: a slow read
+ * becomes an empty dropdown.
  */
 const AUTOCOMPLETE_BUDGET_MS = 2000;
 
-/** below this a substring search matches most of the corpus, so it is not run */
+/**
+ * below this a substring search matches most of the corpus, so it is not run
+ */
 const MIN_SEARCH = 2;
 
-/**
- * an option as discord sends it back, which is not the option as we registered
- * it.
- *
- * the registration shape in `commands.ts` carries a description and the
- * choices we offer; what arrives carries the value the editor chose and, during
- * autocomplete, which option their cursor is in. they were one type, and that
- * is why `value` was `unknown` and every read of it went through `String()`
- */
+/** an option as Discord sends it back, not as `commands.ts` registers it */
 type SubmittedOption = {
   name: string;
-  /** discord sends the option's own type; ours are all strings */
   value?: string | number | boolean;
   /** which option the cursor is in; only autocomplete payloads carry it */
   focused?: boolean;
@@ -89,17 +70,13 @@ type SubmittedOption = {
 };
 
 /**
- * an option's value as text.
- *
- * every option `/article` takes is a string, so anything else is discord
- * sending a shape we did not register — treated as absent rather than coerced,
- * because `String(someObject)` is how "[object Object]" reaches notion
+ * An option's value as text. Anything but a string is treated as absent, not
+ * coerced.
  */
 function textOf(option: SubmittedOption | undefined): string {
   return typeof option?.value === "string" ? option.value.trim() : "";
 }
 
-/** a discord user, as much of one as a payload ever carries */
 type DiscordUser = {
   id?: string;
   username?: string;
@@ -115,11 +92,7 @@ type Interaction = {
     custom_id?: string;
     name?: string;
     options?: SubmittedOption[];
-    /*
-      the objects behind a USER option, sent with the interaction rather than
-      looked up. `members` carries the server nickname and `users` the account,
-      which is why crediting somebody costs no discord request at all
-    */
+    /* the objects behind a USER option, so crediting needs no lookup */
     resolved?: {
       members?: Record<string, { nick?: string | null }>;
       users?: Record<string, DiscordUser>;
@@ -127,7 +100,6 @@ type Interaction = {
   };
   message?: { components?: Component[] };
   member?: {
-    /** every role the member holds, which is the only access check we get */
     roles?: string[];
     nick?: string | null;
     user?: DiscordUser;
@@ -136,39 +108,26 @@ type Interaction = {
 };
 
 /**
- * the reads a command needs, as functions rather than an `Env`.
- *
- * the route supplies the real ones; a test hands over closures. keeping the
- * notion token out of this file is what lets every branch below — including
- * the ones that fail — be exercised without it
+ * what a command reads and writes, supplied by the route so tests need no
+ * Notion
  */
 export type InteractionDeps = {
-  /** the most recently edited Articles — the matching happens in `suggestions` */
+  /** the most recently edited Articles */
   articles?: () => Promise<Article[]>;
-  /** headlines containing this text, for work too old to be in the recent set */
+  /**
+   * headlines containing this text, for work too old to be in the recent set
+   */
   search?: (text: string) => Promise<Article[]>;
   /** one Article, read live from notion */
   page?: (pageId: string) => Promise<ArticlePage>;
-  /**
-   * the write, which happens after the reply.
-   *
-   * it never throws and it always returns words: `runEdit` in
-   * `~/lib/articles/edit` is that promise, and this seam is what lets every
-   * branch of the deferral be exercised without notion
-   */
+  /** the write, after the reply. `runEdit`, which never throws */
   edit?: (request: EditRequest, actor: Actor) => Promise<EditResult>;
   /**
-   * hands work to the platform to finish after the response goes out.
-   *
-   * the route passes `(work) => locals.cfContext.waitUntil(work())`. without
-   * it a worker is free to tear the isolate down the moment DEFER is returned,
-   * which is the write that lands sometimes — so its absence refuses the
-   * command outright rather than deferring into nothing
+   * `waitUntil`. Without it the isolate can be torn down once DEFER returns, so
+   * its absence refuses the command rather than deferring into nothing.
    */
   defer?: (work: () => Promise<void>) => void;
-  /** overridable so a test can watch the follow-up without reaching discord */
   reply?: typeof followUp;
-  /** overridable so a test can prove the deadline exists without waiting */
   timeoutMs?: number;
 };
 
@@ -203,21 +162,17 @@ export async function handleInteraction(
   return undefined;
 }
 
-/** the subcommand discord was asked for: `/article ping` arrives as "ping" */
 function subcommandOf(interaction: Interaction): SubmittedOption | undefined {
   return interaction.data?.options?.[0];
 }
 
-/** whether the member who sent this holds @Editorial Board */
+/**
+ * whether the sender holds @Editorial Board. A DM has no `member`, and refuses.
+ */
 function onTheBoard(interaction: Interaction): boolean {
-  /*
-    `member` is absent in a DM, where there are no roles to check, and absent
-    has to refuse rather than read as an empty role list
-  */
   return interaction.member?.roles?.includes(EDITORIAL_BOARD_ROLE_ID) ?? false;
 }
 
-/** one of a subcommand's own options, by name */
 function optionOf(
   subcommand: SubmittedOption | undefined,
   name: string,
@@ -225,12 +180,6 @@ function optionOf(
   return subcommand?.options?.find((option) => option.name === name);
 }
 
-/*
-  every subcommand, and what it answers with. one entry per property as ADR
-  0009 fills this in; a subcommand that writes to notion returns
-  `deferEphemeral()` here and follows up, rather than trying to fit a write
-  inside three seconds
-*/
 const SUBCOMMANDS: Record<
   string,
   (
@@ -262,8 +211,7 @@ const SUBCOMMANDS: Record<
           headline,
           section,
           member,
-          /* Optional text is a pseudonym; edit.ts otherwise freezes the
-             selected member's name into the printed Byline. */
+          /* a pseudonym; without one the member's name is printed (ADR 0004) */
           byline: textOf(optionOf(subcommand, "byline")) || null,
         },
       };
@@ -296,13 +244,8 @@ const SUBCOMMANDS: Record<
     write(interaction, deps, (subcommand) => {
       const typed = textOf(optionOf(subcommand, "date"));
 
-      /*
-        no date clears it, deliberately: an Article that slipped out of the
-        schedule has no Publication Date, and making an editor open notion to
-        express that is the context switch these commands exist to remove.
-        anything that is not a date is refused rather than sent — notion
-        accepts a malformed string on some property types by ignoring it
-      */
+      /* No date clears it. A malformed one is refused here: Notion silently
+         ignores it on some property types. */
       if (typed && !isDate(typed))
         return refuse(
           markup`**${typed}** is not a date HareWare can write. Use \`YYYY-MM-DD\`, or leave the date out to clear it.`,
@@ -332,25 +275,13 @@ const SUBCOMMANDS: Record<
 };
 
 /**
- * the names this file answers to, read off the table above.
- *
- * a hand-written list here was a third copy of one fact: `commands.test.ts`
- * held it against the registration, and nothing held it against the handlers —
- * so a subcommand could be registered, listed, and still answer "HareWare does
- * not know that command". derived, the two lists cannot disagree, and the test
- * is comparing the registration against what actually runs.
+ * the subcommands handled here; `commands.test.ts` holds the registration to it
  */
 export const HANDLED = Object.keys(SUBCOMMANDS);
 
 /* ---- turning an interaction into a request ------------------------------ */
 
-/**
- * a request, or the sentence explaining why there is not one.
- *
- * refusal is a state rather than a thrown error, because every one of these is
- * answerable *before* deferring — and a command answered inline never leaves a
- * spinner behind
- */
+/** a request, or why there is none — answered inline, before deferring */
 type Parsed = { request: EditRequest } | { refusal: Markup };
 
 const refuse = (reason: Markup): Parsed => ({ refusal: reason });
@@ -359,15 +290,13 @@ const PICK_AN_ARTICLE = markup`Pick an Article from the list HareWare offers.`;
 const UNPICKED = refuse(PICK_AN_ARTICLE);
 
 /**
- * the picked Article's page id, or null. discord sends whatever was typed when
- * nobody picked a suggestion, so this is as likely to be half a headline — and
- * that is never handed to notion
+ * The picked page id, or null. Discord sends typed text when nothing was
+ * picked, and that must not reach Notion.
  */
 function articleOf(subcommand: SubmittedOption | undefined): string | null {
   return pageIdOf(textOf(optionOf(subcommand, "article")));
 }
 
-/** a one-property change against whichever Article was picked */
 function property(
   subcommand: SubmittedOption | undefined,
   intent: Intent,
@@ -391,11 +320,6 @@ function chosen(
       markup`Pick ${/^[aeiou]/.test(label) ? "an" : "a"} ${label}.`,
     );
 
-  /*
-    the value is notion's own spelling because that is what was registered as
-    the choice — this is the point of reading them from the schema rather than
-    writing them down, and it is why `Not started` cannot become `Not Started`
-  */
   return key === "section"
     ? property(subcommand, { property: "section", option: picked })
     : property(subcommand, { property: key, option: picked });
@@ -425,12 +349,8 @@ function crediting(
 }
 
 /**
- * whoever the user picker returned, name and all.
- *
- * the name comes out of `data.resolved` rather than a lookup, and prefers what
- * the member chose to be called in this server — nickname, then display name,
- * then handle — which is the same chain `~/lib/member` uses, so a person is
- * called one thing everywhere HareWare mentions them
+ * the picked user, named as `~/lib/member` names them: nickname, display name,
+ * handle
  */
 function picked(
   interaction: Interaction,
@@ -451,12 +371,10 @@ function picked(
   return { discordId, displayName };
 }
 
-/** a real calendar date, in the one format notion writes a bare date in */
+/** a real YYYY-MM-DD date. `new Date` would roll 2026-02-31 into March. */
 function isDate(text: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
 
-  /* the shape is not enough: 2026-02-31 matches it and notion rejects it, and
-     `new Date` rolls it forward to march rather than refusing */
   const [year, month, day] = text.split("-").map(Number) as [
     number,
     number,
@@ -474,17 +392,9 @@ function isDate(text: string): boolean {
 /* ---- deferring ---------------------------------------------------------- */
 
 /**
- * DEFER now, write later, and say something either way.
- *
- * a notion read plus a PATCH does not fit inside discord's three seconds, so
- * every subcommand that writes comes through here. the shape is the whole
- * point: the request is parsed *before* deferring, so a bad date is answered
- * inline; and once deferred, every path — a refused write, a thrown edit, a
- * follow-up discord rejected — ends in a request to the follow-up url or a
- * line in the console saying why it could not. a deferred interaction left
- * silent is the failure `docs/agents/silent-failures.md` exists for: the
- * editor watches a spinner settle into nothing and cannot tell a refused write
- * from a slow one
+ * Parse, DEFER, write, follow up. Once deferred, every path must end in a
+ * follow-up or a logged reason: a silent deferral leaves the editor a spinner
+ * (docs/agents/silent-failures.md).
  */
 function write(
   interaction: Interaction,
@@ -496,10 +406,6 @@ function write(
 
   const { edit, defer } = deps;
 
-  /*
-    refused inline rather than deferred. without somewhere to hand the work,
-    deferring would answer "HareWare is thinking…" and then stop existing
-  */
   if (!edit || !defer)
     return ephemeral(
       markup`HareWare cannot write to Notion right now — it is missing the credentials or the runtime to do it with. Nothing was changed.`,
@@ -519,8 +425,6 @@ function write(
     try {
       message = editResponse(await edit(parsed.request, actor));
     } catch (error) {
-      /* `runEdit` promises not to throw, and this is what happens when that
-         promise is broken — the editor still gets a sentence */
       console.error("[article] an edit threw rather than answering", error);
       message = editResponse({
         status: "failed",
@@ -535,8 +439,6 @@ function write(
 
     const result: Result = await send(applicationId, token, message);
 
-    /* the write landing and the reply arriving are different mornings: a
-       follow-up discord refused leaves an editor believing nothing happened */
     if (result.outcome !== "ok")
       console.error(`[article] could not answer the editor: ${result.summary}`);
   });
@@ -544,13 +446,7 @@ function write(
   return deferEphemeral();
 }
 
-/**
- * `/article show` — one Article, read live from notion.
- *
- * answered inline rather than through `deferEphemeral()`: one page read fits
- * inside three seconds comfortably, and an acknowledgement is a promise to
- * follow up that can itself go quiet. every branch here says something.
- */
+/** `/article show`, answered inline: one page read fits in three seconds */
 async function show(
   interaction: Interaction,
   deps: InteractionDeps,
@@ -580,22 +476,15 @@ async function show(
 }
 
 /**
- * the reply to a slash command, which is always a reply.
- *
- * unlike a button press there is no "not ours to answer" branch: discord shows
- * an unanswered command as "HareWare didn't respond in time", so a command we
- * do not recognise gets a sentence saying so rather than silence
+ * always a reply: an unanswered command reads as "HareWare didn't respond in
+ * time"
  */
 async function handleCommand(
   interaction: Interaction,
   deps: InteractionDeps,
 ): Promise<MessageResponse> {
-  /*
-    the command registers with default_member_permissions "0" — invisible until
-    an admin grants it to a role under Server Settings → Integrations. that
-    override is editable by any admin and says nothing about @Editorial Board,
-    so it is a default and not a security boundary. this is the boundary.
-  */
+  /* The access check. `default_member_permissions` is editable by any admin,
+     so it is only a default. */
   if (!onTheBoard(interaction)) {
     return ephemeral(
       markup`This command is for the Editorial Board, in the server. If you are on the board and seeing this, ask an admin to check the role.`,
@@ -615,17 +504,7 @@ async function handleCommand(
   return run(interaction, deps);
 }
 
-/**
- * the dropdown discord shows while an editor types.
- *
- * three things shape this. it cannot be deferred — there is no such response
- * type, and discord's three seconds are hard — so the read is raced against a
- * deadline and a slow notion becomes an empty dropdown rather than an error.
- * it is gated on the role like every other branch, because an autocomplete
- * response is a list of the club's unpublished Articles and reaches whoever an
- * admin left the command visible to. and an empty list is always a valid
- * answer, so nothing here may throw.
- */
+/** Never throws: an empty list is always a valid answer. */
 async function handleAutocomplete(
   interaction: Interaction,
   deps: InteractionDeps,
@@ -635,11 +514,7 @@ async function handleAutocomplete(
     data: { choices: [] },
   };
 
-  /*
-    the same check `handleCommand` makes, for the same reason: without it the
-    picker lists every Article to anybody who can reach the command, and it
-    does so before the command is ever run
-  */
+  /* the list is the club's unpublished Articles */
   if (!onTheBoard(interaction)) {
     console.warn("[article] autocomplete refused: not on the editorial board");
     return empty;
@@ -655,18 +530,8 @@ async function handleAutocomplete(
     return empty;
   }
 
-  /*
-    the hundred most recently edited, ranked here rather than by notion —
-    notion cannot express a fuzzy match, and this is the whole reason an editor
-    can type half a headline badly and still find it
-  */
-  /*
-    one deadline for the whole answer, not one per read. the two reads used to
-    get the full budget each, so a throttling notion spent two seconds on the
-    first and two on the second — four against discord's hard three, which
-    reaches the editor as "HareWare didn't respond in time" on every keystroke.
-    exactly what the budget was chosen to prevent
-  */
+  /* one deadline shared by both reads, so together they stay under three
+     seconds */
   const until = Date.now() + (deps.timeoutMs ?? AUTOCOMPLETE_BUDGET_MS);
   const left = () => Math.max(0, until - Date.now());
 
@@ -676,16 +541,8 @@ async function handleAutocomplete(
   let source = "recent";
   let why = recent.why;
 
-  /*
-    nothing recent matched, so it is probably older than the hundred we hold.
-    notion's `contains` is a literal substring — it finds "ellicott" and not
-    "elicott" — so this is coarser than the matching above and deliberately a
-    last resort.
-
-    `recent.why === undefined` is load-bearing: without it, a read that timed
-    out or threw also arrives here as "no choices", and we would spend a second
-    request on notion at the exact moment notion is refusing us
-  */
+  /* Older work, by Notion's literal substring match. Not after a read that
+     failed: that would ask Notion again while it is refusing us. */
   if (
     choices.length === 0 &&
     recent.why === undefined &&
@@ -696,18 +553,10 @@ async function handleAutocomplete(
 
     choices = suggestions(found.rows, query);
     source = "search";
-    /* the search's own outcome, not the first read's — reporting "no matches"
-       for a search that never answered is the failure this line exists to
-       describe */
     why = found.why;
   }
 
-  /*
-    every failure here answers with an empty list, because that is the only
-    thing discord accepts — which leaves an editor staring at a blank dropdown
-    with nothing anywhere saying why. this line is the difference between that
-    and a question somebody can answer
-  */
+  /* every failure answers an empty list; this is the only record of why */
   if (choices.length === 0) {
     console.warn(
       `[article] autocomplete answered nothing: query=${JSON.stringify(query)} source=${source} ${why ?? "no matches"}`,
@@ -720,17 +569,8 @@ async function handleAutocomplete(
   };
 }
 
-/**
- * the rows, or none of them if they take too long or the read throws.
- *
- * `live.ts` deliberately lets its throws out — it has no better answer to
- * give — so this is where they stop. a promise that never settles is the
- * failure a try/catch cannot see, and it is the one discord punishes
- */
+/** the rows, or none with the reason: too slow, or threw */
 async function within(rows: Promise<Article[]>, ms: number) {
-  /* a sentinel rather than an empty array: "the deadline won" and "notion
-     holds nothing that matches" are different facts, and answering both with
-     `[]` is what made an empty dropdown impossible to explain */
   const LATE = Symbol("late");
   const deadline = new Promise<typeof LATE>((resolve) =>
     setTimeout(() => resolve(LATE), ms),

@@ -1,14 +1,9 @@
-/*
-  The gate over the admin tools, run from `~/middleware` before any page, so no
-  page carries the check itself. Takes `next` as an argument and imports nothing
-  from `astro:middleware`, which is what makes it testable. ADR 0007.
-*/
+/* The gate over the admin tools, run from `~/middleware`. ADR 0007. */
 
 /*
-  Types only, and `~/lib/admin` stays behind the route check inside
-  `guardAdmin`: it reaches `cloudflare:workers`, middleware is in every route's
-  module graph, and node builds the prerendered /custom with a loader that fails
-  on a `cloudflare:` url. `npm run build` is what catches a regression.
+  Types only: `~/lib/admin` reaches `cloudflare:workers`, which node cannot load
+  when it prerenders /custom, so it is imported inside `guardAdmin`. `npm run
+  build` catches a regression.
 */
 import type { Access, Viewer } from "./admin";
 
@@ -25,14 +20,10 @@ export type Admission = {
   returnTo: string;
 };
 
-/* Only the part of `App.Locals` this touches, so the Cloudflare adapter's own
-   required field stays out of this file's business. */
 type HasAdmission = { admission?: Admission };
 
 /**
- * The member an admin page is rendering for. Throws rather than refusing: the
- * guard has already decided by now, so no admission means an unguarded page,
- * which is a fault to see rather than a visitor to turn away.
+ * The member an admin page renders for. Throws if the guard did not admit them.
  */
 export function admitted(locals: HasAdmission): Viewer {
   const { admission } = locals;
@@ -54,20 +45,18 @@ export function admitted(locals: HasAdmission): Viewer {
   return admission.access.who;
 }
 
-/** the part of astro's context this needs, so a test can build one */
 type GuardContext = {
   url: URL;
   request: Request;
   locals: HasAdmission;
 };
 
-/** Astro's `next`, including the path its rewrite takes. */
 type Next = (rewrite?: string) => Promise<Response>;
 
 export async function guardAdmin(context: GuardContext, next: Next) {
   if (!isAdminPath(context.url.pathname)) return next();
 
-  /* Deferred: see the note on the import at the top of this file. */
+  /* see the note on the import at the top */
   const { adminAccess } = await import("./admin");
 
   const access = await adminAccess(context.request);
@@ -79,12 +68,10 @@ export async function guardAdmin(context: GuardContext, next: Next) {
 
   if (access.allowed) return next();
 
-  /* A rewrite, not a redirect, so the address bar keeps the page they asked
-     for and a reload re-reads the answer. */
+  /* a rewrite, so a reload re-asks for the page */
   const response = await next(REFUSAL_PATH);
 
-  /* The status below is stamped onto whatever came back, so a refusal page
-     that broke would ship Astro's error body wearing a 401. */
+  /* otherwise Astro's error page would ship with a 401 */
   if (!response.ok) {
     throw new Error(
       `${REFUSAL_PATH} answered ${response.status} while refusing ${context.url.pathname}`,

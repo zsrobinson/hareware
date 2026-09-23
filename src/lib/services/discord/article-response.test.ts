@@ -10,7 +10,7 @@ const page: ArticlePage = {
   },
 };
 
-test("a successful edit leads with the B2c sentence and shares the show card", () => {
+test("a successful edit leads with what changed and shares the show card", () => {
   const reply = editResponse({
     status: "updated",
     page,

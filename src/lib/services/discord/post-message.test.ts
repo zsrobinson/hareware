@@ -78,12 +78,7 @@ test("mentions nothing when no roles are named", async () => {
   });
 });
 
-/*
-  allowed_mentions does not gate a mention inside a components v2 text display:
-  an empty roles array notifies the role exactly as though the field were
-  absent. this cost two real pings to the editorial board before it was found,
-  so the test asserts the markup is gone rather than that the field is empty
-*/
+/* `allowed_mentions` does not gate a V2 text display, so the markup must go */
 test("silent writes no mention markup at all", async () => {
   const fetchMock = mockDiscord([{}]);
 
@@ -164,10 +159,6 @@ test("a dry run sends nothing", async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-/*
-  the channels are constants now, so without this a local run would post to the
-  club's real ones rather than a test channel
-*/
 test("REMINDERS_TEST_CHANNEL redirects the message", async () => {
   const fetchMock = mockDiscord();
 
@@ -187,11 +178,6 @@ test("posts to the real channel when no redirect is set", async () => {
   expect(String(fetchMock.mock.calls[0]![0])).toContain(CHANNEL);
 });
 
-/*
-  remote text sharing a line with a real role mention. `allowed_mentions` does
-  not gate a mention inside a components v2 text display, so a headline is the
-  one thing between a wordpress contributor and pinging the whole server
-*/
 test("makes @everyone in remote text unable to ping", () => {
   expect(inert("Council votes @everyone out")).not.toContain("@everyone");
   expect(inert("@HERE we go")).not.toMatch(/@here/i);

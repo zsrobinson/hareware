@@ -1,12 +1,4 @@
-/*
-  a record of what HareWare did, so that a quiet morning can be told apart from
-  a broken one. see ADR 0007.
-
-  nothing in here is authoritative: every row is derived from something notion,
-  wordpress or discord already knows, so dropping the database costs the club
-  its history and nothing else. that is the rule ADR 0006 set for D1 and the
-  reason this is allowed to exist
-*/
+/* The invocation log: what HareWare did, and nothing authoritative. ADR 0007. */
 
 import { drizzle } from "drizzle-orm/d1";
 import { and, desc, eq } from "drizzle-orm";
@@ -17,10 +9,7 @@ export type { Invocation, Row };
 const now = () => Math.floor(Date.now() / 1000);
 
 /**
- * writes one row, and never throws.
- *
- * a reminder that posted correctly must not be reported as failed because the
- * log was unreachable, and the log is the less important of the two
+ * writes one row. Never throws, so a failed write cannot fail what it records.
  */
 export async function record(
   db: D1Database | undefined,
@@ -47,18 +36,8 @@ export function recent(db: D1Database, limit = 100): Promise<Row[]> {
 }
 
 /**
- * how the last recorded run of an action ended, or null if there is no record.
- *
- * used to tell a new failure from a continuing one. null means "nothing to
- * compare against" — no database, no history, or a read that failed — and the
- * caller treats all three as "this is news", because a missing log is a reason
- * to say more rather than less.
- *
- * scoped to one `source` deliberately. the alert is a statement about the
- * unattended schedule, so it has to compare cron runs against cron runs: a
- * failed run somebody fired by hand from the panel would otherwise sit at the
- * top of the table and suppress the next morning's real alert — the one
- * morning the club most needs it
+ * How the last run of an action from this `source` ended, or null when unknown.
+ * Per source, so a failed manual run cannot suppress the next cron alert.
  */
 export async function lastOutcome(
   db: D1Database | undefined,

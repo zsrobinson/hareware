@@ -17,12 +17,7 @@ const IS_COMPONENTS_V2 = 1 << 15;
 const PAGE = "22cbe415-e24c-80d1-a2b3-c4d5e6f70001";
 const OTHER_PAGE = "22cbe415-e24c-80d1-a2b3-c4d5e6f70002";
 
-/**
- * the reply as a message reply.
- *
- * autocomplete answers with `choices` and no body, so the two shapes are a
- * union — this narrows it and fails loudly rather than reading `undefined`
- */
+/** the reply narrowed to a message, failing loudly if it is not one */
 function asMessage(reply: InteractionResponse | undefined): BodyResponse {
   if (!reply?.data || !("components" in reply.data))
     throw new Error("expected a message reply, got " + JSON.stringify(reply));
@@ -99,10 +94,6 @@ test("marks the pressed button posted, crediting whoever pressed it", async () =
   expect(button.style).toBe(3);
 });
 
-/*
-  a checkbox that cannot be unticked is a trap for whoever presses the wrong
-  row, so nothing is ever disabled
-*/
 test("pressing a posted button un-posts it", async () => {
   const posted = press(postedId("first"));
   posted.message.components[1]!.components![0] = {
@@ -129,12 +120,7 @@ test("nothing is ever disabled", async () => {
   }
 });
 
-/*
-  an interactive button is invalid without a custom_id, and discord rejects the
-  whole response rather than the one component — which reaches the person who
-  pressed it as "HareWare didn't respond in time". `disabled` is what stops a
-  second press; removing the id only breaks the reply
-*/
+/* without a custom_id Discord rejects the whole response (silent-failures.md) */
 test("keeps the custom_id, without which the reply is invalid", async () => {
   const reply = asMessage(await handleInteraction(press(postedId("first"))));
 
@@ -263,22 +249,13 @@ test("credits a member by their server nickname first", async () => {
   expect(text(reply)).toContain("**Robbo**");
 });
 
-/*
-  ADR 0009: the editor sees the result, the channel sees nothing. and both
-  flags together — the ephemeral bit alone with a components body is a response
-  discord refuses outright
-*/
+/* Discord refuses the ephemeral bit alone with a components body */
 test("a command reply is ephemeral, and says so in components v2", async () => {
   const reply = asMessage(await handleInteraction(command("ping")));
 
   expect(reply.data!.flags).toBe(EPHEMERAL | IS_COMPONENTS_V2);
 });
 
-/*
-  the registration hides the command with default_member_permissions "0", but
-  that override is editable by any admin under Integrations — so it is a
-  default, and this is the access check
-*/
 test("refuses somebody without the editorial board role", async () => {
   const reply = asMessage(
     await handleInteraction(command("ping", [], ["some-other-role"])),
@@ -289,7 +266,7 @@ test("refuses somebody without the editorial board role", async () => {
   expect(reply.data!.flags).toBe(EPHEMERAL | IS_COMPONENTS_V2);
 });
 
-/* absent roles is not an empty role list: a DM carries no member at all */
+/* a DM carries no member at all */
 test("refuses a command with no member on it", async () => {
   const reply = asMessage(
     await handleInteraction({
@@ -302,10 +279,6 @@ test("refuses a command with no member on it", async () => {
   expect(text(reply)).toContain("Editorial Board");
 });
 
-/*
-  discord shows an unanswered command as "HareWare didn't respond in time",
-  which reads as a broken bot rather than a command that no longer exists
-*/
 test("answers a subcommand it does not know rather than going quiet", async () => {
   const reply = asMessage(await handleInteraction(command("nonexistent")));
 
@@ -352,10 +325,6 @@ const deps = (over: InteractionDeps = {}): InteractionDeps => ({
   ...over,
 });
 
-/*
-  ADR 0009: what the picker offers is a suggestion, so what an editor
-  is shown for one Article is re-read from notion
-*/
 test("/article show reads the page live rather than from the picker", async () => {
   let asked: string | undefined;
   const reply = asMessage(
@@ -377,11 +346,6 @@ test("/article show reads the page live rather than from the picker", async () =
   expect(text(reply)).toContain("Terps lose again");
 });
 
-/*
-  an interaction acknowledged and then left silent is the failure
-  docs/agents/silent-failures.md is about — a notion outage has to reach the
-  editor as a sentence
-*/
 test("/article show says something when notion does not answer", async () => {
   const reply = asMessage(
     await handleInteraction(
@@ -454,14 +418,10 @@ test("autocomplete answers with choices, not a message", async () => {
   const reply = await handleInteraction(typing("terps"), deps());
 
   expect(reply!.type).toBe(AUTOCOMPLETE_RESULT);
-  /* the headline and nothing else: the status and byline that used to be
-     crammed in front of it were noise an editor already knows */
   expect(asChoices(reply)).toEqual([{ name: "Terps lose again", value: PAGE }]);
 });
 
 test("autocomplete matches what was typed, against what it read", async () => {
-  /* the query never reaches d1 any more — the whole index comes back and the
-     ranking happens here, which is what buys a fuzzy match */
   const choices = asChoices(
     await handleInteraction(
       typing("looney"),
@@ -478,11 +438,6 @@ test("autocomplete matches what was typed, against what it read", async () => {
   expect(choices.map((choice) => choice.value)).toEqual(["hit"]);
 });
 
-/*
-  an autocomplete response is a list of the club's unpublished Articles, and it
-  is sent before the command is ever run — so it is gated exactly as the
-  command is
-*/
 test("autocomplete tells somebody off the board nothing", async () => {
   const choices = asChoices(
     await handleInteraction(
@@ -521,11 +476,6 @@ test("autocomplete refuses a payload with no member on it", async () => {
   expect(choices).toEqual([]);
 });
 
-/*
-  there is no deferred autocomplete response and discord's three seconds are
-  hard, so a slow index has to become an empty dropdown rather than a
-  "HareWare didn't respond in time" on every keystroke
-*/
 test("an index that never answers becomes an empty dropdown", async () => {
   const reply = await handleInteraction(
     typing("terps"),
@@ -558,12 +508,8 @@ test("autocomplete with no reads wired up still answers", async () => {
 const DEFERRED = 5;
 
 /**
- * deps that run the deferred work inline and await it.
- *
- * this is the whole reason `defer` is a dependency rather than a `waitUntil`
- * call inside the handler: with it, every branch of a deferred write — the
- * refusal, the throw, the follow-up discord rejected — is reachable in a test
- * with no worker, no notion and no discord
+ * deps that record the edit and follow-up, with `settle` to await the deferred
+ * work
  */
 function writing(over: Partial<InteractionDeps> = {}) {
   const seen = {
@@ -662,11 +608,6 @@ test("/article delete defers a request for the selected Article", async () => {
   expect(seen.requests).toEqual([{ kind: "delete", pageId: OTHER_PAGE }]);
 });
 
-/*
-  the exact silent failure `docs/agents/silent-failures.md` names: an
-  acknowledged interaction left silent shows the editor "HareWare is thinking…"
-  forever, and they cannot tell a refused write from a slow one
-*/
 test("an edit that throws still follows up", async () => {
   const { deps, seen, settle } = writing({
     edit: async () => {
@@ -833,8 +774,6 @@ test("a real date is passed through as notion writes it", async () => {
 /* ---- credits ------------------------------------------------------------ */
 
 test("the picked member's name comes out of the payload, nickname first", async () => {
-  /* ADR 0009: the interaction resolves the user, so crediting somebody costs
-     no discord request at all */
   const { deps, seen, settle } = writing();
 
   await handleInteraction(
@@ -983,12 +922,6 @@ test("a new article with no headline is refused before anything is written", asy
   expect(seen.requests).toEqual([]);
 });
 
-/*
-  the picker holds the hundred most recently edited Articles, which is nearly
-  always what somebody is reaching for. when it is not — a piece from years ago
-  — notion is asked for a substring match rather than the editor being told the
-  Article does not exist
-*/
 test("autocomplete falls back to a search when nothing recent matches", async () => {
   const choices = asChoices(
     await handleInteraction(
@@ -1025,8 +958,6 @@ test("a recent match never costs a search", async () => {
 });
 
 test("a one-character query is not searched for", async () => {
-  /* a single letter is a substring of most of the corpus, so notion would
-     answer with everything and the dropdown would be noise */
   let searched = false;
 
   await handleInteraction(
@@ -1043,12 +974,6 @@ test("a one-character query is not searched for", async () => {
   expect(searched).toBe(false);
 });
 
-/*
-  the two reads used to get the full budget each, so a throttling notion spent
-  two seconds on the recent read and two more on the search — four against
-  discord's hard three, which reaches the editor as "HareWare didn't respond in
-  time" on every keystroke
-*/
 test("the whole answer shares one deadline, not one per read", async () => {
   const started = Date.now();
 
@@ -1061,14 +986,10 @@ test("the whole answer shares one deadline, not one per read", async () => {
     }),
   );
 
-  /* generous, because what is asserted is "one budget, not two" rather than
-     any particular millisecond */
   expect(Date.now() - started).toBeLessThan(150);
 });
 
 test("a read that failed does not spend a request on the search", async () => {
-  /* without this, a timed-out read arrives as "no choices" and we ask notion
-     again at the exact moment notion is refusing us */
   let searched = false;
 
   await handleInteraction(

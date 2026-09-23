@@ -12,12 +12,7 @@ import type { Result } from "~/lib/result";
 import type { MemberMatch } from "./member";
 import { ARTICLES_DATA_SOURCE_ID } from "./config";
 
-/*
-  the whole outside world, hand-written, so every refusal below is reachable —
-  which is the point of testing here at all. the guards are the paths an
-  integration test would never take on purpose, and each of them is the
-  difference between a wrong reply and a member's articles being reattributed
-*/
+/* the whole outside world, hand-written, so every refusal below is reachable */
 
 const fullSchema: Schema = {
   properties: {
@@ -36,7 +31,9 @@ const fullSchema: Schema = {
   },
 };
 
-/** the same schema with Members unshared — notion drops the property entirely */
+/**
+ * the same schema with Members unshared — notion drops the property entirely
+ */
 const withoutAuthor: Schema = {
   properties: Object.fromEntries(
     Object.entries(fullSchema.properties).filter(([name]) => name !== "Author"),
@@ -334,8 +331,7 @@ test("a new article is created at the schema's own spelling of approved", async 
 });
 
 test("a renamed approved option is said out loud rather than sent to notion", async () => {
-  /* ADR 0009: no notion value is typed into this repo, so the option is looked
-     up — and a lookup that misses has to be reported, not guessed at */
+  /* the option is looked up (ADR 0009), and a miss is reported */
   const { io, seen } = spy({
     schema: async () => ({
       properties: {
@@ -367,9 +363,6 @@ test("a renamed approved option is said out loud rather than sent to notion", as
 });
 
 test("a new article credits the member the picker returned, creating the row", async () => {
-  /* the bug this covers: `/article new` took a free-text byline and no
-     member, so an editor picking a writer got the mention markup printed as
-     the Byline and an empty Author relation */
   const { io, seen } = spy({ members: async () => ({ status: "absent" }) });
 
   const said = await runEdit(
@@ -436,11 +429,7 @@ const creditRequest = (
 });
 
 test("a relation notion is not sharing is refused rather than overwritten", async () => {
-  /*
-    the data-loss guard. notion omits a relation whose target the integration
-    cannot reach, and the value then reads back as `[]` on every page — so an
-    append built on that read deletes co-authors nobody can see
-  */
+  /* the data-loss guard; see `assertProperties` */
   const { io, seen } = spy({ schema: async () => withoutAuthor });
 
   const said = await runEdit(io, creditRequest(), actor);
@@ -503,8 +492,7 @@ test("Members being unreadable writes nothing and says so", async () => {
 });
 
 test("a name match links the Discord ID onto that row and says so", async () => {
-  /* the common path: 39 of 48 Members carry no id, so the roster backfills
-     itself as editors credit people */
+  /* the common path: most Members carry no id yet */
   const { io, seen } = spy({
     members: async () => ({
       status: "linkable",
@@ -597,8 +585,7 @@ test("without `also` the credit is replaced outright", async () => {
 });
 
 test("a pseudonym keeps the selected member linked", async () => {
-  /* ADR 0004: the text is authoritative for what gets printed and the relation
-     is who it actually was. setting one must not silently clear the other */
+  /* ADR 0004: setting one of the pair must not clear the other */
   const { io, seen } = spy({
     page: async () =>
       article({
@@ -651,12 +638,7 @@ test("every attempt is logged against the editor who made it", async () => {
   expect(seen.logged.every((row) => row.actor === "111")).toBe(true);
 });
 
-/*
-  the bug this exists for: the relation deduped and the printed byline did not.
-  running the same `also` twice — a slow follow-up, an editor who thought it had
-  not landed — left the relation correct and the byline reading "Bob and Bob",
-  which is exactly the pair ADR 0004 exists to keep in step coming apart
-*/
+/* a repeated `also` must not print "Bob and Bob" */
 test("crediting the same member twice does not print them twice", async () => {
   const { io, seen } = spy({
     page: async () =>

@@ -1,7 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
 
-/* the automations return an outcome now, not a bare string — a run that found
-   nothing to do is `skipped`, not `ok` */
 const meeting = vi.fn(async () => ({ outcome: "ok", summary: "meeting ran" }));
 const social = vi.fn(async () => ({ outcome: "ok", summary: "social ran" }));
 const applications = vi.fn(async () => ({
@@ -146,8 +144,6 @@ test("reports a failed cron run, naming the automation and the reason", async ()
   await runAutomations({} as Env, eastern, ALL, "cron");
 
   expect(reportFailure).toHaveBeenCalledOnce();
-  /* the automation itself, not its action string — so the alert can read the
-     friendly name off it rather than keeping a second table of names */
   const [, automation, summary] = reportFailure.mock.calls[0] as [
     Env,
     { action: string },
@@ -184,13 +180,8 @@ test("reports each reminder that failed, independently", async () => {
   expect(reportFailure).toHaveBeenCalledTimes(2);
 });
 
-/*
-  what actually reaches the row.
-
-  every test above passes `{} as Env`, so `record()` short-circuits on the
-  missing DB and the write path — the semantics this branch is entirely about —
-  was exercised by nothing. mocking the log rather than D1 keeps that cheap.
-*/
+/* `{} as Env` makes `record()` return early, so the log is mocked to see the
+   row */
 test("records the outcome the automation returned, not whether it threw", async () => {
   vi.spyOn(console, "log").mockImplementation(() => {});
   meeting.mockResolvedValueOnce({
@@ -236,17 +227,9 @@ test("writes no row for a dry run, which posted nothing", async () => {
     "cron",
   );
 
-  // a green row for a message that never went out is the distinction the
-  // widened outcomes exist to make, undone
   expect(record).not.toHaveBeenCalled();
 });
 
-/*
-  the sync is not a time of day. ADR 0010 has it creating a row so somebody who
-  applied on monday autocompletes at wednesday's meeting, and a fixed hour meant
-  an application approved on wednesday afternoon waited until thursday morning,
-  which is the case that section is written around
-*/
 test("an hourly automation runs on a tick that is not the reminder hour", async () => {
   await runScheduled(NINE_AM, {} as Env);
 

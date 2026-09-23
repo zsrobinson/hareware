@@ -1,32 +1,18 @@
-/*
-  a stateless session: the member's discord id, signed, in a cookie.
-
-  nothing is stored server-side, which is deliberate — there is no session table
-  to keep, migrate or clean up, and no read on every request. the cost is that a
-  session cannot be revoked before it expires, which is bearable here because
-  the thing worth revoking is not the session but the @Editorial Board role, and
-  that is checked live against discord on every admin request. see ~/lib/admin
-*/
+/* The member's Discord id, signed, in a cookie. Nothing is stored (ADR 0008). */
 
 import { requestCookie } from "./request-cookie";
 import { seal, unseal } from "./sealed-value";
 
 export type Session = {
-  /* the key everything else hangs off, per CONTEXT.md's Member */
   discordUserId: string;
 };
 
-/** what is actually signed: the session plus when it stops being valid */
 type SealedSession = Session & { expiresAt: number };
 
 export const SESSION_COOKIE = "__Host-hareware-session";
 
 /**
- * how long a sign-in lasts.
- *
- * a signed cookie cannot be withdrawn once issued, so its lifetime is the only
- * bound on a stolen one. a week is short enough to matter and long enough that
- * nobody signs in twice in a meeting
+ * a signed cookie cannot be revoked, so this is the only bound on a stolen one
  */
 const SESSION_DAYS = 7;
 
@@ -40,10 +26,7 @@ export async function createSessionCookie(session: Session, secret: string) {
 
   const value = await seal(JSON.stringify(payload), secret, "session");
 
-  /*
-    Max-Age makes the browser drop it, and `expiresAt` inside the signature is
-    what actually enforces it — a cookie the browser kept anyway is still dead
-  */
+  /* `expiresAt`, inside the signature, is what enforces it */
   return `${SESSION_COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${LIFETIME_SECONDS}`;
 }
 

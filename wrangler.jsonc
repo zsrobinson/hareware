@@ -6,25 +6,13 @@
   // linkedom and fast-xml-parser both reach for node builtins
   "compatibility_flags": ["nodejs_compat"],
 
-  /**
-   * vercel's cdn honoured the cache-control headers the pages set on their own
-   * responses; cloudflare does not cache a worker's own response unless asked.
-   * this is the ask — with it, `s-maxage` on / and /email means what it did
-   * before, and `private, no-store` on /generate and /magazine still opts out
-   *
-   * a cache hit skips the worker altogether, which is also what keeps the feed
-   * pages off wordpress.com's rate limit
-   */
+  // without this Cloudflare ignores the pages' own cache-control headers; the
+  // cache is also what keeps the feed pages under wordpress.com's rate limit
   "cache": { "enabled": true },
 
   "observability": { "enabled": true },
 
-  /**
-   * the invocation log, and nothing else. per ADR 0006's rule and ADR 0007's
-   * reasoning, nothing in here is authoritative: every row is derived from
-   * something notion, wordpress or discord already knows, so dropping this
-   * database costs the club its history and nothing more
-   */
+  // the invocation log only; nothing in it is authoritative (ADR 0007)
   "d1_databases": [
     {
       "binding": "DB",
@@ -33,24 +21,12 @@
     },
   ],
 
-  /**
-   * our own entrypoint rather than the adapter's
-   * `@astrojs/cloudflare/entrypoints/server`, which exports only `fetch` and so
-   * gives a cron trigger nowhere to land. src/worker.ts is that file plus a
-   * `scheduled()` handler; it still serves every request through the adapter's
-   * own handler, which must stay the one answering fetch
-   */
+  // the adapter's entrypoint has no `scheduled()`; src/worker.ts adds one and
+  // still answers fetch through the adapter
   "main": "./src/worker.ts",
 
-  /**
-   * hourly, because the reminders mean "8am eastern" and cloudflare crons are
-   * utc with no timezone setting. src/lib/eastern.ts decides whether a given
-   * tick is the right hour, so the schedule never drifts across daylight saving.
-   * the same tick refreshes the slash commands' picker options.
-   *
-   * `REMINDER_CRON` in src/lib/automations/run.ts must match this: a reminder
-   * runs only on that schedule, so a second cron cannot send one twice
-   */
+  // hourly, since crons are UTC and src/lib/eastern.ts picks the Eastern hour.
+  // `REMINDER_CRON` in src/lib/automations/run.ts must match
   "triggers": { "crons": ["0 * * * *"] },
   "assets": { "directory": "./dist", "binding": "ASSETS" },
 }

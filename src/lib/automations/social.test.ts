@@ -67,7 +67,6 @@ test("offers marking posted, and a link into the post generator", async () => {
 
   const [mark, open] = discord.mock.calls[0]![0].components[1].components;
 
-  // interactive: only an application-owned webhook may send this
   expect(mark.label).toBe("Not posted");
   expect(mark.style).toBe(4);
   expect(mark.custom_id).toBe(postedId("a-headline"));
@@ -101,11 +100,7 @@ test("posts nothing on a day with no articles", async () => {
   expect(discord).not.toHaveBeenCalled();
 });
 
-/*
-  an article published at 6am eastern is 10:00 utc the same day, but one at 8pm
-  eastern is already tomorrow in utc — comparing utc calendar days would file it
-  under the wrong date and ping the wrong roster
-*/
+/* 8pm Eastern is already tomorrow in UTC */
 test("counts an evening article as today in eastern, not utc", async () => {
   const discord = mockFeed(
     item("Late piece", "Fri, 04 Sep 2026 00:30:00 +0000", "late"),
@@ -142,11 +137,6 @@ test("says what is unset rather than throwing", async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-/*
-  the outcome, not just the words. these used to be recorded as `ok` alike,
-  which reproduced in the log the exact problem ADR 0007 was written to solve:
-  a quiet morning and a broken one looking identical.
-*/
 test("an unreadable feed is a failure, not a quiet day", async () => {
   // wordpress throttling answers with html, which parses to no <rss>
   vi.stubGlobal(
@@ -184,11 +174,7 @@ test("a posted ping is ok", async () => {
   expect((await sendSocialPing(env, today)).outcome).toBe("ok");
 });
 
-/*
-  the wrapper, not the helper. `inert()` has its own tests, but nothing asserted
-  this file calls it — deleting the wrapper left every test passing, which is
-  the whole point of the ticket going untested
-*/
+/* `inert()` has its own tests; this checks the ping calls it */
 test("a headline cannot ping the server through the ping", async () => {
   const discord = mockFeed(
     item("@everyone read this", "Thu, 03 Sep 2026 14:00:00 +0000", "x"),

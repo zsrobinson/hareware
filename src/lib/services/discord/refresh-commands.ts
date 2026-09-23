@@ -1,17 +1,7 @@
 /*
-  keeping discord's command surface in step with notion's schema.
-
-  the options a picker offers — Article Status, Image Status, Section — are
-  read from notion and then *baked into the registration*, because discord
-  resolves choices when a command is registered rather than when somebody opens
-  it. so a status added in notion reaches an editor only once the surface is
-  registered again, and that is what this is for. see ADR 0009.
-
-  it runs hourly and registers unconditionally. there used to be a hash stored
-  in D1 so an unchanged schema registered nothing, which guarded discord's
-  limit of two hundred registrations a day — a limit that twenty-four uses
-  fourteen per cent of. the hash cost a table, a read, a write and a way for
-  the stored hash to disagree with what was actually up there.
+  Re-registers the commands from Notion's schema, hourly: Discord bakes choices
+  into the registration (ADR 0009). Unconditional — 24 of Discord's 200 daily
+  registrations.
 */
 
 import { buildCommands, MAX_CHOICES } from "./commands";
@@ -24,12 +14,7 @@ import {
 } from "~/lib/articles/choices";
 import { CHOICE_PROPERTIES } from "~/lib/articles/config";
 
-/**
- * reads the schema and puts the surface it implies on discord.
- *
- * never throws: this is called from a cron tick that also posts the reminders,
- * and a stale picker must not take the morning's reminders down with it
- */
+/** Never throws: it shares a cron tick with the reminders. */
 export async function refreshCommands(env: Env): Promise<Result> {
   if (!env.NOTION_TOKEN) return misconfigured("NOTION_TOKEN unset");
 
@@ -41,29 +26,14 @@ export async function refreshCommands(env: Env): Promise<Result> {
     return failed(`notion refused the schema: ${String(error)}`);
   }
 
-  /*
-    the hourly alarm for notion quietly stopping sharing something. the write
-    paths check this too and refuse rather than write a relation they cannot
-    read back — but that only speaks when somebody tries to credit a Member,
-    which could be weeks. this says so the same day
-  */
+  /* the write paths refuse too, but only when somebody next edits */
   const missing = notSharing(schema);
   if (missing) return misconfigured(missing);
 
   const choices = extractChoices(schema);
 
-  /*
-    an empty set is not a surface worth publishing: it would replace working
-    pickers with empty ones, which reads to an editor as the command being
-    broken. keeping yesterday's is the better failure
-  */
-  /*
-    per picker, not in aggregate. a read that half worked — `Image Status`
-    renamed, or converted from a status to a select — still returns options for
-    the other two, and registering that publishes a required picker with no
-    choices in it. an editor opens an empty dropdown, or types free text that
-    notion then refuses
-  */
+  /* per picker: a renamed property would register a required picker with
+     no choices. Keep the surface already registered instead. */
   const empty = CHOICE_PROPERTIES.filter(
     (property) => !choices.some((choice) => choice.property === property),
   );

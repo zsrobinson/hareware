@@ -4,11 +4,7 @@ import { plan, planCreate, planCredit } from "./write";
 import type { Schema } from "./choices";
 import type { ArticlePage } from "./page";
 
-/*
-  a schema notion is sharing fully. built from the real property names rather
-  than a literal so a rename in `config.ts` cannot leave these tests asserting
-  against a schema nobody has
-*/
+/* a fully shared schema, built from `config.ts` so a rename follows */
 const fullSchema: Schema = {
   properties: {
     Headline: { type: "title" },
@@ -159,11 +155,7 @@ test("a relation notion is not sharing is refused rather than written", () => {
 });
 
 test("an absent relation reads back as [] on the page, and is still refused", () => {
-  /*
-    this is the whole point: notion omits a relation whose target the
-    integration cannot reach, and every page then reports it as empty. an
-    append built on that read deletes co-authors nobody could see
-  */
+  /* the data-loss guard; see `assertProperties` */
   const result = plan(
     withoutAuthor,
     page({ Author: { type: "relation", relation: [] } }),
@@ -251,10 +243,7 @@ test("an image credit uses the image pair, not the author pair", () => {
 });
 
 test("a credit is refused entirely when the relation half cannot be written", () => {
-  /*
-    refusing the pair rather than writing the text alone: half a dual write is
-    the drift ADR 0004 accepts the denormalisation to avoid
-  */
+  /* never the text alone (ADR 0004) */
   const result = planCredit(withoutAuthor, page(), {
     credit: "author",
     byline: "Gale de Silva",
@@ -332,9 +321,7 @@ test("a new article always writes its section", () => {
 });
 
 test("a new article crediting a member is refused when Author is unshared", () => {
-  /* the pair ADR 0004 keeps together: a create that knows the member writes
-     the relation, so an unreadable relation refuses the whole create rather
-     than writing a Byline with nothing behind it */
+  /* never a Byline with no relation behind it (ADR 0004) */
   expect(
     planCreate(withoutAuthor, {
       headline: "Looney's line",

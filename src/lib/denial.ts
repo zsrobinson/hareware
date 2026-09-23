@@ -1,8 +1,4 @@
-/*
-  The four refusals and everything that differs between them, in one table, so
-  a denial added to the type cannot fall through a branch somewhere and pick up
-  another's button. Imports nothing: the guard reads it to set a status.
-*/
+/* The four refusals, in one table. Imports nothing: the guard reads it. */
 
 /**
  * Why somebody may not see the admin tools. Separate because a member acts on
@@ -43,8 +39,6 @@ export const DENIALS: Record<Denial, DenialCopy> = {
   },
 
   "no-role": {
-    /* it does not say how to get the role: the board is the board, and
-       offering a way to ask reads as though it were a favour */
     status: 403,
     title: "This tool is for the Editorial Board",
     body: (you) => `You are signed in as ${you}, who is not on the board.`,

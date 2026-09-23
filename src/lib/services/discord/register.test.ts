@@ -25,10 +25,7 @@ test("puts the whole surface on the guild, as the bot", async () => {
   expect(result.outcome).toBe("ok");
 
   const [url, init] = fetchMock.mock.calls[0]!;
-  /*
-    guild-scoped, not global: guild commands appear instantly, while a global
-    registration takes up to an hour to propagate
-  */
+  /* guild commands are live at once; global ones take up to an hour */
   expect(String(url)).toBe(
     `https://discord.com/api/v10/applications/${DISCORD_APPLICATION_ID}/guilds/${GUILD_ID}/commands`,
   );
@@ -49,10 +46,6 @@ test("registers again when the payload changed", async () => {
   expect(result.outcome).toBe("ok");
 });
 
-/*
-  a missing token is not a failure to alert on the way a refused registration
-  is — it is a worker that has not been given its credential yet
-*/
 test("says misconfigured, not failed, without a bot token", async () => {
   const fetchMock = mockDiscord();
 
@@ -63,11 +56,6 @@ test("says misconfigured, not failed, without a bot token", async () => {
   expect(result.summary).toContain("DISCORD_BOT_TOKEN");
 });
 
-/*
-  discord answers a rejected registration with a 200-shaped body on some
-  endpoints and a 4xx here; either way the surface silently stays stale unless
-  the status is read
-*/
 test("a refused registration is failed, and says what discord said", async () => {
   mockDiscord(false, '{"message":"Missing Access","code":50001}');
 
@@ -78,10 +66,7 @@ test("a refused registration is failed, and says what discord said", async () =>
   expect(result.summary).toContain("Missing Access");
 });
 
-/*
-  this runs from the hourly cron, and a throw there takes the reminders down
-  with it
-*/
+/* a throw on the cron tick would take the reminders with it */
 test("never throws into a cron tick", async () => {
   vi.stubGlobal("fetch", async () => {
     throw new TypeError("network down");
@@ -92,8 +77,3 @@ test("never throws into a cron tick", async () => {
   expect(result.outcome).toBe("failed");
   expect(result.summary).toContain("network down");
 });
-
-/*
-  the hash is what suppresses the next registration. storing it after a failed
-  PUT would leave the stale surface up and never try again
-*/

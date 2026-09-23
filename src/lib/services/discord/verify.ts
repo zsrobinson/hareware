@@ -1,19 +1,10 @@
-/*
-  every interaction discord sends is signed, and an endpoint that does not
-  check the signature is an endpoint anyone on the internet can drive.
-
-  discord validates a new endpoint url by sending one correctly signed request
-  and one deliberately corrupted one, and refuses to save the url unless the
-  second is rejected — so getting this wrong fails closed and loudly, which is
-  the right way round
-*/
+/* Ed25519 verification of Discord interactions, which webcrypto in workerd
+   provides. */
 
 const encoder = new TextEncoder();
 
-/*
-  allocated rather than built with `Uint8Array.from`, which infers
-  `ArrayBufferLike` and will not satisfy webcrypto's `BufferSource`
-*/
+/* not `Uint8Array.from`: its `ArrayBufferLike` is not a webcrypto
+   `BufferSource` */
 function fromHex(hex: string): Uint8Array<ArrayBuffer> | undefined {
   if (hex.length % 2 !== 0 || !/^[0-9a-f]*$/i.test(hex)) return undefined;
 
@@ -25,27 +16,19 @@ function fromHex(hex: string): Uint8Array<ArrayBuffer> | undefined {
   return bytes;
 }
 
-/** how far from now a signed timestamp may be, in seconds, either direction */
+/** seconds a signed timestamp may be from now, either way */
 const MAX_SKEW = 5 * 60;
 
-/** whether discord's unix-seconds timestamp is close enough to now to accept */
 function recent(timestamp: string) {
   const sent = Number(timestamp);
   if (!Number.isFinite(sent)) return false;
 
-  // both directions: a clock ahead of ours is skew, not a replay
   return Math.abs(Date.now() / 1000 - sent) <= MAX_SKEW;
 }
 
 /**
- * the request body, if discord really sent it, and undefined otherwise.
- *
- * returns the body rather than a boolean because it has to read it here — a
- * request body can only be consumed once, and the signature covers the exact
- * bytes, so a caller that re-parsed its own copy could verify one thing and act
- * on another
- *
- * workerd implements ed25519 in webcrypto, so this needs no library
+ * The body if Discord signed it. Returned so the caller acts on the exact bytes
+ * verified.
  */
 export async function verifyInteraction(
   request: Request,
@@ -57,12 +40,7 @@ export async function verifyInteraction(
 
   if (!signature || !timestamp) return undefined;
 
-  /*
-    a correctly signed interaction stays valid forever without this, so anyone
-    who captured one could replay it and write invocation rows that look like a
-    button press. discord's own guidance is to bound the timestamp; five
-    minutes is generous for a request discord expects answered in three seconds
-  */
+  /* without a bound, a captured interaction could be replayed forever */
   if (!recent(timestamp)) return undefined;
 
   const signatureBytes = fromHex(signature);

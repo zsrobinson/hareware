@@ -1,17 +1,11 @@
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-/*
-  one row per thing HareWare did: a cron tick, a manual trigger, a button.
-
-  the schema lives here rather than only in a migration so that the table and
-  the type it produces cannot drift — the row shape is inferred from this, not
-  asserted by hand at the call site
-*/
+/* one row per thing HareWare did: a cron tick, a manual trigger, a button */
 export const invocations = sqliteTable(
   "invocations",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    /** unix seconds; sqlite has no date type worth the name */
+    /** unix seconds */
     at: integer("at").notNull(),
     source: text("source", {
       enum: ["cron", "manual", "button", "command"],
@@ -24,26 +18,16 @@ export const invocations = sqliteTable(
         "article-edit",
         "command-surface",
         "application-sync",
-        /* every roster change an officer makes on the three ADR 0010 pages:
-           attendance, a member created, an application linked, two rows
-           merged, a status set. one value at the granularity `article-edit`
-           already uses — the summary names which, and an election audit needs
-           to find these without knowing what to look for */
+        /* every roster change on the ADR 0010 pages; the summary says which */
         "roster-edit",
       ],
     }).notNull(),
-    /*
-      four, not two. "did it throw" is the wrong question: the reminders return
-      rather than throw on their most important failures, so a week of wordpress
-      refusing the feed used to write seven rows saying `ok`. a quiet morning and
-      a broken one have to differ by more than prose nobody reads past the badge
-    */
     outcome: text("outcome", {
       enum: ["ok", "skipped", "misconfigured", "failed"],
     }).notNull(),
-    /** the plain line the log page shows. kept indefinitely */
+    /** the line the log page shows */
     summary: text("summary").notNull(),
-    /** the discord user behind it, where a person was */
+    /** the Discord user behind it, if any */
     actor: text("actor"),
   },
   // the log page reads newest-first

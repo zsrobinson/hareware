@@ -1,18 +1,7 @@
 /*
-  turning an intended change into one notion PATCH and structured before/after
-  values. The response and Invocation log format those same facts.
-
-  everything here is pure. a command re-reads its page, plans the change,
-  sends the body and confirms the returned values — so the interesting part, which is
-  which shape each property type takes and what the value was before, is
-  testable without notion and without a write token. see ADR 0009.
-
-  the shapes are not interchangeable and getting one wrong is silent: notion
-  rejects `{ select: … }` on a `status` property with a 400 that reads like a
-  bad id, and accepts a body whose property name it does not recognise by
-  ignoring it. `Article Status` and `Image Status` are `status` properties
-  where `Section` is a `select`, which is why the builders below are separate
-  functions rather than one that takes a type.
+  An intended change as one Notion PATCH body plus before/after values. Pure.
+  Each property type has its own shape: Notion rejects `select` on a `status`
+  with a 400 that reads like a bad id, and ignores an unknown property name.
 */
 
 import { plainText } from "~/lib/services/notion/client";
@@ -20,23 +9,13 @@ import { notSharing, type Schema } from "./choices";
 import { ARTICLE_PROPERTIES } from "./config";
 import { optionName, propertyOf, relationIds, type ArticlePage } from "./page";
 
-/** the key of an Articles property, as `config.ts` names it */
 export type PropertyKey = keyof typeof ARTICLE_PROPERTIES;
 
-/** a property value as notion accepts it in a PATCH body */
 export type PropertyValue = Record<string, unknown>;
 
-/** the body of a `PATCH pages/{id}` */
 export type PatchBody = { properties: Record<string, PropertyValue> };
 
-/**
- * one intended change, keyed by property.
- *
- * the union is per-property rather than per-type so a caller cannot hand a
- * `select` value to a `status` property: `section` takes an option and
- * `publicationDate` takes a date, and there is no spelling of this type that
- * mixes them up
- */
+/** one intended change, per property so a value cannot reach the wrong type */
 export type Intent =
   | { property: "headline"; text: string }
   | { property: "status" | "imageStatus"; option: string }
@@ -48,19 +27,13 @@ export type Intent =
 /** which pair of properties a credit writes; see ADR 0004 */
 export type Credit = {
   credit: "author" | "image";
-  /** the printed name — always filled, and authoritative for what gets printed */
+  /** the printed name, always filled */
   byline: string;
-  /** the Members behind it; commands require at least one */
   memberIds: string[];
 };
 
 /**
- * a planned change: the body to send and the values to verify.
- *
- * each change carries the value it is changing **from** as well as to. that
- * is what makes a command run against the wrong article undoable rather than
- * a mystery, and ADR 0009 requires every mutation to be an Invocation — a log
- * row saying only the new value cannot undo anything
+ * A value before and after, so the logged Invocation can undo it (ADR 0009).
  */
 export type ChangeValue = string | string[] | null;
 export type ArticleChange = {
@@ -71,13 +44,6 @@ export type ArticleChange = {
 };
 export type Plan = PatchBody & { changes: ArticleChange[] };
 
-/**
- * a plan, or a refusal to make one.
- *
- * refusal is a state rather than a thrown error or an empty body, because the
- * caller has an editor waiting on a deferred interaction and has to say
- * something either way
- */
 export type PlanResult =
   { status: "planned"; plan: Plan } | { status: "refused"; reason: string };
 
@@ -105,14 +71,14 @@ function dateValue(start: string | null): PropertyValue {
   return { date: start === null ? null : { start } };
 }
 
-/** the whole list, replaced. an append is the caller's read plus its addition */
+/** the whole list, replaced */
 function relationValue(ids: string[]): PropertyValue {
   return { relation: ids.map((id) => ({ id })) };
 }
 
 /* ---- reading what is there now ------------------------------------------ */
 
-/** Read raw values once for planning, confirmation and logging. */
+/** a property's value, for planning, confirmation and logging */
 export function current(page: ArticlePage, property: PropertyKey): ChangeValue {
   const value = propertyOf(page, property);
   switch (ARTICLE_PROPERTIES[property].type) {
@@ -135,7 +101,7 @@ export function sameValue(a: ChangeValue, b: ChangeValue): boolean {
     : a === b;
 }
 
-/** Detailed log text retains relation ids for undoing an edit. */
+/** log text, keeping relation ids so an edit can be undone */
 export function changesSummary(changes: ArticleChange[]): string {
   const said = (value: ChangeValue) =>
     Array.isArray(value)
@@ -175,18 +141,9 @@ function intended(intent: Intent): {
 }
 
 /**
- * why a property may not be written, or undefined.
- *
- * this is the data-loss guard and it is why a schema is a parameter rather
- * than something the builders do without. notion omits a relation whose target
- * the integration cannot reach **from the schema entirely**, and the property
- * then reads back on every page as `[]` — indistinguishable from an article
- * with genuinely no author, so an append built on that read deletes co-authors
- * nobody could see. absent is not empty, and only the schema can tell them
- * apart.
- *
- * scoped to the properties actually being written: Members going unshared must
- * not stop an editor moving an article to _Section Edited_
+ * Why these properties may not be written, or undefined — see
+ * `assertProperties`. Scoped to what is written, so Members going unshared does
+ * not block a status change.
  */
 function refusal(
   schema: Schema,
@@ -203,7 +160,6 @@ function refusal(
 
 /* ---- planning ----------------------------------------------------------- */
 
-/** one property, changed */
 export function plan(
   schema: Schema,
   page: ArticlePage,
@@ -233,23 +189,15 @@ export function plan(
 /** what `/article new` starts an Article with */
 export type NewArticle = {
   headline: string;
-  /** always filled, per ADR 0004 — the selected member's name by default */
+  /** always filled (ADR 0004) */
   byline: string;
-  /** the Members rows behind that byline; commands require at least one */
   authorIds: string[];
-  /** notion's own spelling, resolved from the schema, or null if it is gone */
+  /** from the schema, or null if the option is gone */
   status: string | null;
-  /** notion's own spelling for the section responsible for the article */
   section: string;
 };
 
-/**
- * a new Article, as the properties of a `POST pages`.
- *
- * a create rather than a change, so there is nothing to say it changed *from*
- * — but it goes through the same refusal as everything else, scoped to the
- * properties it would actually write.
- */
+/** a new Article, as the properties of a `POST pages` */
 export function planCreate(
   schema: Schema,
   { headline, byline, authorIds, status, section }: NewArticle,
@@ -295,14 +243,8 @@ export function planCreate(
 }
 
 /**
- * a credit, as ADR 0004 requires it: the printed Byline and the Member behind
- * it, in **one** patch body.
- *
- * never one without the other. the ADR accepts storing the printed name twice
- * over on the understanding that HareWare writes both together — a helper that
- * could emit the text alone is the dual-write drift it names as the cost, and
- * the whole pair is refused rather than half-written when the relation cannot
- * be reached
+ * A credit: the printed Byline and its Members in one body, never one alone
+ * (ADR 0004).
  */
 export function planCredit(
   schema: Schema,

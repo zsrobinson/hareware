@@ -1,20 +1,4 @@
-/*
-  every automation, in one list that both describes and dispatches them.
-
-  this used to be description only — the admin panel read it while `run.ts`
-  kept a hand-written array of the same two things in the same order, deriving
-  each one's name from its *array position*. Adding a third meant editing six
-  places coupled by nothing but convention, and swapping two lines silently
-  relabelled every log row.
-
-  Now the function is the entry. Adding an automation is one entry here plus
-  one module, which is what this file already claimed.
-
-  The shape is deliberately the one a watcher or a command also fits: something
-  with an id, a schedule, and a function from (env, time) to a result. When a
-  Notion or Discord watcher arrives, it belongs here with a different `trigger`
-  rather than in a parallel system.
-*/
+/* Every automation. This list both describes and dispatches them. */
 
 import type { EasternNow } from "~/lib/eastern";
 import type { Result } from "~/lib/result";
@@ -26,49 +10,15 @@ import { syncApplications } from "~/lib/members/sync";
 
 export type AutomationId = "meeting" | "social" | "applications";
 
-/**
- * what an automation reports back.
- *
- * `ok` is reserved for "it did the thing". A run that found nothing to do is
- * `skipped` and a run that could not try is `misconfigured` — both used to be
- * recorded as `ok`, so a week of WordPress refusing the feed produced seven
- * green rows in the log ADR 0007 exists to prevent.
- */
-/*
-  re-exported rather than moved-and-repointed everywhere: `Result` is the
-  vocabulary every automation already speaks, and its definition belongs in
-  `~/lib/result` because six modules that are not automations — two of them
-  under `services/`, whose rule is that it knows nothing about this layer —
-  also speak it
-*/
-export type { Outcome, Result } from "~/lib/result";
-export { ok, skipped, misconfigured, failed } from "~/lib/result";
-
 export type Automation = {
   id: AutomationId;
-  /** what the log calls it. stable: rows already written use these */
+  /** what the log calls it. Stable: written rows use it */
   action: Row["action"];
   name: string;
-  /** what it does, in the words a club member would use */
   description: string;
-  /**
-   * where it posts, as an id — so the panel and the message cannot disagree.
-   *
-   * optional, because not every automation talks to the club. The application
-   * sync writes notion rows and says nothing in discord, and giving it a
-   * channel it never posts to would be a lie the panel then prints. Absent
-   * means "this one reaches nobody", which `channelLabel` says out loud
-   */
+  /** where it posts; absent when it posts nothing */
   channelId?: string;
-  /**
-   * the hour it runs, eastern, or `"hourly"` for every tick.
-   *
-   * the reminders are a time of day. the application sync is not: ADR 0010
-   * has it creating a row so somebody who applied on monday autocompletes at
-   * wednesday's meeting, and a fixed hour meant an application approved on
-   * wednesday afternoon waited until thursday morning, which is the case the
-   * whole section is written around
-   */
+  /** the Eastern hour it runs, or every tick (ADR 0010) */
   hour: number | "hourly";
   run: (env: Env, eastern: EasternNow) => Promise<Result>;
 };
@@ -105,12 +55,12 @@ export const AUTOMATIONS: Automation[] = [
   },
 ];
 
-/** an automation by id, for a route validating `?only=` against what exists */
+/** an automation by id */
 export function automation(id: string): Automation | undefined {
   return AUTOMATIONS.find((a) => a.id === id);
 }
 
-/** "8am", the way the panel says it */
+/** "8am" */
 export function hourLabel(hour: number | "hourly") {
   if (hour === "hourly") return "every hour";
 
@@ -119,14 +69,7 @@ export function hourLabel(hour: number | "hourly") {
   return `${twelve}${suffix}`;
 }
 
-/**
- * "#editorial-board", for a confirmation nobody should click through blind.
- *
- * an automation with no channel is not an error and not an unknown channel —
- * it is one that posts nothing, and the panel says so rather than rendering
- * "channel undefined" beside it. ADR 0010 put the application sync on the same
- * hourly cron precisely so that everything the cron does is visible here
- */
+/** "#editorial-board", or "posts nothing" */
 export function channelLabel(channelId: string | undefined) {
   if (!channelId) return "posts nothing";
   return CHANNEL_NAMES[channelId] ?? `channel ${channelId}`;

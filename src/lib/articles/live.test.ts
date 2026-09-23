@@ -6,12 +6,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/**
- * the json body of the one request that was sent.
- *
- * `RequestInit["body"]` is a union including streams and blobs, so reading it
- * needs a narrowing somewhere — once here rather than at every assertion
- */
+/** the json body of the one request that was sent */
 function sentBody(mock: { mock: { calls: unknown[] } }) {
   const [, init] = mock.mock.calls[0] as [string, RequestInit];
 
@@ -46,11 +41,7 @@ test("reads the most recently edited Articles from notion", async () => {
   expect(articles[0]!.headline).toBe("Terps lose again");
 });
 
-/*
-  the memo is why this is affordable: notion allows roughly three requests a
-  second and discord fires one per keystroke, so six keystrokes have to be one
-  request rather than six. it exists for that budget, not for speed
-*/
+/* keystrokes must share one request: Notion allows about three a second */
 test("a burst of keystrokes costs one request, not one each", async () => {
   const fetchMock = notion();
 
@@ -83,10 +74,6 @@ test("sorts by recency and asks notion to do it", async () => {
   });
 });
 
-/*
-  the fallback for work older than the hundred we hold. notion's `contains` is
-  a literal substring, so this is coarser than the local matching on purpose
-*/
 test("search asks notion for headlines containing the text", async () => {
   const fetchMock = notion("Ellicott Hall Stolen");
 
@@ -101,8 +88,7 @@ test("search asks notion for headlines containing the text", async () => {
 });
 
 test("search is never served from the snapshot", async () => {
-  /* the snapshot is the recent hundred; a search is for what is not in it, so
-     answering one from the other would be answering the wrong question */
+  /* a search is for what the recent snapshot lacks */
   const fetchMock = notion();
 
   await recentArticles("token");

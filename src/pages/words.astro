@@ -26,10 +26,8 @@ const error = Astro.url.searchParams.get("error");
 const articlesStr = Astro.url.searchParams.get("articles");
 let counts: (number | null)[] = [];
 if (articlesStr && !error) {
-  /* a textarea submits CRLF, but not every browser or paste agrees, and a
-     mismatch here used to be invisible: URL strips newlines before parsing, so
-     an unsplit blob came back canParse true and on theumdhare.com, then got
-     sent upstream as one enormous slug */
+  /* CRLF or LF: `URL` strips newlines, so an unsplit blob would parse as one
+     link */
   const articles = articlesStr
     .split(/\r?\n/)
     .map((a) => a.trim())
@@ -38,16 +36,12 @@ if (articlesStr && !error) {
   if (articles.length > 10) return redirectError("too-many");
   if (articles.length < 1) return redirectError("too-few");
 
-  /* takes a bare slug, a dated path or a full permalink, and rules out
-     anything that isn't the hare — which is both checks this used to do
-     itself, minus the newline blind spot */
   const links = articles.map(toArticleLink);
   if (links.some((link) => link === undefined))
     return redirectError("invalid-url");
 
-  /* ten links at once is enough to start collecting 429s */
+  /* ten at once draws 429s */
   counts = await mapLimit(links as string[], 3, async (link) => {
-    // one bad slug in ten shouldn't take the whole page down with it
     try {
       const { body } = await scrapeArticle(link);
       return getWordCount(body);
@@ -56,8 +50,6 @@ if (articlesStr && !error) {
     }
   });
 }
-/* the sidebar this renders depends on who is asking, so the response is
-   theirs alone — the scraping below is per-request anyway */
 Astro.response.headers.set("cache-control", "private, no-store");
 
 const who = viewerState(await viewer(Astro.request));

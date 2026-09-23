@@ -9,7 +9,11 @@
 */
 
 import { plainText } from "~/lib/services/notion/client";
-import { ARTICLE_PROPERTIES, UNTITLED } from "./config";
+import {
+  ARTICLE_PROPERTIES,
+  ARTICLES_DATA_SOURCE_ID,
+  UNTITLED,
+} from "./config";
 
 /**
  * a property value, in every shape we read.
@@ -37,8 +41,30 @@ export type ArticlePage = {
   /* notion's two words for the same thing, depending on endpoint age */
   in_trash?: boolean;
   archived?: boolean;
+  parent?: { type?: string; data_source_id?: string };
   properties: Record<string, ArticleProperty>;
 };
+
+const NOTION_ID =
+  /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i;
+
+/**
+ * The text as a page id, or null. It goes into a Notion url path, so anything
+ * else — half a headline, or `../` — must not reach one.
+ */
+export function pageIdOf(text: string): string | null {
+  return NOTION_ID.test(text) ? text : null;
+}
+
+/** Whether the page is a row of Articles, not any page the token can reach. */
+export function isArticle(page: ArticlePage): boolean {
+  const compact = (id: string | undefined) =>
+    id?.replaceAll("-", "").toLowerCase();
+
+  return (
+    compact(page.parent?.data_source_id) === compact(ARTICLES_DATA_SOURCE_ID)
+  );
+}
 
 /*
   older than anything notion can return, so a page that arrived without a

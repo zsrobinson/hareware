@@ -125,6 +125,11 @@ function safeReturnTo(value: string) {
   }
 }
 
+/** where a sign-in reached at this url may send somebody afterwards */
+export function returnToOf(url: URL) {
+  return safeReturnTo(url.searchParams.get("returnTo") ?? "/generate");
+}
+
 function redirect(location: string, cookies: string[] = []) {
   const headers = new Headers({
     location,
@@ -156,7 +161,7 @@ export async function beginDiscordSignIn(request: Request, config: AuthConfig) {
   const requestUrl = new URL(request.url);
   const callbackUrl = new URL("/auth/discord/callback", requestUrl.origin);
   const state = crypto.randomUUID();
-  const returnTo = requestUrl.searchParams.get("returnTo") ?? "/generate";
+  const returnTo = returnToOf(requestUrl);
   const destination = new URL("https://discord.com/oauth2/authorize");
 
   destination.search = new URLSearchParams({

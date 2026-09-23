@@ -21,6 +21,9 @@ export type AdminRoute = (typeof ADMIN_ROUTES)[number];
 /** whether this path is one of the admin tools, and so needs the role */
 export function isAdminPath(pathname: string) {
   /* Exact, not a prefix: the tools are flat, so `startsWith` would guard
-     `/logout` on its way past. */
-  return (ADMIN_ROUTES as readonly string[]).includes(pathname);
+     `/logout` on its way past. Astro serves `/log/` as `/log`, so the one
+     trailing slash it ignores is ignored here too. */
+  return (ADMIN_ROUTES as readonly string[]).includes(
+    pathname.replace(/\/$/, ""),
+  );
 }

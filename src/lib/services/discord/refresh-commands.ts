@@ -14,7 +14,7 @@
   the stored hash to disagree with what was actually up there.
 */
 
-import { buildCommands } from "./commands";
+import { buildCommands, MAX_CHOICES } from "./commands";
 import { registerCommands } from "./register";
 import { failed, misconfigured, type Result } from "~/lib/result";
 import {
@@ -80,6 +80,19 @@ export async function refreshCommands(env: Env): Promise<Result> {
   }
 
   const result = await registerCommands(env, buildCommands(choices));
+
+  /* `choicesFor` registers the first MAX_CHOICES; the rest reach no picker */
+  const cut = CHOICE_PROPERTIES.map((property) => ({
+    property,
+    count: choices.filter((choice) => choice.property === property).length,
+  }))
+    .filter(({ count }) => count > MAX_CHOICES)
+    .map(
+      ({ property, count }) =>
+        `${property} has ${count} options and Discord takes ${MAX_CHOICES}, so ${count - MAX_CHOICES} are missing from its picker`,
+    );
+  if (result.outcome === "ok" && cut.length > 0)
+    return misconfigured(`${result.summary}, but ${cut.join("; ")}`);
 
   return { outcome: result.outcome, summary: result.summary };
 }

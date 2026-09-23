@@ -10,6 +10,7 @@ import type { Schema } from "./choices";
 import type { ArticlePage } from "./page";
 import type { Result } from "~/lib/result";
 import type { MemberMatch } from "./member";
+import { ARTICLES_DATA_SOURCE_ID } from "./config";
 
 /*
   the whole outside world, hand-written, so every refusal below is reachable —
@@ -42,8 +43,12 @@ const withoutAuthor: Schema = {
   ),
 };
 
+const PAGE = "22cbe415-e24c-80d1-a2b3-c4d5e6f70001";
+const OTHER_PAGE = "22cbe415-e24c-80d1-a2b3-c4d5e6f70002";
+
 const article = (properties: ArticlePage["properties"] = {}): ArticlePage => ({
-  id: "page-1",
+  id: PAGE,
+  parent: { type: "data_source_id", data_source_id: ARTICLES_DATA_SOURCE_ID },
   last_edited_time: "2026-09-04T10:05:00.000Z",
   properties: {
     Headline: { type: "title", title: [{ plain_text: "Looney's line" }] },
@@ -136,7 +141,7 @@ function spy(over: Partial<EditIO> = {}) {
 
 const setStatus: EditRequest = {
   kind: "property",
-  pageId: "page-1",
+  pageId: PAGE,
   intent: { property: "status", option: "Approved" },
 };
 
@@ -156,10 +161,10 @@ test("deleting moves the Article to Notion's Trash and keeps its returned page",
     },
   });
 
-  const result = await runEdit(io, { kind: "delete", pageId: "page-1" }, actor);
+  const result = await runEdit(io, { kind: "delete", pageId: PAGE }, actor);
 
   expect(result).toMatchObject({ status: "deleted", page: returned });
-  expect(seen.trashed).toEqual(["page-1"]);
+  expect(seen.trashed).toEqual([PAGE]);
   expect(seen.logged[0]!.result).toMatchObject({
     outcome: "ok",
     summary: "Moved article to Notion's Trash.",
@@ -168,9 +173,54 @@ test("deleting moves the Article to Notion's Trash and keeps its returned page",
 
 test("a trash response that does not confirm in_trash is uncertain", async () => {
   const { io } = spy({ trash: async () => article() });
-  const result = await runEdit(io, { kind: "delete", pageId: "page-1" }, actor);
-  expect(result).toMatchObject({ status: "failed", pageId: "page-1" });
+  const result = await runEdit(io, { kind: "delete", pageId: PAGE }, actor);
+  expect(result).toMatchObject({ status: "failed", pageId: PAGE });
   expect(editSummary(result)).toContain("could not be confirmed");
+});
+
+/* the id is whatever was typed into Discord, and the token reaches more than
+   Articles */
+test("deleting refuses a page that is not in Articles, and trashes nothing", async () => {
+  const { io, seen } = spy({
+    page: async () => ({
+      ...article(),
+      parent: { type: "data_source_id", data_source_id: OTHER_PAGE },
+    }),
+  });
+
+  const result = await runEdit(io, { kind: "delete", pageId: PAGE }, actor);
+
+  expect(result).toMatchObject({ status: "failed" });
+  expect(seen.trashed).toEqual([]);
+});
+
+test("deleting refuses text that is not a page id before asking Notion", async () => {
+  const asked: string[] = [];
+  const { io, seen } = spy({
+    page: async (pageId) => {
+      asked.push(pageId);
+      return article();
+    },
+  });
+
+  for (const typed of ["Looney's line", `${PAGE}/../../blocks/${OTHER_PAGE}`])
+    expect(
+      await runEdit(io, { kind: "delete", pageId: typed }, actor),
+    ).toMatchObject({ status: "failed" });
+
+  expect(asked).toEqual([]);
+  expect(seen.trashed).toEqual([]);
+});
+
+test("a property change refuses a page that is not in Articles", async () => {
+  const { io, seen } = spy({
+    page: async () => ({ ...article(), parent: undefined }),
+  });
+
+  expect(await runEdit(io, setStatus, actor)).toMatchObject({
+    status: "failed",
+  });
+  expect(seen.patched).toEqual([]);
 });
 
 test("the Notion adapter moves a page to Trash with in_trash", async () => {
@@ -181,11 +231,11 @@ test("the Notion adapter moves a page to Trash with in_trash", async () => {
   vi.stubGlobal("fetch", fetchMock);
 
   await expect(
-    notionIO({ NOTION_TOKEN: "notion-token" } as Env).trash("page-1"),
+    notionIO({ NOTION_TOKEN: "notion-token" } as Env).trash(PAGE),
   ).resolves.toEqual(returned);
 
   const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-  expect(url).toBe("https://api.notion.com/v1/pages/page-1");
+  expect(url).toBe(`https://api.notion.com/v1/pages/${PAGE}`);
   expect(init.method).toBe("PATCH");
   expect(JSON.parse(init.body as string)).toEqual({ in_trash: true });
 });
@@ -199,7 +249,7 @@ test("a property change patches notion, indexes what came back, and logs it", as
         "Article Status": { type: "status", status: { name: "Backlog" } },
       }),
     patch: async (pageId, body) => {
-      expect(pageId).toBe("page-1");
+      expect(pageId).toBe(PAGE);
       expect(body).toEqual({
         properties: { "Article Status": { status: { name: "Approved" } } },
       });
@@ -377,7 +427,7 @@ const creditRequest = (
   over: Partial<Extract<EditRequest, { kind: "credit" }>> = {},
 ): EditRequest => ({
   kind: "credit",
-  pageId: "page-1",
+  pageId: PAGE,
   credit: "author",
   member: { discordId: "222", displayName: "Bay Hoffman" },
   byline: null,
@@ -417,6 +467,8 @@ test("two Members sharing a Discord ID is refused, naming both", async () => {
 
   expect(editSummary(said)).toContain("member-1");
   expect(editSummary(said)).toContain("member-2");
+  /* plain text: the log shows it as written and Discord escapes it */
+  expect(editSummary(said)).not.toContain("*");
   expect(seen.patched).toEqual([]);
   expect(seen.logged[0]!.result.outcome).toBe("failed");
 });
@@ -435,6 +487,7 @@ test("two Members answering to one name is refused rather than picked between", 
   const said = await runEdit(io, creditRequest(), actor);
 
   expect(editSummary(said)).toContain("member-1");
+  expect(editSummary(said)).not.toContain("*");
   expect(seen.patched).toEqual([]);
 });
 
@@ -592,7 +645,7 @@ test("every attempt is logged against the editor who made it", async () => {
   const { io, seen } = spy();
 
   await runEdit(io, setStatus, actor);
-  await runEdit(io, { ...setStatus, pageId: "page-2" }, actor);
+  await runEdit(io, { ...setStatus, pageId: OTHER_PAGE }, actor);
 
   expect(seen.logged).toHaveLength(2);
   expect(seen.logged.every((row) => row.actor === "111")).toBe(true);
@@ -658,11 +711,11 @@ test("a missing property in the write response cannot claim a clear", async () =
   const { io } = spy({
     page: async () =>
       article({ "Article Status": { status: { name: "Backlog" } } }),
-    patch: async () => ({ id: "page-1", properties: {} }),
+    patch: async () => ({ id: PAGE, properties: {} }),
   });
   expect(await runEdit(io, setStatus, actor)).toMatchObject({
     status: "failed",
-    pageId: "page-1",
+    pageId: PAGE,
     explanation: expect.stringContaining("could not be confirmed"),
   });
 });
@@ -770,7 +823,7 @@ test("an explicitly null date is confirmed as a clear", async () => {
       io,
       {
         kind: "property",
-        pageId: "page-1",
+        pageId: PAGE,
         intent: { property: "publicationDate", date: null },
       },
       actor,
@@ -785,14 +838,14 @@ test("an explicitly null date is confirmed as a clear", async () => {
 
 test("a missing before value cannot become an unchanged clear", async () => {
   const { io, seen } = spy({
-    page: async () => ({ id: "page-1", properties: {} }),
+    page: async () => ({ id: PAGE, properties: {} }),
   });
   expect(
     await runEdit(
       io,
       {
         kind: "property",
-        pageId: "page-1",
+        pageId: PAGE,
         intent: { property: "publicationDate", date: null },
       },
       actor,

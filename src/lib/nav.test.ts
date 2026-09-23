@@ -57,10 +57,12 @@ test("no public tool is sitting on a guarded route", () => {
 
 /*
   the guard matches exactly, so a public route is safe from being caught by a
-  guarded one that happens to start the same way
+  guarded one that happens to start the same way — but Astro also routes the
+  trailing-slash form to the page, so the guard has to catch that one too
 */
 test("guards the route itself, not everything beginning with it", () => {
   expect(isAdminPath("/log")).toBe(true);
+  expect(isAdminPath("/log/")).toBe(true);
   expect(isAdminPath("/logout")).toBe(false);
   expect(isAdminPath("/log/2026")).toBe(false);
   expect(isAdminPath("/generate")).toBe(false);

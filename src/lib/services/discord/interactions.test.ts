@@ -10,8 +10,12 @@ import { EDITORIAL_BOARD_ROLE_ID } from "./config";
 import type { Article } from "~/lib/articles/page";
 import type { ArticlePage } from "~/lib/articles/page";
 import type { CommandMessage } from "./message";
+import { ARTICLES_DATA_SOURCE_ID } from "~/lib/articles/config";
 
 const IS_COMPONENTS_V2 = 1 << 15;
+
+const PAGE = "22cbe415-e24c-80d1-a2b3-c4d5e6f70001";
+const OTHER_PAGE = "22cbe415-e24c-80d1-a2b3-c4d5e6f70002";
 
 /**
  * the reply as a message reply.
@@ -227,6 +231,38 @@ test("/article ping answers inline, crediting whoever ran it", async () => {
   expect(text(reply)).toContain("Zachary");
 });
 
+test("a reply's own Markdown renders, and a name inside it adds none", async () => {
+  const reply = asMessage(
+    await handleInteraction({
+      ...command("ping"),
+      member: {
+        roles: [EDITORIAL_BOARD_ROLE_ID],
+        user: { username: "z", global_name: "*Zach*" },
+      },
+    }),
+  );
+
+  expect(reply.data!.components[0]).toEqual({
+    type: 10,
+    content: "HareWare is listening. Discord says you are **\\*Zach\\***.",
+  });
+});
+
+test("credits a member by their server nickname first", async () => {
+  const reply = asMessage(
+    await handleInteraction({
+      ...command("ping"),
+      member: {
+        roles: [EDITORIAL_BOARD_ROLE_ID],
+        nick: "Robbo",
+        user: { username: "zsrobinson", global_name: "Zachary" },
+      },
+    }),
+  );
+
+  expect(text(reply)).toContain("**Robbo**");
+});
+
 /*
   ADR 0009: the editor sees the result, the channel sees nothing. and both
   flags together — the ephemeral bit alone with a components body is a response
@@ -293,7 +329,7 @@ test("answers /article with no subcommand at all", async () => {
 
 /** an index row, with only what a test cares about spelled out */
 const row = (over: Partial<Article> = {}): Article => ({
-  pageId: "page-1",
+  pageId: PAGE,
   headline: "Terps lose again",
   section: "News",
   status: "Written",
@@ -306,8 +342,9 @@ const row = (over: Partial<Article> = {}): Article => ({
 
 /** a notion page as `/article show` reads one */
 const notionPage = (): ArticlePage => ({
-  id: "page-1",
+  id: PAGE,
   url: "https://notion.so/page-1",
+  parent: { type: "data_source_id", data_source_id: ARTICLES_DATA_SOURCE_ID },
   properties: {
     Headline: { type: "title", title: [{ plain_text: "Terps lose again" }] },
     "Article Status": { type: "status", status: { name: "Written" } },
@@ -328,7 +365,7 @@ test("/article show reads the page live rather than from the picker", async () =
   let asked: string | undefined;
   const reply = asMessage(
     await handleInteraction(
-      command("show", [{ name: "article", value: "page-42" }]),
+      command("show", [{ name: "article", value: OTHER_PAGE }]),
       deps({
         page: (id) => {
           asked = id;
@@ -341,7 +378,7 @@ test("/article show reads the page live rather than from the picker", async () =
     ),
   );
 
-  expect(asked).toBe("page-42");
+  expect(asked).toBe(OTHER_PAGE);
   expect(text(reply)).toContain("Terps lose again");
 });
 
@@ -353,7 +390,7 @@ test("/article show reads the page live rather than from the picker", async () =
 test("/article show says something when notion does not answer", async () => {
   const reply = asMessage(
     await handleInteraction(
-      command("show", [{ name: "article", value: "page-42" }]),
+      command("show", [{ name: "article", value: OTHER_PAGE }]),
       deps({ page: () => Promise.reject(new Error("notion is down")) }),
     ),
   );
@@ -368,10 +405,24 @@ test("/article show asks for an Article when nobody picked one", async () => {
   expect(text(reply)).toContain("Pick an Article");
 });
 
+test("/article show refuses a page that is not in Articles", async () => {
+  const reply = asMessage(
+    await handleInteraction(
+      command("show", [{ name: "article", value: PAGE }]),
+      deps({
+        page: () => Promise.resolve({ ...notionPage(), parent: undefined }),
+      }),
+    ),
+  );
+
+  expect(text(reply)).toContain("not a page in Articles");
+  expect(text(reply)).not.toContain("Terps lose again");
+});
+
 test("the read commands are gated on the editorial board role too", async () => {
   const reply = asMessage(
     await handleInteraction(
-      command("show", [{ name: "article", value: "page-1" }], ["nope"]),
+      command("show", [{ name: "article", value: PAGE }], ["nope"]),
       deps({
         page: () => {
           throw new Error("must not read notion for somebody off the board");
@@ -410,9 +461,7 @@ test("autocomplete answers with choices, not a message", async () => {
   expect(reply!.type).toBe(AUTOCOMPLETE_RESULT);
   /* the headline and nothing else: the status and byline that used to be
      crammed in front of it were noise an editor already knows */
-  expect(asChoices(reply)).toEqual([
-    { name: "Terps lose again", value: "page-1" },
-  ]);
+  expect(asChoices(reply)).toEqual([{ name: "Terps lose again", value: PAGE }]);
 });
 
 test("autocomplete matches what was typed, against what it read", async () => {
@@ -578,7 +627,7 @@ test("a write defers, then follows up with what the edit said", async () => {
 
   const reply = await handleInteraction(
     writeCommand("status", [
-      { name: "article", value: "page-1" },
+      { name: "article", value: PAGE },
       { name: "status", value: "Approved" },
     ]),
     deps,
@@ -592,7 +641,7 @@ test("a write defers, then follows up with what the edit said", async () => {
   expect(seen.requests).toEqual([
     {
       kind: "property",
-      pageId: "page-1",
+      pageId: PAGE,
       intent: { property: "status", option: "Approved" },
     },
   ]);
@@ -610,12 +659,12 @@ test("a write defers, then follows up with what the edit said", async () => {
 test("/article delete defers a request for the selected Article", async () => {
   const { deps, seen, settle } = writing();
   const reply = await handleInteraction(
-    writeCommand("delete", [{ name: "article", value: "page-7" }]),
+    writeCommand("delete", [{ name: "article", value: OTHER_PAGE }]),
     deps,
   );
   expect(reply).toEqual({ type: DEFERRED, data: { flags: EPHEMERAL } });
   await settle();
-  expect(seen.requests).toEqual([{ kind: "delete", pageId: "page-7" }]);
+  expect(seen.requests).toEqual([{ kind: "delete", pageId: OTHER_PAGE }]);
 });
 
 /*
@@ -632,7 +681,7 @@ test("an edit that throws still follows up", async () => {
 
   await handleInteraction(
     writeCommand("headline", [
-      { name: "article", value: "page-1" },
+      { name: "article", value: PAGE },
       { name: "headline", value: "Looney's line" },
     ]),
     deps,
@@ -651,7 +700,7 @@ test("nowhere to run the work is refused inline rather than deferred", async () 
   const reply = asMessage(
     await handleInteraction(
       writeCommand("status", [
-        { name: "article", value: "page-1" },
+        { name: "article", value: PAGE },
         { name: "status", value: "Approved" },
       ]),
       deps,
@@ -677,6 +726,53 @@ test("a headline the picker did not fill in is answered before deferring", async
   expect(seen.requests).toEqual([]);
 });
 
+/* discord sends whatever was typed when nobody picked a suggestion */
+test("typed text that is not a page id never reaches notion", async () => {
+  const { deps, seen } = writing({
+    page: () => {
+      throw new Error("typed text reached notion");
+    },
+  });
+  const typed = {
+    name: "article",
+    value: `${PAGE}/../../blocks/${OTHER_PAGE}`,
+  };
+
+  for (const [subcommand, ...options] of [
+    ["show"],
+    ["delete"],
+    ["status", { name: "status", value: "Approved" }],
+    ["author", { name: "member", value: "222" }],
+  ] as const) {
+    const reply = asMessage(
+      await handleInteraction(
+        writeCommand(subcommand, [typed, ...options]),
+        deps,
+      ),
+    );
+
+    expect(text(reply)).toContain("Pick an Article");
+  }
+
+  expect(seen.requests).toEqual([]);
+});
+
+test("an empty status picker asks with the right article", async () => {
+  const { deps } = writing();
+  const asked = async (subcommand: string) =>
+    text(
+      asMessage(
+        await handleInteraction(
+          writeCommand(subcommand, [{ name: "article", value: PAGE }]),
+          deps,
+        ),
+      ),
+    );
+
+  expect(await asked("image-status")).toContain("Pick an image status.");
+  expect(await asked("status")).toContain("Pick a status.");
+});
+
 /* ---- the date ----------------------------------------------------------- */
 
 test("a publication date that is not one is refused rather than written", async () => {
@@ -691,7 +787,7 @@ test("a publication date that is not one is refused rather than written", async 
     const reply = asMessage(
       await handleInteraction(
         writeCommand("publication-date", [
-          { name: "article", value: "page-1" },
+          { name: "article", value: PAGE },
           { name: "date", value: bad },
         ]),
         deps,
@@ -708,7 +804,7 @@ test("a publication date with no date clears it", async () => {
   const { deps, seen, settle } = writing();
 
   await handleInteraction(
-    writeCommand("publication-date", [{ name: "article", value: "page-1" }]),
+    writeCommand("publication-date", [{ name: "article", value: PAGE }]),
     deps,
   );
   await settle();
@@ -716,7 +812,7 @@ test("a publication date with no date clears it", async () => {
   expect(seen.requests).toEqual([
     {
       kind: "property",
-      pageId: "page-1",
+      pageId: PAGE,
       intent: { property: "publicationDate", date: null },
     },
   ]);
@@ -727,7 +823,7 @@ test("a real date is passed through as notion writes it", async () => {
 
   await handleInteraction(
     writeCommand("publication-date", [
-      { name: "article", value: "page-1" },
+      { name: "article", value: PAGE },
       { name: "date", value: "2026-09-10" },
     ]),
     deps,
@@ -750,7 +846,7 @@ test("the picked member's name comes out of the payload, nickname first", async 
     writeCommand(
       "author",
       [
-        { name: "article", value: "page-1" },
+        { name: "article", value: PAGE },
         { name: "member", value: "222" },
         { name: "also", value: true },
       ],
@@ -766,7 +862,7 @@ test("the picked member's name comes out of the payload, nickname first", async 
   expect(seen.requests).toEqual([
     {
       kind: "credit",
-      pageId: "page-1",
+      pageId: PAGE,
       credit: "author",
       member: { discordId: "222", displayName: "Bay" },
       byline: null,
@@ -782,7 +878,7 @@ test("no nickname falls back to the display name, then the handle", async () => 
     writeCommand(
       "image-crew",
       [
-        { name: "article", value: "page-1" },
+        { name: "article", value: PAGE },
         { name: "member", value: "222" },
       ],
       { users: { "222": { username: "bayh", global_name: null } } },
@@ -804,7 +900,7 @@ test("a credit without a Discord member is refused before deferring", async () =
   const reply = asMessage(
     await handleInteraction(
       writeCommand("author", [
-        { name: "article", value: "page-1" },
+        { name: "article", value: PAGE },
         { name: "byline", value: "Gale de Silva" },
       ]),
       deps,

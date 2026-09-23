@@ -16,7 +16,12 @@
 
 import { failed, misconfigured, ok, type Result } from "~/lib/result";
 
-import { IS_COMPONENTS_V2, textMessage, type CommandMessage } from "./message";
+import {
+  IS_COMPONENTS_V2,
+  markup,
+  textMessage,
+  type CommandMessage,
+} from "./message";
 
 /**
  * how long the interaction token is good for.
@@ -29,8 +34,7 @@ import { IS_COMPONENTS_V2, textMessage, type CommandMessage } from "./message";
 export const TOKEN_LIFETIME_MS = 15 * 60 * 1000;
 
 /** what an editor sees when a command produced no words of its own */
-const NOTHING_SAID =
-  "HareWare finished, but had nothing to say about it. That is a bug. Check `/log`.";
+const NOTHING_SAID = markup`HareWare finished, but had nothing to say about it. That is a bug. Check \`/log\`.`;
 
 /** the message a deferred interaction turned into */
 export function followUpUrl(applicationId: string, interactionToken: string) {

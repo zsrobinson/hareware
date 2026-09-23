@@ -1,4 +1,4 @@
-import { textMessage } from "./message";
+import { markup, textMessage } from "./message";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { followUp, TOKEN_LIFETIME_MS } from "./follow-up";
 
@@ -29,7 +29,7 @@ test("it patches the original deferred message", async () => {
   const result = await followUp(
     APPLICATION,
     TOKEN,
-    textMessage("Set to Section Edited."),
+    textMessage(markup`Set to Section Edited.`),
   );
 
   const [url, init] = fetchMock.mock.calls[0] as unknown as [
@@ -52,7 +52,7 @@ test("it sends no authorization header, because the token is the credential", as
   const fetchMock = vi.fn(async () => okResponse());
   vi.stubGlobal("fetch", fetchMock);
 
-  await followUp(APPLICATION, TOKEN, textMessage("done"));
+  await followUp(APPLICATION, TOKEN, textMessage(markup`done`));
 
   const headers = (
     fetchMock.mock.calls[0] as unknown as [string, RequestInit]
@@ -71,7 +71,7 @@ test("empty content still sends a message rather than nothing", async () => {
   const fetchMock = vi.fn(async () => okResponse());
   vi.stubGlobal("fetch", fetchMock);
 
-  const result = await followUp(APPLICATION, TOKEN, textMessage("   "));
+  const result = await followUp(APPLICATION, TOKEN, textMessage(markup``));
 
   const body = JSON.parse(sentBody(fetchMock));
   expect(body.components[0].content.length).toBeGreaterThan(0);
@@ -82,7 +82,7 @@ test("content longer than discord accepts is truncated rather than rejected", as
   const fetchMock = vi.fn(async () => okResponse());
   vi.stubGlobal("fetch", fetchMock);
 
-  await followUp(APPLICATION, TOKEN, textMessage("x".repeat(5000)));
+  await followUp(APPLICATION, TOKEN, textMessage(markup`${"x".repeat(5000)}`));
 
   const body = JSON.parse(sentBody(fetchMock));
   expect(body.components[0].content.length).toBeLessThanOrEqual(900);
@@ -94,7 +94,7 @@ test("discord refusing the follow-up is a failed result, not a throw", async () 
     vi.fn(async () => new Response("Invalid Webhook Token", { status: 401 })),
   );
 
-  const result = await followUp(APPLICATION, TOKEN, textMessage("done"));
+  const result = await followUp(APPLICATION, TOKEN, textMessage(markup`done`));
 
   expect(result.outcome).toBe("failed");
   // whatever discord said goes in the log; an expired token reads as 401 here
@@ -110,7 +110,7 @@ test("an unreachable discord is a failed result, not a throw", async () => {
     }),
   );
 
-  const result = await followUp(APPLICATION, TOKEN, textMessage("done"));
+  const result = await followUp(APPLICATION, TOKEN, textMessage(markup`done`));
 
   expect(result.outcome).toBe("failed");
   expect(result.summary).toContain("network down");
@@ -120,12 +120,12 @@ test("a missing application id or token is misconfigured rather than a bad reque
   const fetchMock = vi.fn(async () => okResponse());
   vi.stubGlobal("fetch", fetchMock);
 
-  expect((await followUp("", TOKEN, textMessage("done"))).outcome).toBe(
+  expect((await followUp("", TOKEN, textMessage(markup`done`))).outcome).toBe(
     "misconfigured",
   );
-  expect((await followUp(APPLICATION, "", textMessage("done"))).outcome).toBe(
-    "misconfigured",
-  );
+  expect(
+    (await followUp(APPLICATION, "", textMessage(markup`done`))).outcome,
+  ).toBe("misconfigured");
   // and nothing was sent to a url with an empty segment in it
   expect(fetchMock).not.toHaveBeenCalled();
 });

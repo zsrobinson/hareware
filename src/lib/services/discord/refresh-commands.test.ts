@@ -87,3 +87,27 @@ test("refuses when one picker came back with no options", async () => {
   expect(result.outcome).toBe("failed");
   expect(result.summary).toContain(ARTICLE_PROPERTIES.imageStatus.name);
 });
+
+test("says how many options a picker lost to Discord's limit of 25", async () => {
+  answering(
+    schema({
+      [ARTICLE_PROPERTIES.section.name]: {
+        type: "select",
+        select: {
+          options: options(Array.from({ length: 27 }, (_, i) => `S${i}`)),
+        },
+      },
+    }),
+  );
+
+  const result = await refreshCommands({
+    ...env,
+    DISCORD_BOT_TOKEN: "bot",
+  } as Env);
+
+  expect(result.outcome).toBe("misconfigured");
+  expect(result.summary).toContain(
+    `${ARTICLE_PROPERTIES.section.name} has 27 options`,
+  );
+  expect(result.summary).toContain("2 are missing");
+});

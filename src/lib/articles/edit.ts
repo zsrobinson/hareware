@@ -14,7 +14,13 @@ import {
   type Member,
   type MemberMatch,
 } from "./member";
-import { readableProperties, relationIds, type ArticlePage } from "./page";
+import {
+  isArticle,
+  pageIdOf,
+  readableProperties,
+  relationIds,
+  type ArticlePage,
+} from "./page";
 import {
   changesSummary,
   current,
@@ -147,8 +153,10 @@ async function attempt(
   actor: Actor,
 ): Promise<EditResult> {
   try {
-    if (request.kind === "delete")
-      return await remove(io, await io.page(request.pageId));
+    if (request.kind === "delete") {
+      const page = await articleAt(io, request.pageId);
+      return page ? await remove(io, page) : refused(NOT_AN_ARTICLE);
+    }
 
     let schema: Schema;
     try {
@@ -160,7 +168,8 @@ async function attempt(
     if (request.kind === "create")
       return await create(io, schema, request, actor);
 
-    const page = await io.page(request.pageId);
+    const page = await articleAt(io, request.pageId);
+    if (!page) return refused(NOT_AN_ARTICLE);
 
     if (request.kind === "property")
       return await apply(io, page, plan(schema, page, request.intent));
@@ -177,6 +186,19 @@ async function attempt(
       `The edit could not be confirmed: ${String(error)}. Check Notion and Members before retrying.`,
     );
   }
+}
+
+const NOT_AN_ARTICLE =
+  "That is not a page in Articles, so HareWare changed nothing.";
+
+/** The page, or null when the id is not one or the page is not an Article. */
+async function articleAt(
+  io: EditIO,
+  pageId: string,
+): Promise<ArticlePage | null> {
+  if (!pageIdOf(pageId)) return null;
+  const page = await io.page(pageId);
+  return isArticle(page) ? page : null;
 }
 
 async function remove(io: EditIO, page: ArticlePage): Promise<EditResult> {
@@ -497,7 +519,7 @@ async function resolve(
     case "ambiguous":
       return {
         status: "refused",
-        reason: `Members has ${match.members.length} rows named **${picked.displayName}** (${match.members
+        reason: `Members has ${match.members.length} rows named "${picked.displayName}" (${match.members
           .map((member) => member.pageId)
           .join(
             ", ",
@@ -508,7 +530,7 @@ async function resolve(
       return {
         status: "refused",
         reason: `Two Members carry the same Discord ID (${match.members
-          .map((member) => `**${member.name}** (${member.pageId})`)
+          .map((member) => `${member.name} (${member.pageId})`)
           .join(
             " and ",
           )}). HareWare will not guess which one wrote this — clear the duplicate in Notion first.`,

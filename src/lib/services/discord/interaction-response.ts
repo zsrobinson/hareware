@@ -3,6 +3,7 @@ import {
   textMessage,
   type CommandMessage,
   type Component,
+  type Markup,
 } from "./message";
 import type { AutocompleteChoice } from "./article-picker";
 
@@ -31,7 +32,7 @@ export type AutocompleteResponse = {
 export type InteractionResponse = MessageResponse | AutocompleteResponse;
 
 /** Components V2 and ephemeral must be set together on a body response. */
-export function ephemeral(content: string | CommandMessage): BodyResponse {
+export function ephemeral(content: Markup | CommandMessage): BodyResponse {
   const { components } =
     typeof content === "string" ? textMessage(content) : content;
 

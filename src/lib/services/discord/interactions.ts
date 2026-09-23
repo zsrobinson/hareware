@@ -16,8 +16,10 @@
 import { articleResponse } from "./article-response";
 import {
   IS_COMPONENTS_V2,
+  markup,
   type CommandMessage,
   type Component,
+  type Markup,
 } from "./message";
 import type {
   Actor,
@@ -27,7 +29,12 @@ import type {
 } from "~/lib/articles/edit";
 import { suggestions } from "./article-picker";
 import type { Intent } from "~/lib/articles/write";
-import type { Article, ArticlePage } from "~/lib/articles/page";
+import {
+  isArticle,
+  pageIdOf,
+  type Article,
+  type ArticlePage,
+} from "~/lib/articles/page";
 import type { Result } from "~/lib/result";
 import { EDITORIAL_BOARD_ROLE_ID } from "./config";
 import { followUp } from "./follow-up";
@@ -122,6 +129,7 @@ type Interaction = {
   member?: {
     /** every role the member holds, which is the only access check we get */
     roles?: string[];
+    nick?: string | null;
     user?: DiscordUser;
   };
   user?: DiscordUser;
@@ -232,7 +240,7 @@ const SUBCOMMANDS: Record<
 > = {
   ping: (interaction) =>
     ephemeral(
-      `HareWare is listening. Discord says you are **${who(interaction)}**.`,
+      markup`HareWare is listening. Discord says you are **${who(interaction)}**.`,
     ),
 
   show: (interaction, deps) => show(interaction, deps),
@@ -240,13 +248,13 @@ const SUBCOMMANDS: Record<
   new: (interaction, deps) =>
     write(interaction, deps, (subcommand) => {
       const headline = textOf(optionOf(subcommand, "headline"));
-      if (!headline) return refuse("Give the article a headline.");
+      if (!headline) return refuse(markup`Give the article a headline.`);
       const member = picked(interaction, subcommand, "member");
       if (!member)
-        return refuse("Choose the Discord member writing the article.");
+        return refuse(markup`Choose the Discord member writing the article.`);
       const section = textOf(optionOf(subcommand, "section"));
       if (!section)
-        return refuse("Choose the section responsible for the article.");
+        return refuse(markup`Choose the section responsible for the article.`);
 
       return {
         request: {
@@ -264,7 +272,7 @@ const SUBCOMMANDS: Record<
   headline: (interaction, deps) =>
     write(interaction, deps, (subcommand) => {
       const text = textOf(optionOf(subcommand, "headline"));
-      if (!text) return refuse("Give the article a headline.");
+      if (!text) return refuse(markup`Give the article a headline.`);
 
       return property(subcommand, { property: "headline", text });
     }),
@@ -297,7 +305,7 @@ const SUBCOMMANDS: Record<
       */
       if (typed && !isDate(typed))
         return refuse(
-          `\`${typed}\` is not a date HareWare can write. Use YYYY-MM-DD, or leave the date out to clear it.`,
+          markup`**${typed}** is not a date HareWare can write. Use \`YYYY-MM-DD\`, or leave the date out to clear it.`,
         );
 
       return property(subcommand, {
@@ -318,10 +326,8 @@ const SUBCOMMANDS: Record<
 
   delete: (interaction, deps) =>
     write(interaction, deps, (subcommand) => {
-      const pageId = textOf(optionOf(subcommand, "article"));
-      return pageId
-        ? { request: { kind: "delete", pageId } }
-        : refuse("Pick an Article from the list HareWare offers.");
+      const pageId = articleOf(subcommand);
+      return pageId ? { request: { kind: "delete", pageId } } : UNPICKED;
     }),
 };
 
@@ -345,20 +351,29 @@ export const HANDLED = Object.keys(SUBCOMMANDS);
  * answerable *before* deferring — and a command answered inline never leaves a
  * spinner behind
  */
-type Parsed = { request: EditRequest } | { refusal: string };
+type Parsed = { request: EditRequest } | { refusal: Markup };
 
-const refuse = (reason: string): Parsed => ({ refusal: reason });
+const refuse = (reason: Markup): Parsed => ({ refusal: reason });
+
+const PICK_AN_ARTICLE = markup`Pick an Article from the list HareWare offers.`;
+const UNPICKED = refuse(PICK_AN_ARTICLE);
+
+/**
+ * the picked Article's page id, or null. discord sends whatever was typed when
+ * nobody picked a suggestion, so this is as likely to be half a headline — and
+ * that is never handed to notion
+ */
+function articleOf(subcommand: SubmittedOption | undefined): string | null {
+  return pageIdOf(textOf(optionOf(subcommand, "article")));
+}
 
 /** a one-property change against whichever Article was picked */
 function property(
   subcommand: SubmittedOption | undefined,
   intent: Intent,
 ): Parsed {
-  const pageId = textOf(optionOf(subcommand, "article"));
-
-  /* discord sends whatever was typed when nobody picked a suggestion, so this
-     is as likely to be half a headline as a page id */
-  if (!pageId) return refuse("Pick an Article from the list HareWare offers.");
+  const pageId = articleOf(subcommand);
+  if (!pageId) return UNPICKED;
 
   return { request: { kind: "property", pageId, intent } };
 }
@@ -370,7 +385,11 @@ function chosen(
   key: "status" | "imageStatus" | "section",
 ): Parsed {
   const picked = textOf(optionOf(subcommand, option));
-  if (!picked) return refuse(`Pick a ${option.replace("-", " ")}.`);
+  const label = option.replace("-", " ");
+  if (!picked)
+    return refuse(
+      markup`Pick ${/^[aeiou]/.test(label) ? "an" : "a"} ${label}.`,
+    );
 
   /*
     the value is notion's own spelling because that is what was registered as
@@ -387,10 +406,11 @@ function crediting(
   subcommand: SubmittedOption | undefined,
   credit: "author" | "image",
 ): Parsed {
-  const pageId = textOf(optionOf(subcommand, "article"));
-  if (!pageId) return refuse("Pick an Article from the list HareWare offers.");
+  const pageId = articleOf(subcommand);
+  if (!pageId) return UNPICKED;
   const member = picked(interaction, subcommand, "member");
-  if (!member) return refuse("Choose the Discord member behind this credit.");
+  if (!member)
+    return refuse(markup`Choose the Discord member behind this credit.`);
 
   return {
     request: {
@@ -482,7 +502,7 @@ function write(
   */
   if (!edit || !defer)
     return ephemeral(
-      "HareWare cannot write to Notion right now — it is missing the credentials or the runtime to do it with. Nothing was changed.",
+      markup`HareWare cannot write to Notion right now — it is missing the credentials or the runtime to do it with. Nothing was changed.`,
     );
 
   const applicationId = interaction.application_id ?? "";
@@ -535,27 +555,28 @@ async function show(
   interaction: Interaction,
   deps: InteractionDeps,
 ): Promise<MessageResponse> {
-  const pageId = textOf(optionOf(subcommandOf(interaction), "article"));
+  const pageId = articleOf(subcommandOf(interaction));
+  if (!pageId) return ephemeral(PICK_AN_ARTICLE);
 
-  /*
-    discord sends whatever was typed when nobody picked a suggestion, so this
-    is as likely to be half a headline as a page id — either way it is not
-    something to hand to notion
-  */
-  if (!pageId)
-    return ephemeral("Pick an Article from the list HareWare offers.");
+  if (!deps.page)
+    return ephemeral(markup`HareWare cannot reach Notion right now.`);
 
-  if (!deps.page) return ephemeral("HareWare cannot reach Notion right now.");
-
+  let page: ArticlePage;
   try {
-    return ephemeral(articleResponse(await deps.page(pageId)));
+    page = await deps.page(pageId);
   } catch (error) {
     console.error("[article] could not read a page for /article show", error);
 
     return ephemeral(
-      "Notion did not answer, so HareWare cannot show that Article. Try again, or open it in Notion.",
+      markup`Notion did not answer, so HareWare cannot show that Article. Try again, or open it in Notion.`,
     );
   }
+
+  return ephemeral(
+    isArticle(page)
+      ? articleResponse(page)
+      : markup`That is not a page in Articles.`,
+  );
 }
 
 /**
@@ -577,7 +598,7 @@ async function handleCommand(
   */
   if (!onTheBoard(interaction)) {
     return ephemeral(
-      "This command is for the Editorial Board, in the server. If you are on the board and seeing this, ask an admin to check the role.",
+      markup`This command is for the Editorial Board, in the server. If you are on the board and seeing this, ask an admin to check the role.`,
     );
   }
 
@@ -585,8 +606,9 @@ async function handleCommand(
   const run = subcommand ? SUBCOMMANDS[subcommand] : undefined;
 
   if (!run) {
+    const name = `/${interaction.data?.name ?? "?"}${subcommand ? ` ${subcommand}` : ""}`;
     return ephemeral(
-      `HareWare does not know the command \`/${interaction.data?.name ?? "?"}${subcommand ? ` ${subcommand}` : ""}\`. It may have been registered by an older deploy.`,
+      markup`HareWare does not know the command **${name}**. It may have been registered by an older deploy.`,
     );
   }
 
@@ -728,5 +750,7 @@ async function within(rows: Promise<Article[]>, ms: number) {
 /** the display name to credit, preferring what a member chose to be called */
 function who(interaction: Interaction): string {
   const user = interaction.member?.user ?? interaction.user;
-  return user?.global_name || user?.username || "someone";
+  return (
+    interaction.member?.nick || user?.global_name || user?.username || "someone"
+  );
 }

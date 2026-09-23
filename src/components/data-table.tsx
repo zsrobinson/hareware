@@ -41,21 +41,12 @@ import {
   TableRow,
 } from "~/components/ui/table";
 
-/*
-  a generic table: sorting, a search across everything, a dropdown per
-  filterable column built from the values actually present, column visibility
-  and pagination.
-
-  it knows nothing about invocations — the columns are passed in — so the next
-  thing worth listing does not need a second one of these
-*/
+/* a generic table: sorting, search, per-column facets, column visibility,
+   pagination and csv export */
 
 /**
- * a header that says it can be sorted, and which way it currently is.
- *
- * here rather than in each table, so the arrow means the same thing on every
- * one of them. the column is typed structurally because a `HeaderContext` is
- * generic in the row type and this has to sit in any table's columns
+ * a sortable header showing its direction. The column is typed structurally so
+ * it fits any table's row type
  */
 export function sortable(label: string) {
   const Header = ({
@@ -90,31 +81,14 @@ export function sortable(label: string) {
 }
 
 type FacetedFilter = {
-  /*
-    a column id, not a key of the row.
-
-    it was `Extract<keyof T, string>` while the log was the only consumer,
-    whose columns are all plain accessor keys. Standing's are not — `status`
-    reads through `person`, and `qualifies` is computed — so the constraint
-    was rejecting the columns it was meant to describe. `getColumn` already
-    returns undefined for a name that does not exist, and the render below
-    already skips that case
-  */
+  /** a column id, which need not be a key of the row */
   id: string;
   label: string;
 };
 
-/*
-  what a column can say about its own export.
-
-  declaration merging rather than a parallel map of column id to getter: the
-  two would drift the moment somebody renamed a column, and the compiler would
-  not notice — an export silently missing a column is exactly the kind of quiet
-  wrong this feature cannot afford
-*/
+/* declared on the column so an export cannot drift from a renamed column */
 declare module "@tanstack/react-table" {
-  /* both parameters are part of the library's declaration and have to be
-     restated to merge into it, even though only the row type is used here */
+  /* merging must restate both of the library's parameters */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface ColumnMeta<TData extends RowData, TValue> {
     /** the header this column writes into a csv, when its own is a component */
@@ -122,14 +96,6 @@ declare module "@tanstack/react-table" {
   }
 }
 
-/**
- * opt-in csv export, per ADR 0010.
- *
- * a prop rather than a second component, because that ADR leans on the promise
- * this file's header makes: every surface it adds is a table, so the export is
- * added here once and all of them inherit it. forking the component would
- * break that promise on the day it was first tested
- */
 type Props<T> = {
   columns: ColumnDef<T, unknown>[];
   data: T[];
@@ -157,8 +123,7 @@ export function DataTable<T>({
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [search, setSearch] = useState("");
 
-  /* tanstack table hands back functions the react compiler cannot follow, so
-     it skips this component. that is the library's shape, not a mistake here */
+  /* the react compiler cannot follow tanstack table's functions and skips this */
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
@@ -177,29 +142,15 @@ export function DataTable<T>({
     initialState: { pagination: { pageSize: 25 } },
   });
 
-  /*
-    exports what is on screen, not `data`.
-
-    `getSortedRowModel()` is the filtered *and* sorted model with pagination
-    not yet applied, which is the whole point of exporting from a table rather
-    than from the page's props: an editor narrows the roster to the people they
-    are asking about and the file holds those people, in that order. exporting
-    `data` would hand them the raw list back and quietly ignore every control
-    above the table.
-
-    only visible columns, for the same reason — a hidden column is a column the
-    person said they did not want to see
-  */
+  /* what is on screen: `getSortedRowModel()` is filtered and sorted but not
+     paginated, and only visible columns are written */
   function exportCsv() {
     const shown = table.getVisibleLeafColumns();
     const rows = table.getSortedRowModel().rows;
 
     const headers = shown.map((column) => {
       const header = column.columnDef.header;
-      /* a header is often a component — a sortable button, in every consumer
-         here — and rendering react to a string is not something a csv should
-         attempt. the column id is the fallback, and a consumer that wants
-         better spelling sets `meta.csvHeader` */
+      /* a header is often a component; `meta.csvHeader`, else the id */
       return (
         column.columnDef.meta?.csvHeader ??
         (typeof header === "string" ? header : column.id)
@@ -207,23 +158,16 @@ export function DataTable<T>({
     });
 
     const body = rows.map((row) =>
-      /* the accessor's value, not the rendered cell: a badge, an icon and a
-         dash standing in for "none" are all presentation, and a column whose
-         accessor is not printable should fix its accessor rather than grow a
-         second one for the export */
+      /* the accessor's value, not the rendered cell */
       shown.map((column) => row.getValue(column.id)),
     );
 
-    /* dated in the filename because these are snapshots of a question asked on
-       a day, and an election leaves three of them in a downloads folder */
     const day = new Date().toISOString().slice(0, 10);
     download(
-      /* the BOM is what makes excel read utf-8 rather than latin-1, which is
-         the difference between "Zoë" and "ZoÃ«" in a name column */
+      /* the BOM makes excel read utf-8 */
       new Blob(["\uFEFF", toCsv(headers, body)], {
         type: "text/csv;charset=utf-8",
       }),
-      /* only ever called from a button rendered under `csv &&` */
       `${csv}-${day}.csv`,
       "text/csv",
     );

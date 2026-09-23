@@ -1,14 +1,5 @@
 // @vitest-environment jsdom
 
-/*
-  the Google Group comparison, which is the one part of this page that does its
-  work in the browser rather than asking a route for the answer.
-
-  worth a test for exactly that reason: nothing on the server sees the file, so
-  nothing on the server can be wrong about it, and the only way to know the
-  diff reaches the screen is to hand a page a file and read what it says.
-*/
-
 import {
   cleanup,
   render,
@@ -21,15 +12,8 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { ReconcilerData } from "~/lib/members/views";
 import type { Person } from "~/lib/members/records";
 
-/*
-  imported per test, not once.
-
-  the query client is module scope in the app, because it has to outlive an
-  island that `<ClientRouter />` remounts on every navigation. Two tests
-  sharing this module share that cache, and `initialData` is only installed
-  under a key with no entry — so the second test would silently render the
-  first one's roster
-*/
+/* imported per test: the query client is module scope, so a shared module
+   would render the previous test's roster */
 let Reconciler: typeof import("./reconciler").Reconciler;
 let toast: typeof import("sonner").toast;
 
@@ -74,8 +58,7 @@ beforeEach(async () => {
   ({ Reconciler } = await import("./reconciler"));
   ({ toast } = await import("sonner"));
 
-  /* the page is seeded by its props and only refetches after a write, so
-     nothing here should reach the network. A stub that throws says so loudly */
+  /* only a write reaches the network */
   vi.stubGlobal(
     "fetch",
     vi.fn(() => {
@@ -89,11 +72,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/*
-  a row can be in more than one section at once, and usually is: somebody with
-  no Discord account and a gmail address is work in two places. So every query
-  about a list says which section it means
-*/
+/* a row can appear in several sections, so queries name the section */
 function section(title: string) {
   return heading(title).closest("section")!;
 }
@@ -105,7 +84,6 @@ function heading(title: string) {
   });
 }
 
-/** hands the page an export, the way the file picker does */
 async function upload(csv: string) {
   const input = screen.getByLabelText(/Export CSV/);
   const file = new File([csv], "members.csv", { type: "text/csv" });
@@ -120,10 +98,7 @@ const json = (body: unknown, status = 200) =>
     headers: { "content-type": "application/json" },
   });
 
-/**
- * the routes, as far as the page can tell: a re-read answers `read()`, and a
- * write answers `write(path)`. Returns what was written, in order
- */
+/** a re-read answers `read()` and a write `write(path)`; returns the writes */
 function serve(read: () => ReconcilerData, write: (path: string) => Response) {
   const posted: { path: string; body: unknown }[] = [];
   vi.stubGlobal(
@@ -143,9 +118,6 @@ function serve(read: () => ReconcilerData, write: (path: string) => Response) {
 test("nothing is claimed about the group before a file is handed over", () => {
   render(<Reconciler initial={initial} faces={{}} />);
 
-  /* the picker is still there, which is the point: a section that hid itself
-     when it had nothing to report would hide the only control that produces a
-     report */
   expect(screen.getByLabelText(/Export CSV/)).toBeTruthy();
   expect(screen.queryByText(/in the group/)).toBeNull();
 });
@@ -159,30 +131,20 @@ test("somebody on the roster and not in the export is offered to paste", async (
   ) as HTMLTextAreaElement;
 
   expect(blob.value).toBe("ben@umd.edu");
-  /* the person, not only the address: an editor who recognises somebody who
-     left the group on purpose can only act on it if the name is on screen */
   expect(
     within(section("Missing from Google Group")).getByText("Ben Okafor"),
   ).toBeTruthy();
-  /* the file is every member's address, and it is read where it was chosen */
   expect(fetch).not.toHaveBeenCalled();
 });
 
-/*
-  the row nothing reaches. filtering these out before counting is the silent
-  omission this page exists to end — but it is counted here and listed once, in
-  the email section, rather than named twice on one page
-*/
 test("a row with no address is counted against the group, not listed twice", async () => {
   render(<Reconciler initial={initial} faces={{}} />);
   await upload(EXPORT);
 
   expect(screen.getByText(/1 member has no address at all/)).toBeTruthy();
-  /* and points at a section that exists */
   expect(
     screen.getByText(/They are listed under Missing email field\./),
   ).toBeTruthy();
-  /* counted beside the group, and named once under Missing email field */
   expect(
     within(section("Missing from Google Group")).queryByText("Cass Lin"),
   ).toBeNull();
@@ -191,7 +153,6 @@ test("a row with no address is counted against the group, not listed twice", asy
   ).toBeTruthy();
 });
 
-/* text that is not an address and an address at the wrong domain */
 test("an unusable address and an outside one share a section", () => {
   render(
     <Reconciler
@@ -211,18 +172,13 @@ test("an unusable address and an outside one share a section", () => {
     />,
   );
 
-  /* one section for both, because the fix and the question are the same */
   const wrong = within(section("Incorrect email domain"));
 
   expect(wrong.getByText("Typo Person")).toBeTruthy();
   expect(wrong.getByText("Dud Row")).toBeTruthy();
-  /* and the one that is not an address at all says so, since "gmail" and
-     "not an address" are the same section but not the same problem */
   expect(wrong.getByText("not an address at all")).toBeTruthy();
 });
 
-/* a row carrying nothing at all is import residue, and saying so beside the
-   address beats a section of its own for ten rows */
 test("a row with nothing else on it says so", () => {
   render(
     <Reconciler
@@ -237,7 +193,6 @@ test("a row with nothing else on it says so", () => {
   expect(screen.getByText(/nothing else on this row either/)).toBeTruthy();
 });
 
-/* a row with a byline and no address is not residue: somebody wrote under it */
 test("a row with writing on it is not called empty", () => {
   render(
     <Reconciler
@@ -259,7 +214,6 @@ test("a row with writing on it is not called empty", () => {
   expect(screen.queryByText(/nothing else on this row either/)).toBeNull();
 });
 
-/* alumni, mostly — and typos, which look identical from here */
 test("an address in the group that no row claims is reported", async () => {
   render(<Reconciler initial={initial} faces={{}} />);
   await upload(EXPORT);
@@ -276,12 +230,6 @@ test("an export holding everybody says so instead of offering a paste", async ()
   ).toBeTruthy();
 });
 
-/*
-  the questions are found by looking for "name" and "email" anywhere in the
-  label. Rewording one survives that; deleting one does not, and then every
-  application answers null at once. The cron refuses to create rows from those,
-  so the page has to be able to.
-*/
 test("an application the form gave nothing for is added by hand", async () => {
   const posted: { path: string; body: Record<string, unknown> }[] = [];
   vi.stubGlobal(
@@ -340,8 +288,6 @@ test("an application the form gave nothing for is added by hand", async () => {
 
   await waitFor(() => expect(posted).not.toHaveLength(0));
 
-  /* the snowflake goes with it, so the row is linked by the same write that
-     creates it and no second pass has to match them up */
   expect(posted[0]!.path).toBe("/api/members/create");
   expect(posted[0]!.body).toMatchObject({
     name: "Ada Vance",
@@ -411,7 +357,6 @@ test("a write that failed can be tried again", async () => {
   fireEvent.click(statuses.getByRole("button", { name: "Grad" }));
 
   await waitFor(() => expect(posted).toHaveLength(2));
-  /* the route reads the name from notion, not from what the page believed */
   expect(posted[1]).toEqual({
     path: "/api/members/status",
     body: { pageId: "p7", status: "Grad" },
@@ -456,8 +401,7 @@ test("a link is confirmed even though the re-read takes its row away", async () 
   expect(toast.success).toHaveBeenCalledWith("Linked Ada Vance");
 });
 
-/* the list of rows with no status is worked out by the server, so patching
-   the roster alone left the row sitting in it */
+/* the status section is computed by the server, so a patch alone leaves it stale */
 test("a status set from a chip takes the row out of the status section", async () => {
   const data = { ...initial, roster: [unsorted], unknownStatus: [unsorted] };
   const sorted = { ...unsorted, status: "Grad" };
@@ -486,7 +430,6 @@ test("a status set from a chip takes the row out of the status section", async (
   ]);
 });
 
-/* discord does not always say when somebody applied */
 test("an application with no date says nothing about one", () => {
   render(
     <Reconciler
@@ -516,7 +459,6 @@ test("an application with no date says nothing about one", () => {
   expect(screen.queryByText(/^applied/)).toBeNull();
 });
 
-/* a problem the page was rendered with can clear, and a new one can appear */
 test("what the re-read could not reach is said, not what first paint could not", async () => {
   const data = { ...initial, roster: [unsorted], unknownStatus: [unsorted] };
   serve(

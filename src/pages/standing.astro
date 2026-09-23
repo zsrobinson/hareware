@@ -11,39 +11,21 @@ import { ALUM_STATUS } from "~/lib/members/config";
 import { AlumMissing, Problem } from "~/components/problem";
 import { faces } from "~/lib/faces";
 
-/* Reaching this page is the permission: the guard already refused anybody it
-   would not admit, and its lookup knows what to call them. */
 const who = admitted(Astro.locals);
 
-/* this page names every member and what they did. ADR 0005 for the rule, ADR
-   0007 for why the admin surface is the sensitive one */
 Astro.response.headers.set("cache-control", "private, no-store");
 
-/*
-  all three databases read once, server-side, and handed to the island whole.
-
-  the island re-answers the question locally on every change to the form,
-  because `standings()` is pure — an editor trying "what if it were four
-  meetings" gets the answer without a round trip, and without the corpus
-  shifting under them between two attempts at the same question. that is why
-  `standing.ts` was written as a pure function and why this page reads rather
-  than queries
-*/
+/* read once; the island recomputes `standings()` locally on every change */
 const token = env.NOTION_TOKEN;
 const rows: Corpus | null = token ? await corpus(token) : null;
 
-/* the same pictures the kiosk and the reconciler draw. one request for the
-   whole guild, and initials for anybody with no linked account */
 const rosterFaces = await faces(
   (rows?.people ?? []).map((person) => person.discordId),
 );
 
-/* standing excludes alumni by `ALUM_STATUS`, so a renamed option would let
-   every alum qualify: the page still answers, and says it cannot be trusted */
 const statuses = await readStatuses(token);
 
-/* eastern, because the window's ends are compared against notion dates the
-   club would name in its own timezone */
+/* eastern, like the notion dates the window is compared against */
 const today = easternNow(new Date()).date;
 ---
 

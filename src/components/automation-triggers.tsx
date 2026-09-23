@@ -21,11 +21,7 @@ import {
 type Report = Record<string, string>;
 type Mode = "dry" | "silent" | "live";
 
-/*
-  the same endpoint a terminal uses, so an automation fired here takes exactly the
-  path it takes in the morning. the three modes are the three ways it is safe,
-  or not, to run one: report only, post without pinging, and the real thing
-*/
+/* the endpoint the cron path uses: report only, post without pinging, or for real */
 async function run(id: AutomationId, mode: Mode): Promise<Report> {
   const query = new URLSearchParams({ only: id });
   if (mode === "dry") query.set("dry", "1");
@@ -43,8 +39,7 @@ export function AutomationTriggers({
   const [said, setSaid] = useState<Record<string, string>>({});
   const [confirming, setConfirming] = useState<Automation | null>(null);
 
-  /* handles its own failure into `said`, so callers have nothing to catch —
-     `void` at each call site is what says that out loud */
+  /* failures go into `said`, so callers have nothing to catch */
   async function fire(automation: Automation, mode: Mode) {
     setBusy(`${automation.id}:${mode}`);
     try {
@@ -119,7 +114,6 @@ export function AutomationTriggers({
         ))}
       </div>
 
-      {/* the only button here that reaches the club, so it asks first */}
       <Dialog
         open={confirming !== null}
         onOpenChange={(open) => !open && setConfirming(null)}
@@ -127,9 +121,7 @@ export function AutomationTriggers({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Run the {confirming?.name} automation?</DialogTitle>
-            {/* an automation with no channel reaches nobody, so the warning
-                that everyone will see it would be false — it still writes,
-                which is its own reason to ask first */}
+            {/* with no channel it reaches nobody, but still writes */}
             <DialogDescription>
               {confirming?.channelId ? (
                 <>

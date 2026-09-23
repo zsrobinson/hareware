@@ -1,9 +1,5 @@
 ---
-/*
-  What an admin tool draws instead of itself. Everything that differs between
-  the four refusals lives in `~/lib/denial`, so this reads a row and renders it
-  rather than choosing anything.
-*/
+/* what a refused admin tool draws; the four refusals are in `~/lib/denial` */
 import Message from "~/components/message.astro";
 import { DENIALS, type Action, type Denial } from "~/lib/denial";
 import type { Profile } from "~/lib/member";
@@ -18,8 +14,6 @@ type Props = {
 
 const { denial, profile, returnTo } = Astro.props;
 
-/* the handle is what a member recognises as themselves — and, when they are
-   signed in as the wrong account, what tells them so */
 const you = profile ? `@${profile.username}` : "This account";
 
 const { title, body, action } = DENIALS[denial];

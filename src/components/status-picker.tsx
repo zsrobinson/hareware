@@ -1,12 +1,7 @@
 import { useId } from "react";
 import { Button } from "~/components/ui/button";
 
-/**
- * notion's Status options as a row of toggles.
- *
- * `label` is drawn above the row unless `hideLabel`, where the row sits under
- * a heading that already says what it is
- */
+/** notion's Status options as a labelled row of toggles */
 export function StatusPicker({
   statuses,
   value,

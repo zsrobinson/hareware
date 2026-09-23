@@ -63,37 +63,19 @@ import type { ReconcilerData } from "~/lib/members/views";
 import type { Application } from "~/lib/members/applications";
 
 /*
-  everything that needs a human, on one page. one rule between the sections:
-  nothing here acts on a guess. Every decision is one the unattended cron
-  declined to make, because a wrong guess makes two people out of one, and
-  under ADR 0010 that costs somebody their vote.
-
-  the duplicates section is why the standing page links here and refuses to
-  look final until it is empty. The reconciler is run *before* the vote.
+  every roster decision the unattended sync declined to make, for a person to
+  make before a vote. Nothing here acts on a guess; ADR 0010 has why.
 */
 
-/**
- * the page's own server-side read, which seeds the query and is then replaced
- * by it. `/api/members/reconciler` answers the same type from the same
- * function, so what a refetch shows cannot differ in shape from first paint
- */
 type Props = {
+  /** the page's server-side read; `/api/members/reconciler` answers the same */
   initial: ReconcilerData;
-  /** discord pictures, so a person looks the same here as on the kiosk */
   faces: Faces;
 };
 
 /** what the last write for a row answered */
 type Said = { ok: boolean; text: string };
 
-/**
- * one heading and what is under it.
- *
- * the title says what the section is for in the words an editor would use, and
- * `why` is the sentence under it rather than the only explanation: a heading
- * that reads as a category — "Applications", "Duplicates" — makes somebody
- * open the section to find out what it wants from them
- */
 function Section({
   title,
   how,
@@ -102,17 +84,10 @@ function Section({
   children,
 }: {
   title: string;
-  /** one short line, only where how the list was arrived at is not obvious */
   how?: string;
   /** null while there is nothing to count yet, which is not the same as none */
   count: number | null;
-  /**
-   * what to say when there is nothing in it, in four or five words.
-   *
-   * absent for a section whose body is not a list — the Google Group's is a
-   * file picker, and hiding it whenever there was nothing to report would hide
-   * the only control that could produce a report
-   */
+  /** shown instead of an empty list; absent where the body is not a list */
   clear?: string;
   children: React.ReactNode;
 }) {
@@ -120,8 +95,7 @@ function Section({
     <Collapsible defaultOpen render={<section />}>
       <h2 className="text-lg font-medium">
         <CollapsibleTrigger className="group flex w-full items-center gap-2 text-left">
-          {/* base-ui puts `data-panel-open` on the trigger, not on the icon
-              inside it, so the variant has to reach up to the group */}
+          {/* base-ui marks the trigger, not the icon, as open */}
           <ChevronDownIcon className="text-muted-foreground size-4 transition-transform duration-200 group-data-[panel-open]:rotate-180" />
           {title}
           {count !== null && (
@@ -137,14 +111,7 @@ function Section({
   );
 }
 
-/**
- * an application the form's questions could not be read from, added by hand.
- *
- * prefilled with whatever did come back, so the usual case is confirming two
- * fields rather than typing them. What the applicant actually answered is
- * printed above it, because when a question is renamed the answers are all
- * still there and only their labels stopped matching
- */
+/** an application whose name or email the form did not give, added by hand */
 function ManualAdd({
   application,
   missing,
@@ -187,12 +154,7 @@ function ManualAdd({
   );
 }
 
-/**
- * an applicant, drawn like the roster rows beside them.
- *
- * they have no Members row yet, but the account is in the guild, and its
- * picture is what makes an application recognisable as somebody the room knows
- */
+/** an applicant, who has a Discord account but no Members row yet */
 function Applicant({
   application,
   faces,
@@ -223,8 +185,7 @@ function Applicant({
               no email given
             </Badge>
           )}
-          {/* the graduation year is read and deliberately never stored — ADR
-              0010 on why a kept one is wrong more often than it is useful */}
+          {/* shown but never stored; see ADR 0010 */}
           {application.gradYear && (
             <Badge variant="outline">
               <GraduationCapIcon />
@@ -267,42 +228,25 @@ function Sections({ initial, faces }: Props) {
     initial,
   );
 
-  /*
-    every action on this page changes what the *other* sections should say:
-    linking an application can resolve a duplicate, and merging two rows takes
-    an entry out of the list of members with no status. So each of them
-    re-reads the whole page's answer rather than crossing off the row it
-    touched, which is what used to leave an editor with a stale screen and a
-    reload
-  */
+  /* every write re-reads the whole page: a link or a merge changes what the
+     other sections say */
   const refresh = useRefresh(rosterKeys.reconciler());
 
-  /* a corrected row is patched in so its chip changes at once, and re-read
-     too: its status, address or account also decides the server-computed
-     sections */
+  /* an edited row is patched in at once, then re-read with the rest */
   const patch = usePatch<ReconcilerData>(rosterKeys.reconciler());
 
-  /* what each row's last write answered. a success locks the row until the
-     re-read takes it away; a failure stays beside it and leaves it open to try
-     again */
+  /* each row's last answer. A success locks the row until the re-read removes
+     it; a failure leaves it open to retry */
   const [said, setSaid] = useState<Record<string, Said>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [merging, setMerging] = useState<{
     keep: Person;
     drop: Person;
   } | null>(null);
-  /*
-    the google group's own member list, as exported by an editor.
-
-    held here and nowhere else: it is read from a file the browser already has,
-    compared against the roster in memory, and never sent anywhere. There is
-    nothing a server would add to a comparison of two lists of strings, and an
-    export sitting in a log is a list of everybody's address
-  */
+  /* the Google Group export. It is every member's address, so it never
+     leaves the browser */
   const [inGroup, setInGroup] = useState<Set<string> | null>(null);
   const [exportName, setExportName] = useState<string | null>(null);
-  /* the same dialog the kiosk uses, so an address is corrected where it is
-     noticed rather than in a second tab */
   const [editing, setEditing] = useState<Editing | null>(null);
 
   async function act(key: string, run: () => Promise<{ summary?: string }>) {
@@ -311,7 +255,7 @@ function Sections({ initial, faces }: Props) {
       const { summary } = await run();
       const text = summary ?? "Done.";
       setSaid((prev) => ({ ...prev, [key]: { ok: true, text } }));
-      /* a toast, because the re-read removes the row and its note with it */
+      /* a toast, because the re-read removes the row and its note */
       toast.success(text);
       await refresh();
     } catch (thrown) {
@@ -324,12 +268,6 @@ function Sections({ initial, faces }: Props) {
     }
   }
 
-  /* narrowed with predicates rather than checked again inside the render: a
-     `Resolution` is a union whose arms carry different fields, and re-testing
-     `status` in the jsx is how one of them ends up reading a field the other
-     does not have */
-  /* the form's questions could not be found, so there is nothing to match on
-     and nothing to write. Added by hand from what the applicant typed */
   const incomplete = resolutions.filter(
     (one): one is Extract<Resolution, { status: "incomplete" }> =>
       one.status === "incomplete",
@@ -339,37 +277,23 @@ function Sections({ initial, faces }: Props) {
     (one): one is Extract<Resolution, { status: "linkable" }> =>
       one.status === "linkable",
   );
-  /*
-    narrowed on the shape rather than by listing statuses: `people` is carried
-    by exactly the arms nobody can decide automatically, so a seventh arm joins
-    this section by existing. Naming the three meant a new one would be dropped
-    from the page silently, which for a roster is how somebody goes missing
-  */
+  /* by shape rather than by status, so a new undecided arm cannot be dropped
+     from the page */
   const ambiguous = resolutions.filter(
     (one): one is Extract<Resolution, { people: Person[] }> => "people" in one,
   );
 
-  /* until a file is handed over there is nothing to say, which is different
-     from saying nobody is missing */
   const diff = inGroup ? compareToGroup(roster, inGroup) : null;
   const emails = (diff?.missing ?? [])
     .map((person) => person.email)
     .filter((email): email is string => Boolean(email));
-  /* comma-separated because that is the shape the group's bulk-add field
-     accepts; a newline-separated list has to be cleaned up by hand */
+  /* the group's bulk-add field takes commas */
   const blob = emails.join(", ");
-  /* flagged rather than dropped: google does not auto-add these, and an
-     address nobody can add is still an address somebody has to deal with */
+  /* google does not auto-add these, so they are flagged */
   const external = emails.filter((email) => isExternalAddress(email));
 
   const { missing, wrongDomain } = emailProblems(roster);
 
-  /*
-    every unlinked row, not only the ones a name matches. an empty section
-    reading "nothing to suggest" and one reading "nobody is unlinked" are very
-    different answers, and the rows without a suggestion are still the ones
-    somebody has to work through
-  */
   const unlinked = roster
     .filter((person) => !person.discordId)
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -495,9 +419,7 @@ function Sections({ initial, faces }: Props) {
                   return (
                     <li key={person.pageId} className="space-y-1">
                       <MemberEntry person={person} faces={faces}>
-                        {/* one button per *other* row, so the choice of which
-                            survives is made explicitly rather than by whichever
-                            happened to be listed first */}
+                        {/* one per other row, so which survives is explicit */}
                         {pair.people
                           .filter((other) => other.pageId !== person.pageId)
                           .map((other) => (
@@ -709,17 +631,13 @@ function Sections({ initial, faces }: Props) {
             />
           </div>
 
-          {/* the file is read here and goes no further, which is worth saying
-              on screen: it is every member's address */}
           <p className="text-muted-foreground text-sm">
             {exportName
               ? `Compared against ${exportName}, which stayed in this browser.`
               : "The file is read in this browser and never uploaded."}
           </p>
 
-          {/* the same rows the email section lists, said once here as a count:
-              repeating the names put everybody with no address on this page
-              twice, in two sections that meant the same thing by it */}
+          {/* counted, not listed: they are listed under Missing email field */}
           {diff && diff.unreachable.length > 0 && (
             <p className="text-muted-foreground text-sm">
               {plural(diff.unreachable.length, "member")}{" "}
@@ -752,12 +670,6 @@ function Sections({ initial, faces }: Props) {
                 </div>
               )}
 
-              {/*
-                the people, not only their addresses. a blob of text is what
-                gets pasted, and it is also the one thing on this page nobody
-                can check: an editor who recognises a name can only act on it
-                if the name is on screen
-              */}
               <ul className="divide-y rounded-lg border">
                 {diff.missing.map((person) => (
                   <li key={person.pageId} className="p-3">
@@ -782,9 +694,6 @@ function Sections({ initial, faces }: Props) {
             </>
           )}
 
-          {/* an address in the group that no row claims is how a typo in
-              notion shows up, and it is also every alum the club has ever
-              had. A count, not a list to work through */}
           {diff && diff.strangers.length > 0 && (
             <p className="text-muted-foreground text-sm">
               {plural(diff.strangers.length, "address", "addresses")} in the
@@ -795,8 +704,6 @@ function Sections({ initial, faces }: Props) {
         </div>
       </Section>
 
-      {/* every chip on this page opens this, so a missing address or account
-          is fixed where somebody noticed it */}
       <MemberEditDialog
         editing={editing}
         onClose={() => setEditing(null)}
@@ -813,8 +720,6 @@ function Sections({ initial, faces }: Props) {
         statuses={statuses}
       />
 
-      {/* the only irreversible action on the page, so it names both rows and
-          says which one is going away */}
       <Dialog
         open={merging !== null}
         onOpenChange={(open) => !open && setMerging(null)}
@@ -857,7 +762,6 @@ function Sections({ initial, faces }: Props) {
   );
 }
 
-/** nothing to do here, said the same way in every section */
 function Cleared({ children }: { children: React.ReactNode }) {
   return (
     <div className="text-muted-foreground flex items-center gap-2 rounded-lg border p-4 text-sm">

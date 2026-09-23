@@ -38,11 +38,7 @@ function GitHubMark({ className }: { className?: string }) {
 
 const REPO = "https://github.com/zsrobinson/hareware";
 
-/*
-  where the version points. `git describe` writes a tag as its own name and
-  anything past one as `<tag>-<n>-g<hash>`, so take the hash when there is one
-  and treat the rest as a tag — either is a path github resolves
-*/
+/* `git describe` gives a tag or `<tag>-<n>-g<hash>`; link the hash if any */
 const described = __APP_VERSION__.replace(/-dirty$/, "");
 const commit = /-g([0-9a-f]+)$/.exec(described)?.[1];
 const versionHref = commit
@@ -51,8 +47,6 @@ const versionHref = commit
     ? `${REPO}/releases/tag/${described}`
     : `${REPO}/commit/${described}`;
 
-/* the same menu either side of signing in, so the one thing in it stays
-   reachable whether or not anyone is signed in yet */
 function AccountMenu({
   signedIn,
   returnTo,
@@ -72,11 +66,7 @@ function AccountMenu({
 
       <DropdownMenuContent side="top" align="end" className="min-w-48">
         {signedIn ? (
-          /*
-            a <button> sizes to its own text even as a flex container, where an
-            <a> fills the row. both widths are needed for this item to
-            highlight the same width as the links beside it
-          */
+          /* a <button> sizes to its text where an <a> fills the row */
           <form
             method="post"
             action="/auth/logout"
@@ -107,12 +97,6 @@ function AccountMenu({
           View source on GitHub
         </DropdownMenuItem>
 
-        {/*
-          what is actually deployed. a bug report that names a version is worth
-          more than one that says "just now", and this is the only place a
-          member could find that out. it links to the commit or tag it names, so
-          the next question after "which version" is one click away
-        */}
         <DropdownMenuItem
           render={<a href={versionHref} target="_blank" rel="noreferrer" />}
           className="text-muted-foreground text-xs"
@@ -125,10 +109,7 @@ function AccountMenu({
   );
 }
 
-/*
-  the bottom of the sidebar. private pages seed the verified session, while
-  cached pages let the shared client hook fill it in without personalising html.
-*/
+/* private pages pass the viewer; cached ones leave it to the client hook */
 export function SidebarAccount({
   viewer: knownByServer,
   returnTo,
@@ -149,11 +130,7 @@ export function SidebarAccount({
   );
 
   if (!session) {
-    /*
-      straight to discord rather than by way of a page whose only content is
-      the same button again. /sign-in still exists for the errors the callback
-      redirects to, which do need somewhere to say what went wrong
-    */
+    /* straight to discord; /sign-in is only where callback errors land */
     const signInHref = `/auth/discord?${new URLSearchParams({ returnTo })}`;
 
     return (
@@ -163,11 +140,7 @@ export function SidebarAccount({
           title="Sign in with Discord"
           className={cn(
             "flex h-9 min-w-0 flex-1 items-center justify-center gap-2 rounded-md bg-[#5865F2] text-sm font-medium text-white transition-colors hover:bg-[#4752c4]",
-            /*
-              the rail stacks this row, and `flex-1` in a column grows down
-              rather than across, which would leave a tall blue slab. at rail
-              width this is a square with the mark in it
-            */
+            /* in the stacked rail `flex-1` would grow down, not across */
             !inSheet &&
               "group-data-[state=collapsed]/shell:size-9 group-data-[state=collapsed]/shell:flex-none",
           )}
@@ -183,11 +156,7 @@ export function SidebarAccount({
     );
   }
 
-  /*
-    the profile arrives a moment after the session on a cached page, and never
-    at all if discord is unreachable, so both lines fall back rather than
-    rendering an empty row
-  */
+  /* the profile may arrive late or never, so both lines fall back */
   return (
     <div className={row}>
       {profile ? (

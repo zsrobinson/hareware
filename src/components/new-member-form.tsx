@@ -9,11 +9,9 @@ import { cn } from "~/lib/utils";
 export type NewMember = { name: string; email: string; status: string | null };
 
 /**
- * the fields a new Members row is created from.
- *
- * `name` given means it was already typed elsewhere and is not asked for
- * again. Undergrad through `defaultStatus`, never the head of notion's options
- * — those currently begin with Alum, and an alum does not vote
+ * the fields a new Members row is created from; a given `name` is not asked
+ * for again. The status starts at `defaultStatus`, never notion's first option,
+ * which is Alum
  */
 export function NewMemberForm({
   id,

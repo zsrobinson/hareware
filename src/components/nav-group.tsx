@@ -1,11 +1,7 @@
 import { isActive, type NavItem } from "~/lib/nav";
 import { cn } from "~/lib/utils";
 
-/*
-  Rendered statically inside the Astro sidebar and inside the mobile sheet.
-  Presentational, with no hooks and no state, which is what lets the sidebar
-  ship no javascript: no group here varies by who is looking.
-*/
+/* no hooks or state, so the sidebar ships as static html */
 export function NavGroup({
   items,
   pathname,
@@ -18,8 +14,6 @@ export function NavGroup({
   return (
     <div className="flex flex-col">
       {label && (
-        /* Sits closer to the list under it than to the group above, so it
-           reads as belonging to what it names. */
         <div
           className="text-sidebar-foreground/60 flex h-7 shrink-0 items-end px-2 pb-1 text-xs font-medium group-data-[state=collapsed]/shell:md:hidden"
           aria-hidden="true"
@@ -38,8 +32,7 @@ export function NavGroup({
                 href={item.href}
                 data-active={active || undefined}
                 aria-current={active ? "page" : undefined}
-                /* the label is what collapses; the icon is the whole control at
-                 rail width, so the title carries the name a tooltip would */
+                /* at rail width only the icon shows, so the title names it */
                 title={item.label}
                 className={cn(
                   "text-sidebar-foreground/80 flex h-8 w-full items-center gap-2 overflow-hidden rounded-md p-2 text-sm outline-hidden transition-colors",

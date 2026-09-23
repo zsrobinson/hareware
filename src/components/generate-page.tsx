@@ -40,20 +40,14 @@ export function GeneratePage({
     }
   }, [state]);
 
-  // on layout change, generate new images. the renderer is the bulk of this
-  // island's javascript and nothing needs it until this fires, so it is pulled
-  // in here rather than held in front of hydration
+  // on layout change, generate new images. the renderer is imported here so
+  // it does not delay hydration
   useDebouncedEffect(
     () => {
       if (!state.renderImages) return;
 
       let cancelled = false;
 
-      /*
-        an effect cannot be async, so the work is an immediately-called one.
-        `void` says the effect deliberately does not wait, and the catch is
-        what keeps a failed render from being a silent unhandled rejection
-      */
       void (async () => {
         const { domToPng } = await import("modern-screenshot");
         if (cancelled) return;
@@ -68,9 +62,7 @@ export function GeneratePage({
         ]);
         if (cancelled) return;
 
-        // navigating away mid-render nulls these. the debounce hook only clears
-        // a pending callback when the next one fires, so on unmount there is no
-        // next one and the cancelled flag above never gets set
+        // unmounting mid-render nulls these without setting `cancelled`
         if (titleSlideImgRef.current) titleSlideImgRef.current.src = titleURI;
         if (contentSlideImgRef.current)
           contentSlideImgRef.current.src = contentURI;
@@ -87,20 +79,15 @@ export function GeneratePage({
     [state],
   );
 
-  // on mount, set article title and bylines from props, and give them back on
-  // the way out — under client-side navigation the store outlives this island,
-  // so anything left behind turns up on the next article
+  // set the title and bylines on mount and clear them on unmount: the store
+  // outlives this island across client-side navigation
   useEffect(() => {
     state.setTitle(defaultTitle);
     state.setArticleByline(defaultArticleByline);
     state.setImageByline(defaultImageByline);
 
     return () => useLayoutState.getState().clearArticle();
-    /*
-      mount and unmount only, deliberately. these props are the article this
-      island was rendered for — reacting to them would fight the store, which
-      is where the member's own edits live once they start typing
-    */
+    /* mount only: after that the store holds the member's edits */
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

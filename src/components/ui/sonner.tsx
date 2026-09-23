@@ -7,9 +7,7 @@ import {
 } from "lucide-react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
 
-/* the registry's copy reads the theme from next-themes. hareware follows the
-   os instead — `globals.css` redefines the dark tokens under a media query
-   rather than a class — so "system" is the only value that can be right */
+/* "system": `globals.css` switches dark tokens by media query, not class */
 const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner

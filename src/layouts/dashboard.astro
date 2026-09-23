@@ -12,22 +12,10 @@ import "~/styles/fonts.css";
 
 type Props = {
   title: string;
-  /*
-    who is looking, for a page the cdn does not cache. one prop rather than
-    two: a page that passed `session` and forgot `profile` rendered a raw
-    discord id where a name belongs.
-
-    a page that sets `s-maxage` passes nothing at all: its html goes to
-    everyone, so the account panel asks /api/session.json for itself instead.
-    that panel is the only thing left that varies by who is looking, because
-    the nav no longer does
-  */
+  /** who is looking, on a page the cdn does not cache. A cached page passes
+      nothing and the account panel asks /api/session.json; see AGENTS.md */
   viewer?: ViewerState | null;
-  /*
-    how wide the content is allowed to get. the container lives here rather
-    than on each page so nothing can be left flush against the sidebar in a
-    wide viewport, which is what every page did before it
-  */
+  /** how wide the content may get */
   width?: keyof typeof WIDTHS;
 };
 
@@ -40,10 +28,7 @@ const WIDTHS = {
 
 const { title, viewer, width = "wide" } = Astro.props;
 
-/*
-  the invariant the sidebar rests on, checked every request rather than only in
-  dev — see ~/lib/anonymous, where it is a pure function with tests
-*/
+/* checked on every request, not only in dev; see ~/lib/anonymous */
 assertAnonymous({
   pathname: Astro.url.pathname,
   headers: Astro.response.headers,
@@ -51,13 +36,8 @@ assertAnonymous({
   dev: import.meta.env.DEV,
 });
 
-/* shadcn's own cookie name and meaning: "true" is open. reading it server-side
-   means data-state is already right in the first paint, so the sidebar never
-   snaps from one width to the other.
-
-   a prerendered page is built long before there is a request to read it from —
-   asking anyway is what made astro warn about `Astro.request.headers` on
-   /custom. the script at the bottom reconciles those on the client instead */
+/* shadcn's cookie, read server-side so the first paint has the right width.
+   A prerendered page has no request to read; the script below fixes it up */
 const collapsed = Astro.isPrerendered
   ? false
   : Astro.cookies.get("sidebar_state")?.value === "false";
@@ -72,10 +52,7 @@ const collapsed = Astro.isPrerendered
     <title>HareWare: {title}</title>
     <ClientRouter />
 
-    {
-      /* pages that need something of their own in the head — the slide fonts,
-        so far — put it here rather than the shell knowing about them */
-    }
+    {/* a page's own additions to the head */}
     <slot name="head" />
   </head>
 
@@ -96,21 +73,13 @@ const collapsed = Astro.isPrerendered
 
       <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
         {
-          /* opaque, and outside the scroll container: the slide previews used
-            to show through this on the way past */
+          /* opaque and outside the scroll container, so content cannot show through */
         }
         <header
           class="bg-background relative z-20 flex h-12 shrink-0 items-center gap-1 border-b px-3"
         >
           {
-            /*
-              On a phone the sidebar is behind a tap, so the bar carries the
-              brand: HareWare / Invocation Log, where the page half opens the
-              menu. Static markup, so it is there in the first paint rather
-              than after the island hydrates. Below 400px the name gives way
-              and the mark stays, since the mark is what matches the browser
-              tab and the bot's avatar in Discord.
-            */
+            /* on a phone the bar carries the brand; below 400px only the mark */
           }
           <a
             href="/"
@@ -151,15 +120,11 @@ const collapsed = Astro.isPrerendered
             <PanelLeftIcon className="size-4" />
           </button>
 
-          {
-            /* below `md` the sheet trigger is already wearing this, so a
-               second copy of it would only take the room */
-          }
+          {/* below `md` the sheet trigger shows the title */}
           <h1 class="hidden truncate px-1 text-sm font-medium md:block">
             {title}
           </h1>
 
-          {/* #24 fills this with the sync indicator; empty until then */}
           <div class="ml-auto flex items-center gap-2">
             <slot name="sync" />
           </div>
@@ -174,21 +139,17 @@ const collapsed = Astro.isPrerendered
     </div>
 
     {
-      /* `client:load`, never `client:idle`: sonner's store notifies whoever is
-         subscribed and keeps no backlog, so a toast fired before this hydrated
-         is a message nobody ever sees. A notification that silently does not
-         arrive is the failure shape this repo keeps meeting */
+      /* `client:load`: sonner keeps no backlog, so a toast fired before this
+        hydrates is lost */
     }
     <Toaster client:load />
 
     <script>
-      /* the listener lives on document so it survives ClientRouter's swaps,
-         and the flag keeps a re-executed module from binding it twice */
+      /* on document to survive ClientRouter's swaps; the flag stops a
+         re-executed module binding it twice */
       const KEY = "__hwSidebarToggle";
 
-      /* /custom is prerendered, so its html is built long before there is a
-         cookie to read and always says expanded. reconciling here keeps the
-         width from snapping back when you navigate onto it */
+      /* prerendered pages always say expanded until this reads the cookie */
       function sync() {
         const shell = document.getElementById("shell");
         if (!shell) return;
@@ -215,8 +176,7 @@ const collapsed = Astro.isPrerendered
           const open = shell.dataset.state !== "collapsed";
           shell.dataset.state = open ? "collapsed" : "expanded";
 
-          /* the server reads this back on the next navigation, so the width
-             survives a full page load rather than only a client-side one */
+          /* read back by the server on the next full load */
           document.cookie = `sidebar_state=${!open}; path=/; max-age=${
             60 * 60 * 24 * 7
           }; samesite=lax`;

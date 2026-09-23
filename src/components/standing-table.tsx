@@ -23,24 +23,9 @@ import {
 } from "~/lib/members/standing";
 
 /*
-  the standing page: who satisfies these thresholds between these two dates.
-
-  everything below the form is recomputed in the browser. `standings()` is a
-  pure function over rows the astro page already read, so changing a threshold
-  costs no request, and an editor can sit with this page and try the numbers
-  the constitution might mean.
-
-  three things this component refuses to do, all of them from ADR 0010:
-
-  - it never shows only the people who qualify. The question people actually
-    ask is "why did I fall short", and a filtered list cannot answer it.
-  - it never treats an empty `Status` as a disqualification. Every row that
-    predates this design has one, and a rule that silently denied them would
-    disenfranchise the whole club at the first election.
-  - it refuses to look final while unresolved near-matches exist, because a
-    duplicate *denies* eligibility: somebody who attended three meetings and
-    was typo'd once holds two attendances on one row and one on another, and
-    fails a threshold they met.
+  who meets these thresholds between two dates, recomputed in the browser from
+  rows the page already read. Everyone is listed, an empty Status never
+  disqualifies, and unresolved near-matches are flagged first: ADR 0010.
 */
 
 /** the form, in the shape the inputs hold it: numbers are text while typing */
@@ -61,8 +46,7 @@ const CUSTOM = "custom";
 /** `YYYY-MM-DD` this many months before a day, for a preset's default window */
 function monthsBefore(day: string, months: number): string {
   const [year, month, date] = day.split("-").map(Number);
-  /* UTC throughout: this is date arithmetic on a label, not on a moment, and
-     a local-time Date would shift the boundary by a day for half the year */
+  /* UTC: a local-time Date would shift the day for half the year */
   const at = new Date(Date.UTC(year!, month! - 1, date!));
   at.setUTCMonth(at.getUTCMonth() - months);
   return at.toISOString().slice(0, 10);
@@ -72,9 +56,7 @@ function formFor(preset: Preset, today: string): Form {
   return {
     from: monthsBefore(today, preset.months),
     to: today,
-    /* an omitted threshold renders as an empty box rather than as 0, because
-       the two mean different things and `0` here would mean everybody
-       qualifies on that clause */
+    /* empty, not 0: `0` would mean everybody meets that clause */
     meetings: preset.thresholds.meetings?.toString() ?? "",
     contributions: preset.thresholds.contributions?.toString() ?? "",
     volunteer: preset.thresholds.volunteer?.toString() ?? "",
@@ -87,13 +69,7 @@ function same(a: Form, b: Form): boolean {
   return (Object.keys(a) as (keyof Form)[]).every((key) => a[key] === b[key]);
 }
 
-/**
- * a typed threshold as `standings` wants it.
- *
- * blank and unparseable both become "no clause". Coercing a half-typed box to
- * `0` mid-keystroke would flash the whole roster as qualifying, which for this
- * page is an alarming thing to see
- */
+/** a typed threshold; blank or half-typed is no clause rather than `0` */
 function threshold(value: string): number | undefined {
   const parsed = Number(value.trim());
   return value.trim() && Number.isFinite(parsed) && parsed >= 0
@@ -109,13 +85,7 @@ function thresholds(form: Form): Thresholds {
   };
 }
 
-/**
- * the columns, which depend on how the clauses combine.
- *
- * under OR the count that satisfied a clause is bold, so the row says which
- * one carried it. under AND every clause that was set had to pass, so there is
- * nothing to single out
- */
+/** the columns. Under OR the count that met its clause is bold */
 function columnsFor(
   combine: Combine,
   faces: Faces,
@@ -139,14 +109,7 @@ function columnsFor(
         </div>
       ),
     },
-    /*
-      its own column, not only the line under the name.
-
-      the export is the club's whole TerpLink integration and the source of the
-      addresses for the Google Group, and a `data-table` csv is built from
-      column accessors — an email rendered only inside the name cell's jsx is
-      invisible to it, so the file would carry names and no way to reach anybody
-    */
+    /* its own column so the csv export, built from accessors, carries it */
     {
       id: "email",
       accessorFn: (row) => row.person.email ?? "",
@@ -160,9 +123,7 @@ function columnsFor(
     },
     {
       id: "qualifies",
-      /* a string, not a boolean: the faceted filter builds its options from the
-         values present and a checkbox column would offer `true` and `false` as
-         unlabelled entries */
+      /* a string, so the faceted filter offers readable options */
       accessorFn: (row) => (row.qualifies ? "Qualifies" : "Falls short"),
       header: sortable("Qualifies"),
       meta: { csvHeader: "qualifies" },
@@ -173,8 +134,6 @@ function columnsFor(
           <Badge variant={row.original.qualifies ? "default" : "outline"}>
             {row.original.qualifies ? "Qualifies" : "Falls short"}
           </Badge>
-          {/* both flags are reasons an editor has something to do, so they are
-              beside the answer rather than in a column somebody has to widen */}
           {row.original.excludedAsAlum && (
             <Badge variant="secondary">Excluded as alum</Badge>
           )}
@@ -253,17 +212,13 @@ export function StandingTable({
 }: {
   corpus: Corpus;
   today: string;
-  /** discord pictures, so a person is recognisable here as on the other pages */
   faces: Faces;
 }) {
   const [presetId, setPresetId] = useState<string>(PRESETS[0]!.id);
   const [form, setForm] = useState<Form>(() => formFor(PRESETS[0]!, today));
 
-  /*
-    editing anything away from the chosen preset's values is what selects
-    Custom, so the chip always describes the question on screen. editing back
-    to a preset's values re-selects it
-  */
+  /* the preset chip always matches the form: an edit selects whichever
+     preset the values equal, else Custom */
   function set(patch: Partial<Form>) {
     const next = { ...form, ...patch };
     setForm(next);
@@ -289,8 +244,6 @@ export function StandingTable({
     [form.combine, faces],
   );
 
-  /* recomputed from the same roster the table is drawn from, so the warning
-     cannot disagree with what is on screen */
   const unresolved = useMemo(() => duplicates(corpus.people), [corpus.people]);
 
   const qualifying = rows.filter((row) => row.qualifies).length;
@@ -298,13 +251,7 @@ export function StandingTable({
   return (
     <div className="space-y-4">
       {unresolved.length > 0 && (
-        /*
-          the single most important thing on this page. it is a block at the
-          top rather than a badge beside the count because the failure it warns
-          about is invisible in the table below: a duplicated person's
-          attendance is split across two rows, both of which look like honest
-          near-misses
-        */
+        /* at the top: a split duplicate looks like two honest near-misses */
         <div
           role="alert"
           className="border-destructive/50 bg-destructive/10 text-foreground space-y-2 rounded-lg border p-4"
@@ -337,7 +284,6 @@ export function StandingTable({
         </div>
       )}
 
-      {/* the question, set apart from the answer below it */}
       <div className="space-y-4 pb-4">
         <div className="space-y-1.5">
           <Label id="standing-preset">Preset</Label>
@@ -360,8 +306,6 @@ export function StandingTable({
                 {one.name}
               </Button>
             ))}
-            {/* selectable so the chip is not a state you can only fall into:
-                pressing it keeps the numbers and lets go of the preset */}
             <Button
               size="sm"
               variant={presetId === CUSTOM ? "default" : "outline"}

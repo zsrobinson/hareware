@@ -17,8 +17,7 @@ export function ContentSlide({
 
     const children = [...(slotRef?.children ?? [])] as HTMLElement[];
 
-    // shifting past the last paragraph is reachable — the counter has no
-    // ceiling — and indexing past the end here used to throw inside the effect
+    // the shift counter has no ceiling, so this can index past the end
     const shift = Math.min(state.paragraphShift, children.length);
 
     for (let i = 0; i < shift; i++) {

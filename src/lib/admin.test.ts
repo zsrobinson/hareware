@@ -5,7 +5,7 @@ import { createSessionCookie } from "./session";
 const workers = vi.hoisted(() => ({ env: {} as Record<string, string> }));
 vi.mock("cloudflare:workers", () => workers);
 
-const { adminAccess, editorialBoardMember } = await import("./admin");
+const { adminAccess } = await import("./admin");
 
 const SECRET = "s".repeat(32);
 const USER = "342850506328117249";
@@ -35,40 +35,14 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("lets in a member holding the role", async () => {
-  workers.env.SESSION_SECRET = SECRET;
-  workers.env.DISCORD_BOT_TOKEN = "bot";
-  mockDiscord(["something-else", EDITORIAL_BOARD_ROLE_ID]);
-
-  const session = await editorialBoardMember(await signedIn());
-
-  expect(session?.discordUserId).toBe(USER);
-});
-
-test("keeps out a member without the role", async () => {
-  workers.env.SESSION_SECRET = SECRET;
-  workers.env.DISCORD_BOT_TOKEN = "bot";
-  mockDiscord(["something-else"]);
-
-  expect(await editorialBoardMember(await signedIn())).toBeNull();
-});
-
-test("keeps out somebody who has left the server", async () => {
-  workers.env.SESSION_SECRET = SECRET;
-  workers.env.DISCORD_BOT_TOKEN = "bot";
-  mockDiscord(null, false);
-
-  expect(await editorialBoardMember(await signedIn())).toBeNull();
-});
-
-test("keeps out a signed-out visitor without asking discord", async () => {
+test("refuses a signed-out visitor without asking discord", async () => {
   workers.env.SESSION_SECRET = SECRET;
   workers.env.DISCORD_BOT_TOKEN = "bot";
   const fetchMock = mockDiscord([EDITORIAL_BOARD_ROLE_ID]);
 
-  const request = new Request("https://hareware.test/admin");
+  const access = await adminAccess(new Request("https://hareware.test/admin"));
 
-  expect(await editorialBoardMember(request)).toBeNull();
+  expect(access.allowed).toBe(false);
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
@@ -81,29 +55,14 @@ test("rejects a tampered session cookie", async () => {
     headers: { cookie: "__Host-hareware-session=nonsense.signature" },
   });
 
-  expect(await editorialBoardMember(request)).toBeNull();
-});
-
-/* an outage denies rather than grants */
-test("denies when discord is unreachable", async () => {
-  workers.env.SESSION_SECRET = SECRET;
-  workers.env.DISCORD_BOT_TOKEN = "bot";
-  vi.spyOn(console, "error").mockImplementation(() => {});
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => {
-      throw new Error("network");
-    }),
-  );
-
-  expect(await editorialBoardMember(await signedIn())).toBeNull();
+  expect((await adminAccess(request)).allowed).toBe(false);
 });
 
 test("denies when there is no bot token to ask with", async () => {
   workers.env.SESSION_SECRET = SECRET;
   mockDiscord([EDITORIAL_BOARD_ROLE_ID]);
 
-  expect(await editorialBoardMember(await signedIn())).toBeNull();
+  expect((await adminAccess(await signedIn())).allowed).toBe(false);
 });
 
 /* the four refusals, told apart */

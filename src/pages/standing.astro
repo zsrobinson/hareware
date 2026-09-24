@@ -10,6 +10,7 @@ import { readStatuses } from "~/lib/members/views";
 import { ALUM_STATUS } from "~/lib/members/config";
 import { AlumMissing, Problem } from "~/components/problem";
 import { faces } from "~/lib/faces";
+import { guildMembers } from "~/lib/member";
 
 const who = admitted(Astro.locals);
 
@@ -17,13 +18,16 @@ Astro.response.headers.set("cache-control", "private, no-store");
 
 /* read once; the island recomputes `standings()` locally on every change */
 const token = env.NOTION_TOKEN;
-const rows: Corpus | null = token ? await corpus(token) : null;
+const guild = guildMembers();
+const [rows, statuses] = await Promise.all([
+  token ? corpus(token) : Promise.resolve<Corpus | null>(null),
+  readStatuses(token),
+]);
 
 const rosterFaces = await faces(
   (rows?.people ?? []).map((person) => person.discordId),
+  () => guild,
 );
-
-const statuses = await readStatuses(token);
 
 /* eastern, like the notion dates the window is compared against */
 const today = easternNow(new Date()).date;

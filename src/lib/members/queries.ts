@@ -34,6 +34,13 @@ const reported = new WeakSet<object>();
  * a roster read, seeded with what the page already rendered so first paint
  * needs no second fetch. `path` answers the same type from `~/lib/members/views`
  */
+/** a roster read, and whether the last attempt at it failed */
+export type RosterRead<T> = {
+  data: T;
+  failed: boolean;
+  retry: () => void;
+};
+
 export function useRosterQuery<T extends object>(
   key: QueryKey,
   path: string,
@@ -44,8 +51,8 @@ export function useRosterQuery<T extends object>(
    * snapshot as fresh; false marks the seed stale so it re-reads at once
    */
   seeded = true,
-): T {
-  const { data, isError, error } = useQuery({
+): RosterRead<T> {
+  const { data, isError, error, refetch } = useQuery({
     queryKey: key,
     queryFn: async (): Promise<T> => {
       const response = await fetch(path, {
@@ -77,7 +84,11 @@ export function useRosterQuery<T extends object>(
     toast.error(`Could not refresh: ${errorMessage(error)}`);
   }, [isError, error]);
 
-  return data;
+  return {
+    data,
+    failed: isError,
+    retry: () => void refetch(),
+  };
 }
 
 /**

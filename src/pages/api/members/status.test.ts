@@ -8,6 +8,7 @@ vi.mock("~/lib/admin", () => admin);
 vi.mock("~/lib/log", () => log);
 
 const { POST } = await import("./status");
+const { MEMBERS_DATA_SOURCE_ID } = await import("~/lib/members/config");
 
 admin.adminAccess.mockImplementation(async () => ({
   allowed: true,
@@ -28,6 +29,7 @@ test("logs the name on the row, not the one in the request", async () => {
         ? new Response(
             JSON.stringify({
               id: PAGE,
+              parent: { data_source_id: MEMBERS_DATA_SOURCE_ID },
               properties: { Name: { title: [{ plain_text: "Ana Reyes" }] } },
             }),
           )
@@ -52,6 +54,40 @@ test("logs the name on the row, not the one in the request", async () => {
   expect(log.record).toHaveBeenCalledWith(
     undefined,
     expect.objectContaining({ summary: "set Ana Reyes's status to Grad" }),
+  );
+});
+
+test("a page outside Members is refused before anything is written", async () => {
+  const fetched = vi.fn(async (url: string, init?: RequestInit) =>
+    String(url).includes("/pages/")
+      ? new Response(
+          JSON.stringify({
+            id: PAGE,
+            parent: { data_source_id: "some-other-data-source" },
+            properties: {},
+          }),
+        )
+      : new Response(
+          JSON.stringify({
+            properties: {
+              Status: { select: { options: [{ name: "Grad" }] } },
+            },
+          }),
+          { status: init?.method === "PATCH" ? 500 : 200 },
+        ),
+  );
+  vi.stubGlobal("fetch", fetched);
+
+  const response = await (POST as (context: unknown) => Promise<Response>)({
+    request: new Request("https://hareware.test/api/members/status", {
+      method: "POST",
+      body: JSON.stringify({ pageId: PAGE, status: "Grad" }),
+    }),
+  });
+
+  expect(response.status).toBe(400);
+  expect(fetched.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(
+    false,
   );
 });
 

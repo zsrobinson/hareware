@@ -122,14 +122,15 @@ test("somebody who answered nothing is still named by their account", async () =
   expect(withoutUser.username).toBe("u3");
 });
 
-test("the applied day is the date alone", async () => {
+test("the applied day is the Eastern day", async () => {
+  /* 9pm Eastern on the 3rd, already the 4th in UTC */
   const application = await read({
     id: "1",
     user_id: "u1",
-    created_at: "2026-09-04T18:22:00.000Z",
+    created_at: "2026-09-04T01:00:00.000Z",
   });
 
-  expect(application.applied).toBe("2026-09-04");
+  expect(application.applied).toBe("2026-09-03");
 });
 
 test("an application with no creation time has no applied day, not an empty one", async () => {

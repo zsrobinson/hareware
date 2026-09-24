@@ -16,6 +16,7 @@ import type {
 } from "./match";
 import { readGuildMembers } from "~/lib/member";
 import type { Profile } from "~/lib/member";
+import type { Faces } from "~/lib/faces";
 import type { MeetingRecord, Person } from "./records";
 import { meetings, people, statusOptions } from "./roster";
 import { alumOptionMissing, FALLBACK_MEMBER_STATUSES } from "./config";
@@ -114,6 +115,8 @@ export type ReconcilerData = {
   discordSuggestions: DiscordSuggestion[];
   /** the whole guild, for the edit dialog's Discord autocomplete */
   guild: GuildAccount[];
+  /** every guild account's picture, so applicants and later links are drawn */
+  faces: Faces;
   /** notion's live options, for the banner when the alum one is gone */
   liveStatuses: string[];
   alumMissing: boolean;
@@ -141,10 +144,12 @@ export async function reconcilerData(env: ViewEnv): Promise<ReconcilerData> {
           return [] as Application[];
         })
       : Promise.resolve([] as Application[]),
-    readGuildMembers(bot).catch((thrown: unknown) => {
-      guildProblem = errorMessage(thrown);
-      return new Map<string, Profile>();
-    }),
+    bot
+      ? readGuildMembers(bot).catch((thrown: unknown) => {
+          guildProblem = errorMessage(thrown);
+          return new Map<string, Profile>();
+        })
+      : Promise.resolve(new Map<string, Profile>()),
     readStatuses(token),
   ]);
 
@@ -162,6 +167,7 @@ export async function reconcilerData(env: ViewEnv): Promise<ReconcilerData> {
     roster,
     discordSuggestions: suggestDiscordLinks(roster, accounts),
     guild: accounts,
+    faces: Object.fromEntries(guild),
     liveStatuses: options.live,
     alumMissing: options.alumMissing,
     discordProblem:

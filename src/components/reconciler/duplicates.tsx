@@ -96,9 +96,10 @@ export function Duplicates({
             <DialogDescription>
               <strong>{merging?.keep.name}</strong> (
               {merging?.keep.email ?? "no email"}) will survive and keep its
-              name and status. <strong>{merging?.drop.name}</strong> (
+              name. <strong>{merging?.drop.name}</strong> (
               {merging?.drop.email ?? "no email"}) will have its articles,
-              images and attendance moved across and will then be put in
+              images and attendance moved across, along with any status, email
+              or Discord account the survivor lacks, and will then be put in
               Notion's trash. This cannot be undone from here.
             </DialogDescription>
           </DialogHeader>

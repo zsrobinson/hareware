@@ -137,3 +137,13 @@ test("no notion token is reported rather than drawn as an empty roster", async (
   expect(kiosk.notionProblem).toMatch(/NOTION_TOKEN/);
   expect(reconciler.notionProblem).toMatch(/NOTION_TOKEN/);
 });
+
+test("no bot token is reported once, and asks Discord nothing", async () => {
+  const { reconcilerData } = await import("./views");
+  const asked = watchNotion();
+
+  const data = await reconcilerData({ NOTION_TOKEN: "secret" });
+
+  expect(data.discordProblem).toBe("DISCORD_BOT_TOKEN is not set.");
+  expect(asked.some((url) => url.includes("discord.com"))).toBe(false);
+});

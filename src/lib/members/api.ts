@@ -11,7 +11,7 @@ import { adminAccess } from "~/lib/admin";
 import { DENIALS } from "~/lib/denial";
 import { record } from "~/lib/log";
 import type { Invocation } from "~/lib/db/schema";
-import { readGuildMembers, type Profile } from "~/lib/member";
+import { lookupMember, type Profile } from "~/lib/services/discord/guild";
 import type { Person } from "./records";
 import { BadRequest } from "./refusal";
 import { statusOptions } from "./roster";
@@ -238,8 +238,15 @@ export async function requireFreeDiscordId(
   roster: Person[],
   pageId: string | null,
 ): Promise<Profile> {
-  const profile = (await readGuildMembers(token)).get(discordId);
-  if (!profile) {
+  if (!token) throw new Error("DISCORD_BOT_TOKEN is not set");
+
+  const found = await lookupMember(token, discordId);
+  if (found.status === "unreachable") {
+    throw new Error(
+      "Discord could not say whether that account is in the server",
+    );
+  }
+  if (found.status === "absent") {
     throw new BadRequest(
       "that account is not in the server, so an editor has to send them an invite first",
     );
@@ -254,5 +261,5 @@ export async function requireFreeDiscordId(
     );
   }
 
-  return profile;
+  return found.profile;
 }

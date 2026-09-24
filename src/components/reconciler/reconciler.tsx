@@ -4,7 +4,6 @@ import {
   type Editing,
 } from "~/components/member-edit-dialog";
 import { AlumMissing, Problem } from "~/components/problem";
-import type { Faces } from "~/lib/faces";
 import { usePatch, useRefresh, useRosterQuery } from "~/lib/members/queries";
 import { rosterKeys } from "~/lib/members/query-keys";
 import type { Person } from "~/lib/members/records";
@@ -26,18 +25,17 @@ import { useWrites } from "./section";
 type Props = {
   /** the page's server-side read; `/api/members/reconciler` answers the same */
   initial: ReconcilerData;
-  faces: Faces;
 };
 
-export function Reconciler({ initial, faces }: Props) {
+export function Reconciler({ initial }: Props) {
   return (
     <RosterQueries>
-      <Sections initial={initial} faces={faces} />
+      <Sections initial={initial} />
     </RosterQueries>
   );
 }
 
-function Sections({ initial, faces }: Props) {
+function Sections({ initial }: Props) {
   const {
     resolutions,
     duplicates,
@@ -50,11 +48,12 @@ function Sections({ initial, faces }: Props) {
     alumMissing,
     discordProblem,
     notionProblem,
+    faces,
   } = useRosterQuery(
     rosterKeys.reconciler(),
     "/api/members/reconciler",
     initial,
-  );
+  ).data;
 
   /* every write re-reads the whole page: a link or a merge changes what the
      other sections say */

@@ -67,11 +67,3 @@ export async function adminAccess(request: Request): Promise<Access> {
 
   return { allowed: true, who };
 }
-
-/** what the API routes guard on, where a refusal is only a status code */
-export async function editorialBoardMember(
-  request: Request,
-): Promise<Session | null> {
-  const who = await viewer(request);
-  return who?.admin ? who.session : null;
-}

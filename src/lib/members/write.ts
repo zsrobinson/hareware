@@ -3,9 +3,14 @@
   elsewhere; these check only what their own fresh read can show.
 */
 
-import { notion, relationIds } from "~/lib/services/notion/client";
+import {
+  inDataSource,
+  notion,
+  relationIds,
+} from "~/lib/services/notion/client";
 import type { Application } from "./applications";
 import {
+  MEETINGS_DATA_SOURCE_ID,
   MEETING_PROPERTIES,
   MEMBERS_DATA_SOURCE_ID,
   MEMBER_PROPERTIES,
@@ -104,6 +109,9 @@ export async function recordAttendance(
   wanted: string[],
 ): Promise<string[]> {
   const page = (await notion(`pages/${meetingPageId}`, token)) as Page;
+  if (!inDataSource(page, MEETINGS_DATA_SOURCE_ID)) {
+    throw new BadRequest("that page is not a row of Meetings");
+  }
   const property = page.properties?.[MEETING_PROPERTIES.attendees.name];
 
   if (!property) {

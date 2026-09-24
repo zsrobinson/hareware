@@ -15,6 +15,8 @@ admin.adminAccess.mockImplementation(async () => ({
   who: { session: { discordUserId: "editor" } },
 }));
 
+const BAY = "574376763006648349";
+
 /** discord's guild holds one account, notion's roster nobody; returns the notion writes */
 function sources() {
   const created = vi.fn();
@@ -23,11 +25,11 @@ function sources() {
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       if (String(url).includes("discord.com"))
-        return new Response(
-          JSON.stringify([
-            { user: { id: "574376763006648349", username: "bay" } },
-          ]),
-        );
+        return String(url).endsWith(`/members/${BAY}`)
+          ? new Response(
+              JSON.stringify({ roles: [], user: { id: BAY, username: "bay" } }),
+            )
+          : new Response(JSON.stringify({ code: 10007 }), { status: 404 });
       if (String(url).includes("/query"))
         return new Response(JSON.stringify({ results: [], has_more: false }));
       if (String(url).endsWith("/pages")) {
@@ -89,9 +91,30 @@ test("creates a row for an account that is in the server", async () => {
     name: "Bay Hoffman",
     email: "bay@terpmail.umd.edu",
     status: "Undergrad",
-    discordId: "574376763006648349",
+    discordId: BAY,
   });
 
   expect(response.status).toBe(200);
   expect(created).toHaveBeenCalledTimes(1);
+});
+
+/* not knowing is not a refusal: the editor should retry, not invite anyone */
+test("a Discord that does not answer fails rather than refusing", async () => {
+  const created = sources();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) =>
+      String(url).includes("discord.com")
+        ? new Response("", { status: 502 })
+        : (created as unknown as typeof fetch)(url, init),
+    ),
+  );
+
+  const response = await create({
+    name: "Bay Hoffman",
+    email: "bay@terpmail.umd.edu",
+    discordId: BAY,
+  });
+
+  expect(response.status).toBe(500);
 });

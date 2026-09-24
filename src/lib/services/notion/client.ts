@@ -26,6 +26,17 @@ export type NotionProperty = {
 
 export class NotionError extends Error {}
 
+/** whether a page read with `pages/{id}` is a row of this data source */
+export function inDataSource(
+  page: { parent?: { data_source_id?: string } },
+  dataSourceId: string,
+): boolean {
+  const compact = (id: string | undefined) =>
+    id?.replaceAll("-", "").toLowerCase();
+
+  return compact(page.parent?.data_source_id) === compact(dataSourceId);
+}
+
 /**
  * one request, with a 429 waited out. The method is inferred from the body;
  * an update must pass `"PATCH"`, because a `POST` with a body creates a page

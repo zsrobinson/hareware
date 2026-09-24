@@ -81,7 +81,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
      is also the query key, so the read and the screen cannot disagree */
   const [meetingId, setMeetingId] = useState(initial.openingId ?? "");
 
-  const data = useRosterQuery(
+  const roster = useRosterQuery(
     rosterKeys.kiosk(meetingId),
     `/api/members/kiosk?today=${encodeURIComponent(today)}${
       meetingId ? `&meeting=${encodeURIComponent(meetingId)}` : ""
@@ -90,6 +90,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
     /* the seed describes only the meeting the page opened on */
     meetingId === (initial.openingId ?? ""),
   );
+  const data = roster.data;
 
   const { meetings, candidates, statuses, notionProblem } = data;
   const { present, known, saving, tap } = useAttendance(meetingId, data);
@@ -378,7 +379,22 @@ function Kiosk({ initial, today, faces, guild }: Props) {
 
         {present.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            {known ? "Nobody yet." : "Reading who is signed in…"}
+            {known ? (
+              "Nobody yet."
+            ) : roster.failed ? (
+              <>
+                Could not read who is signed in.{" "}
+                <Button
+                  variant="link"
+                  className="h-auto p-0"
+                  onClick={roster.retry}
+                >
+                  Try again
+                </Button>
+              </>
+            ) : (
+              "Reading who is signed in…"
+            )}
           </p>
         ) : (
           <ul aria-label="Signed in" className="divide-y rounded-lg border">

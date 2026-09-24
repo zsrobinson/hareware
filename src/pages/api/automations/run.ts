@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
-import { editorialBoardMember } from "~/lib/admin";
+import { adminAccess } from "~/lib/admin";
+import { DENIALS } from "~/lib/denial";
 import { easternNow } from "~/lib/eastern";
 import { ALL, runAutomations, type Which } from "~/lib/automations/run";
 import { automation } from "~/lib/automations/registry";
@@ -33,13 +34,16 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   const given = request.headers.get("authorization")?.replace(/^Bearer /, "");
-  const member =
-    given && matches(given, expected)
-      ? null
-      : await editorialBoardMember(request);
+  let actor: string | undefined;
 
-  if (!(given && matches(given, expected)) && !member) {
-    return new Response("unauthorized", { status: 401 });
+  if (!(given && matches(given, expected))) {
+    const access = await adminAccess(request);
+    /* the admin pages' statuses, so an outage is a 503 and not a refusal */
+    if (!access.allowed) {
+      const { status, title } = DENIALS[access.denial];
+      return new Response(title, { status });
+    }
+    actor = access.who.session.discordUserId;
   }
 
   const query = new URL(request.url).searchParams;
@@ -75,7 +79,7 @@ export const POST: APIRoute = async ({ request }) => {
     easternNow(new Date()),
     which,
     "manual",
-    member?.discordUserId,
+    actor,
   );
 
   return new Response(JSON.stringify(report, null, 2), {

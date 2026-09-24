@@ -1,6 +1,7 @@
 /* reading Members, Meetings and Articles into the shapes in `records.ts`. */
 
 import {
+  inDataSource,
   notion,
   plainText,
   queryAll,
@@ -20,6 +21,7 @@ import {
 } from "./config";
 import type { ContributionRecord, MeetingRecord, Person } from "./records";
 import { easternNow } from "~/lib/eastern";
+import { BadRequest } from "./refusal";
 
 type Property = RelationProperty & {
   type?: string;
@@ -31,7 +33,11 @@ type Property = RelationProperty & {
   formula?: { type?: string; number?: number | null } | null;
 };
 
-export type Page = { id: string; properties: Record<string, Property> };
+export type Page = {
+  id: string;
+  parent?: { data_source_id?: string };
+  properties: Record<string, Property>;
+};
 
 function text(property: Property | undefined): string {
   return plainText(property?.title ?? property?.rich_text).trim();
@@ -93,7 +99,12 @@ export async function people(token: string): Promise<Person[]> {
 }
 
 export async function member(token: string, pageId: string): Promise<Person> {
-  return toPerson((await notion(`pages/${pageId}`, token)) as Page);
+  const page = (await notion(`pages/${pageId}`, token)) as Page;
+  if (!inDataSource(page, MEMBERS_DATA_SOURCE_ID)) {
+    throw new BadRequest("that page is not a row of Members");
+  }
+
+  return toPerson(page);
 }
 
 /** notion's live Status options. Throws when there is no Status select, as after a rename */

@@ -64,6 +64,8 @@ type Fake = {
   refuse: boolean;
   /** what a re-read of the roster answers, for the tests that switch meeting */
   kiosk: KioskData | null;
+  /** how many re-reads of the roster fail before one answers */
+  kioskFailures: number;
 };
 
 let fake: Fake;
@@ -79,6 +81,7 @@ beforeEach(async () => {
     gate: Promise.resolve(),
     refuse: false,
     kiosk: null,
+    kioskFailures: 0,
   };
   /* this test's fake, not the variable: writes left running must not land
      in the next test's notion */
@@ -125,6 +128,13 @@ beforeEach(async () => {
 
       if (url.startsWith("/api/members/kiosk") && notion.kiosk) {
         await notion.gate;
+        if (notion.kioskFailures > 0) {
+          notion.kioskFailures -= 1;
+          return new Response(JSON.stringify({ error: "rate limited" }), {
+            status: 429,
+            headers: { "content-type": "application/json" },
+          });
+        }
         return new Response(JSON.stringify(notion.kiosk), {
           headers: { "content-type": "application/json" },
         });
@@ -340,6 +350,59 @@ test("switching meeting shows who that meeting's read says is in", async () => {
   release();
 
   await waitFor(() => expect(order()).toEqual(["Cass Lin"]));
+});
+
+test("a meeting whose read failed says so, and can be read again", async () => {
+  const later = {
+    pageId: "m2",
+    name: "Writers' Room 2026-09-10",
+    date: "2026-09-10",
+    type: "General Body",
+    attendeeIds: [],
+  };
+  const data = { ...initial, meetings: [later, ...initial.meetings] };
+  fake.kiosk = {
+    ...data,
+    meetings: [{ ...later, attendeeIds: ["p3"] }, ...initial.meetings],
+    openingId: "m2",
+  };
+  fake.kioskFailures = 1;
+
+  draw(data);
+  const user = userEvent.setup();
+  await user.click(screen.getByLabelText("Meeting"));
+  await user.click(
+    await screen.findByRole("option", { name: /Writers' Room/ }),
+  );
+
+  await user.click(await screen.findByRole("button", { name: "Try again" }));
+
+  await waitFor(() => expect(order()).toEqual(["Cass Lin"]));
+});
+
+test("a meeting the read no longer finds is not left reading", async () => {
+  const later = {
+    pageId: "m2",
+    name: "Writers' Room 2026-09-10",
+    date: "2026-09-10",
+    type: "General Body",
+    attendeeIds: [],
+  };
+  const data = { ...initial, meetings: [later, ...initial.meetings] };
+  /* trashed since the page loaded: the route falls back to today's meeting */
+  fake.kiosk = { ...initial };
+
+  draw(data);
+  const user = userEvent.setup();
+  await user.click(screen.getByLabelText("Meeting"));
+  await user.click(
+    await screen.findByRole("option", { name: /Writers' Room/ }),
+  );
+
+  expect(await screen.findByText("Nobody yet.")).toBeTruthy();
+  expect(screen.getByLabelText("Meeting").textContent).toContain(
+    "General Body Meeting",
+  );
 });
 
 test("a part of notion the kiosk could not read is said on screen", () => {

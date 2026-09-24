@@ -4,6 +4,7 @@ import {
   approvedJoinRequests,
   type JoinRequest,
 } from "~/lib/services/discord/join-requests";
+import { easternNow } from "~/lib/eastern";
 
 export type Application = {
   id: string;
@@ -39,7 +40,10 @@ function toApplication(request: JoinRequest): Application {
     name: answer(request, "name"),
     email: answer(request, "email"),
     gradYear: answer(request, "year"),
-    applied: request.createdAt?.slice(0, 10) ?? null,
+    /* the Eastern day, like every other date the pages show */
+    applied: request.createdAt
+      ? easternNow(new Date(request.createdAt)).date
+      : null,
   };
 }
 

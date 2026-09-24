@@ -47,6 +47,38 @@ test("refuses a prefix of the right secret", async () => {
   expect(response.status).toBe(401);
 });
 
+/* the panel's own refusal: a Discord outage is not "unauthorized" */
+test("says it could not check a signed-in editor during an outage", async () => {
+  const { createSessionCookie } = await import("~/lib/session");
+  const secret = "s".repeat(32);
+  const cookie = (
+    await createSessionCookie({ discordUserId: "342850506328117249" }, secret)
+  ).split(";")[0]!;
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      throw new Error("network");
+    }),
+  );
+  Object.assign(workers.env, {
+    REMINDERS_TRIGGER_SECRET: SECRET,
+    SESSION_SECRET: secret,
+    DISCORD_BOT_TOKEN: "bot",
+  });
+
+  const response = await (POST as (c: unknown) => Promise<Response>)({
+    request: new Request("https://hareware.test/api/automations/run", {
+      method: "POST",
+      headers: { cookie },
+    }),
+  });
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+
+  expect(response.status).toBe(503);
+});
+
 /* with nothing configured, each automation reports itself unset offline */
 test("runs both reminders for a correct secret", async () => {
   const response = await call(

@@ -22,16 +22,13 @@ export const POST = rosterRoute(
     discordId: optionalText(body, "discordId"),
   }),
   async ({ name, email, status, discordId }, tokens) => {
-    if (status) await requireStatus(tokens.notion, status);
-
-    if (discordId) {
-      await requireFreeDiscordId(
-        tokens.discord,
-        discordId,
-        await people(tokens.notion),
-        null,
-      );
-    }
+    await Promise.all([
+      status && requireStatus(tokens.notion, status),
+      discordId &&
+        people(tokens.notion).then((roster) =>
+          requireFreeDiscordId(tokens.discord, discordId, roster, null),
+        ),
+    ]);
 
     const pageId = await createMember(tokens.notion, {
       name,

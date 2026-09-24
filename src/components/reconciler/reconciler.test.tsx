@@ -42,6 +42,7 @@ const initial: ReconcilerData = {
   ],
   discordSuggestions: [],
   guild: [],
+  faces: {},
   liveStatuses: ["Undergrad", "Grad", "Alum"],
   alumMissing: false,
   discordProblem: null,
@@ -116,14 +117,14 @@ function serve(read: () => ReconcilerData, write: (path: string) => Response) {
 }
 
 test("nothing is claimed about the group before a file is handed over", () => {
-  render(<Reconciler initial={initial} faces={{}} />);
+  render(<Reconciler initial={initial} />);
 
   expect(screen.getByLabelText(/Export CSV/)).toBeTruthy();
   expect(screen.queryByText(/in the group/)).toBeNull();
 });
 
 test("somebody on the roster and not in the export is offered to paste", async () => {
-  render(<Reconciler initial={initial} faces={{}} />);
+  render(<Reconciler initial={initial} />);
   await upload(EXPORT);
 
   const blob = screen.getByLabelText(
@@ -138,7 +139,7 @@ test("somebody on the roster and not in the export is offered to paste", async (
 });
 
 test("a row with no address is counted against the group, not listed twice", async () => {
-  render(<Reconciler initial={initial} faces={{}} />);
+  render(<Reconciler initial={initial} />);
   await upload(EXPORT);
 
   expect(screen.getByText(/1 member has no address at all/)).toBeTruthy();
@@ -168,7 +169,6 @@ test("an unusable address and an outside one share a section", () => {
           }),
         ],
       }}
-      faces={{}}
     />,
   );
 
@@ -186,7 +186,6 @@ test("a row with nothing else on it says so", () => {
         ...initial,
         roster: [person({ pageId: "p9", name: "Ghost Row", status: null })],
       }}
-      faces={{}}
     />,
   );
 
@@ -207,7 +206,6 @@ test("a row with writing on it is not called empty", () => {
           }),
         ],
       }}
-      faces={{}}
     />,
   );
 
@@ -215,14 +213,14 @@ test("a row with writing on it is not called empty", () => {
 });
 
 test("an address in the group that no row claims is reported", async () => {
-  render(<Reconciler initial={initial} faces={{}} />);
+  render(<Reconciler initial={initial} />);
   await upload(EXPORT);
 
   expect(screen.getByText(/1 address in the group/)).toBeTruthy();
 });
 
 test("an export holding everybody says so instead of offering a paste", async () => {
-  render(<Reconciler initial={initial} faces={{}} />);
+  render(<Reconciler initial={initial} />);
   await upload("ana@terpmail.umd.edu, ben@umd.edu");
 
   expect(
@@ -272,7 +270,6 @@ test("an application the form gave nothing for is added by hand", async () => {
           },
         ],
       }}
-      faces={{}}
     />,
   );
 
@@ -297,7 +294,7 @@ test("an application the form gave nothing for is added by hand", async () => {
 });
 
 test("a section's heading holds its toggle rather than sitting inside it", () => {
-  render(<Reconciler initial={initial} faces={{}} />);
+  render(<Reconciler initial={initial} />);
 
   const title = heading("Missing email field");
 
@@ -306,7 +303,7 @@ test("a section's heading holds its toggle rather than sitting inside it", () =>
 });
 
 test("the group's section has no count until a file is handed over", async () => {
-  render(<Reconciler initial={initial} faces={{}} />);
+  render(<Reconciler initial={initial} />);
 
   const count = () =>
     within(heading("Missing from Google Group")).queryByText(/^\d+$/);
@@ -319,7 +316,7 @@ test("the group's section has no count until a file is handed over", async () =>
 });
 
 test("a file the browser cannot read says so", async () => {
-  render(<Reconciler initial={initial} faces={{}} />);
+  render(<Reconciler initial={initial} />);
 
   const file = new File([""], "broken.csv", { type: "text/csv" });
   file.text = () => Promise.reject(new Error("the disk said no"));
@@ -347,7 +344,7 @@ test("a write that failed can be tried again", async () => {
         : json({ summary: "status set" }),
   );
 
-  render(<Reconciler initial={data} faces={{}} />);
+  render(<Reconciler initial={data} />);
   const statuses = within(section("Missing status field"));
 
   fireEvent.click(statuses.getByRole("button", { name: "Grad" }));
@@ -394,7 +391,7 @@ test("a link is confirmed even though the re-read takes its row away", async () 
     () => json({ summary: "Linked Ada Vance" }),
   );
 
-  render(<Reconciler initial={data} faces={{}} />);
+  render(<Reconciler initial={data} />);
   fireEvent.click(screen.getByRole("button", { name: "This is them" }));
 
   await waitFor(() => screen.getByText("No applicants waiting"));
@@ -410,7 +407,7 @@ test("a status set from a chip takes the row out of the status section", async (
     () => json({ summary: "status set" }),
   );
 
-  render(<Reconciler initial={data} faces={{}} />);
+  render(<Reconciler initial={data} />);
   fireEvent.click(
     within(section("Missing Discord ID")).getByRole("button", {
       name: "Set status",
@@ -451,7 +448,6 @@ test("an application with no date says nothing about one", () => {
           },
         ],
       }}
-      faces={{}}
     />,
   );
 
@@ -466,7 +462,7 @@ test("what the re-read could not reach is said, not what first paint could not",
     () => json({ summary: "status set" }),
   );
 
-  render(<Reconciler initial={data} faces={{}} />);
+  render(<Reconciler initial={data} />);
   expect(screen.queryByRole("alert")).toBeNull();
 
   fireEvent.click(
@@ -504,7 +500,6 @@ test("an application nobody could decide says why", () => {
           },
         ],
       }}
-      faces={{}}
     />,
   );
 

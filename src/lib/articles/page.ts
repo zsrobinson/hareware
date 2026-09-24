@@ -1,6 +1,6 @@
 /* An Article page as Notion returns it. Any property may be missing. */
 
-import { plainText } from "~/lib/services/notion/client";
+import { inDataSource, plainText } from "~/lib/services/notion/client";
 import {
   ARTICLE_PROPERTIES,
   ARTICLES_DATA_SOURCE_ID,
@@ -42,12 +42,7 @@ export function pageIdOf(text: string): string | null {
 
 /** Whether the page is a row of Articles, not any page the token can reach. */
 export function isArticle(page: ArticlePage): boolean {
-  const compact = (id: string | undefined) =>
-    id?.replaceAll("-", "").toLowerCase();
-
-  return (
-    compact(page.parent?.data_source_id) === compact(ARTICLES_DATA_SOURCE_ID)
-  );
+  return inDataSource(page, ARTICLES_DATA_SOURCE_ID);
 }
 
 /* so a page without a timestamp sorts last */

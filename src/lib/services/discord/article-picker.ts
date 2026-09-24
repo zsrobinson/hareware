@@ -1,17 +1,7 @@
 /*
-  turning Articles into the dropdown discord shows while an editor types.
-
-  pure functions over a list, because everything that can go wrong here goes
-  wrong silently: discord refuses the *entire* autocomplete response when one
-  choice name is empty or over its limit, and refusing looks exactly like a
-  slow read — an empty dropdown with no explanation. so the rules about length,
-  emptiness and the 25 cap live in one place with tests on them, and the caller
-  does the reading and nothing else. see ADR 0009.
-
-  the matching is here rather than in notion's filter because notion has no
-  fuzzy one: its `contains` finds "ellicott" and not "elicott", "hall ellicott"
-  or "stolen card", which is most of how anybody actually half-remembers a
-  headline.
+  Articles as the autocomplete dropdown. Discord rejects the whole response if
+  any choice name is empty or too long, which looks like an empty dropdown, so
+  those rules live here. Matching is local because Notion has no fuzzy filter.
 */
 
 import { UNTITLED } from "~/lib/articles/config";
@@ -24,12 +14,8 @@ const MAX_CHOICE_NAME = 100;
 export type AutocompleteChoice = { name: string; value: string };
 
 /**
- * how well a headline answers a query, higher being better, 0 being not at all.
- *
- * three tiers rather than a continuous score, because the tie-break is what
- * matters: an editor is nearly always reaching for something they touched this
- * week, so recency decides between two comparable matches and the tiers only
- * keep a genuinely better match above a worse one.
+ * how well a headline answers a query: 0 not at all. Coarse, so recency breaks
+ * ties.
  */
 function quality(headline: string, query: string): number {
   if (!query) return 1;
@@ -40,22 +26,13 @@ function quality(headline: string, query: string): number {
 
   if (text.startsWith(wanted)) return 4;
 
-  /* a word boundary, so "leer" ranks a headline about leering above one that
-     merely contains the letters somewhere */
   if (text.includes(` ${wanted}`)) return 3;
   if (text.includes(wanted)) return 2;
 
   return subsequence(text, wanted) ? 1 : 0;
 }
 
-/**
- * whether every character of `wanted` appears in `text`, in order.
- *
- * this is the whole of the fuzziness: it forgives a typo that drops a letter,
- * a half-remembered headline and words typed out of an editor's memory rather
- * than off the page. it forgives a *transposition* too, but only by matching
- * fewer characters, which the tiers above already rank below a real match.
- */
+/** whether every character of `wanted` appears in `text`, in order */
 function subsequence(text: string, wanted: string): boolean {
   let at = 0;
   for (const character of wanted) {
@@ -67,11 +44,7 @@ function subsequence(text: string, wanted: string): boolean {
 }
 
 /**
- * case, accents and punctuation removed.
- *
- * headlines carry curly quotes and em dashes that nobody types into a picker,
- * so comparing the raw strings means "Terps' loss" cannot be found by typing
- * "terps loss"
+ * case, accents and punctuation removed, so "terps loss" finds "Terps’ loss"
  */
 function fold(value: string): string {
   return value
@@ -82,17 +55,7 @@ function fold(value: string): string {
     .trim();
 }
 
-/**
- * the choices for a query, ranked and capped.
- *
- * the value is the notion page id rather than the headline: a headline changes
- * throughout copy edit, so the label an editor scanned and the article they
- * picked have to be identified by different things.
- *
- * only the headline is shown. the status and byline used to be here and were
- * noise — an editor picking an article already knows which one they mean, and
- * the card they get answers everything else.
- */
+/** the choices for a query, ranked and capped; the value is the page id */
 export function suggestions(rows: Article[], query = ""): AutocompleteChoice[] {
   return rows
     .map((row) => ({ row, score: quality(row.headline, query) }))
@@ -104,19 +67,11 @@ export function suggestions(rows: Article[], query = ""): AutocompleteChoice[] {
 
 type Scored = { row: Article; score: number };
 
-/**
- * a better match first, and among comparable matches the most recently edited.
- *
- * recency is doing most of the work by design: the articles anybody runs a
- * command against are the ones being worked on now, and an empty query — a
- * picker that has only just opened — is exactly this list in exactly that
- * order.
- */
+/** a better match first, then the most recently edited */
 function byScoreThenRecency(a: Scored, b: Scored): number {
   if (a.score !== b.score) return b.score - a.score;
 
-  /* notion's `last_edited_time` is fixed-width iso 8601 in UTC, so comparing
-     the strings is comparing the instants */
+  /* fixed-width UTC ISO 8601, so the strings compare as instants */
   return a.row.lastEdited < b.row.lastEdited
     ? 1
     : a.row.lastEdited > b.row.lastEdited
@@ -124,13 +79,7 @@ function byScoreThenRecency(a: Scored, b: Scored): number {
       : 0;
 }
 
-/**
- * the headline, and nothing else.
- *
- * an empty name makes discord reject the whole response, so an untitled row
- * gets a word rather than nothing — and the hard cut at the end is what stops
- * a 200-character headline taking the dropdown down with it.
- */
+/** the headline, never empty and never over Discord's limit */
 function nameFor(row: Article): string {
   const headline = row.headline.trim() || UNTITLED;
 

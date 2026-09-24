@@ -10,11 +10,7 @@ function fileToBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
-    /*
-      readAsDataURL always yields a string, but the type allows the ArrayBuffer
-      the other read methods produce — and `toString()` on one of those quietly
-      resolves "[object ArrayBuffer]" as though it were an image
-    */
+    /* typed as possibly an ArrayBuffer, whose `toString()` is not an image */
     reader.onload = () =>
       typeof reader.result === "string"
         ? resolve(reader.result)

@@ -39,12 +39,27 @@ export function displayText(value: string, limit = 240): string {
   return inert(short).replace(/[\\`*_{}[\]()<>#|~]/g, "\\$&");
 }
 
+declare const WRITTEN_HERE: unique symbol;
+
+/** Discord Markdown built by `markup`, so no unescaped value can reach it. */
+export type Markup = string & { readonly [WRITTEN_HERE]: true };
+
+/** The template renders as Markdown; every interpolated value is escaped. */
+export function markup(
+  template: TemplateStringsArray,
+  ...values: string[]
+): Markup {
+  return template.reduce(
+    (text, part, index) => `${text}${displayText(values[index - 1]!)}${part}`,
+  ) as Markup;
+}
+
 /** Plain fallback text also uses V2, including after a deferred reply. */
-export function textMessage(content: string): CommandMessage {
+export function textMessage(content: Markup): CommandMessage {
   return {
     components: [
       textDisplay(
-        displayText(content, 900) ||
+        content.trim() ||
           "HareWare could not describe the result. Check the Article in Notion.",
       ),
     ],

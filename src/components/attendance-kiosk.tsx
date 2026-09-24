@@ -1,12 +1,15 @@
 import { useMutation } from "@tanstack/react-query";
 import { PlusIcon, XIcon } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   MemberEditDialog,
   type Editing,
   type GuildOption,
 } from "~/components/member-edit-dialog";
 import { MemberEntry } from "~/components/member-entry";
+import { NewMemberForm, type NewMember } from "~/components/new-member-form";
+import { Problem } from "~/components/problem";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -24,77 +27,46 @@ import {
   indistinguishable,
   meetingLabel,
   searchCandidates,
-  shownName,
 } from "~/lib/members/kiosk";
-import { defaultStatus } from "~/lib/members/config";
 import { rosterKeys } from "~/lib/members/query-keys";
 import { RosterQueries } from "~/lib/members/roster-queries";
 import { useAttendance, usePatch, useRosterQuery } from "~/lib/members/queries";
 import type { KioskData } from "~/lib/members/views";
 import type { Intent } from "~/lib/members/attendance";
 import type { MeetingRecord, Person } from "~/lib/members/records";
-import { notify } from "~/lib/notify";
 import { postJson } from "~/lib/post-json";
-import { withParam } from "~/lib/search-params";
+import { errorMessage } from "~/lib/utils";
 
 /*
-  a laptop at the front of the room with a queue of people typing their own
-  names — ADR 0010. three things follow from the queue:
-
-  - the input takes focus back after every entry, or the second person types
-    into nothing.
-  - the last entry is confirmed by name, because somebody unsure whether their
-    tap registered taps again, and a double entry is a duplicate.
-  - two members sharing a name are shown side by side with what separates them
-    and never collapsed into one offer.
+  the sign-in laptop at a meeting (ADR 0010). A queue of people type their own
+  names, so the input takes focus back after every entry and each entry is
+  confirmed by name.
 */
 
 type Props = {
-  /**
-   * the page's own server-side read: the meetings on offer, the roster, the
-   * meeting to open on, and notion's statuses.
-   *
-   * `/api/members/kiosk` answers the same type from the same function, so this
-   * seeds the query and every later read replaces it in place. Creating
-   * somebody or correcting a row re-reads this rather than asking the room to
-   * reload the laptop
-   */
+  /** the page's server-side read; `/api/members/kiosk` answers the same */
   initial: KioskData;
   /** `today` in eastern, fixed by the page so an evening does not roll over */
   today: string;
-  /** discord pictures for the roster, from one request for the whole guild */
   faces: Faces;
-  /** the same request's members, for the Discord chip's autocomplete */
+  /** for the Discord chip's autocomplete */
   guild: GuildOption[];
 };
 
-async function createPerson(
-  name: string,
-  email: string,
-  status: string | null,
-): Promise<{ pageId: string; name: string; email: string }> {
+async function createPerson({ name, email, status }: NewMember) {
   const { pageId } = await postJson<{ pageId?: string }>(
     "/api/members/create",
     { name, email, ...(status ? { status } : {}) },
   );
 
-  /* a member with no id would be one the list could not remove again, so it is
-     checked rather than asserted */
+  /* without an id the row could not be signed in or removed */
   if (!pageId) throw new Error("the member was created without an id");
 
-  return { pageId, name, email };
+  return pageId;
 }
 
-const dayOf = (meeting: MeetingRecord) => meeting.date.slice(0, 10);
-
-/** the date the calendar holds, then the name with its own date taken off */
 const describe = (meeting: MeetingRecord) =>
-  `${dayOf(meeting)} ${meetingLabel(meeting.name) || "Untitled"}`;
-
-/* the route's own message where there is one — notion's refusals say useful
-   things, and everybody at this laptop holds @Editorial Board */
-const reason = (thrown: unknown) =>
-  thrown instanceof Error ? thrown.message : String(thrown);
+  `${meeting.date} ${meetingLabel(meeting.name) || "Untitled"}`;
 
 export function AttendanceKiosk(props: Props) {
   return (
@@ -105,43 +77,28 @@ export function AttendanceKiosk(props: Props) {
 }
 
 function Kiosk({ initial, today, faces, guild }: Props) {
-  /*
-    the attendee list is held in exactly one place: the query cache.
-
-    it used to be held twice, in the cache and in the island's own state, and
-    every reported problem came from that — a switch that reseeded from a stale
-    read, a write whose answer overwrote what had been tapped since, an
-    optimistic list computed before the last write had landed. `useAttendance`
-    keeps the list in the cache and the taps in a serial queue, and this
-    component only says what was tapped.
-
-    `meetingId` is the one piece of state, and it is the query key too, so the
-    read and the meeting on screen cannot disagree
-  */
+  /* the attendee list lives only in `useAttendance`'s cache; the meeting id
+     is also the query key, so the read and the screen cannot disagree */
   const [meetingId, setMeetingId] = useState(initial.openingId ?? "");
 
-  const data = useRosterQuery(
+  const roster = useRosterQuery(
     rosterKeys.kiosk(meetingId),
     `/api/members/kiosk?today=${encodeURIComponent(today)}${
       meetingId ? `&meeting=${encodeURIComponent(meetingId)}` : ""
     }`,
     initial,
-    /* the seed describes the meeting the page opened on and no other, so a
-       switch re-reads rather than showing the last one for a staleTime */
+    /* the seed describes only the meeting the page opened on */
     meetingId === (initial.openingId ?? ""),
   );
+  const data = roster.data;
 
-  const { meetings, candidates, statuses } = data;
-  const { present, saving, tap } = useAttendance(meetingId, data);
+  const { meetings, candidates, statuses, notionProblem } = data;
+  const { present, known, saving, tap } = useAttendance(meetingId, data);
 
   const patchRoster = usePatch<KioskData>(rosterKeys.kiosk(meetingId));
 
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  const [newEmail, setNewEmail] = useState("");
-  /* Undergrad through `defaultStatus`, never the head of notion's options —
-     those currently begin with Alum, and an alum does not vote */
-  const [newStatus, setNewStatus] = useState(() => defaultStatus(statuses));
   const [editing, setEditing] = useState<Editing | null>(null);
 
   const search = useRef<HTMLInputElement>(null);
@@ -158,52 +115,28 @@ function Kiosk({ initial, today, faces, guild }: Props) {
     [candidates, query],
   );
 
-  /* the query and the highlighted offer only ever move together: the list
-     shortens under the fingers of somebody still typing, and an index left
-     past its end selects nothing on Enter, silently */
+  /* an index left past the shortened list would select nothing on Enter */
   function changeQuery(value: string) {
     setQuery(value);
     setActive(0);
-    setNewEmail("");
-    setNewStatus(defaultStatus(statuses));
   }
 
-  /* the next person is already reaching for the keyboard. `preventScroll`
-     because focusing scrolls the input into view, and on a laptop showing a
-     room's worth of names that yanked the page back to the top after every
-     single tap */
+  /* `preventScroll`, or every tap jumps a long page back to the top */
   function refocus() {
     search.current?.focus({ preventScroll: true });
   }
 
   function switchMeeting(id: string) {
-    /* the attendees follow from the key, so there is nothing else to reseed */
     setMeetingId(id);
-    /*
-      so a reload during the meeting comes back to the same one.
-
-      `history.state` is passed back rather than replaced with null, which is
-      not a detail: astro's `<ClientRouter />` keeps its own scroll and index
-      record in there, and a popstate arriving to find it missing calls
-      `location.reload()`. Wiping it here is what reloaded the page under
-      somebody halfway through signing a room in
-    */
-    history.replaceState(
-      history.state,
-      "",
-      withParam(location.href, "meeting", id),
-    );
+    /* so a reload comes back to this meeting. `history.state` must be kept:
+       `<ClientRouter />` reloads the page on a popstate that finds it gone */
+    const url = new URL(location.href);
+    url.searchParams.set("meeting", id);
+    history.replaceState(history.state, "", url);
     refocus();
   }
 
-  /**
-   * one tap, onto the queue.
-   *
-   * it draws immediately and writes in turn. A refusal takes it back off the
-   * list and says so, which is what keeps the screen honest: a kiosk showing
-   * somebody as present when the write failed would cost them a vote they
-   * could not know they had lost
-   */
+  /** one tap onto the queue. It draws at once; a refusal takes it back off */
   function record(intent: Intent, say: string) {
     if (!meetingId) return;
 
@@ -216,32 +149,25 @@ function Kiosk({ initial, today, faces, guild }: Props) {
 
     if (present.includes(person.pageId)) {
       /* they tapped because they were not sure it had registered */
-      notify.ok(`${shownName(person)} was already signed in`);
+      toast.success(`${person.name} was already signed in`);
       refocus();
       return;
     }
 
     record(
       { kind: "add", pageId: person.pageId },
-      `${shownName(person)} is signed in`,
+      `${person.name} is signed in`,
     );
   }
 
   function remove(pageId: string) {
     const person = byId.get(pageId);
-    const name = person ? shownName(person) : "that row";
+    const name = person ? person.name : "that row";
 
     record({ kind: "remove", pageId }, `Removed ${name}`);
   }
 
-  /**
-   * the row as it now is, on screen before notion is asked again.
-   *
-   * written into the cache and not re-read. The route already validated what
-   * it wrote and answered with it, so a refetch would spend three notion
-   * requests to be told the same thing, and redraw a page somebody is
-   * queueing at while it did. The next mount reads notion again
-   */
+  /* patched, not re-read: see `usePatch` */
   function replacePerson(person: Person) {
     patchRoster((current) => ({
       ...current,
@@ -251,32 +177,20 @@ function Kiosk({ initial, today, faces, guild }: Props) {
     }));
   }
 
-  /*
-    creating somebody is its own write, and deliberately not in the attendance
-    queue: it has to finish before there is an id to sign in
-  */
+  /* not in the attendance queue: it must finish before there is an id */
   const { mutate: create, isPending: creating } = useMutation({
-    mutationFn: (fields: {
-      name: string;
-      email: string;
-      status: string | null;
-    }) => createPerson(fields.name, fields.email, fields.status),
-    onSuccess: (created, fields) => {
+    mutationFn: createPerson,
+    onSuccess: (pageId, fields) => {
       const added: Person = {
-        pageId: created.pageId,
-        name: created.name,
-        email: created.email,
+        pageId,
+        name: fields.name,
+        email: fields.email,
         discordId: null,
         status: fields.status,
-        /* nobody has written anything under a row created a second ago */
         contributions: 0,
       };
 
-      /* into the roster on screen too, so a second person with the same name
-         later this evening is disambiguated against them rather than matched
-         to them. Patched rather than refetched: re-reading costs three notion
-         requests to be told what this page just wrote, and redraws a screen
-         somebody is queueing at while it does */
+      /* into the roster, so a later namesake is told apart from them */
       patchRoster((current) => ({
         ...current,
         candidates: [...current.candidates, added],
@@ -284,30 +198,15 @@ function Kiosk({ initial, today, faces, guild }: Props) {
       changeQuery("");
 
       record(
-        { kind: "add", pageId: created.pageId },
-        `${created.name} was added and is signed in`,
+        { kind: "add", pageId },
+        `${fields.name} was added and is signed in`,
       );
     },
-    onError: (thrown) => notify.failed(`Could not add them: ${reason(thrown)}`),
+    onError: (thrown) =>
+      toast.error(`Could not add them: ${errorMessage(thrown)}`),
   });
 
-  function addNewPerson() {
-    const name = query.trim();
-    const email = newEmail.trim();
-    if (!name || !email) return;
-
-    create({ name, email, status: newStatus });
-  }
-
-  /*
-    newest first on screen, oldest first everywhere else.
-
-    `present` is insertion order, which is what notion's relation holds and
-    what `mergeAttendance` preserves when it appends another device's people.
-    Keeping one order and reversing it here means a reload shows the same list
-    as the tap did; prepending locally instead put the newest at the top until
-    the write answered, and then the server's order flipped it back
-  */
+  /* `present` is in insertion order, as notion keeps it; newest first here */
   const signedIn = useMemo(() => [...present].reverse(), [present]);
 
   const listboxId = "kiosk-matches";
@@ -315,6 +214,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
   return (
     <div className="grid items-start gap-8 lg:grid-cols-2">
       <div className="space-y-6">
+        {notionProblem && <Problem>{notionProblem}</Problem>}
         <div className="flex flex-wrap items-center gap-2">
           <Label htmlFor="kiosk-meeting" className="text-muted-foreground">
             Meeting
@@ -324,8 +224,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
             onValueChange={(value) => switchMeeting(String(value))}
           >
             <SelectTrigger id="kiosk-meeting" size="sm">
-              {/* base-ui renders the raw value unless it is told otherwise,
-                  which put a notion page id in the trigger */}
+              {/* base-ui would otherwise show the raw page id */}
               <SelectValue placeholder="Choose a meeting">
                 {(value) => {
                   const one = meetings.find((m) => m.pageId === value);
@@ -383,9 +282,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
                 } else if (event.key === "Enter") {
                   event.preventDefault();
                   const chosen = matches[active];
-                  /* Enter on an empty list deliberately does not fall through
-                       to "create this person": a stranger's half-typed name
-                       would become a Members row */
+                  /* never falls through to creating a half-typed name */
                   if (chosen) markPresent(chosen);
                 } else if (event.key === "Escape") {
                   changeQuery("");
@@ -400,16 +297,13 @@ function Kiosk({ initial, today, faces, guild }: Props) {
                 className="divide-y rounded-lg border"
               >
                 {matches.map((person, index) => {
-                  /* insisted on rather than merely shown when another offer
-                       reads identically: that pair is not a choice anybody can
-                       make correctly */
                   const clash = matches.some(
                     (other) =>
                       other !== person && indistinguishable(other, person),
                   );
 
                   return (
-                    <li key={person.pageId}>
+                    <li key={person.pageId} role="presentation">
                       <button
                         type="button"
                         id={`kiosk-match-${index}`}
@@ -422,9 +316,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
                         }`}
                       >
                         <div className="min-w-0 flex-1">
-                          {/* a name and a count: every edit lives on the
-                              signed-in side, where the person is looking at
-                              their own row rather than scanning a list */}
+                          {/* no chips here: edits live on the signed-in row */}
                           <MemberEntry person={person} faces={faces} />
                         </div>
 
@@ -445,65 +337,27 @@ function Kiosk({ initial, today, faces, guild }: Props) {
               </ul>
             )}
 
-            {/*
-                the offer to create somebody lives here rather than behind a
-                button of its own: nobody presses "someone new" before typing
-                their name, so the name is already in hand and the only thing
-                left to ask for is the address the merge later depends on
-              */}
             {query.trim() && matches.length === 0 && (
               <div className="space-y-3 rounded-lg border p-4">
                 <p className="text-sm">
                   Nobody on the roster is called <strong>{query.trim()}</strong>{" "}
                   yet. Please use your full first and last name.
                 </p>
-                <div className="space-y-1.5">
-                  <Label htmlFor="kiosk-email">Email</Label>
-                  <Input
-                    id="kiosk-email"
-                    type="email"
-                    value={newEmail}
-                    onChange={(event) => setNewEmail(event.target.value)}
-                    className="h-12 text-base"
-                    autoComplete="off"
-                    placeholder="you@terpmail.umd.edu"
-                    aria-describedby="kiosk-email-why"
-                  />
-                  <p
-                    id="kiosk-email-why"
-                    className="text-muted-foreground text-sm"
-                  >
-                    Use your @terpmail.umd.edu or @umd.edu address.
-                  </p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Status</Label>
-                  {/* outline until it is the one chosen: this is a field
-                      almost nobody has to touch, and the default is right */}
-                  <div className="flex flex-wrap gap-2">
-                    {statuses.map((status) => (
-                      <Button
-                        key={status}
-                        type="button"
-                        variant={newStatus === status ? "secondary" : "outline"}
-                        aria-pressed={newStatus === status}
-                        onClick={() => setNewStatus(status)}
-                      >
-                        {status}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <Button
-                  className="h-12"
-                  disabled={creating || !newEmail.trim()}
-                  onClick={() => addNewPerson()}
-                >
-                  <PlusIcon className="size-4" />
-                  {creating ? "Adding…" : "Add and sign in"}
-                </Button>
+                <NewMemberForm
+                  key={query.trim()}
+                  id="kiosk-new"
+                  name={query.trim()}
+                  statuses={statuses}
+                  busy={creating}
+                  large
+                  submit={
+                    <>
+                      <PlusIcon className="size-4" />
+                      {creating ? "Adding…" : "Add and sign in"}
+                    </>
+                  }
+                  onAdd={(member) => create(member)}
+                />
               </div>
             )}
           </div>
@@ -524,11 +378,29 @@ function Kiosk({ initial, today, faces, guild }: Props) {
         </h2>
 
         {present.length === 0 ? (
-          <p className="text-muted-foreground text-sm">Nobody yet.</p>
+          <p className="text-muted-foreground text-sm">
+            {known ? (
+              "Nobody yet."
+            ) : roster.failed ? (
+              <>
+                Could not read who is signed in.{" "}
+                <Button
+                  variant="link"
+                  className="h-auto p-0"
+                  onClick={roster.retry}
+                >
+                  Try again
+                </Button>
+              </>
+            ) : (
+              "Reading who is signed in…"
+            )}
+          </p>
         ) : (
           <ul aria-label="Signed in" className="divide-y rounded-lg border">
             {signedIn.map((pageId) => {
-              const person = byId.get(pageId) ?? {
+              const listed = byId.get(pageId);
+              const person = listed ?? {
                 pageId,
                 name: "Someone not on this list",
                 discordId: null,
@@ -536,7 +408,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
                 status: null,
                 contributions: 0,
               };
-              const name = shownName(person);
+              const name = person.name;
 
               return (
                 <li
@@ -544,16 +416,16 @@ function Kiosk({ initial, today, faces, guild }: Props) {
                   className="flex items-center gap-3 py-2 pr-2 pl-3"
                 >
                   <div className="min-w-0 flex-1">
-                    {/* every chip and every edit lives here: the person has
-                        tapped, and this is the one row they are looking at */}
+                    {/* no chips for a row this roster does not hold */}
                     <MemberEntry
                       person={person}
                       faces={faces}
-                      onEdit={(field) => setEditing({ field, person })}
+                      onEdit={
+                        listed &&
+                        ((field) => setEditing({ field, person: listed }))
+                      }
                     />
                   </div>
-                  {/* removing is possible only because `setAttendees` replaces
-                      the whole relation rather than appending to it */}
                   <Button
                     variant="ghost"
                     size="sm"

@@ -1,10 +1,8 @@
-/* Run an Article edit against live Notion, preserve its returned page and
-   record the outcome. External calls stay behind EditIO so refusals, partial
-   writes and failed delivery can be tested without bindings. See ADR 0009. */
+/* Runs an Article edit against live Notion and records it. ADR 0009. */
 
 import { failed, ok, type Result } from "~/lib/result";
 import { record } from "~/lib/log";
-import { assertProperties, optionNamed, type Schema } from "./choices";
+import { fetchSchema, notSharing, optionNamed, type Schema } from "./choices";
 import { ARTICLE_PROPERTIES, ARTICLES_DATA_SOURCE_ID } from "./config";
 import {
   createMember,
@@ -14,7 +12,13 @@ import {
   type Member,
   type MemberMatch,
 } from "./member";
-import { readableProperties, relationIds, type ArticlePage } from "./page";
+import {
+  isArticle,
+  pageIdOf,
+  readableProperties,
+  relationIds,
+  type ArticlePage,
+} from "./page";
 import {
   changesSummary,
   current,
@@ -28,59 +32,39 @@ import {
   type PlanResult,
 } from "./write";
 import { notion, plainText } from "~/lib/services/notion/client";
+import { readArticle } from "./live";
 
-/** the discord user who ran the command */
 export type Actor = { id: string; name: string };
 
-/** the user discord's own picker handed back, resolved from the payload */
 export type PickedUser = { discordId: string; displayName: string };
 
-/**
- * one thing an editor asked for.
- *
- * three kinds rather than one per subcommand: eight subcommands share three
- * behaviours, and the differences between `status` and `section` are already
- * expressed by `Intent` in `write.ts`
- */
 export type EditRequest =
   /** `/article new` */
   | {
       kind: "create";
       headline: string;
       section: string;
-      /** the Discord member who wrote it */
       member: PickedUser;
       /** a pseudonym to print instead of the member's name */
       byline: string | null;
     }
-  /** every subcommand that sets one property */
   | { kind: "property"; pageId: string; intent: Intent }
   /** `/article author` and `/article image-crew`, which write a pair */
   | {
       kind: "credit";
       pageId: string;
       credit: "author" | "image";
-      /** the Discord member behind the credit */
       member: PickedUser;
       /** a pseudonym to print instead of the member's name */
       byline: string | null;
       /** add to the credit that is there rather than replacing it */
       also: boolean;
     }
-  /** `/article delete` moves the page to Notion's recoverable Trash */
   | { kind: "delete"; pageId: string };
 
-/**
- * everything outside this module, as functions.
- *
- * `notionIO(env)` builds the real ones. a test hands over closures, which is
- * the only way the refusals below get exercised — they are the paths that
- * matter and the ones no integration test would reach on purpose
- */
+/** everything outside this module; `notionIO(env)` builds the real ones */
 export type EditIO = {
-  /** the Articles schema, which is the data-loss guard's evidence */
   schema: () => Promise<Schema>;
-  /** one Article, live. never the index */
   page: (pageId: string) => Promise<ArticlePage>;
   /** notion answers a PATCH with the whole updated page */
   patch: (pageId: string, body: PatchBody) => Promise<ArticlePage>;
@@ -102,13 +86,31 @@ export type EditResult =
     }
   | { status: "failed"; explanation: string; pageId?: string; notes: string[] };
 
+/** the sentence an edit that landed leads with, in the log and the reply */
+export function editSentence(
+  status: Exclude<EditResult["status"], "failed">,
+): string {
+  switch (status) {
+    case "created":
+      return "Created article.";
+    case "deleted":
+      return "Moved article to Notion's Trash.";
+    case "unchanged":
+      return "Article is unchanged.";
+    case "updated":
+      return "Updated article.";
+  }
+}
+
 export function editSummary(result: EditResult): string {
   const summary =
     result.status === "failed"
       ? result.explanation
       : result.status === "deleted"
-        ? "Moved article to Notion's Trash."
-        : `${result.status === "created" ? "Created article. " : result.status === "unchanged" ? "Unchanged. " : ""}${changesSummary(result.changes)}`;
+        ? editSentence("deleted")
+        : result.status === "updated"
+          ? changesSummary(result.changes)
+          : `${editSentence(result.status)} ${changesSummary(result.changes)}`;
   return [summary, ...result.notes].join(" — ");
 }
 
@@ -147,8 +149,10 @@ async function attempt(
   actor: Actor,
 ): Promise<EditResult> {
   try {
-    if (request.kind === "delete")
-      return await remove(io, await io.page(request.pageId));
+    if (request.kind === "delete") {
+      const page = await articleAt(io, request.pageId);
+      return page ? await remove(io, page) : refused(NOT_AN_ARTICLE);
+    }
 
     let schema: Schema;
     try {
@@ -160,23 +164,33 @@ async function attempt(
     if (request.kind === "create")
       return await create(io, schema, request, actor);
 
-    const page = await io.page(request.pageId);
+    const page = await articleAt(io, request.pageId);
+    if (!page) return refused(NOT_AN_ARTICLE);
 
     if (request.kind === "property")
       return await apply(io, page, plan(schema, page, request.intent));
 
     return await credit(io, schema, page, request, actor);
   } catch (error) {
-    /*
-      one catch for every notion call: they all fail the same way from an
-      editor's side, and the alternative — a rejected promise inside a
-      `waitUntil` — is the spinner that never settles
-    */
+    /* a rejection inside `waitUntil` would leave the editor a spinner */
     console.error("[article] an edit did not complete", error);
     return refused(
       `The edit could not be confirmed: ${String(error)}. Check Notion and Members before retrying.`,
     );
   }
+}
+
+const NOT_AN_ARTICLE =
+  "That is not a page in Articles, so HareWare changed nothing.";
+
+/** The page, or null when the id is not one or the page is not an Article. */
+async function articleAt(
+  io: EditIO,
+  pageId: string,
+): Promise<ArticlePage | null> {
+  if (!pageIdOf(pageId)) return null;
+  const page = await io.page(pageId);
+  return isArticle(page) ? page : null;
 }
 
 async function remove(io: EditIO, page: ArticlePage): Promise<EditResult> {
@@ -210,30 +224,17 @@ async function create(
   request: Extract<EditRequest, { kind: "create" }>,
   actor: Actor,
 ): Promise<EditResult> {
-  /*
-    ADR 0009: a new Article starts Approved — somebody typing a headline into
-    an editor command has already decided to run it. the value is looked up in
-    the schema rather than written down, so renaming the option here means
-    HareWare says the option is gone rather than sending notion a word it
-    rejects with a 400 that reads like a bad id
-  */
+  /* a new Article starts Approved (ADR 0009) */
   const status = optionNamed(
     schema,
     ARTICLE_PROPERTIES.status.name,
     "approved",
   );
 
-  /*
-    the same resolution `/article author` uses, so picking a writer here
-    backfills or creates their Members row rather than leaving the relation
-    empty. a pseudonym changes only the printed text; the selected member still
-    records who wrote it
-  */
   const found = await resolve(io, request.member, actor);
   if (found.status === "refused") return refused(found.reason);
 
-  /* ADR 0004: the printed Byline is always filled. typed text is explicitly a
-     pseudonym; otherwise the selected member's name is frozen onto the row */
+  /* the printed Byline is always filled (ADR 0004) */
   const byline = request.byline ?? found.member.name;
 
   const planned = planCreate(schema, {
@@ -373,24 +374,11 @@ async function credit(
       ? ARTICLE_PROPERTIES.author
       : ARTICLE_PROPERTIES.imageCrew;
 
-  /*
-    the guard, checked before anything is read off the page rather than after.
-    a relation notion is not sharing is absent from the schema and reads back
-    as `[]` on every page, so the append below would silently delete every
-    co-author. `assertProperties` is the only thing that can tell absent from
-    empty
-  */
-  /* widened: the config names are a union of literals, and a property the
-     schema is missing arrives as plain text */
-  const pair: string[] = [text.name, relation.name];
-  const unshared = assertProperties(schema).filter((miss) =>
-    pair.includes(miss.name),
-  );
-  if (unshared.length > 0)
+  /* before resolving the member, which may create a Members row */
+  const unshared = notSharing(schema, [text.name, relation.name]);
+  if (unshared)
     return refused(
-      `Notion is not sharing ${unshared
-        .map((miss) => `${miss.name} (${miss.found ?? "absent"})`)
-        .join(", ")}, so HareWare will not write a credit it cannot read back.`,
+      `${unshared}, so HareWare will not write a credit it cannot read back.`,
     );
 
   if (
@@ -413,12 +401,7 @@ async function credit(
 
   const name = request.byline ?? found.member.name;
 
-  /* `also` appends both the selected member and the printed credit. */
-  /* already credited, so `also` has nothing to add. the relation deduped and
-     the printed byline did not, which made a second run — a slow follow-up, an
-     editor who thought it had not landed — write "Bob and Bob" while the
-     relation stayed correct. the two halves ADR 0004 keeps together came apart,
-     and only the printed one was wrong */
+  /* already credited: a repeated `also` must not print "Bob and Bob" */
   const already = held.includes(found.member.pageId);
 
   const memberIds = request.also
@@ -455,14 +438,7 @@ type Resolved =
   | { status: "resolved"; member: Member; note?: string }
   | { status: "refused"; reason: string };
 
-/**
- * the Members row behind a picked discord user, and what to say about it.
- *
- * every uncertain outcome refuses. `conflicted` names both pages because two
- * rows sharing a discord id is a data problem somebody has to go and fix, and
- * taking the first would attribute Articles to the wrong person permanently
- * with nothing downstream able to notice
- */
+/** the Members row behind a picked user. Every uncertain outcome refuses. */
 async function resolve(
   io: EditIO,
   picked: PickedUser,
@@ -497,7 +473,7 @@ async function resolve(
     case "ambiguous":
       return {
         status: "refused",
-        reason: `Members has ${match.members.length} rows named **${picked.displayName}** (${match.members
+        reason: `Members has ${match.members.length} rows named "${picked.displayName}" (${match.members
           .map((member) => member.pageId)
           .join(
             ", ",
@@ -508,7 +484,7 @@ async function resolve(
       return {
         status: "refused",
         reason: `Two Members carry the same Discord ID (${match.members
-          .map((member) => `**${member.name}** (${member.pageId})`)
+          .map((member) => `${member.name} (${member.pageId})`)
           .join(
             " and ",
           )}). HareWare will not guess which one wrote this — clear the duplicate in Notion first.`,
@@ -524,24 +500,14 @@ async function resolve(
 
 /* ---- the real outside world --------------------------------------------- */
 
-/**
- * `EditIO` against notion, D1 and the log.
- *
- * the only place a token or a binding is touched, and it is deliberately
- * trivial: everything worth testing is above this line
- */
+/** `EditIO` against Notion and the log */
 export function notionIO(env: Env): EditIO {
   const token = () => env.NOTION_TOKEN!;
 
   return {
-    schema: () =>
-      notion(
-        `data_sources/${ARTICLES_DATA_SOURCE_ID}`,
-        token(),
-      ) as Promise<Schema>,
+    schema: () => fetchSchema(token()),
 
-    page: (pageId) =>
-      notion(`pages/${pageId}`, token()) as Promise<ArticlePage>,
+    page: (pageId) => readArticle(token(), pageId),
 
     patch: (pageId, body) =>
       notion(`pages/${pageId}`, token(), body, "PATCH") as Promise<ArticlePage>,

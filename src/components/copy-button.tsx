@@ -2,7 +2,13 @@ import { useState } from "react";
 import { Button } from "./ui/button";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
-export function CopyButton({ id }: { id: string }) {
+export function CopyButton({
+  id,
+  label = "Copy",
+}: {
+  id: string;
+  label?: string;
+}) {
   const [copied, setCopied] = useState(false);
 
   return (
@@ -29,38 +35,12 @@ export function CopyButton({ id }: { id: string }) {
             console.error("could not write to the clipboard", error);
           });
       }}
+      aria-label={label}
       variant="outline"
       size="icon"
       className="px-3"
     >
       {copied ? <CheckIcon /> : <CopyIcon />}
-    </Button>
-  );
-}
-
-async function copyImage(image: string) {
-  const response = await fetch(image);
-  const blob = await response.blob();
-  await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-}
-
-export function CopyImageButton({ image }: { image: string }) {
-  return (
-    <Button
-      variant="outline"
-      className="w-full"
-      /*
-        not an async handler: react calls this and drops what it returns, so a
-        rejected fetch or a refused clipboard would surface only as an unhandled
-        rejection in the console. the promise is run and caught here instead
-      */
-      onClick={() => {
-        void copyImage(image).catch((error: unknown) => {
-          console.error("could not copy the image", error);
-        });
-      }}
-    >
-      Copy Image
     </Button>
   );
 }

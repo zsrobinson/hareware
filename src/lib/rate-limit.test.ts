@@ -1,12 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { RateLimited, retryAfterMs, sendPatiently } from "./rate-limit";
+import { sendPatiently } from "./rate-limit";
 
-/*
-  the waits are real `setTimeout`s, so the clock is faked and advanced by hand.
-  that is also what lets `Retry-After` be tested as a *duration* rather than as
-  "it retried eventually": the assertion is that nothing goes out before the
-  server said it could.
-*/
+/* the clock is faked, so `Retry-After` is tested as a duration */
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
@@ -37,8 +32,7 @@ test("nothing is sent again until Retry-After has elapsed", async () => {
 
   const answered = sendPatiently(send, "notion databases/x");
 
-  /* the default backoff is half a second, so a retry here would mean the
-     header was ignored rather than merely that the timing is loose */
+  /* the default backoff is shorter, so a retry here would mean the header was ignored */
   await vi.advanceTimersByTimeAsync(1_900);
   expect(send).toHaveBeenCalledTimes(1);
 
@@ -69,7 +63,6 @@ test("running out of retries throws an error that says it was rate limited", asy
   await vi.advanceTimersByTimeAsync(60_000);
 
   const thrown = await caught;
-  expect(thrown).toBeInstanceOf(RateLimited);
   expect((thrown as Error).message).toMatch(/rate limited/);
   /* and it names the call, so the log line says which read gave up */
   expect((thrown as Error).message).toContain("notion databases/x");
@@ -78,8 +71,6 @@ test("running out of retries throws an error that says it was rate limited", asy
   expect(send).toHaveBeenCalledTimes(4);
 });
 
-/* only a 429 is retried: a 403 retried three times is three requests spent on
-   the same refusal, and the caller is what knows what a status means */
 test("any other failure is handed straight back", async () => {
   const send = vi.fn().mockResolvedValue(new Response("nope", { status: 403 }));
 
@@ -89,10 +80,29 @@ test("any other failure is handed straight back", async () => {
   expect(send).toHaveBeenCalledTimes(1);
 });
 
-test("a Retry-After that is not a number is absence, not NaN in a timer", () => {
-  expect(retryAfterMs("Wed, 21 Oct 2026 07:28:00 GMT")).toBeUndefined();
-  expect(retryAfterMs("")).toBeUndefined();
-  expect(retryAfterMs(null)).toBeUndefined();
-  expect(retryAfterMs("-1")).toBeUndefined();
-  expect(retryAfterMs("1.5")).toBe(1500);
+/* a date-form or malformed header falls back to the backoff; NaN would fire at once */
+test.each([
+  ["Wed, 21 Oct 2026 07:28:00 GMT", 500],
+  ["", 500],
+  ["-1", 500],
+  ["1.5", 1_500],
+])("a Retry-After of %j waits %ims", async (header, waits) => {
+  const send = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response("rate limited", {
+        status: 429,
+        headers: { "retry-after": header },
+      }),
+    )
+    .mockResolvedValue(new Response("ok", { status: 200 }));
+
+  const answered = sendPatiently(send, "notion databases/x");
+
+  await vi.advanceTimersByTimeAsync(waits - 1);
+  expect(send).toHaveBeenCalledTimes(1);
+
+  await vi.advanceTimersByTimeAsync(1);
+  expect(send).toHaveBeenCalledTimes(2);
+  expect((await answered).status).toBe(200);
 });

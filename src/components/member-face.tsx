@@ -3,14 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import type { Faces } from "~/lib/faces";
 import { initials } from "~/lib/members/kiosk";
 
-/**
- * the discord picture beside a name, or the initials of that name.
- *
- * the ghost is left for the row there is no name to draw either — an actor id
- * the guild lookup could not resolve. A member of the roster always has a
- * name, so on the kiosk this is always initials, which read as a person where
- * a row of identical ghosts read as a fault
- */
+/** the discord picture, else initials, else a ghost when there is no name */
 export function MemberFace({
   discordId,
   name,

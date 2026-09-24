@@ -50,11 +50,6 @@ test("a schema notion refused is a failure, not a silent skip", async () => {
   expect((await refreshCommands(env)).outcome).toBe("failed");
 });
 
-/*
-  the alarm for notion quietly stopping sharing something. the write paths
-  refuse too, but only when somebody tries to credit a Member — which could be
-  weeks away. this says so the same day
-*/
 test("reports a property notion has stopped sharing", async () => {
   const without = schema();
   delete (without.properties as Record<string, unknown>)[
@@ -68,10 +63,7 @@ test("reports a property notion has stopped sharing", async () => {
   expect(result.summary).toContain(ARTICLE_PROPERTIES.author.name);
 });
 
-/*
-  a read that half worked. registering it publishes a required picker with no
-  choices in it, and an editor opens an empty dropdown
-*/
+/* a half-worked read would register a required picker with no choices */
 test("refuses when one picker came back with no options", async () => {
   answering(
     schema({
@@ -86,4 +78,28 @@ test("refuses when one picker came back with no options", async () => {
 
   expect(result.outcome).toBe("failed");
   expect(result.summary).toContain(ARTICLE_PROPERTIES.imageStatus.name);
+});
+
+test("says how many options a picker lost to Discord's limit of 25", async () => {
+  answering(
+    schema({
+      [ARTICLE_PROPERTIES.section.name]: {
+        type: "select",
+        select: {
+          options: options(Array.from({ length: 27 }, (_, i) => `S${i}`)),
+        },
+      },
+    }),
+  );
+
+  const result = await refreshCommands({
+    ...env,
+    DISCORD_BOT_TOKEN: "bot",
+  } as Env);
+
+  expect(result.outcome).toBe("misconfigured");
+  expect(result.summary).toContain(
+    `${ARTICLE_PROPERTIES.section.name} has 27 options`,
+  );
+  expect(result.summary).toContain("2 are missing");
 });

@@ -1,33 +1,15 @@
 /*
-  the two decisions the kiosk makes before a human touches it: which meeting it
-  is, and which of the fifty names in the roster to offer somebody halfway
-  through typing theirs.
-
-  both are pure and live here rather than in the island, because they are the
-  parts that can be wrong. ADR 0010 puts this laptop at the front of a room
-  with a queue of people in front of it, and the two failures it names are a
-  typo creating a second copy of somebody and a tap landing on the wrong
-  existing person. autocomplete fixes the first and causes the second, so the
-  ranking below never collapses two people into one offer — it hands both to
-  the room and makes them different enough to tell apart.
+  the kiosk's decisions: which meeting it opens on, and which names to offer
+  somebody typing theirs. A wrong tap files attendance on the wrong person or
+  meeting, silently. ADR 0010.
 */
 
 import type { Faces } from "~/lib/faces";
-import { normaliseName } from "~/lib/articles/member";
+import { normaliseName } from "./match";
 import { plural } from "~/lib/utils";
 import type { MeetingRecord, Person } from "./records";
 
-/**
- * the short line under a name that tells two people apart.
- *
- * the whole address rather than its domain: two people with one name and one
- * domain are the pair this has to separate, and `@terpmail.umd.edu` twice
- * separates nothing.
- *
- * a person with neither an email nor a credit gets "no email on file", which
- * is deliberately a slightly uncomfortable thing to read: it is the row most
- * likely to be a duplicate
- */
+/** the line under a name that tells two people apart; the whole address, since the domain is shared */
 export function distinguish(person: Person): string {
   const parts: string[] = [];
 
@@ -42,14 +24,7 @@ export function distinguish(person: Person): string {
   return parts.join(" · ");
 }
 
-/**
- * whether two offers would look identical on the kiosk.
- *
- * used by the island to decide when to *insist* on the second line rather than
- * merely show it. two rows with the same name and nothing to separate them are
- * not a pick a person can make correctly, and the kiosk says so instead of
- * letting somebody guess
- */
+/** whether two offers would look identical on the kiosk */
 export function indistinguishable(a: Person, b: Person): boolean {
   return (
     normaliseName(a.name) === normaliseName(b.name) &&
@@ -58,20 +33,8 @@ export function indistinguishable(a: Person, b: Person): boolean {
 }
 
 /**
- * the roster narrowed to what somebody has typed so far.
- *
- * matched on a normalised form so accents, punctuation and case do not have to
- * be reproduced by a person standing up: `normaliseName` already folds all
- * three for byline matching, and the kiosk wants exactly the same tolerance.
- *
- * ranked prefix-first because people type their own name from the front, and
- * an infix hit ("ann" inside "Joanna") is a real match but a less likely one.
- * ties break on name so the order does not change under the fingers of
- * somebody who is mid-tap.
- *
- * an empty query returns nothing rather than everybody: the kiosk's first
- * screen is an invitation to type, and dumping fifty names into it makes the
- * wrong-person tap more likely, not less
+ * the roster narrowed to what somebody has typed, prefix matches first and
+ * ties by name so the order holds still mid-tap. An empty query offers nobody
  */
 export function searchCandidates(
   roster: Person[],
@@ -93,21 +56,9 @@ export function searchCandidates(
 }
 
 /**
- * the meeting the kiosk opens on.
- *
- * today's if there is one, and otherwise the most recent one already past.
- * never a future meeting: the calendar holds the whole semester, and opening
- * on next week's general body would file tonight's attendance against it —
- * silently, and discovered only when somebody's eligibility is short.
- *
- * a past meeting is the safer default for the same reason it is the likelier
- * one: an officer who opens this at 7pm is either at tonight's meeting or
- * catching up on the last one.
- *
- * editorial board meetings are candidates here even though they count toward
- * nothing. attendance is a record of what happened, and the counting rule
- * lives in `standing.ts` — filtering them out here would mean the board could
- * not use the kiosk at all
+ * today's meeting, else the latest past one; never a future one, which would
+ * take tonight's attendance silently. Every type is a candidate: what counts
+ * is `standing.ts`'s business
  */
 export function defaultMeeting(
   meetings: MeetingRecord[],
@@ -115,21 +66,13 @@ export function defaultMeeting(
 ): MeetingRecord | null {
   const dated = meetings
     .filter((meeting) => meeting.date)
-    .map((meeting) => ({ meeting, day: meeting.date.slice(0, 10) }))
-    .filter((entry) => entry.day <= today)
-    .sort((a, b) => b.day.localeCompare(a.day));
+    .filter((meeting) => meeting.date <= today)
+    .sort((a, b) => b.date.localeCompare(a.date));
 
-  return dated[0]?.meeting ?? null;
+  return dated[0] ?? null;
 }
 
-/**
- * a meeting's name without the date somebody typed into it.
- *
- * the calendar's rows are named "General Body Meeting 2026-09-08", and the
- * kiosk shows the date in its own column already. Presentation only: notion is
- * never rewritten, so a row whose name is nothing but a date keeps it rather
- * than becoming blank
- */
+/** a meeting's name without a trailing date, unless the date is all it has */
 export function meetingLabel(name: string): string {
   const stripped = name.replace(/[\s–—-]*\d{4}-\d{2}-\d{2}\s*$/, "");
   return stripped.trim() || name.trim();
@@ -138,7 +81,6 @@ export function meetingLabel(name: string): string {
 /** how far back the picker reaches before somebody has to pass `?meeting=` */
 const WINDOW_MONTHS = 1;
 
-/** an ISO day some number of months before another, clamped by the calendar */
 function monthsBefore(day: string, months: number): string {
   const at = new Date(`${day}T00:00:00Z`);
   at.setUTCMonth(at.getUTCMonth() - months);
@@ -146,17 +88,9 @@ function monthsBefore(day: string, months: number): string {
 }
 
 /**
- * the meetings worth offering, newest first.
- *
- * a semester of history in one select is a list nobody reads, and the row that
- * gets tapped by accident is an old one — filing tonight's attendance against
- * a meeting last spring, silently. So the picker holds the past month and
- * everything ahead.
- *
- * `pinned` is the exception, and it is why this takes an argument rather than
- * a date alone: `?meeting=` is how somebody backfills an old meeting on
- * purpose, and a picker that dropped the meeting the page is currently showing
- * would render a select with no selection and no way back to it
+ * the past month and everything ahead, newest first, so an old meeting is
+ * hard to tap by accident. `pinned` (from `?meeting=`) stays even when older,
+ * or the select would lose the meeting it is showing
  */
 export function offerableMeetings(
   meetings: MeetingRecord[],
@@ -167,20 +101,11 @@ export function offerableMeetings(
 
   return meetings
     .filter((meeting) => meeting.date)
-    .filter(
-      (meeting) =>
-        meeting.date.slice(0, 10) >= from || meeting.pageId === pinned,
-    )
+    .filter((meeting) => meeting.date >= from || meeting.pageId === pinned)
     .sort((a, b) => b.date.localeCompare(a.date));
 }
 
-/**
- * the two letters an avatar falls back to when nothing is linked to Discord.
- *
- * first and last of what somebody typed, because middle names are common on a
- * roster typed from applications and "MK" for Mary Kate Ellis is the wrong
- * pair. A single name gets one letter rather than a doubled one
- */
+/** an avatar's fallback: first and last initials, skipping middle names */
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "";
@@ -189,17 +114,6 @@ export function initials(name: string): string {
   const last = parts[parts.length - 1]![0]!;
 
   return (parts.length === 1 ? first : first + last).toUpperCase();
-}
-
-/**
- * what to call somebody on screen.
- *
- * always the name on their Notion row. The Discord handle belongs on the
- * Discord chip, where it says which account is linked; using it as the title
- * hid the name the room is actually looking for
- */
-export function shownName(person: Person): string {
-  return person.name;
 }
 
 /** the linked Discord handle, for the chip that names the account */

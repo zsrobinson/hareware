@@ -1,11 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
-import {
-  toContribution,
-  toMeeting,
-  toPerson,
-  meetings,
-  people,
-} from "./roster";
+import { ARTICLES_DATA_SOURCE_ID } from "~/lib/articles/config";
+import { corpus, meetings, statusOptions, toPerson } from "./roster";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -17,6 +12,29 @@ const richText = (text: string) => ({
   type: "rich_text",
   rich_text: [{ plain_text: text }],
 });
+
+/** one Meetings row, read through `meetings` */
+async function toMeeting(row: { id: string; properties: object }) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ results: [row], has_more: false })),
+  );
+  return (await meetings("token"))[0]!;
+}
+
+/** one Articles row, read through `corpus` */
+async function toContribution(row: { id: string; properties: object }) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) =>
+      Response.json({
+        results: String(url).includes(ARTICLES_DATA_SOURCE_ID) ? [row] : [],
+        has_more: false,
+      }),
+    ),
+  );
+  return (await corpus("token")).contributions[0]!;
+}
 
 test("a Members row reads into a Person", () => {
   const person = toPerson({
@@ -39,8 +57,6 @@ test("a Members row reads into a Person", () => {
   });
 });
 
-/* the difference between "no id" and "empty id" is the difference between a row
-   we may link and a row we may not */
 test("an empty Discord ID reads as null, never as an empty string", () => {
   const person = toPerson({
     id: "p1",
@@ -50,11 +66,6 @@ test("an empty Discord ID reads as null, never as an empty string", () => {
   expect(person.discordId).toBeNull();
 });
 
-/*
-  the all-time count notion computes as `prop("Articles Count") +
-  prop("Images Count")`, so a screen that only wants the total does not read
-  every article the club has published to work it out
-*/
 test("the Contributions formula reads as its number", () => {
   const person = toPerson({
     id: "p1",
@@ -70,8 +81,7 @@ test("the Contributions formula reads as its number", () => {
   expect(person.contributions).toBe(3);
 });
 
-/* a property the integration cannot read is omitted from the payload entirely,
-   and a badge reading "NaN contributions" is the loud end of a quiet problem */
+/* an unreadable property is omitted, and must not become NaN */
 test("a missing Contributions property counts as none rather than NaN", () => {
   const person = toPerson({ id: "p1", properties: { Name: title("Ada") } });
 
@@ -108,9 +118,7 @@ test("a missing email and a missing status are null rather than absent", () => {
   expect(person.status).toBeNull();
 });
 
-/* the options belong to notion and the pickers read them from the schema, so
-   an option this repository has never seen is a label and not an error. only
-   an empty select is "we do not know", which is what the reconciler chases */
+/* an option this repository has never seen is a label, not an error */
 test("a Status notion has and we do not is kept, not coerced to unknown", () => {
   const person = toPerson({
     id: "p1",
@@ -123,8 +131,8 @@ test("a Status notion has and we do not is kept, not coerced to unknown", () => 
   expect(person.status).toBe("Faculty");
 });
 
-test("a Meetings row reads its type and its attendees", () => {
-  const meeting = toMeeting({
+test("a Meetings row reads its type and its attendees", async () => {
+  const meeting = await toMeeting({
     id: "m1",
     properties: {
       Name: title("General Body Meeting"),
@@ -138,8 +146,8 @@ test("a Meetings row reads its type and its attendees", () => {
   expect(meeting.attendeeIds).toEqual(["p1", "p2"]);
 });
 
-test("a meeting with no date reads as empty, so no window can contain it", () => {
-  const meeting = toMeeting({
+test("a meeting with no date reads as empty, so no window can contain it", async () => {
+  const meeting = await toMeeting({
     id: "m1",
     properties: {
       Name: title("TBD"),
@@ -151,14 +159,28 @@ test("a meeting with no date reads as empty, so no window can contain it", () =>
   expect(meeting.attendeeIds).toEqual([]);
 });
 
-test("an unreadable attendee relation refuses to compute standing", () => {
-  expect(() =>
-    toMeeting({ id: "m1", properties: { Name: title("Meeting") } }),
-  ).toThrow(/Attendees relation is not readable/);
+/* 9pm Eastern on the 9th is 1am UTC on the 10th */
+test("a meeting with a time falls on its Eastern day", async () => {
+  const meeting = await toMeeting({
+    id: "m1",
+    properties: {
+      Name: title("General Body Meeting"),
+      Date: { type: "date", date: { start: "2026-09-10T01:00:00.000Z" } },
+      Attendees: { type: "relation", relation: [] },
+    },
+  });
+
+  expect(meeting.date).toBe("2026-09-09");
 });
 
-test("an Article reads its two credits separately", () => {
-  const article = toContribution({
+test("an unreadable attendee relation refuses to compute standing", async () => {
+  await expect(
+    toMeeting({ id: "m1", properties: { Name: title("Meeting") } }),
+  ).rejects.toThrow(/Attendees relation is not readable/);
+});
+
+test("an Article reads its two credits separately", async () => {
+  const article = await toContribution({
     id: "a1",
     properties: {
       Headline: title("Something happened"),
@@ -173,8 +195,34 @@ test("an Article reads its two credits separately", () => {
   expect(article.date).toBe("2026-03-04");
 });
 
-test("an unreadable credit relation refuses to compute standing", () => {
-  expect(() =>
+test("an article published at night falls on its Eastern day", async () => {
+  const article = await toContribution({
+    id: "a1",
+    properties: {
+      Headline: title("Something happened"),
+      "Publication Date": {
+        type: "date",
+        date: { start: "2026-04-01T02:30:00.000Z" },
+      },
+      Author: { type: "relation", relation: [] },
+      "Image Crew": { type: "relation", relation: [] },
+    },
+  });
+
+  expect(article.date).toBe("2026-03-31");
+});
+
+test("a schema with no Status select is refused, not read as no options", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify({ properties: {} }))),
+  );
+
+  await expect(statusOptions("secret")).rejects.toThrow(/no readable Status/);
+});
+
+test("an unreadable credit relation refuses to compute standing", async () => {
+  await expect(
     toContribution({
       id: "a1",
       properties: {
@@ -183,73 +231,10 @@ test("an unreadable credit relation refuses to compute standing", () => {
         Author: { type: "relation", relation: [] },
       },
     }),
-  ).toThrow(/Image Crew relation is not readable/);
+  ).rejects.toThrow(/Image Crew relation is not readable/);
 });
 
-/*
-  the paging test. a reader that stops at the first page returns a plausible
-  answer quietly missing everybody after the hundredth, which for an election is
-  the worst shape a bug can take here
-*/
-test("every page is followed, not just the first", async () => {
-  const page = (n: number) => ({
-    id: `p${n}`,
-    properties: { Name: title(`Member ${n}`) },
-  });
-
-  const bodies: unknown[] = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (_url: string, init?: RequestInit) => {
-      const body = JSON.parse(init!.body as string) as {
-        start_cursor?: string;
-      };
-      bodies.push(body);
-
-      if (!body.start_cursor) {
-        return new Response(
-          JSON.stringify({
-            results: [page(1), page(2)],
-            has_more: true,
-            next_cursor: "second",
-          }),
-        );
-      }
-
-      return new Response(
-        JSON.stringify({ results: [page(3)], has_more: false }),
-      );
-    }),
-  );
-
-  const roster = await people("token");
-
-  expect(roster.map((one) => one.pageId)).toEqual(["p1", "p2", "p3"]);
-  expect(bodies).toHaveLength(2);
-});
-
-test("a cursor that says has_more but sends none stops rather than looping", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({ results: [], has_more: true, next_cursor: null }),
-        ),
-    ),
-  );
-
-  await expect(people("token")).resolves.toEqual([]);
-});
-
-/*
-  the cap where it is actually needed.
-
-  `together` has its own test, and a helper can be perfectly tested while
-  nothing calls it: this is the one that goes red if `corpus` is written back
-  as a `Promise.all`. `/standing` reads all three databases on every visit, and
-  four notion requests in one tick is over the budget before any has answered.
-*/
+/* goes red if `corpus` becomes a `Promise.all` */
 test("corpus never has more than two notion requests in flight", async () => {
   let running = 0;
   let most = 0;
@@ -269,19 +254,13 @@ test("corpus never has more than two notion requests in flight", async () => {
     }),
   );
 
-  const { corpus } = await import("./roster");
   await corpus("secret");
 
   expect(most).toBeLessThanOrEqual(2);
   expect(most).toBeGreaterThan(1);
 });
 
-/*
-  notion answers a relation with at most 25 entries wherever it appears inside
-  a page and flags the rest with `has_more`. A general body meeting is thirty
-  people, so counting straight from the query leaves five of them a meeting
-  short of a vote, and nothing about the answer looks short
-*/
+/* a general body meeting is more than the 25 a query shows */
 test("a truncated attendee relation is read in full, not counted short", async () => {
   const asked: string[] = [];
 
@@ -298,8 +277,7 @@ test("a truncated attendee relation is read in full, not counted short", async (
                 id: "m1",
                 properties: {
                   Name: title("General Body"),
-                  /* the shape notion really answers with: the property id is
-                     already percent-encoded when it arrives */
+                  /* notion sends the property id already percent-encoded */
                   Attendees: {
                     type: "relation",
                     id: "c%3CLo",
@@ -336,22 +314,12 @@ test("a truncated attendee relation is read in full, not counted short", async (
   const [meeting] = await meetings("token");
 
   expect(meeting!.attendeeIds).toEqual(["p1", "p2", "p3"]);
-  /*
-    the id exactly as notion gave it, never encoded again.
-
-    measured against the real database: `c%3CLo` answers with the twelve
-    related pages, and `c%253CLo` — the same id through `encodeURIComponent` —
-    answers 200 with an empty list. An empty relation is the one wrong answer
-    that does no harm here and great harm in `recordAttendance`, which merges
-    against what notion holds: an empty answer for a meeting of thirty reads as
-    an empty room, and the next tap writes that back
-  */
+  /* verbatim: encoded again, notion answers 200 with an empty list */
   expect(asked[1]).toContain("/pages/m1/properties/c%3CLo");
   expect(asked[1]).not.toContain("c%253CLo");
 });
 
-/* the extra read is a whole round trip per meeting, so it happens only for the
-   meetings notion actually cut short */
+/* the extra read happens only for a relation notion cut short */
 test("a relation notion answered in full costs no second read", async () => {
   const fetched = vi.fn(
     async () =>

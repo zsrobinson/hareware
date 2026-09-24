@@ -1,23 +1,10 @@
 /*
-  what each of ADR 0010's pages reads, in one place.
-
-  the pages are server-rendered and their islands re-ask the same question
-  after a mutation, so every one of these shapes is written twice: once by the
-  `.astro` page that hands it down as `initialData`, and once by the GET route
-  under `~/pages/api/members` that answers the refetch. Two copies of "what the
-  reconciler shows" would drift, and the way they would drift is the shape this
-  repo keeps meeting — a page and its refresh disagreeing about who is on the
-  roster, with nothing announcing it.
-
-  so the page and the route both call one function here, and neither knows how
-  the answer is assembled. Nothing in this module decides anything: it reads,
-  and hands the reads to the pure functions in `kiosk.ts`, `match.ts` and
-  `group.ts` that already know what they mean.
+  what each ADR 0010 page shows. The page renders it and its GET route answers
+  the island's refetch from the same function, so the two cannot disagree.
 */
 
 import { together } from "~/lib/services/notion/client";
-import { approvedApplications } from "~/lib/services/discord/join-requests";
-import type { Application } from "~/lib/services/discord/join-requests";
+import { approvedApplications, type Application } from "./applications";
 
 import { defaultMeeting, offerableMeetings } from "./kiosk";
 import { duplicates, resolveApplications, suggestDiscordLinks } from "./match";
@@ -27,58 +14,62 @@ import type {
   GuildAccount,
   Resolution,
 } from "./match";
-import { requireGuildMembers } from "~/lib/member";
+import { readGuildMembers } from "~/lib/member";
 import type { Profile } from "~/lib/member";
+import type { Faces } from "~/lib/faces";
 import type { MeetingRecord, Person } from "./records";
 import { meetings, people, statusOptions } from "./roster";
 import { alumOptionMissing, FALLBACK_MEMBER_STATUSES } from "./config";
+import { errorMessage } from "~/lib/utils";
 
-/** the bindings these reads need, so nothing here reaches for a global */
-export type ViewEnv = {
+type ViewEnv = {
   NOTION_TOKEN?: string;
   DISCORD_BOT_TOKEN?: string;
-  DB?: D1Database;
 };
 
-/**
- * notion's Status options, falling back rather than offering nobody a status.
- *
- * an empty answer means the schema could not be read, which is not the same as
- * notion having no options — `alumMissing` beside it is the loud version of
- * that distinction, and it is computed from the live list, never the fallback
- */
-async function statuses(token: string | undefined) {
-  const live = token
-    ? await statusOptions(token).catch(() => [] as string[])
-    : [];
+const NO_NOTION = "NOTION_TOKEN is not set, so the roster cannot be read.";
 
-  return {
-    live,
-    offered: live.length ? live : FALLBACK_MEMBER_STATUSES,
-    alumMissing: alumOptionMissing(live),
-  };
+/**
+ * notion's Status options, or the fallback with a `problem` saying so;
+ * `alumMissing` only from a list notion gave
+ */
+export async function readStatuses(token: string | undefined) {
+  const unread = (problem: string) => ({
+    live: [] as string[],
+    offered: FALLBACK_MEMBER_STATUSES,
+    alumMissing: false,
+    problem,
+  });
+
+  if (!token) return unread(NO_NOTION);
+
+  try {
+    const live = await statusOptions(token);
+    return {
+      live,
+      offered: live,
+      alumMissing: alumOptionMissing(live),
+      problem: null,
+    };
+  } catch (thrown) {
+    return unread(
+      `Notion's Status options could not be read, so the ones offered are a fallback: ${errorMessage(thrown)}`,
+    );
+  }
 }
 
-/** everything the kiosk draws, minus the discord pictures the page adds */
+/** everything the kiosk draws except the discord pictures */
 export type KioskData = {
-  /** already narrowed to the window, newest first */
   meetings: MeetingRecord[];
-  /* the roster itself: a Person carries the all-time contribution count the
-     picker disambiguates with, read from notion's `Contributions` formula
-     rather than from the article corpus */
   candidates: Person[];
   /** the meeting to open on: `asked` where it exists, else today's */
   openingId: string | null;
   statuses: string[];
+  /** why part of this could not be read from notion */
+  notionProblem: string | null;
 };
 
-/**
- * the roster and the calendar as the kiosk needs them.
- *
- * `asked` is the `meeting` search param and wins over today's, so a refetch
- * mid-meeting comes back to the one the room is signing into rather than
- * rolling forward onto a meeting nobody is at
- */
+/** `asked` (the `?meeting=` param) wins over today's meeting */
 export async function kioskData(
   env: ViewEnv,
   today: string,
@@ -86,72 +77,56 @@ export async function kioskData(
 ): Promise<KioskData> {
   const token = env.NOTION_TOKEN;
   if (!token) {
-    return { meetings: [], candidates: [], openingId: null, statuses: [] };
+    return {
+      meetings: [],
+      candidates: [],
+      openingId: null,
+      statuses: [],
+      notionProblem: NO_NOTION,
+    };
   }
 
   const [roster, calendar, options] = await together([
     () => people(token),
     () => meetings(token),
-    () => statuses(token),
+    () => readStatuses(token),
   ]);
 
   const chosen = calendar.find((meeting) => meeting.pageId === asked);
   const opening = chosen ?? defaultMeeting(calendar, today);
 
   return {
-    /* the past month and everything ahead, plus whatever `?meeting=` named: a
-       semester of history in one select is where a mis-tap files tonight's
-       room against a meeting last spring */
     meetings: offerableMeetings(calendar, today, opening?.pageId ?? null),
     candidates: roster,
     openingId: opening?.pageId ?? null,
     statuses: options.offered,
+    notionProblem: options.problem,
   };
 }
 
 export type ReconcilerData = {
   resolutions: Resolution[];
   duplicates: Duplicate[];
-  /** rows whose `Status` select is empty, the one field a person maintains */
+  /** rows with no Status */
   unknownStatus: Person[];
   statuses: string[];
-  /**
-   * the whole roster, for the comparison the browser does itself.
-   *
-   * the google group cannot be read by software, so an editor exports its
-   * members and the page diffs the file against this. Sending the roster and
-   * keeping the file in the browser means the export never touches a server
-   */
+  /** the whole roster, for the Google Group comparison the browser runs */
   roster: Person[];
-  /** rows that could be linked to an account already in the server */
   discordSuggestions: DiscordSuggestion[];
-  /**
-   * the whole guild, for the edit dialog's Discord autocomplete.
-   *
-   * the same read the suggestions come from, so it costs nothing extra: an
-   * editor fixing an address on this page can fix a missing account beside it
-   */
+  /** the whole guild, for the edit dialog's Discord autocomplete */
   guild: GuildAccount[];
-  /** notion's live options, named in the banner when the alum one is gone */
+  /** every guild account's picture, so applicants and later links are drawn */
+  faces: Faces;
+  /** notion's live options, for the banner when the alum one is gone */
   liveStatuses: string[];
   alumMissing: boolean;
-  /**
-   * why applications could not be read, or null when they could.
-   *
-   * a state rather than an empty list: "discord said nobody has applied" and
-   * "we could not ask discord" are the same empty array, and the reconciler is
-   * the page somebody opens the morning of an election
-   */
+  /** why discord could not be read, so a failure is not an empty list */
   discordProblem: string | null;
+  /** the same, for notion */
+  notionProblem: string | null;
 };
 
-/**
- * everything waiting for a human, read together.
- *
- * the discord failure is caught on its own read rather than thrown: most of
- * this page does not need discord, and a page that 500s because a bot token
- * expired would take the merge tool down with it
- */
+/** discord failures are reported rather than thrown: most of the page does not need it */
 export async function reconcilerData(env: ViewEnv): Promise<ReconcilerData> {
   const token = env.NOTION_TOKEN;
   const bot = env.DISCORD_BOT_TOKEN;
@@ -165,19 +140,17 @@ export async function reconcilerData(env: ViewEnv): Promise<ReconcilerData> {
     token ? people(token) : Promise.resolve([] as Person[]),
     bot
       ? approvedApplications(bot).catch((thrown: unknown) => {
-          applicationProblem =
-            thrown instanceof Error ? thrown.message : String(thrown);
+          applicationProblem = errorMessage(thrown);
           return [] as Application[];
         })
       : Promise.resolve([] as Application[]),
-    /* one request for the whole server. suggestions depend on this list, so a
-       failed read is preserved as a visible problem rather than interpreted as
-       a real empty guild */
-    requireGuildMembers(bot).catch((thrown: unknown) => {
-      guildProblem = thrown instanceof Error ? thrown.message : String(thrown);
-      return new Map<string, Profile>();
-    }),
-    statuses(token),
+    bot
+      ? readGuildMembers(bot).catch((thrown: unknown) => {
+          guildProblem = errorMessage(thrown);
+          return new Map<string, Profile>();
+        })
+      : Promise.resolve(new Map<string, Profile>()),
+    readStatuses(token),
   ]);
 
   const accounts = [...guild].map(([id, profile]) => ({
@@ -194,9 +167,11 @@ export async function reconcilerData(env: ViewEnv): Promise<ReconcilerData> {
     roster,
     discordSuggestions: suggestDiscordLinks(roster, accounts),
     guild: accounts,
+    faces: Object.fromEntries(guild),
     liveStatuses: options.live,
     alumMissing: options.alumMissing,
     discordProblem:
       [applicationProblem, guildProblem].filter(Boolean).join(" ") || null,
+    notionProblem: options.problem,
   };
 }

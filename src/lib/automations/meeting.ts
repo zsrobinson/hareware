@@ -1,11 +1,4 @@
-/*
-  the meeting reminder: if there is an Editorial Board meeting in Notion today,
-  say so in #editorial-board before anyone has to ask.
-
-  everything about *how* to talk to Notion lives in ~/lib/services/notion. What
-  is left here is what makes this reminder this reminder — which database, which
-  rows count, and what the message says.
-*/
+/* If Meetings has an Editorial Board meeting today, say so in #editorial-board. */
 
 import {
   buttons,
@@ -14,7 +7,6 @@ import {
   text,
 } from "~/lib/services/discord/post-message";
 import {
-  dataSource,
   propertyOfType,
   query,
   richText,
@@ -23,34 +15,32 @@ import {
 } from "~/lib/services/notion/client";
 import { easternDayWindow, startsOn } from "~/lib/services/notion/dates";
 import { easternTime, type EasternNow } from "~/lib/eastern";
-import { MEETING_PROPERTIES } from "~/lib/members/config";
-import { misconfigured, ok, skipped, type Result } from "./registry";
+import {
+  MEETINGS_DATA_SOURCE_ID,
+  MEETING_PROPERTIES,
+  MEETING_TYPE,
+} from "~/lib/members/config";
+import { misconfigured, ok, skipped, type Result } from "~/lib/result";
 import {
   BOARD_CHANNEL_ID,
   MEETING_DATE_PROPERTY,
   MEETING_MENTION_ROLE_ID,
   MEETING_TITLE_PREFIX,
-  MEETINGS_DATABASE_ID,
 } from "./config";
 
 export async function sendMeetingReminder(
   env: Env,
   eastern: EasternNow,
 ): Promise<Result> {
-  // the code must stay inert until the club actually sets these up — see ADR
-  // 0006's "setup outside the repo"
   const missing = [
     !env.NOTION_TOKEN && "NOTION_TOKEN",
     !env.DISCORD_BOT_TOKEN && "DISCORD_BOT_TOKEN",
-    !MEETINGS_DATABASE_ID && "MEETINGS_DATABASE_ID",
   ].filter(Boolean);
-  /* not `ok`: nothing ran, and a row saying otherwise is the failure ADR 0007
-     exists to prevent */
   if (missing.length > 0)
     return misconfigured(`meeting reminder unset: ${missing.join(", ")}`);
 
   const token = env.NOTION_TOKEN!;
-  const source = await dataSource(MEETINGS_DATABASE_ID!, token);
+  const source = MEETINGS_DATA_SOURCE_ID;
   const property = await propertyOfType(
     source,
     token,
@@ -59,7 +49,6 @@ export async function sendMeetingReminder(
   );
   const page = await findTodaysMeeting(token, source, property, eastern.date);
 
-  // a genuinely quiet day, which is a different thing from a broken one
   if (!page)
     return skipped(
       `no ${MEETING_TITLE_PREFIX} meeting today (${eastern.date})`,
@@ -84,17 +73,10 @@ export async function sendMeetingReminder(
     },
   );
 
-  // a dry run posts nothing, and saying "posted" made a message that never
-  // went out indistinguishable from one that did
   const verb = env.REMINDERS_DRY_RUN ? "would post" : "posted";
 
-  /*
-    the fallback announces itself rather than waiting to be remembered. the
-    title match exists only until every Meetings row carries a `Type`, and a
-    migration bridge nobody is reminded of is a permanent special case — this
-    is the line that tells somebody the constant can go
-  */
-  const untyped = page.properties[MEETING_PROPERTIES.type.name]?.select?.name
+  /* says when the title fallback matched, so it can be retired */
+  const untyped = meetingType(page)
     ? ""
     : " (matched on its title: this row has no Type set)";
 
@@ -102,14 +84,9 @@ export async function sendMeetingReminder(
 }
 
 /**
- * today's meeting of the kind we care about, if there is one.
- *
- * the window-plus-predicate shape is not optional — `easternDayWindow` explains
- * why asking Notion for one day does not work
+ * Today's board meeting. A window plus a filter, since Notion's date equality
+ * fails (`easternDayWindow`).
  */
-/** the `Type` a meeting must carry for the board reminder to claim it */
-const BOARD_MEETING_TYPE = "Editorial Board";
-
 async function findTodaysMeeting(
   token: string,
   source: string,
@@ -127,40 +104,28 @@ async function findTodaysMeeting(
 }
 
 /**
- * whether a meeting row is an editorial board meeting.
- *
- * ADR 0010 added a `Type` select to Meetings, which is what this should read
- * and now does. The title prefix survives as a **fallback for untyped rows**
- * only, because every row that existed when `Type` was added has it empty:
- * deleting the prefix match outright would have stopped the reminder finding
- * anything, silently, on the morning after deploy — which is the failure
- * `docs/agents/silent-failures.md` is about.
- *
- * so `Type` wins wherever it is set, and the prefix answers only for rows
- * nobody has typed yet. Once the Meetings database has a `Type` on every row,
- * the fallback and `MEETING_TITLE_PREFIX` can both go, and nothing else needs
- * to change.
+ * By `Type` (ADR 0010), falling back to the title prefix for rows with no Type
+ * yet. The fallback and `MEETING_TITLE_PREFIX` go once every row has a Type.
  */
 function isBoardMeeting(page: NotionPage): boolean {
-  const type = page.properties[MEETING_PROPERTIES.type.name]?.select?.name;
+  const type = meetingType(page);
 
-  /* an explicitly typed row is answered by its type, including when the answer
-     is no — a General Body meeting whose title happens to begin "Editorial
-     Board" must not ping the board */
-  if (type) return type === BOARD_MEETING_TYPE;
+  /* a typed row is answered by its Type, even against its title */
+  if (type) return type === MEETING_TYPE.editorialBoard;
 
-  // titles carry stray trailing spaces, so compare a trimmed lowercase form
   return title(page)
     .trim()
     .toLowerCase()
     .startsWith(MEETING_TITLE_PREFIX.toLowerCase());
 }
 
-/**
- * the one line the reminder says, assembled from what the row actually has —
- * a meeting with no time or no location set simply loses that clause rather
- * than announcing itself as "at undefined"
- */
+function meetingType(page: NotionPage): string | undefined {
+  return (
+    page.properties[MEETING_PROPERTIES.type.name]?.select?.name ?? undefined
+  );
+}
+
+/** the reminder's line; a missing time or location drops its clause */
 function meetingLine(page: NotionPage, property: string): string {
   const mention = MEETING_MENTION_ROLE_ID
     ? `<@&${MEETING_MENTION_ROLE_ID}> `
@@ -171,7 +136,6 @@ function meetingLine(page: NotionPage, property: string): string {
   return [
     `${mention}**Meeting Tonight**`,
     time && ` at ${time}`,
-    /* notion text, on a line that mentions @Editorial Board — see `inert` */
     location && ` in ${inert(location)}`,
   ]
     .filter(Boolean)

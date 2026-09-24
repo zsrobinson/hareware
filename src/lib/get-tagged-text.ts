@@ -49,7 +49,7 @@ export function getTaggedText(body: Element[]) {
 }
 
 // tbh this is from chat
-export function encodeTaggedAscii(input: string): string {
+function encodeTaggedAscii(input: string): string {
   let out = "";
 
   // Iterate UTF-16 code units so supplementary chars become surrogate pairs (<0xD83D><0xDE00>)

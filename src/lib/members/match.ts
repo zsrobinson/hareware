@@ -1,34 +1,32 @@
 /*
-  deciding which Members row an application belongs to, and which rows are two
-  copies of one person.
-
-  ADR 0010 puts a kiosk in the room at general body meetings, and the kiosk
-  creates people: somebody attends their first meeting before they ever apply
-  on discord, so rows are now born with a name and no snowflake. That is the
-  whole reason this file exists — until it, a Members row either carried an id
-  or was matched by name at the moment an editor credited it.
-
-  the rule throughout is the one `~/lib/articles/member` already follows: never
-  guess. every uncertain outcome is returned for a person to decide on the
-  reconciler, and the unattended cron acts on exactly one of them.
+  which Members row an application belongs to, and which rows are one person
+  twice. Never guesses: every uncertain outcome goes to a person on the
+  reconciler, and the cron acts only on `new`. ADR 0009 and ADR 0010.
 */
 
-import { normaliseName } from "~/lib/articles/member";
-import type { Application } from "~/lib/services/discord/join-requests";
+import type { Application } from "./applications";
 import type { Person } from "./records";
+
+/**
+ * case, accents, punctuation and spacing folded, and nothing more: "Matthew"
+ * and "Mathew" stay two people, because a looser match joins real members
+ */
+export function normaliseName(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[^\p{Letter}\p{Number}\s]/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
 
 /** an email reduced to what two spellings of one address share */
 export function normaliseEmail(email: string | null): string {
   return (email ?? "").trim().toLowerCase();
 }
 
-/**
- * what an application resolves to.
- *
- * six outcomes rather than a match-or-not, because they send a person in
- * different directions and flattening any two of them is how a roster acquires
- * a second copy of somebody
- */
+/** what an application resolves to. Each outcome sends a person somewhere different */
 export type Resolution =
   /** a row already carries this snowflake; there is nothing to do */
   | { status: "linked"; application: Application; person: Person }
@@ -43,28 +41,14 @@ export type Resolution =
   /** several id-less rows could be — a person picks */
   | { status: "ambiguous"; application: Application; people: Person[] }
   /**
-   * nothing matches, but an id-less row is one keystroke away from matching.
-   *
-   * not linkable — `normaliseName` deliberately keeps "Matthew" and "Mathew"
-   * apart, because a matcher loose enough to join them joins real members too.
-   * But it is not safe to *create* over either: doing so makes exactly the
-   * duplicate the reconciler exists to catch, and a duplicate splits somebody's
-   * attendance and can cost them a vote. So the cron stops and a person decides
+   * nothing matches, but an id-less row is one edit away. Too loose to link and
+   * unsafe to create over: a duplicate splits somebody's attendance
    */
   | { status: "similar"; application: Application; people: Person[] }
   /**
-   * the form did not give us a name or an email, so there is nothing to match
-   * on and nothing to write.
-   *
-   * the questions are found by looking for "name" and "email" anywhere in the
-   * label, which survives most rewordings — but not all of them, and not a
-   * question that gets deleted. When that happens every application answers
-   * `null` at once, and the cron would create a row per applicant named by
-   * their Discord handle with no address on it: fifty rows nobody can match to
-   * anybody, made silently, at the top of the hour.
-   *
-   * so it stops and asks. The reconciler shows what the applicant actually
-   * typed and takes the row from a person instead
+   * the form gave no name or no email. A reworded or deleted question does this
+   * to every application at once, and creating from them would make a row per
+   * applicant that nothing can match
    */
   | { status: "incomplete"; application: Application; missing: string[] }
   /** nothing matches at all, so a new row is safe */
@@ -72,14 +56,7 @@ export type Resolution =
   /** more than one row carries this snowflake, which is never safe to act on */
   | { status: "conflicted"; application: Application; people: Person[] };
 
-/**
- * which Members row an application belongs to, decided over the whole roster.
- *
- * the whole roster rather than a filtered query, for the reason
- * `matchMembers` gives: the conflicted case only exists if you can see every
- * row, and a query returning the first match cannot tell one row carrying an
- * id from two.
- */
+/** decided over the whole roster: only that can tell one row carrying an id from two */
 export function resolveApplication(
   people: Person[],
   application: Application,
@@ -93,39 +70,25 @@ export function resolveApplication(
   if (byId.length === 1)
     return { status: "linked", application, person: byId[0]! };
 
-  /*
-    a row already carrying somebody else's id is not a candidate however well
-    its name or email reads. overwriting it would move that person's whole
-    contribution history onto this applicant
-  */
+  /* a row carrying somebody else's id is never a candidate: linking over it
+     moves their history onto this applicant */
   const free = people.filter((person) => person.discordId === null);
 
   const email = normaliseEmail(application.email);
   const name = normaliseName(application.name ?? "");
 
-  /*
-    after the id checks, because a row already carrying this snowflake is a
-    complete answer whatever the form said, and before everything else,
-    because the rest of this function has nothing to work with
-  */
   const missing = [!name && "name", !email && "email"].filter(
     (one): one is string => Boolean(one),
   );
   if (missing.length > 0) return { status: "incomplete", application, missing };
 
-  const emailMatches = email
-    ? free.filter((person) => normaliseEmail(person.email) === email)
-    : [];
-  const nameMatches = name
-    ? free.filter((person) => normaliseName(person.name) === name)
-    : [];
+  const emailMatches = free.filter(
+    (person) => normaliseEmail(person.email) === email,
+  );
+  const nameMatches = free.filter(
+    (person) => normaliseName(person.name) === name,
+  );
 
-  /*
-    the confident case, and the one the kiosk is designed to produce: the
-    person typed their email at a meeting, applied on discord later with the
-    same address, and both spellings of their name agree. nothing weaker than
-    this is treated as certain
-  */
   const both = emailMatches.filter((person) => nameMatches.includes(person));
   if (both.length === 1)
     return {
@@ -150,9 +113,9 @@ export function resolveApplication(
     };
   }
 
-  const similar = name
-    ? free.filter((person) => nearName(normaliseName(person.name), name))
-    : [];
+  const similar = free.filter((person) =>
+    nearName(normaliseName(person.name), name),
+  );
 
   if (similar.length > 0)
     return { status: "similar", application, people: similar };
@@ -161,32 +124,16 @@ export function resolveApplication(
 }
 
 /**
- * whether two normalised names differ by at most one keystroke.
- *
- * used only to *withhold* a create, never to link: a false positive costs
- * somebody one click on the reconciler, where a false negative costs a member
- * their vote. That asymmetry is why the threshold is loose here and strict in
- * `resolveApplication`'s equality check above.
- *
- * one edit, not two. "Matthew"/"Mathew" and "Reyes"/"Reyez" are the misspellings
- * that actually happen when somebody types their own name at a kiosk; two edits
- * starts joining unrelated short names
+ * two normalised names at most one edit apart. Used only to withhold a create
+ * or propose a merge, never to link; two edits joins unrelated short names
  */
-export function nearName(a: string, b: string): boolean {
+function nearName(a: string, b: string): boolean {
   if (!a || !b || a === b) return false;
   if (Math.abs(a.length - b.length) > 1) return false;
 
   return editDistanceWithin(a, b, 1);
 }
 
-/**
- * whether `a` and `b` are within `max` edits, without computing the full
- * distance — the matrix is wasted work when the answer is a yes/no at one.
- *
- * walks both strings together and, at the first difference, tries the three
- * edits that could repair it. `max` is a parameter only so the recursion can
- * spend one and recurse; callers pass 1
- */
 function editDistanceWithin(a: string, b: string, max: number): boolean {
   let i = 0;
   while (i < a.length && i < b.length && a[i] === b[i]) i += 1;
@@ -194,8 +141,7 @@ function editDistanceWithin(a: string, b: string, max: number): boolean {
   if (i === a.length && i === b.length) return true;
   if (max === 0) return false;
 
-  /* a substitution, a deletion from `a`, and a deletion from `b` — the three
-     single edits that can reconcile a first difference */
+  /* a substitution, a deletion from `a`, a deletion from `b` */
   return (
     editDistanceWithin(a.slice(i + 1), b.slice(i + 1), max - 1) ||
     editDistanceWithin(a.slice(i + 1), b.slice(i), max - 1) ||
@@ -212,88 +158,43 @@ export function resolveApplications(
   );
 }
 
-/**
- * the applications the unattended cron may act on.
- *
- * only `new`, and deliberately only `new`. Everything else — an id that
- * already matches, an email or a name that lands on an id-less row — is a
- * collision, and a collision is exactly where a wrong guess makes two people
- * out of one. The cron has nobody to ask, so it defers rather than deciding.
- *
- * this is also what keeps the kiosk from duplicating anybody: a person who
- * signed in at a meeting and applied afterwards matches on something, so the
- * cron leaves them alone and the reconciler links them.
- */
+/** the applications the unattended cron may create rows for: only `new` */
 export function safeToCreate(resolutions: Resolution[]): Application[] {
   return resolutions
     .filter(creatable)
     .map((resolution) => resolution.application);
 }
 
-/**
- * whether the cron may act on one resolution, decided by an exhaustive switch.
- *
- * a switch rather than `status === "new"` so that **adding an arm to
- * `Resolution` is a compile error here**. `similar` was added late, precisely
- * because the cron was creating duplicates it should have deferred, and an
- * equality test would have let the next arm through in silence. The safe
- * default has to be enforced by the type checker, not remembered
- */
+/* exhaustive rather than `status === "new"`, so a new arm on `Resolution` is a
+   compile error here instead of a create */
 function creatable(resolution: Resolution): boolean {
   switch (resolution.status) {
     case "new":
       return true;
-    /* every collision. named individually rather than caught by a default, so
-       the compiler asks about the next one */
     case "linked":
     case "linkable":
     case "similar":
     case "ambiguous":
     case "conflicted":
       return false;
-    /* not a collision, but the same answer: a row made from this would carry
-       no address and a name nobody chose */
     case "incomplete":
       return false;
   }
 }
 
 /**
- * rows that look like the same person twice.
- *
- * a duplicate is not cosmetic here. somebody who attended three general body
- * meetings, typo'd once, holds two attendances on one row and one on another
- * and fails a threshold they met — the error runs toward disenfranchisement,
- * during an election. So the reconciler surfaces these and the standing page
- * refuses to look final while any are outstanding.
- *
- * grouped on signals that are certain rather than on edit distance: an
- * identical normalised name, or an identical email. `normaliseName` already
- * folds case, accents and punctuation, so "Zoë O'Brien" and "zoe obrien" group
- * — and "Matthew" and "Mathew" deliberately do not, because a matcher loose
- * enough to join those is loose enough to join two real members.
+ * rows that look like one person twice. A duplicate splits somebody's
+ * attendance and can cost them a vote, so the standing page will not look
+ * final while any are outstanding
  */
 export type Duplicate = {
-  /**
-   * what they share, for a page that has to explain the grouping.
-   *
-   * ordered by how sure it is. `name` and `email` are exact matches on a
-   * normalised form and are almost always one person; `near-name` and
-   * `same-ends` are guesses offered to a human, and some of them will be wrong
-   */
+  /** `name` and `email` are exact; `near-name` and `same-ends` are guesses */
   on: "name" | "email" | "near-name" | "same-ends";
   value: string;
   people: Person[];
 };
 
-/**
- * the middle taken out of a name.
- *
- * "Andy (Andromeda) Vu" and "Andy Vu" are one person on this roster, and so
- * are "Mary Kate Ellis" and "Mary Ellis". A roster typed from applications and
- * from a kiosk collects both spellings of the same human, and neither exact
- * matching nor an edit distance will ever put them together
- */
+/** first and last of three or more names, so "Mary Kate Ellis" meets "Mary Ellis" */
 function firstAndLast(name: string): string {
   const parts = normaliseName(name).split(" ").filter(Boolean);
   if (parts.length < 3) return "";
@@ -301,22 +202,7 @@ function firstAndLast(name: string): string {
   return `${parts[0]} ${parts[parts.length - 1]}`;
 }
 
-/**
- * pairs that are probably one person, for a human to look at.
- *
- * exact matching finds the duplicates somebody made by pasting; this finds the
- * ones they made by typing. `Timur Malamud` and `Timur Malcmud` are on this
- * roster right now, one letter apart, and neither `duplicates` nor anything
- * else on the page had ever compared them.
- *
- * `nearName` is used here in the one direction ADR 0010 allows: to *ask*. It
- * withholds a create and it proposes a merge, and it never performs either —
- * the merge behind this is the page's only irreversible action and it goes
- * through a dialog naming both rows.
- *
- * some of these will be wrong. Two siblings, two people a letter apart. That
- * is the cost of asking, and the answer to a wrong pair is not to click it
- */
+/** pairs that are probably one person, offered to a human; some will be wrong */
 function nearDuplicates(people: Person[]): Duplicate[] {
   const found: Duplicate[] = [];
 
@@ -340,21 +226,12 @@ function nearDuplicates(people: Person[]): Duplicate[] {
       }
 
       const ends = firstAndLast(a.name) || firstAndLast(b.name);
-      if (
-        ends &&
-        firstAndLast(a.name) === ends &&
-        firstAndLast(b.name) === ends
-      ) {
-        found.push({
-          on: "same-ends",
-          value: `${a.name} · ${b.name}`,
-          people: [a, b],
-        });
-        continue;
-      }
+      const sameEnds =
+        firstAndLast(a.name) === ends && firstAndLast(b.name) === ends;
+      /* or one carries a middle name and the other does not */
+      const oneMiddle = one === ends || two === ends;
 
-      /* one carries a middle name and the other does not */
-      if (ends && (one === ends || two === ends)) {
+      if (ends && (sameEnds || oneMiddle)) {
         found.push({
           on: "same-ends",
           value: `${a.name} · ${b.name}`,
@@ -371,15 +248,11 @@ export function duplicates(people: Person[]): Duplicate[] {
   const found = [
     ...group(people, "name", (person) => normaliseName(person.name)),
     ...group(people, "email", (person) => normaliseEmail(person.email)),
-    /* last, because they are guesses and the confident findings should be the
-       ones an editor works through first */
+    /* guesses last */
     ...nearDuplicates(people),
   ];
 
-  /*
-    two rows sharing both a name and an email are one finding, not two. the
-    name grouping is listed first, so it is the one that survives
-  */
+  /* a pair found twice is one finding; the first listed survives */
   const seen = new Set<string>();
   return found.filter((duplicate) => {
     const key = duplicate.people
@@ -429,25 +302,10 @@ export type DiscordSuggestion = {
 };
 
 /**
- * roster rows that could be linked to somebody already in the server.
- *
- * the third way people arrive, and the one nothing else covers. Applications
- * only carry people who went through the join form, so anybody who joined
- * before member verification, or was invited straight in, has a discord
- * account and a Members row that have never met. Until they are linked, their
- * face does not appear beside their name and a second row for them looks like
- * a stranger rather than a duplicate.
- *
- * exact on the normalised name, and never fuzzy. `nearName` exists to withhold
- * a create, not to propose a link: writing a snowflake onto the wrong row
- * moves that person's whole contribution history onto somebody else, and a
- * suggestion a tired officer clicks through is not meaningfully safer than an
- * automatic link.
- *
- * a suggestion is offered only where the match is one to one in both
- * directions. Two accounts that could be one row, or two rows that could be
- * one account, are exactly the ambiguity ADR 0009 refuses to guess at, and
- * they are left for the duplicates section and a human
+ * id-less rows whose name exactly matches one account already in the server,
+ * for people who never went through the join form. Exact, never fuzzy: a
+ * clicked-through suggestion is no safer than an automatic link. Offered only
+ * where the match is one to one in both directions
  */
 export function suggestDiscordLinks(
   roster: Person[],
@@ -458,8 +316,6 @@ export function suggestDiscordLinks(
   );
   const free = guild.filter((account) => !taken.has(account.id));
 
-  /* every spelling an account answers to: the server nickname somebody set,
-     and the handle they cannot change */
   const named = free.map((account) => ({
     account,
     names: new Set(
@@ -479,7 +335,6 @@ export function suggestDiscordLinks(
     if (!name) continue;
 
     const matches = named.filter((one) => one.names.has(name));
-    /* one row, one account, or nobody decides anything */
     if (matches.length !== 1) continue;
 
     const { account } = matches[0]!;
@@ -487,9 +342,34 @@ export function suggestDiscordLinks(
     suggestions.push({ person, account });
   }
 
-  /* and the same test from the account's side: two rows named alike would
-     otherwise both offer to take the one account */
+  /* and one to one from the account's side */
   return suggestions.filter(
     (suggestion) => proposed.get(suggestion.account.id) === 1,
   );
 }
+
+/** how two rows came to be listed together, in the words the pages use */
+export const WHY_ALIKE: Record<Duplicate["on"], string> = {
+  name: "the same name",
+  email: "the same email",
+  "near-name": "one letter apart",
+  "same-ends": "a middle name on one and not the other",
+};
+
+/** whether the pages present a finding as certain */
+export const SURE: Record<Duplicate["on"], boolean> = {
+  name: true,
+  email: true,
+  "near-name": false,
+  "same-ends": false,
+};
+
+/** why an application needs a person to pick its row, in the words the pages use */
+export const WHY_UNDECIDED: Record<
+  Extract<Resolution, { people: Person[] }>["status"],
+  string
+> = {
+  similar: "too close to call",
+  conflicted: "two rows disagree",
+  ambiguous: "could be either",
+};

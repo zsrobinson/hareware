@@ -45,10 +45,7 @@ test("accepts a correctly signed request and returns its body", async () => {
   expect(await verifyInteraction(request, publicKey)).toBe(body);
 });
 
-/*
-  discord will not save an interactions endpoint url unless it rejects a
-  deliberately corrupted request, so this case is the one that gates setup
-*/
+/* Discord will not save the endpoint url unless this is rejected */
 test("rejects a body that was tampered with after signing", async () => {
   const { publicKey, request } = await signed(JSON.stringify({ type: 1 }));
 

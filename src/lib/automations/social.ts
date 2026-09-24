@@ -7,25 +7,19 @@ import {
   type Block,
 } from "~/lib/services/discord/post-message";
 import { easternNow, type EasternNow } from "~/lib/eastern";
-import { failed, misconfigured, ok, skipped, type Result } from "./registry";
+import { failed, misconfigured, ok, skipped, type Result } from "~/lib/result";
 import { postedId } from "~/lib/services/discord/posted-button";
 import { toArticleSlug } from "~/lib/services/wordpress/article-url";
 import { getRecentArticles } from "~/lib/services/wordpress/get-recent-articles";
 import { HAREWARE_ORIGIN, SOCIAL_CHANNEL_ID, SOCIAL_ROLE_IDS } from "./config";
 
-/*
-  each article gets its own line and its own row of buttons, so the whole
-  message is three components per article plus a divider. components v2 caps a
-  message at forty, and the feed only hands back ten articles a page anyway
-*/
+/* three components per article, under Components V2's forty per message */
 const MAX_ARTICLES = 10;
 
 export async function sendSocialPing(
   env: Env,
   eastern: EasternNow,
 ): Promise<Result> {
-  // the code must stay inert until the club actually sets these up — see ADR
-  // 0006's "setup outside the repo"
   const roleId = SOCIAL_ROLE_IDS[eastern.weekday];
   const missing = [
     !env.DISCORD_BOT_TOKEN && "DISCORD_BOT_TOKEN",
@@ -35,42 +29,23 @@ export async function sendSocialPing(
     return misconfigured(`social ping unset: ${missing.join(", ")}`);
 
   const articles = await getRecentArticles();
-  /*
-    this is the one that mattered most: an unreadable feed used to be recorded
-    as `ok`, so a week of wordpress rate-limiting produced seven green rows
-  */
   if (!articles) return failed("could not read the wordpress feed");
 
-  /*
-    the feed's `date` field is a display string with the year thrown away, so
-    it can't be compared to eastern.date. `pubDate` is the raw feed value —
-    run it back through `easternNow` so "today" means eastern midnight to
-    midnight, not whatever the utc calendar day happens to be, which would
-    mislabel anything published in the early morning eastern
-  */
+  /* `pubDate`, not the feed's `date`, which drops the year; "today" is Eastern */
   const today = articles.filter(
     (article) => easternNow(new Date(article.pubDate)).date === eastern.date,
   );
-  // a genuinely quiet day, which is a different thing from a broken one
   if (today.length === 0)
     return skipped(`no articles published today (${eastern.date})`);
 
   const posted = today.slice(0, MAX_ARTICLES);
 
   const blocks: Block[] = posted.flatMap((article, index) => [
-    // the mention repeats per article rather than heading the message, so each
-    // one reads as its own item — discord pings once however often it appears
+    // Discord pings once however often the mention appears
     ...(index > 0 ? [separator()] : []),
-    /* the headline comes from wordpress, so it is somebody else's text sharing
-       a line with a real role mention — see `inert` */
     text(`<@&${roleId}> **${inert(article.title)}**`),
     buttons(
-      /*
-        a checkbox that discord makes us draw as a button: the label carries
-        the state rather than the action, because the message is read to see
-        what is left to do. pressing it toggles, and the message is the only
-        record of what has been posted
-      */
+      /* the label is the state, not the action; the message is the record */
       {
         label: "Not posted",
         id: postedId(toArticleSlug(article.link)),

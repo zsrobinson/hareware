@@ -1,6 +1,7 @@
 # 4. The Byline is text; the Member behind it is a relation
 
-**Status:** Accepted — 2026-09-02
+**Status:** Accepted — 2026-09-02. Backfill and pseudonym sections revised
+2026-09-03 and 2026-09-04.
 
 ## Context
 
@@ -8,10 +9,10 @@ An Article's Byline is not reliably the name of the person who wrote it. A
 writer may publish under a pseudonym, and so may an image creator. Notion has to
 hold both the printed name and the real Member behind it.
 
-Today the Articles database holds a single free-text `Author` column, and it has
+The Articles database held a single free-text `Author` column, and it had
 already drifted: the same people appear as "Matthew Gray" and "Mathew Gray", as
-"Zach", "Zachary Robinson" and "Matt G.". The Writers and Imagers views group on
-that column, so they are already wrong. Free text alone cannot answer "how many
+"Zach", "Zachary Robinson" and "Matt G.". The Writers and Imagers views grouped
+on that column, so they were wrong. Free text alone cannot answer "how many
 Articles has this person written".
 
 ## Decision
@@ -35,16 +36,16 @@ Storing the printed name on every Article, rather than deriving it from the
 Member, is a deliberate denormalisation. Three things pay for it.
 
 **ADR 0001 stops working otherwise.** That ADR buys Notion, at a real daily
-cost, so that a club member can open the Articles table during an outage and keep
-working. If the Byline text were only filled for pseudonymous Articles, that
-table would show a blank column for most rows and be readable only by resolving a
-relation per row. A filled text column keeps the table legible on its own.
+cost, so that a club member can open the Articles table during an outage and
+keep working. If the Byline text were only filled for pseudonymous Articles,
+that table would show a blank column for most rows and be readable only by
+resolving a relation per row. A filled text column keeps the table legible on
+its own.
 
 **A published Byline should be frozen.** Once an Article is on WordPress its
 printed name is baked into the post body. A derived Byline would mean someone
 changing their default name silently rewrites what HareWare claims older
-Articles said. Storing the string as printed is the correct semantics, not
-merely the convenient one.
+Articles said. The string as printed is what should be stored.
 
 **Co-Bylines.** Relations are naturally multi-valued; printed Bylines are prose
 ("X and Y", "X, with reporting by Y"). The text holds the printed form and the
@@ -57,42 +58,27 @@ The privacy rule falls out for free. The WordPress-bound field is the Byline
 text; the relation is never sent. The real name behind a pseudonymous Byline
 cannot reach WordPress by accident.
 
-The cost is dual-write drift — someone edits the relation and forgets the text.
-HareWare writes both together, and hand-editing is the outage path, so this is
-accepted. The status quo is worse: a single text column is drifting already.
+The cost is dual-write drift: someone edits the relation and forgets the text.
+HareWare's commands ([ADR 0009](0009-editor-commands-in-discord.md)) always
+write both together, and hand-editing is the outage path, so this is accepted.
 
-### Historical rows were backported after all
+### Historical rows were backfilled
 
-**Amended 2026-09-03.** This section originally said the relation would stay
-empty on existing Articles, on the grounds that a Member link buys nothing
-retroactively for a Byline already frozen in a WordPress post body. In practice
-the split was implemented and the existing rows were filled in by hand at the
-same time, so the Writers and Imagers views group correctly across the whole
-history rather than only from the changeover forward.
-
-The original reasoning was not wrong about the value — it was wrong about the
-cost, which turned out to be one sitting.
-
-No stub Member rows for alumni, either. Members is keyed by Discord user ID and
-that ID cannot be obtained for someone who has left the server, so stubs would
-either collide on empty or weaken the key. A legacy row carrying only its Byline
-text is the honest state.
+The relation was filled in by hand on existing Articles when the split was
+built, so the Writers and Imagers views group correctly across the whole
+history. (The original plan left old rows empty; the backfill turned out to take
+one sitting.) No stub Members rows were made for alumni who had left: a legacy
+row carrying only its Byline text is the accurate state.
 
 ### Pseudonyms are detected, not listed
 
-**Amended 2026-09-04.** This ADR said pseudonyms belonging to a Member would be
-recorded on the Members row as a plain list, enough to offer a dropdown when
-setting a Byline. That property was never built, and the split works without it:
 Notion carries an `Author Pseudonym` formula,
 `prop("Author").some(current.prop("Name") != prop("Author Byline"))`, which is
 true exactly when the printed Byline is not the linked Member's name, and an
-`Image Pseudonym` formula beside it.
-
-Detecting the mismatch turned out to be worth more than listing the names. A
-list needs maintaining and can be wrong; the formula cannot disagree with the
-data it reads. What is lost is the dropdown — a Byline that is not the Member's
-name is typed — and answering "who is Gale de Silva?" now means opening one of
-their Articles rather than searching Members.
+`Image Pseudonym` formula beside it. The original plan was a list of pseudonyms
+on each Members row; the formula replaced it because it cannot disagree with the
+data it reads. The cost is that "who is Gale de Silva?" is answered by opening
+one of their Articles rather than searching Members.
 
 ## Alternatives considered
 

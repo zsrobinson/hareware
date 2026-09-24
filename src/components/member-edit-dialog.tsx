@@ -1,5 +1,7 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
+import { toast } from "sonner";
 import type { EditableField } from "~/components/member-entry";
+import { StatusPicker } from "~/components/status-picker";
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
@@ -11,24 +13,13 @@ import {
 } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import { normaliseName } from "~/lib/articles/member";
-import { shownName } from "~/lib/members/kiosk";
-import { notify } from "~/lib/notify";
+import { normaliseName } from "~/lib/members/match";
 import type { Person } from "~/lib/members/records";
 import { postJson } from "~/lib/post-json";
+import { errorMessage } from "~/lib/utils";
 
-/*
-  the Members database, edited by the person it is about, at the meeting.
-
-  ADR 0010 leaves Status to a human and leaves the reconciler to chase the rest,
-  which puts every correction on an editor weeks after the person who knew the
-  answer was standing at the laptop. These three modals are the other end of
-  that: the row is in front of its owner exactly once a week.
-
-  none of the three trusts this file. Each route re-reads what it needs — the
-  guild for a snowflake, the schema for a status — because a page rendered
-  minutes ago is a stale claim about somebody's identity.
-*/
+/* a Members row's Discord, email or status, edited where it is seen. Each
+   route re-validates what it is sent */
 
 /** a guild member as the autocomplete offers them */
 export type GuildOption = {
@@ -42,12 +33,10 @@ export type Editing = { field: EditableField; person: Person };
 type Props = {
   editing: Editing | null;
   onClose: () => void;
-  /** the row as it now is, so the roster on the page re-renders without a reload */
+  /** the row as it now is */
   onSaved: (person: Person) => void;
   guild: GuildOption[];
-  /** notion's own Status options, read from the schema on every page load */
   statuses: string[];
-  /** discord profiles, so a linked row is titled by the handle the room knows */
 };
 
 export function MemberEditDialog({
@@ -83,7 +72,7 @@ function Body({
   statuses,
 }: Props & { editing: Editing }) {
   const { field, person } = editing;
-  const called = shownName(person);
+  const called = person.name;
   const [busy, setBusy] = useState(false);
   const [discordId, setDiscordId] = useState(person.discordId ?? "");
   const [query, setQuery] = useState("");
@@ -102,15 +91,7 @@ function Body({
       .slice(0, 8);
   }, [guild, query]);
 
-  /**
-   * `next` is the row as it will be, so the page behind the modal re-renders,
-   * and `said` is what the person in front of it is told.
-   *
-   * the route's own summary is not echoed here. It is written for the
-   * invocation log, where saying which screen a change came from is the whole
-   * point of the row; the person who just typed their address knows where they
-   * are standing and wants to know only that it saved
-   */
+  /* `said` rather than the route's summary, which is written for the log */
   async function save(
     path: string,
     body: Record<string, string>,
@@ -120,17 +101,13 @@ function Body({
     setBusy(true);
 
     try {
-      await postJson(path, {
-        pageId: person.pageId,
-        name: person.name,
-        ...body,
-      });
+      await postJson(path, { pageId: person.pageId, ...body });
 
       onSaved(next);
-      notify.ok(said);
+      toast.success(said);
       onClose();
     } catch (thrown) {
-      notify.failed(thrown instanceof Error ? thrown.message : String(thrown));
+      toast.error(errorMessage(thrown));
     } finally {
       setBusy(false);
     }
@@ -143,25 +120,20 @@ function Body({
           <DialogTitle>{called}'s status</DialogTitle>
           <DialogDescription>Alumni do not vote.</DialogDescription>
         </DialogHeader>
-        <div className="flex flex-wrap gap-2">
-          {statuses.map((status) => (
-            <Button
-              key={status}
-              variant={person.status === status ? "default" : "outline"}
-              disabled={busy}
-              onClick={() =>
-                void save(
-                  "/api/members/status",
-                  { status },
-                  { ...person, status },
-                  `Status set to ${status}`,
-                )
-              }
-            >
-              {status}
-            </Button>
-          ))}
-        </div>
+        <StatusPicker
+          statuses={statuses}
+          value={person.status}
+          hideLabel
+          disabled={busy}
+          onPick={(status) =>
+            void save(
+              "/api/members/status",
+              { status },
+              { ...person, status },
+              `Status set to ${status}`,
+            )
+          }
+        />
       </>
     );
   }
@@ -269,8 +241,6 @@ function Body({
             ))}
           </ul>
         ) : (
-          /* the only outcome here a person cannot fix themselves, so it says
-             who can: joining the server is an invite an editor sends */
           <p className="text-muted-foreground text-sm">
             Nobody in the server by that name. If you have not joined yet, ask
             an editor for an invite link.
@@ -290,13 +260,7 @@ function Body({
   );
 }
 
-/**
- * Enter on a text field presses the modal's save button.
- *
- * these are one-field forms in a dialog rather than a `<form>`, so nothing
- * submits them by default and everybody at the kiosk types their address and
- * hits Enter
- */
+/** Enter presses save; these fields are not in a `<form>` */
 function onEnter(submit: () => void) {
   return (event: KeyboardEvent) => {
     if (event.key !== "Enter") return;

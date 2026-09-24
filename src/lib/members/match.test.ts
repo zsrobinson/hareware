@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
-import type { Application } from "~/lib/services/discord/join-requests";
+import type { Application } from "./applications";
 import {
   duplicates,
-  nearName,
+  normaliseName,
   resolveApplication,
   safeToCreate,
   suggestDiscordLinks,
@@ -65,8 +65,7 @@ test("nobody matching is new, and the cron may create it", () => {
   expect(safeToCreate([resolution])).toHaveLength(1);
 });
 
-/* the kiosk's whole purpose: somebody typed their name and email at a meeting,
-   then applied on discord a week later */
+/* signed in at a meeting, then applied with the same name and email */
 test("an id-less row agreeing on both email and name is confidently linkable", () => {
   const kiosk = person({ name: "bay hoffman", email: "Bay@Terpmail.UMD.edu" });
   const resolution = resolveApplication([kiosk], application());
@@ -151,13 +150,7 @@ test("nothing but `new` is ever safe for the cron to create", () => {
   expect(safeToCreate(resolutions)).toHaveLength(1);
 });
 
-/*
-  the form questions are found by looking for "name" and "email" anywhere in
-  the label, which survives a rewording but not a deletion. When one goes, every
-  application answers null at once — and a row per applicant, named by their
-  Discord handle with no address on it, would be made silently at the top of
-  the hour. So it stops and says which answer it wanted
-*/
+/* a reworded or deleted form question makes every application incomplete at once */
 test("an application with no name and no email stops rather than creating a row", () => {
   const resolution = resolveApplication(
     [person({ name: "", email: null })],
@@ -180,8 +173,6 @@ test("either one missing is enough to stop", () => {
   if (noName.status === "incomplete") expect(noName.missing).toEqual(["name"]);
 });
 
-/* a row already carrying the snowflake is a complete answer whatever the form
-   said, so the check for missing answers comes after the id */
 test("an incomplete application whose account is already on a row reads as linked", () => {
   const resolution = resolveApplication(
     [person({ pageId: "p1", discordId: "574376763006648349" })],
@@ -207,17 +198,7 @@ test("two rows normalising to one name are a duplicate", () => {
   expect(found[0]!.on).toBe("name");
 });
 
-/*
-  near spellings used to be deliberately left out of this, on the grounds that
-  a matcher loose enough to join "Matthew" and "Mathew" joins real members too.
-  That reasoning still holds for *linking*, which is why `resolveApplication`
-  still refuses them — but it was the wrong call for a page whose entire job is
-  to put a question in front of a person.
-
-  `Timur Malamud` and `Timur Malcmud` are two rows on the real roster, one
-  letter apart, and nothing here had ever compared them. Their attendance is
-  split across both, which is exactly the vote this page exists to protect
-*/
+/* offered to a person, never linked: see `resolveApplication` */
 test("two rows a letter apart are offered as a possible duplicate", () => {
   const found = duplicates([
     person({ pageId: "p1", name: "Timur Malamud" }),
@@ -228,8 +209,6 @@ test("two rows a letter apart are offered as a possible duplicate", () => {
   expect(found[0]!.on).toBe("near-name");
 });
 
-/* the exact finding is the confident one and stays first, so an editor works
-   through the certainties before the guesses */
 test("an exact match outranks a near one", () => {
   const found = duplicates([
     person({ pageId: "p1", name: "Bay Hoffman" }),
@@ -241,12 +220,7 @@ test("an exact match outranks a near one", () => {
   expect(found.some((one) => one.on === "near-name")).toBe(true);
 });
 
-/*
-  the other way one person becomes two rows: a middle name typed once and not
-  the next time. An edit distance will never join these — "andy andromeda vu"
-  and "andy vu" are eight edits apart — and this roster collects both spellings
-  because one comes from an application and the other from a kiosk
-*/
+/* a middle name typed once and not the next time */
 test("a name with a middle part is offered against one without", () => {
   const found = duplicates([
     person({ pageId: "p1", name: "Andy (Andromeda) Vu" }),
@@ -266,8 +240,6 @@ test("two people who merely share a first name are left alone", () => {
   ).toEqual([]);
 });
 
-/* a guess is still never a link. `resolveApplication` keeps refusing these,
-   because that one writes without asking anybody */
 test("a near name still never resolves an application to a row", () => {
   const resolution = resolveApplication(
     [person({ pageId: "p1", name: "Matthew Reyes" })],
@@ -335,8 +307,6 @@ test("a roster with nothing repeated has no duplicates", () => {
   ).toEqual([]);
 });
 
-/* the cron would otherwise create the duplicate the reconciler exists to
-   prevent, and a duplicate splits attendance and can cost somebody a vote */
 test("a name one keystroke away is withheld from the cron rather than created", () => {
   const resolution = resolveApplication(
     [person({ name: "Mathew Reyes", email: null })],
@@ -379,25 +349,28 @@ test("names further apart than one edit are still new", () => {
   expect(resolution.status).toBe("new");
 });
 
+/** whether two names are offered as a near-name pair */
+const near = (a: string, b: string) =>
+  duplicates([
+    person({ pageId: "a", name: a }),
+    person({ pageId: "b", name: b }),
+  ]).some((found) => found.on === "near-name");
+
 test("one edit is one edit, whether inserted, deleted or substituted", () => {
-  expect(nearName("matthew", "mathew")).toBe(true);
-  expect(nearName("mathew", "matthew")).toBe(true);
-  expect(nearName("reyes", "reyez")).toBe(true);
-  expect(nearName("bay hoffman", "bay hoffmann")).toBe(true);
+  expect(near("Matthew", "Mathew")).toBe(true);
+  expect(near("Mathew", "Matthew")).toBe(true);
+  expect(near("Reyes", "Reyez")).toBe(true);
+  expect(near("Bay Hoffman", "Bay Hoffmann")).toBe(true);
 });
 
 test("two edits are too many, and an identical name is not 'near'", () => {
-  expect(nearName("matthew", "mathews")).toBe(false);
-  expect(nearName("bay", "bay")).toBe(false);
-  expect(nearName("", "bay")).toBe(false);
-  expect(nearName("ada vance", "bay hoffman")).toBe(false);
+  expect(near("Matthew", "Mathews")).toBe(false);
+  expect(near("Bay", "Bay")).toBe(false);
+  expect(near("", "Bay")).toBe(false);
+  expect(near("Ada Vance", "Bay Hoffman")).toBe(false);
 });
 
-/*
-  the third way somebody arrives: already in the server, with a row that has
-  never been linked to it. Nothing else on the reconciler reaches these people,
-  because applications only carry those who went through the join form
-*/
+/* people already in the server who never went through the join form */
 const account = (
   over: Partial<{ id: string; username: string; displayName: string }> = {},
 ) => ({
@@ -436,8 +409,7 @@ test("a row that already has an id is not offered another", () => {
   expect(suggestions).toEqual([]);
 });
 
-/* the account is already somebody's, and offering it again would be offering
-   to move that person's contribution history onto this row */
+/* offering it again would move that person's history onto this row */
 test("an account another row already claims is not offered", () => {
   const suggestions = suggestDiscordLinks(
     [
@@ -479,11 +451,7 @@ test("two rows that could be one account are not guessed between", () => {
   expect(suggestions).toEqual([]);
 });
 
-/*
-  `nearName` withholds a create; it never proposes a link. A suggestion a tired
-  officer clicks through is not meaningfully safer than an automatic link, and
-  this is the write that moves somebody's whole history
-*/
+/* exact names only: a clicked-through suggestion is no safer than a link */
 test("a name one edit away is not offered at all", () => {
   const suggestions = suggestDiscordLinks(
     [person({ name: "Matthew Reyes" })],
@@ -500,4 +468,17 @@ test("a row with no name matches nothing", () => {
   );
 
   expect(suggestions).toEqual([]);
+});
+
+test("names match across case, accents, punctuation and spacing", () => {
+  expect(normaliseName("Gale de Silva")).toBe(normaliseName("gale de silva"));
+  expect(normaliseName("Zoë O'Brien")).toBe(normaliseName("Zoe OBrien"));
+  expect(normaliseName("  Matthew   Gray ")).toBe(
+    normaliseName("Matthew Gray"),
+  );
+  expect(normaliseName("Matt G.")).toBe(normaliseName("matt g"));
+});
+
+test("different people do not normalise to the same name", () => {
+  expect(normaliseName("Matthew Gray")).not.toBe(normaliseName("Mathew Gray"));
 });

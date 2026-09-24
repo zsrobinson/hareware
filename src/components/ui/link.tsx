@@ -12,8 +12,7 @@ interface LinkProps extends ButtonProps, AnchorProps {
   children: ReactNode;
 }
 
-/* base ui composes through `render` rather than radix's `asChild`, so a button
-   that is really a link hands it the anchor to render as */
+/* base ui composes through `render`, not `asChild` */
 export function Link({
   href,
   target,

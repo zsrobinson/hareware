@@ -5,11 +5,6 @@ import type { Article } from "~/lib/articles/page";
 const row = (over: Partial<Article> = {}): Article => ({
   pageId: "page-1",
   headline: "Terps lose again, somehow",
-  section: "News",
-  status: "Written",
-  imageStatus: "Not started",
-  authorByline: "Sam Rivera",
-  publicationDate: null,
   lastEdited: "2026-09-01T12:00:00.000Z",
   ...over,
 });
@@ -17,27 +12,20 @@ const row = (over: Partial<Article> = {}): Article => ({
 /* ---- what an editor sees ------------------------------------------------ */
 
 test("shows the headline and nothing else", () => {
-  /*
-    the status, section and byline used to be crammed in front of it. an editor
-    picking an article already knows which one they mean, and the card they get
-    back answers everything else
-  */
   const [choice] = suggestions([row()]);
 
   expect(choice!.name).toBe("Terps lose again, somehow");
 });
 
 test("the value is the page id, never the headline", () => {
-  /* a headline changes throughout copy edit, so the label somebody scanned and
-     the article they picked cannot be identified by the same string */
+  /* a headline changes during copy edit */
   const [choice] = suggestions([row({ pageId: "3d1be415" })]);
 
   expect(choice!.value).toBe("3d1be415");
 });
 
 test("an untitled row still gets a name", () => {
-  /* discord rejects the entire response — every choice, not just this one —
-     when a name is empty, which reaches the editor as a blank dropdown */
+  /* Discord rejects the whole response over one empty name */
   const [choice] = suggestions([row({ headline: "   " })]);
 
   expect(choice!.name).toBe("Untitled");
@@ -90,8 +78,7 @@ test("refuses letters that are not there in order", () => {
 });
 
 test("an empty query matches everything", () => {
-  /* a picker that has only just opened is not a search, and answering it with
-     nothing is how this looked broken for an evening */
+  /* a picker that has just opened has no query yet */
   expect(suggestions([row(), row({ pageId: "b" })], "")).toHaveLength(2);
 });
 
@@ -115,10 +102,6 @@ test("ranks a better match above a worse one", () => {
 /* ---- ranking ------------------------------------------------------------ */
 
 test("among comparable matches, the most recently edited comes first", () => {
-  /*
-    the ranking the club actually needs: a command is nearly always run against
-    something touched this week, so recency decides between equals
-  */
   const rows = [
     row({
       pageId: "old",

@@ -1,8 +1,7 @@
 # Context
 
-The shared vocabulary for HareWare. This file is a glossary and nothing else:
-no schemas, no endpoints, no implementation decisions. Those live in
-`docs/adr/`.
+The shared vocabulary for HareWare: what each word means to the club, and which
+word to use. The reasons behind the design live in `docs/adr/`.
 
 ## Article
 
@@ -28,9 +27,9 @@ WordPress** and stays that way.
 
 This is the single most important thing to know about an Article, because it
 determines where each of its details is authoritative. Before: Notion is the
-authority on everything. After: WordPress is the authority on the writing
-itself — title, body, publish date, section, image — and Notion remains the
-authority on everything WordPress has no concept of.
+authority on everything. After: WordPress is the authority on the writing itself
+— title, body, publish date, section, image — and Notion remains the authority
+on everything WordPress has no concept of.
 
 Interface language says "this article isn't on WordPress yet", never "phase one"
 or "unlinked".
@@ -48,8 +47,8 @@ screen that is already about Instagram.
 An Instagram Post is not a record anywhere. It is generated from an Article on
 demand, downloaded, and posted by hand, and Notion does not track whether one
 went out — the _Posted to Instagram_ property was removed with the rest of the
-tracker integration. The daily reminder in `#instagram-posting` is where the social
-team sees what still needs posting, and eventually where they mark it done.
+tracker integration. The daily reminder in `#instagram-posting` is where the
+social team sees what needs posting, and where they mark each one posted.
 
 ## Publish Date
 
@@ -66,21 +65,20 @@ The club aims to put an Article on Instagram the same day it publishes.
 Who is responsible for posting to Instagram on a given day of the week.
 
 Not a database at all: it is seven Discord roles, `@Social Sunday` through
-`@Social Saturday`. Set once per semester and changes rarely. Anyone with
-Manage Roles can edit it without going through a developer, and the reminder bot
-pings the role for the day rather than resolving a person.
+`@Social Saturday`. Set once per semester and changes rarely. Anyone with Manage
+Roles can edit it without going through a developer, and the reminder bot pings
+the role for the day rather than resolving a person.
 
-It lived in Notion as a **Social Media Day** property on Members until ADR 0006.
-Discord roles clear the same bar — a non-developer can change them — while
-keeping the bot's only job a mention.
+It used to be a **Social Media Day** property on Members; ADR 0006 moved it to
+Discord roles, which a non-developer can change just as easily.
 
 ## Section
 
 Which desk an Article belongs to: News, Features, Entertainment, Sports,
 Rabbithole, or Social Media. Every Article has exactly one.
 
-Social Media is the odd one out — it is not a desk with a Section Editor, and
-it covers writing made for the club's own accounts rather than the website.
+Social Media is the odd one out — it is not a desk with a Section Editor, and it
+covers writing made for the club's own accounts rather than the website.
 
 A Section has a **Section Editor** who approves ideas, edits drafts, and decides
 when an Article is ready to move on. Each Section has its own Discord channel,
@@ -98,9 +96,9 @@ left off.
 
 ## Status
 
-How far an Article has moved through the writing process, plus — once it is
-**on WordPress** — its publication state. One value at a time, and it only ever
-moves forward, except when an Article is bounced.
+How far an Article has moved through the writing process, plus — once it is **on
+WordPress** — its publication state. One value at a time, and it only ever moves
+forward, except when an Article is bounced.
 
 - **Backlog** — an idea, not yet approved to be written
 - **Approved** — a Section Editor has approved the idea
@@ -109,10 +107,10 @@ moves forward, except when an Article is bounced.
 - **Managing Edited** — the Managing Editor has passed it for grammar and brand
 - **Scheduled**, **Published** — facts about the Article's WordPress Post
 
-All seven are set by hand. An earlier design had the last two mirrored in from
-WordPress by a scheduled job; ADR 0006 retired it, and no software writes to the
-Articles database at all. WordPress remains the authority on whether an Article
-is really published — Notion is a description of that, maintained by people.
+Status is always set by a person, in Notion or through `/article` (ADR 0009).
+Nothing sets it automatically from WordPress, so WordPress remains the authority
+on whether an Article is really published — Notion's Status is a description of
+that, maintained by people.
 
 ## Image Status
 
@@ -130,14 +128,13 @@ The name printed on a published Article — which is not necessarily the name of
 the person who wrote it. A writer may publish under a pseudonym, and so may an
 image creator.
 
-An Article carries the Byline as text, always filled, plus a separate relation
-to the Member who actually wrote it — the relation may be empty or hold more
-than one Member, for co-Bylines. The text is not merely a pseudonym override:
-it is authoritative for what gets printed, kept as its own column rather than
-derived from the Member, so a published Byline stays frozen and the Articles
-table stays readable without resolving a relation per row. See ADR 0004. The
-same split applies to image credits, as Image Byline text and an Image Crew
-relation.
+An Article carries the Byline as text, filled on every Article rather than only
+pseudonymous ones, plus a separate relation to the Member who actually wrote it,
+which may be empty or hold several Members for co-Bylines. The text is
+authoritative for what gets printed and is its own column rather than derived
+from the Member, so a published Byline stays frozen and the Articles table stays
+readable without resolving a relation per row. See ADR 0004. Image credits have
+the same split, as Image Byline text and an Image Crew relation.
 
 WordPress has no idea about any of this: on the website a Byline is simply text
 inside the article body. Notion holds both the Byline and the real member behind
@@ -154,26 +151,26 @@ name, their email, whether they are an Undergrad, a Grad or an Alum, which
 Articles and images are theirs, and which meetings they attended.
 
 A Member is usually identified by their Discord account, but not always. Rows
-are also created at the **Kiosk** by people who have not applied on Discord
-yet, and those carry a name and an email and no snowflake until an
-**Application** is matched to them. "Keyed by Discord ID" was true before ADR
-0010 and is now only the common case.
+created at the **Kiosk** by people who have not applied on Discord yet carry a
+name and an email and no Discord ID until an **Application** is linked to them.
 
-There is no such thing as joining or leaving. Anyone may write, attend and
-vote subject to **Standing**; nothing is revoked, and nobody is removed.
+There is no such thing as joining or leaving. Anyone may write, attend and vote
+subject to **Standing**; nothing is revoked, and nobody is removed.
 
 Pseudonyms are not recorded. A pseudonymous Byline is **detected** rather than
 stored — an Article whose printed Byline differs from the linked Member's name
 is one, and Notion computes that. So "who is Gale de Silva?" is answered by
-opening the Article, not by looking the name up on a Member. What a Member is allowed to _do_ is not recorded here —
-that is read live from their Discord roles (@Editor-in-Chief, @Managing Editor,
-@Section Editor, @Media Editor), so that a promotion in Discord takes effect
-without anyone updating a second list.
+opening the Article, not by looking the name up on a Member.
 
-Historical Articles were backported to link a Member where one could be
-identified. See ADR 0004. Alumni do have rows — they keep contributing and
-never leave the server — and are marked `Alum` by hand, which is the one field
-in the roster a person has to maintain.
+What a Member is allowed to _do_ is not recorded on the row. It is read live
+from their Discord roles — HareWare's admin tools and `/article` check
+`@Editorial Board` — so a promotion in Discord takes effect without anyone
+updating a second list.
+
+Historical Articles were linked to a Member by hand where one could be
+identified (ADR 0004). Alumni do have rows — they keep contributing and never
+leave the server — and are marked `Alum` by hand, which is the one field in the
+roster a person has to maintain.
 
 Graduation year is deliberately not recorded. People change it without telling
 the club, and winter versus spring is not a distinction anyone here needs. See
@@ -183,15 +180,15 @@ ADR 0010.
 
 What a person has done in a window of time, and whether it was enough.
 
-Standing is **computed, never stored**. There is no eligible flag and nothing
-to tick: HareWare counts general body meetings, volunteer events and
-contributions over a date range and compares them against thresholds. The
-constitution's rule — within the past year, 3 meetings or 2 contributions or 1
-volunteer event, alumni excluded — is a preset on that query rather than
-something the code enforces, because the rule belongs to the club.
+Standing is **computed, never stored**. There is no eligible flag and nothing to
+tick: HareWare counts general body meetings, volunteer events and contributions
+over a date range and compares them against thresholds. The constitution's rule
+— within the past year, 3 meetings or 2 contributions or 1 volunteer event,
+alumni excluded — is a preset on that query rather than something the code
+enforces, because the rule belongs to the club.
 
-The masthead is the same question with different numbers, which is why there
-is one page and not two. See ADR 0010.
+The masthead is the same question with different numbers, which is why there is
+one page and not two. See ADR 0010.
 
 Standing is the club's one **coordination** tool: people act on it during
 elections, so unlike the Article tracker it has to be right. Say "who has
@@ -203,8 +200,8 @@ What somebody fills in to join the Discord server: their full name, email,
 graduation year and a paragraph about why. An editor approves it by hand.
 
 Applications are read, never written. They are the cleanest identity data the
-club has, and the origin of most Members — but they only reach back to
-December 2025, so most of the server predates them.
+club has, and the origin of most Members — but they only reach back to December
+2025, so most of the server predates them.
 
 ## Attendance
 
@@ -216,20 +213,19 @@ Body meetings and Volunteer Events feed Standing.
 
 ## Kiosk
 
-The laptop at the front of the room at a meeting, showing `/admin/attendance`,
-where people enter their own names.
+The laptop at the front of the room at a meeting, showing `/attendance`, where
+people enter their own names.
 
-It is signed in as an officer and sits beside one. It creates Members as well
-as recording Attendance, which is why a new person is asked for an email: that
-address is what later matches them to their Application without anyone
-guessing.
+It is signed in as an officer and sits beside one. It creates Members as well as
+recording Attendance, which is why a new person is asked for an email: that
+address is what later ties them to their Application.
 
 ## Reconciler
 
 The page holding everything about the roster that needs a person to decide:
-Applications that might belong to an existing row, rows that look like the same
-human twice, Members with no Status, and the emails waiting to be added to the
-Google Group by hand.
+Applications the hourly sync would not act on, rows that look like the same
+person twice, Members missing a Status, Discord ID or email, addresses outside
+the university's domains, and the comparison against the Google Group.
 
 Nothing on it happens automatically. A duplicate Member splits somebody's
 Attendance across two rows and can cost them a vote they earned, so the
@@ -241,11 +237,16 @@ anything is outstanding.
 Something HareWare does on a schedule without being asked: today, the two
 morning reminders and the application sync.
 
-"Automation" is the word the interface uses: `/automations`, the sidebar,
-the trigger buttons — and the word to use in code and in issues. It is broader
-than **Reminder** on purpose: a reminder is an automation that posts a message,
-and the shape also takes a watcher on a Notion database or a Discord slash
-command without becoming a second system.
+"Automation" is the word the interface uses (`/automations`, the sidebar, the
+trigger buttons) and the word to use in code and in issues. It is broader than
+**Reminder** on purpose: a reminder is an automation that posts a message, and
+the application sync is one that posts nothing.
 
-Say "the social ping did not run", never "the social job failed" — **Invocation**
-is what the log records, and an automation is the thing that produced it.
+Say "the social ping did not run", never "the social job failed".
+
+## Invocation
+
+One thing HareWare did, as recorded in the log at `/log`: an automation's run, a
+manual trigger, a button press, an `/article` edit or a roster change. Each
+records what happened and, where there was one, the Discord user behind it. The
+log records Invocations; an automation is one of the things that produces them.

@@ -5,8 +5,6 @@ import { viewerState } from "~/lib/admin";
 import { admitted } from "~/lib/admin-guard";
 import { AUTOMATIONS } from "~/lib/automations/registry";
 
-/* Reaching this page is the permission: the guard already refused anybody it
-   would not admit, and its lookup knows what to call them. */
 const who = admitted(Astro.locals);
 
 Astro.response.headers.set("cache-control", "private, no-store");

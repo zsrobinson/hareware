@@ -14,12 +14,7 @@ test("registers one command, /article", () => {
   expect(payload[0]!.name).toBe("article");
 });
 
-/*
-  a command visible to everyone is a command everyone tries. "0" hides it until
-  a server admin grants it to a role under Integrations — which is also why the
-  role is checked again at runtime: that override is editable by any admin, so
-  the registration is a default and not a security boundary
-*/
+/* "0" hides the command until an admin grants it to a role */
 test("registers hidden, granted to a role in server settings", () => {
   expect(article().default_member_permissions).toBe("0");
 });
@@ -65,11 +60,7 @@ test("required arguments precede optional ones as Discord requires", () => {
   }
 });
 
-/*
-  notion is the source of truth for the interface, not just the data (ADR
-  0009), so a choice's value is the option name verbatim — casing included.
-  "Not Started" is not a status; "Not started" is
-*/
+/* a choice's value is Notion's option name verbatim, casing included (ADR 0009) */
 test("a choice's value is the notion option name, verbatim", () => {
   expect(
     choicesFor(
@@ -109,10 +100,7 @@ test("choices for one property never include another's", () => {
   expect(choices).toEqual([{ name: "Drafting", value: "Drafting" }]);
 });
 
-/*
-  discord rejects the whole registration over a 26th choice, which would take
-  the command surface down until somebody deleted a notion option
-*/
+/* Discord rejects the whole registration over a 26th choice */
 test("stops at discord's 25 choice limit rather than being refused", () => {
   const many = Array.from({ length: 40 }, (_, i) => ({
     property: "Section",
@@ -134,11 +122,7 @@ test("every subcommand the handler answers to is registered", () => {
 });
 
 test("the article picker is autocompleted, not a choice list", () => {
-  /*
-    138 articles against discord's cap of 25 choices: listing them is not an
-    option, and a picker that silently truncated to the first 25 would look
-    like the rest had been deleted
-  */
+  /* there are more Articles than Discord's 25 choices */
   const show = buildCommands([])[0]!.options!.find((o) => o.name === "show");
   const article = show!.options!.find((o) => o.name === "article");
 
@@ -172,12 +156,7 @@ test("every subcommand about one Article autocompletes the picker", () => {
   }
 });
 
-/*
-  ADR 0009: adding a status in notion changes what discord offers without a
-  code change, and no notion value is ever typed into this repo — which is what
-  keeps `Not started` from becoming `Not Started` and being rejected with a 400
-  that reads like a bad id
-*/
+/* a status added in Notion reaches Discord with no code change (ADR 0009) */
 test("the three pickers offer notion's own options, in notion's order", () => {
   const choices = [
     { property: "Article Status", name: "Approved", position: 1 },

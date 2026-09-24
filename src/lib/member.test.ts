@@ -4,7 +4,7 @@ import { GUILD_ID } from "./services/discord/config";
 const workers = vi.hoisted(() => ({ env: {} as Record<string, string> }));
 vi.mock("cloudflare:workers", () => workers);
 
-const { guildMember, guildMembers, requireGuildMembers } =
+const { guildMember, guildMembers, readGuildMembers } =
   await import("./member");
 
 const USER = "342850506328117249";
@@ -21,10 +21,7 @@ function mockDiscord(body: unknown, ok = true) {
   );
 }
 
-/*
-  the profile, insisting the lookup succeeded. a test about naming that quietly
-  ran against "absent" would pass for the wrong reason
-*/
+/* insists the lookup succeeded, so a naming test cannot pass on "absent" */
 async function profileOf(userId = USER) {
   const lookup = await guildMember(userId);
   if (lookup.status !== "member")
@@ -107,11 +104,7 @@ test("is absent when they have left the server", async () => {
   expect(await guildMember(USER)).toEqual({ status: "absent" });
 });
 
-/*
-  the same 404 answers a guild we cannot see — a wrong GUILD_ID, or the bot
-  removed from the server. reading that as "they left" would print our own
-  misconfiguration on the refusal page as a fact about a member
-*/
+/* the same 404 answers a wrong GUILD_ID or a removed bot */
 test("is unreachable when the 404 is about the guild, not the member", async () => {
   workers.env.DISCORD_BOT_TOKEN = "bot";
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -150,8 +143,6 @@ test("is unreachable when discord answers with an error", async () => {
   expect(await guildMember(USER)).toEqual({ status: "unreachable" });
 });
 
-/* a 200 that is not the shape we asked for is discord misbehaving, not a
-   member who holds no roles */
 test("is unreachable when the body carries no roles", async () => {
   workers.env.DISCORD_BOT_TOKEN = "bot";
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -168,8 +159,7 @@ test("is unreachable without a bot token, without asking discord", async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-/* the whole guild in one request, which is what makes a page of avatars
-   affordable. the guild avatar wins over the account one, as it does per user */
+/* the guild avatar wins over the account one, as it does per user */
 test("maps every id in the list to its avatar url", async () => {
   workers.env.DISCORD_BOT_TOKEN = "bot";
   vi.stubGlobal(
@@ -223,7 +213,29 @@ test("a required guild read exposes Discord refusal instead of claiming it is em
     vi.fn(async () => new Response("no", { status: 403 })),
   );
 
-  await expect(requireGuildMembers()).rejects.toThrow(/Server Members intent/);
+  await expect(readGuildMembers()).rejects.toThrow(/Server Members intent/);
+});
+
+/* discord answers at most 1000 members a request */
+test("pages through a guild larger than one request", async () => {
+  workers.env.DISCORD_BOT_TOKEN = "bot";
+  const page = (from: number, count: number) =>
+    Array.from({ length: count }, (_, i) => ({
+      user: { id: String(from + i), username: `u${from + i}` },
+    }));
+  const fetchMock = vi.fn(async (url: string) =>
+    new URL(url).searchParams.get("after") === "0"
+      ? new Response(JSON.stringify(page(1, 1000)))
+      : new Response(JSON.stringify(page(1001, 3))),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+
+  const guild = await readGuildMembers();
+
+  expect(guild.size).toBe(1003);
+  expect(
+    new URL(String(fetchMock.mock.calls[1]![0])).searchParams.get("after"),
+  ).toBe("1000");
 });
 
 test("does not ask discord for the guild without a bot token", async () => {

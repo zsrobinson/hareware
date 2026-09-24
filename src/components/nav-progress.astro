@@ -9,9 +9,7 @@
 </div>
 
 <script>
-  /* astro fires neither of these on a full page load, so the bar only ever
-     stands in where the browser has stopped showing its own indicator.
-     listeners on document survive the swaps, so registering once is enough */
+  /* only client-side navigations, where the browser shows no indicator */
   const SHOW_AFTER = 150; // let quick navigations finish without a flash
 
   let show: ReturnType<typeof setTimeout> | undefined;
@@ -26,9 +24,7 @@
     clearTimeout(show);
     clearTimeout(reset);
 
-    // a navigation started while one was already running: leave the bar
-    // where it is and let it keep creeping, rather than snapping it back
-    // to nothing and starting over, which reads as a flicker
+    // already running: keep creeping rather than flicker back to zero
     if (el.getAttribute("data-state") === "loading") return;
 
     el.removeAttribute("data-state"); // back to zero width, untransitioned
@@ -46,8 +42,7 @@
     clearTimeout(show);
     const state = el.getAttribute("data-state");
 
-    // page-load lands a moment after preparation finished, so without this
-    // the second call would strip the bar mid-wind-down
+    // page-load follows preparation; do not strip the bar mid-wind-down
     if (state === "done") return;
 
     // it never became visible, so there is nothing to wind down

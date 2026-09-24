@@ -1,5 +1,9 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { automation } from "~/lib/automations/registry";
 import { syncApplications } from "./sync";
+
+const log = vi.hoisted(() => ({ record: vi.fn() }));
+vi.mock("~/lib/log", () => log);
 
 const env = {
   NOTION_TOKEN: "secret",
@@ -39,13 +43,7 @@ const member = (
   },
 });
 
-/**
- * stands in for discord's one read, notion's one query and each create.
- *
- * returns the spy on creates, because "what did it write" is the question every
- * test here asks — a summary that says three and a roster that grew by five is
- * the failure mode worth catching
- */
+/** discord's read, notion's query and each create; returns the spy on creates */
 function mockSources(requests: unknown[], members: unknown[]) {
   const created = vi.fn();
 
@@ -68,7 +66,10 @@ function mockSources(requests: unknown[], members: unknown[]) {
   return created;
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
+});
 
 test("a missing NOTION_TOKEN is misconfigured, and names the secret", async () => {
   const result = await syncApplications(
@@ -112,6 +113,47 @@ test("an applicant nobody on the roster matches gets a row", async () => {
   expect(body.properties.Name.title[0].text.content).toBe("Bay Hoffman");
   expect(body.properties["Discord ID"].rich_text[0].text.content).toBe("1");
   expect(body.properties.Email.email).toBe("bay@terpmail.umd.edu");
+});
+
+/* under the run's own action, a created row would read as this run's outcome
+   and re-arm the failure alert mid-run */
+test("each created row is logged as a roster edit, apart from the run", async () => {
+  mockSources([request("1", "Bay Hoffman", "bay@terpmail.umd.edu")], []);
+
+  await syncApplications(env, today);
+
+  expect(log.record).toHaveBeenCalledTimes(1);
+  const [, row] = log.record.mock.calls[0]!;
+  expect(row.action).not.toBe(automation("applications")!.action);
+  expect(log.record).toHaveBeenCalledWith(undefined, {
+    source: "cron",
+    action: "roster-edit",
+    outcome: "ok",
+    summary: "created a Members row for Bay Hoffman from their application",
+  });
+});
+
+/* a renamed form question makes every application incomplete at once */
+test("an application missing an answer is counted as waiting", async () => {
+  mockSources(
+    [
+      {
+        ...request("1", "Bay Hoffman", "bay@terpmail.umd.edu"),
+        form_responses: [
+          { label: "Full name", response: "Bay Hoffman", values: [""] },
+          { label: "Contact", response: "bay@terpmail.umd.edu", values: [""] },
+        ],
+      },
+    ],
+    [],
+  );
+
+  const result = await syncApplications(env, today);
+
+  expect(result.outcome).toBe("skipped");
+  expect(result.summary).toContain(
+    "1 needs review on the reconciler (1 missing a name or email)",
+  );
 });
 
 test("only the applications matching nothing are created", async () => {

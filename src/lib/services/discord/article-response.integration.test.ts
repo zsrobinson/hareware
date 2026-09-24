@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { runEdit, type EditIO } from "~/lib/articles/edit";
 import type { ArticlePage } from "~/lib/articles/page";
+import { ARTICLES_DATA_SOURCE_ID } from "~/lib/articles/config";
 import type { Schema } from "~/lib/articles/choices";
 import { handleInteraction, type InteractionDeps } from "./interactions";
 import { followUp } from "./follow-up";
@@ -28,6 +29,7 @@ function article(status: string, color: string, headline: string): ArticlePage {
   return {
     id: "3d1be415-e24c-80c8-a14f-cf1fd9b7e48c",
     url: "https://www.notion.so/3d1be415e24c80c8a14fcf1fd9b7e48c",
+    parent: { type: "data_source_id", data_source_id: ARTICLES_DATA_SOURCE_ID },
     properties: {
       Headline: { title: [{ plain_text: headline }] },
       "Author Byline": { rich_text: [{ plain_text: "Jamie Example" }] },

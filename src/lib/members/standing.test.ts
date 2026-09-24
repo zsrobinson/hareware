@@ -123,11 +123,6 @@ test("the window is inclusive of both ends", () => {
   expect(standing.contributions).toBe(2);
 });
 
-test("a full timestamp compares as its day", () => {
-  const standing = only([], [article({ date: "2026-12-31T18:41:17.187Z" })]);
-  expect(standing.contributions).toBe(1);
-});
-
 test("an article with no publication date counts for nothing", () => {
   const standing = only([], [article({ date: "" })]);
   expect(standing.contributions).toBe(0);
@@ -168,8 +163,8 @@ test("an alum is on the masthead, because that question is not about standing", 
   expect(standing.excludedAsAlum).toBe(false);
 });
 
-/* the 49 rows predating ADR 0010 all look like this, and a rule that denied
-   them would disenfranchise the club at the first election it ran */
+/* every row predating ADR 0010 has no status, so denying them would
+   disenfranchise the club at its first election */
 test("an unset status is flagged rather than treated as alum", () => {
   const standing = only(
     [meeting(), meeting(), meeting()],

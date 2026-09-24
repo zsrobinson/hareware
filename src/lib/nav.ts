@@ -17,13 +17,11 @@ export type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
-  /* the other routes that belong to this tool. the generator's working pages
-     are /generate and /custom, and neither should light a nav item of its own */
+  /* the other routes that light this item */
   match?: string[];
 };
 
-/* the public tools. these read wordpress and nothing else, so they stay
-   reachable signed out, as they always have been */
+/* the public tools, which read only WordPress */
 export const toolsNav: NavItem[] = [
   {
     href: "/generate",
@@ -36,16 +34,7 @@ export const toolsNav: NavItem[] = [
   { href: "/email", label: "Newsletter", icon: MailIcon },
 ];
 
-/*
-  The admin tools, shown to everybody: the guard refuses in person, so the nav
-  has nothing to hide (ADR 0007). `href` is an `AdminRoute`, so a tool listed
-  here is one the guard protects.
-
-  Ordered by when they are used: the kiosk at the meeting, the reconciler
-  before a vote, standing to answer the question those two make answerable,
-  then the three that were here first. The log goes last, being the one read
-  after the fact rather than a thing somebody came to do.
-*/
+/* The admin tools, shown to everybody: the guard refuses in person (ADR 0007). */
 export const adminNav: (NavItem & { href: AdminRoute })[] = [
   { href: "/attendance", label: "Attendance", icon: ClipboardCheckIcon },
   { href: "/reconciler", label: "Reconciler", icon: UsersIcon },

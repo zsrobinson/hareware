@@ -104,12 +104,3 @@ export function useViewer(knownByServer?: ViewerState | null): ViewerState {
 
   return knownByServer ?? value;
 }
-
-export function useSession(knownByServer?: ViewerState | null) {
-  return useViewer(knownByServer).session;
-}
-
-/** what to call the signed-in member, once it has arrived */
-export function useProfile(knownByServer?: ViewerState | null) {
-  return useViewer(knownByServer).profile;
-}

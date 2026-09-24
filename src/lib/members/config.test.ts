@@ -6,13 +6,7 @@ import {
   defaultStatus,
 } from "./config";
 
-/*
-  the Status options are notion's, and the pickers read them live. This one
-  value is the exception, because `standing.ts` excludes alumni from voting by
-  comparing against it — a rename in notion would enfranchise every alum with
-  nothing on screen to say so. So it is checked against the live options and
-  the standing page and reconciler say it out loud.
-*/
+/* standing excludes alumni by this one value, so a rename in notion is flagged */
 
 test("an unread schema is not a claim that the option is gone", () => {
   expect(alumOptionMissing([])).toBe(false);
@@ -26,11 +20,7 @@ test("a renamed alum option is reported rather than silently ignored", () => {
   expect(alumOptionMissing(["Undergrad", "Grad", "Alumnus"])).toBe(true);
 });
 
-/*
-  a new member's status, which nobody at the kiosk is going to change. Notion
-  returns its options alum-first, so the default is the one thing here that may
-  not be read off the front of the list.
-*/
+/* notion lists its options alum-first */
 
 test("a new member starts on Undergrad however notion orders its options", () => {
   expect(defaultStatus(["Alum", "Undergrad", "Grad"])).toBe(

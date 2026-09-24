@@ -100,15 +100,9 @@ function clearOAuthStateCookie() {
 }
 
 /*
-  where a sign-in may send somebody afterwards.
-
-  the rule is checked against the string that goes into the Location header,
-  not the one that came in. checking the input and returning the *normalised*
-  value left a hole: `/..//evil.com` starts with a single slash and resolves to
-  our own origin — the escape happens inside the path — but `url.pathname`
-  comes back as `//evil.com`, which a browser reads as protocol-relative and
-  follows off-site. A phish is most convincing on the login path, so this is
-  the one place that must not hand out redirects.
+  Where a sign-in may send somebody afterwards. Checks the string that goes into
+  the Location header, not the input: `/..//evil.com` normalises to
+  `//evil.com`, which a browser follows off-site.
 */
 function safeReturnTo(value: string) {
   const base = "https://hareware.invalid";
@@ -123,6 +117,11 @@ function safeReturnTo(value: string) {
   } catch {
     return "/generate";
   }
+}
+
+/** where a sign-in reached at this url may send somebody afterwards */
+export function returnToOf(url: URL) {
+  return safeReturnTo(url.searchParams.get("returnTo") ?? "/generate");
 }
 
 function redirect(location: string, cookies: string[] = []) {
@@ -156,7 +155,7 @@ export async function beginDiscordSignIn(request: Request, config: AuthConfig) {
   const requestUrl = new URL(request.url);
   const callbackUrl = new URL("/auth/discord/callback", requestUrl.origin);
   const state = crypto.randomUUID();
-  const returnTo = requestUrl.searchParams.get("returnTo") ?? "/generate";
+  const returnTo = returnToOf(requestUrl);
   const destination = new URL("https://discord.com/oauth2/authorize");
 
   destination.search = new URLSearchParams({

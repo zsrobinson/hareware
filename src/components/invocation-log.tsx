@@ -1,20 +1,15 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { useMemo } from "react";
 import { DataTable, sortable } from "~/components/data-table";
 import { MemberFace } from "~/components/member-face";
 import { Badge } from "~/components/ui/badge";
 import type { Faces } from "~/lib/faces";
 import type { Row } from "~/lib/log";
 
-/** the row as it crosses to the client: json has no Date and needs none */
 export type LogRow = Row;
 
-/*
-  four outcomes, four readings. binary would put `skipped` in the same red as
-  `failed`, so a Tuesday with no board meeting — the quiet morning ADR 0007
-  exists to distinguish — would read as broken. `misconfigured` is amber
-  because somebody has to go and set something, and `failed` is red because
-  something went wrong on its own
-*/
+/* `skipped` is not a failure (ADR 0007); `misconfigured` needs someone to
+   set something */
 const BADGES: Record<string, "secondary" | "outline" | "destructive"> = {
   ok: "secondary",
   skipped: "outline",
@@ -31,8 +26,6 @@ const when = (at: number) =>
     minute: "2-digit",
   });
 
-/* the actor is a discord id, so the column is built per page: the picture and
-   the name both come from the lookup the page already made */
 const columnsFor = (faces: Faces): ColumnDef<LogRow, unknown>[] => [
   {
     accessorKey: "at",
@@ -88,8 +81,7 @@ const columnsFor = (faces: Faces): ColumnDef<LogRow, unknown>[] => [
       const face = faces[actor];
       return (
         <span className="flex items-center gap-2 whitespace-nowrap">
-          {/* the id is not a name, so an unresolved actor gets the ghost
-              rather than initials made out of a snowflake */}
+          {/* the ghost, not initials made from a snowflake */}
           <MemberFace
             discordId={actor}
             name={face?.displayName ?? ""}
@@ -111,9 +103,11 @@ export function InvocationLog({
   rows: LogRow[];
   faces: Faces;
 }) {
+  const columns = useMemo(() => columnsFor(faces), [faces]);
+
   return (
     <DataTable
-      columns={columnsFor(faces)}
+      columns={columns}
       data={rows}
       facets={[
         { id: "source", label: "Source" },

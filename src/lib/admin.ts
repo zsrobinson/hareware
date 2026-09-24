@@ -1,8 +1,6 @@
 /*
-  Who may reach the admin tools. @Editorial Board is checked against Discord on
-  every request rather than captured at sign-in, so losing the role takes effect
-  immediately; the same request carries the profile, so identity is never
-  stored. A refusal names which of four things is wrong. ADR 0007 for both.
+  Who may reach the admin tools, checked live against Discord on every request.
+  The same lookup gives the profile. ADR 0007, ADR 0008.
 */
 
 import { getSessionSecret } from "./auth-config";
@@ -13,8 +11,6 @@ import { getSession, type Session } from "./session";
 
 /**
  * The signed-in member, what to call them, and whether they may see the tools.
- * `admin` and `denial` are one choice, so a refused viewer always carries its
- * reason and an admitted one cannot carry a stale one.
  */
 export type Viewer = {
   session: Session;
@@ -22,10 +18,7 @@ export type Viewer = {
   profile: Profile | null;
 } & ({ admin: true; denial: null } | { admin: false; denial: Denial });
 
-/**
- * The same thing as the sidebar takes it, where signed-out is a value rather
- * than null. No `admin`: nothing the sidebar draws varies by role.
- */
+/** what the sidebar takes, where signed-out is a value rather than null */
 export type ViewerState = {
   session: Session | null;
   profile: Profile | null;
@@ -60,13 +53,7 @@ export async function viewer(request: Request): Promise<Viewer | null> {
     : { session, profile: member.profile, admin: false, denial: "no-role" };
 }
 
-/**
- * whoever is asking, and whether the admin tools may answer them.
- *
- * the shape the admin pages guard on: one call that either hands back an
- * allowed viewer or the reason it will not, so there is no way to read the
- * session without the check, and no way to refuse without saying why
- */
+/** whoever is asking, and whether the admin tools may answer them or why not */
 export type Access =
   | { allowed: true; who: Viewer }
   | { allowed: false; who: Viewer | null; denial: Denial };
@@ -76,20 +63,7 @@ export async function adminAccess(request: Request): Promise<Access> {
 
   if (!who) return { allowed: false, who: null, denial: "signed-out" };
 
-  /* Read rather than defaulted to "no-role": a default is where a lookup
-     state nobody has thought about yet would quietly become a lie. */
   if (!who.admin) return { allowed: false, who, denial: who.denial };
 
   return { allowed: true, who };
-}
-
-/**
- * What the API routes guard on, where a caller holding a bearer secret gets a
- * status code rather than a page and the reason is nobody's business.
- */
-export async function editorialBoardMember(
-  request: Request,
-): Promise<Session | null> {
-  const who = await viewer(request);
-  return who?.admin ? who.session : null;
 }

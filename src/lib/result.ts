@@ -1,17 +1,5 @@
-/*
-  how anything here reports what it did.
-
-  four outcomes rather than a boolean, because "did it throw" is the wrong
-  question: the reminders return rather than throw on their most important
-  failures, so a week of wordpress refusing the feed once wrote seven rows
-  saying `ok`. a quiet morning and a broken one have to differ by more than
-  prose nobody reads past the badge.
-
-  here rather than in `automations/registry` — where it was — because six
-  modules that are not automations import it, two of them under `services/`,
-  whose whole rule is that it knows nothing about the layer above it. a shared
-  vocabulary is not a registry.
-*/
+/* How anything reports what it did: a quiet morning must not look like a broken
+   one. */
 
 import type { Row } from "~/lib/db/schema";
 

@@ -1,54 +1,45 @@
 /*
-  talking to Notion.
-
-  everything here is about the API and nothing about reminders — a watcher on a
-  database, a slash command that looks a page up, and the meeting reminder all
-  want the same three things: resolve a data source, read its schema, query it.
-  they were inside the meeting reminder, which meant the second caller would
-  have copied them.
-
-  what is deliberately NOT here: which database, which property, what a row
-  means. that belongs to whatever is asking.
+  talking to Notion's API. Which database, which property and what a row means
+  belong to the caller. The traps are in docs/agents/silent-failures.md.
 */
 
 import { mapLimit } from "~/lib/map-limit";
 import { sendPatiently } from "~/lib/rate-limit";
 
-// https://developers.notion.com/reference/versioning — pinned explicitly
-// rather than omitted, since an unpinned request rides whatever the account's
-// default happens to be and can change shape without warning
+// pinned: an unpinned request follows the account's default version, which
+// can change shape. https://developers.notion.com/reference/versioning
 const NOTION_VERSION = "2026-03-11";
 
-/** a page as we read it: its url, and whatever properties it carries */
 export type NotionPage = {
   url: string;
   properties: Record<string, NotionProperty>;
 };
 
-/** a property can be almost anything; these are the shapes we know how to read */
+/** the property shapes these helpers read */
 export type NotionProperty = {
   type: string;
   title?: { plain_text: string }[];
   rich_text?: { plain_text: string }[];
   date?: { start: string } | null;
-  /* the meeting reminder reads Meetings' `Type` to tell a board meeting from a
-     general body one — see ADR 0010 */
   select?: { name?: string | null } | null;
 };
 
 export class NotionError extends Error {}
 
+/** whether a page read with `pages/{id}` is a row of this data source */
+export function inDataSource(
+  page: { parent?: { data_source_id?: string } },
+  dataSourceId: string,
+): boolean {
+  const compact = (id: string | undefined) =>
+    id?.replaceAll("-", "").toLowerCase();
+
+  return compact(page.parent?.data_source_id) === compact(dataSourceId);
+}
+
 /**
- * every request wants the same headers, and none may echo the token.
- *
- * the method is inferred from the body — a read has none — with `method` there
- * for the one case that breaks the rule: updating a page is a `PATCH` with a
- * body, and sending it as a `POST` creates a second page rather than failing.
- *
- * every caller in the codebase goes through here, so a 429 is waited out here
- * and nowhere else. `sendPatiently` is a retry and not a queue: it keeps a
- * burst that crossed the budget from reaching a page as an error, while
- * `together` below is what keeps the burst from happening
+ * one request, with a 429 waited out. The method is inferred from the body;
+ * an update must pass `"PATCH"`, because a `POST` with a body creates a page
  */
 export async function notion(
   path: string,
@@ -67,12 +58,10 @@ export async function notion(
         },
         body: body ? JSON.stringify(body) : undefined,
       }),
-    /* the path names the call and carries no token */
     `notion ${path}`,
   );
 
   if (!response.ok) {
-    // the status and body are safe to surface; the request headers are not
     throw new NotionError(
       `notion returned ${response.status} for ${path}: ${await response.text()}`,
     );
@@ -82,35 +71,8 @@ export async function notion(
 }
 
 /**
- * the data source inside a database.
- *
- * a database is a container in the current API and holds no properties of its
- * own — the schema and the rows both live on a data source inside it, so
- * `databases/{id}/query` is not an endpoint and `databases/{id}` comes back
- * with an empty `properties`. this is the first thing every caller needs and
- * the first thing every caller gets wrong
- */
-export async function dataSource(
-  databaseId: string,
-  token: string,
-): Promise<string> {
-  const database = (await notion(`databases/${databaseId}`, token)) as {
-    data_sources: { id: string }[];
-  };
-
-  const source = database.data_sources[0]?.id;
-  if (!source)
-    throw new NotionError(`database ${databaseId} has no data source`);
-
-  return source;
-}
-
-/**
- * the name of the first property of a given type on a data source.
- *
- * asked of the schema rather than hardcoded, so renaming a column in Notion
- * does not break a caller quietly. pass an override when a second property of
- * the same type would make the guess ambiguous
+ * the name of the first property of a type, from the schema. Pass `override`
+ * when a second property of the type would make the guess ambiguous
  */
 export async function propertyOfType(
   source: string,
@@ -147,18 +109,7 @@ export async function query(
   return data.results;
 }
 
-/**
- * every row a query matches, following `has_more` to the end.
- *
- * `query` above returns one page and is right for a caller that wants the
- * first few; this is for the ones that need all of them. Notion caps a page at
- * 100 and reports more with a cursor, so a caller reading only the first gets
- * a plausible answer quietly missing everybody after the hundredth — a whole
- * class of bug that reads as "that member has no articles".
- *
- * generic in the row so each caller keeps its own shape; this knows only how
- * notion pages a response
- */
+/** every row a query matches: notion answers 100 at a time, and `query` stops at one page */
 export async function queryAll<T>(
   source: string,
   token: string,
@@ -175,12 +126,22 @@ export async function queryAll<T>(
     })) as { results: T[]; has_more?: boolean; next_cursor?: string | null };
 
     rows.push(...response.results);
-    cursor = response.has_more
-      ? (response.next_cursor ?? undefined)
-      : undefined;
+    cursor = next(response, `data_sources/${source}/query`);
   } while (cursor);
 
   return rows;
+}
+
+/** the next cursor, or undefined on the last page. `has_more` with no cursor throws */
+function next(
+  page: { has_more?: boolean; next_cursor?: string | null },
+  path: string,
+): string | undefined {
+  if (!page.has_more) return undefined;
+  if (!page.next_cursor) {
+    throw new NotionError(`notion said ${path} has more but gave no cursor`);
+  }
+  return page.next_cursor;
 }
 
 /** the plain text of a page's title property, whatever that property is called */
@@ -204,29 +165,15 @@ export function richText(page: NotionPage): string | undefined {
   return text.trim() || undefined;
 }
 
-/**
- * the text of a notion rich-text or title array.
- *
- * every caller that reads a property needs this, and it was written out
- * identically in four files under `articles/` — a shape notion decides, so it
- * belongs beside the rest of what notion's shapes mean
- */
+/** the text of a notion rich-text or title array */
 export function plainText(
   parts: { plain_text: string }[] | null | undefined,
 ): string {
   return (parts ?? []).map((part) => part.plain_text).join("");
 }
 
-/**
- * how many notion reads a page may have in flight at once.
- *
- * the budget is about three requests a second per integration, and two lanes
- * rather than three because the reads in a lane are not one request each:
- * `contributions()` pages twice back to back and `queryAll` will page further
- * as the article corpus grows, so two lanes already produce three or four
- * requests in a second. The retry in `notion()` above is the backstop; this is
- * the thing that keeps it from being needed
- */
+/* notion allows about three requests a second, and a lane running `queryAll`
+   pages back to back, so two lanes is already three or four a second */
 const LANES = 2;
 
 /** the tasks' results, in the order the tasks were given */
@@ -235,16 +182,8 @@ type Results<T extends readonly (() => Promise<unknown>)[]> = {
 };
 
 /**
- * runs notion reads concurrently, but never more than `LANES` at once.
- *
- * `Promise.all` over a page's reads is what put five requests on the wire in
- * one tick, which is above the budget before a single one has finished. This
- * keeps them concurrent — serialising them would add a round trip per read to
- * a page that is `no-store` and therefore re-read on every visit — and only
- * bounds how many are in the air.
- *
- * takes thunks rather than promises: a promise handed in has already started,
- * so a `Promise.all` renamed to this would look bounded and burst anyway
+ * notion reads run concurrently, never more than `LANES` at once. Takes thunks
+ * because a promise handed in has already started
  */
 export async function together<
   const T extends readonly (() => Promise<unknown>)[],
@@ -254,31 +193,47 @@ export async function together<
 }
 
 /**
- * every id in a relation property, including the ones a page object omits.
- *
- * notion truncates a relation to 25 entries wherever it appears inside a page
- * — a `pages/{id}` read and a data source query alike — and says so only with
- * `has_more` on the property. Nothing else about the answer looks short. A
- * general body meeting is thirty people, so the twenty-sixth onward were
- * simply not there: read for standing they were never counted, and read
- * before a write they were merged against and deleted.
- *
- * the property item endpoint is the documented way to the whole list, and it
- * pages. `property` is the property's own id from the page object, not its
- * name, and it goes into the path **verbatim**.
- *
- * verbatim is load-bearing. notion hands these ids back already
- * percent-encoded — `c%3CLo`, `%5CClH` — so encoding them again asks for a
- * property that does not exist. Measured against the real database: the id as
- * given answers with twelve related pages, and the same id put through
- * `encodeURIComponent` answers `200` with an empty list. Not a 404, not an
- * error; an empty relation.
- *
- * that shape is the worst one this could take. `recordAttendance` merges the
- * device's list against what notion currently holds, so an empty answer for a
- * meeting of thirty reads as an empty room, and the next tap writes that back
+ * a relation property as notion puts it inside a page object. A relation the
+ * integration cannot reach is left out of the page entirely, so a missing
+ * property must not be read as an empty one
+ */
+export type RelationProperty = {
+  /** the property's own id, which the property item endpoint is keyed by */
+  id?: string;
+  relation?: { id: string }[] | null;
+  /** notion's only sign that `relation` was cut short at 25 */
+  has_more?: boolean;
+};
+
+/**
+ * every id in a relation property. Notion cuts a relation inside a page or a
+ * query result to 25 and says so only with `has_more`; only then is the rest
+ * read from the property item endpoint
  */
 export async function relationIds(
+  pageId: string,
+  property: RelationProperty,
+  token: string,
+): Promise<string[]> {
+  if (!property.has_more) {
+    return (property.relation ?? []).map((related) => related.id);
+  }
+  if (!property.id) {
+    throw new NotionError(
+      `a relation on ${pageId} was cut short and carries no id to read the rest by`,
+    );
+  }
+
+  return pagedRelation(pageId, property.id, token);
+}
+
+/**
+ * a whole relation from the property item endpoint. `property` is the
+ * property's id and goes into the path verbatim: notion returns it already
+ * percent-encoded (`c%3CLo`), and encoding it again answers 200 with an empty
+ * list
+ */
+async function pagedRelation(
   pageId: string,
   property: string,
   token: string,
@@ -287,8 +242,9 @@ export async function relationIds(
   let cursor: string | undefined;
 
   do {
+    const path = `pages/${pageId}/properties/${property}`;
     const page = (await notion(
-      `pages/${pageId}/properties/${property}?page_size=100${
+      `${path}?page_size=100${
         cursor ? `&start_cursor=${encodeURIComponent(cursor)}` : ""
       }`,
       token,
@@ -302,7 +258,7 @@ export async function relationIds(
       if (item.relation?.id) ids.push(item.relation.id);
     }
 
-    cursor = page.has_more ? (page.next_cursor ?? undefined) : undefined;
+    cursor = next(page, path);
   } while (cursor);
 
   return ids;

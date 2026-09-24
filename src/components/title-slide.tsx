@@ -17,16 +17,9 @@ export function TitleSlide({
   const autoSized = useRef<number | null>(null);
 
   /**
-   * fit the title to the slide, once, as soon as there is a title to fit.
-   *
-   * reading scrollHeight forces a synchronous reflow, so a binary search over
-   * the slider's range settles inside a single frame — the old version stepped
-   * one pixel at a time behind a 100ms timer, which took upwards of a second
-   * and restarted the debounced png render on every step along the way.
-   *
-   * the title arrives from a parent effect a beat after mount, so this keys off
-   * the title rather than mount; past that first fit the size belongs to
-   * whoever is dragging the slider.
+   * fit the title to the slide once there is a title. Reading scrollHeight
+   * reflows synchronously, so a binary search settles in one frame. After the
+   * first fit the size belongs to the slider
    */
   useLayoutEffect(() => {
     if (autoSized.current !== null || !state.title) return;
@@ -62,24 +55,16 @@ export function TitleSlide({
 
     measure();
 
-    // the serif loads with font-display: swap, so a measurement taken against
-    // fallback metrics can come out wrong. redo it after the swap, unless the
-    // slider has been touched in the meantime
+    // the serif swaps in late, so measure again unless the slider moved
     document.fonts?.ready
       .then(() => {
         if (autoSized.current === useLayoutState.getState().titleSize)
           measure();
       })
-      /* a browser that never resolves this leaves the fallback measurement,
-         which is the size it already has — nothing to recover, only to report */
       .catch((error: unknown) => {
         console.error("could not remeasure after the font swap", error);
       });
-    /*
-      the title is what changes the measurement. `state` as a whole would
-      re-measure on every slider nudge, which is the thing this is meant to
-      stop overriding, and `ref` is stable
-    */
+    /* only the title: `state` would re-measure on every slider nudge */
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.title]);
 
@@ -95,11 +80,7 @@ export function TitleSlide({
       {imageURI ? (
         <img
           src={imageURI}
-          // photon answers with access-control-allow-origin: *, so asking for
-          // the image as cors leaves the cached copy reusable when the png
-          // renderer inlines it, rather than making it fetch the image a second
-          // time on every re-render. uploads arrive as data uris, which have
-          // nothing to negotiate
+          // photon allows cors, so the png renderer can reuse the cached image
           crossOrigin={imageURI.startsWith("data:") ? undefined : "anonymous"}
           className="bg-secondary aspect-video w-full"
         />

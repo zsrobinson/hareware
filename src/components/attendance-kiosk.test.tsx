@@ -1,19 +1,7 @@
 // @vitest-environment jsdom
 
-/*
-  the test that should have existed before any of the fixes above it.
-
-  the room's whole interaction with this page is a queue of people tapping in
-  quick succession, and every failure reported against it — people missing,
-  rows reordering, a removal that did not take — has been in the space between
-  one tap and the next. That space cannot be reasoned about from the pure
-  functions alone: it is React Query's queue, the cache, and the component's
-  own state, together.
-
-  so this drives the real component against a fake notion that behaves like the
-  real one in the two ways that hurt: it takes time to answer, and it answers
-  with the relation in whatever order it likes.
-*/
+/* the real kiosk against a fake notion that is slow and answers the relation
+   in any order, since the failures live between one tap and the next */
 
 import {
   cleanup,
@@ -23,32 +11,22 @@ import {
   within,
 } from "@testing-library/react";
 import { configure, fireEvent } from "@testing-library/dom";
+import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mergeAttendance } from "~/lib/members/attendance";
 import type { KioskData } from "~/lib/members/views";
 
-/*
-  imported per test, not once.
-
-  the query client is module scope in the app — it has to outlive the island,
-  which `<ClientRouter />` remounts on every navigation — so two tests sharing
-  this module would share the cache, and the second would open with the first
-  test's room already signed in
-*/
+/* imported per test: the query client is module scope, so a shared module
+   would share one test's cache with the next */
 let AttendanceKiosk: typeof import("./attendance-kiosk").AttendanceKiosk;
+let toast: typeof import("sonner").toast;
 
-vi.mock("~/lib/notify", () => ({
-  notify: { ok: vi.fn(), failed: vi.fn() },
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-/*
-  generous, because every wait here is for a condition rather than for a
-  duration: the writes are gated by the test, not by a clock. A default second
-  is enough on an idle machine and not on one running the rest of this suite in
-  parallel, and a test that fails only when the laptop is busy teaches nobody
-  anything
-*/
+/* every wait is for a condition, so a generous timeout only helps a busy machine */
 configure({ asyncUtilTimeout: 10_000 });
 
 const NAMES = ["Ana Diaz", "Ben Okafor", "Cass Lin", "Dev Patel", "Elle Moore"];
@@ -73,15 +51,21 @@ const initial: KioskData = {
   })),
   openingId: "m1",
   statuses: ["Undergrad", "Grad", "Alum"],
+  notionProblem: null,
 };
 
-/** notion, as far as the page can tell: slow, and indifferent to order */
 type Fake = {
   attendees: string[];
   writes: { known: string[]; memberIds: string[] }[];
-  /* held open by the test that wants to look at the screen while every write
-     is still in flight. Resolved by default, so the rest run at full speed */
+  /* held open by a test that looks at the screen before notion answers.
+     Resolved by default, so the rest run at full speed */
   gate: Promise<void>;
+  /** whether a write is refused rather than recorded */
+  refuse: boolean;
+  /** what a re-read of the roster answers, for the tests that switch meeting */
+  kiosk: KioskData | null;
+  /** how many re-reads of the roster fail before one answers */
+  kioskFailures: number;
 };
 
 let fake: Fake;
@@ -89,15 +73,18 @@ let fake: Fake;
 beforeEach(async () => {
   vi.resetModules();
   ({ AttendanceKiosk } = await import("./attendance-kiosk"));
+  ({ toast } = await import("sonner"));
 
-  fake = { attendees: [], writes: [], gate: Promise.resolve() };
-  /*
-    the stub closes over *this* test's fake, not the variable.
-
-    a test that ends with writes still queued leaves them running, and they
-    answer into whatever the stub reaches. Reading the outer binding meant the
-    next test opened with the last one's writes landing in its notion
-  */
+  fake = {
+    attendees: [],
+    writes: [],
+    gate: Promise.resolve(),
+    refuse: false,
+    kiosk: null,
+    kioskFailures: 0,
+  };
+  /* this test's fake, not the variable: writes left running must not land
+     in the next test's notion */
   const notion = fake;
 
   vi.stubGlobal(
@@ -112,11 +99,16 @@ beforeEach(async () => {
         };
         notion.writes.push(body);
 
-        /* the round trip, so a second tap really does land mid-write */
         await notion.gate;
-        /* enough for the next tap to land while this one is in flight, which
-           is the whole situation under test */
+        /* long enough for the next tap to land mid-write */
         await new Promise((done) => setTimeout(done, 10));
+
+        if (notion.refuse) {
+          return new Response(JSON.stringify({ error: "notion refused" }), {
+            status: 502,
+            headers: { "content-type": "application/json" },
+          });
+        }
 
         notion.attendees = mergeAttendance(
           notion.attendees,
@@ -127,13 +119,25 @@ beforeEach(async () => {
         return new Response(
           JSON.stringify({
             summary: "recorded",
-            /* reversed on purpose. notion gives a relation no ordering
-               guarantee, and a screen that takes its order from the answer
-               reshuffles itself under whoever is still queueing */
+            /* reversed: notion guarantees no order */
             memberIds: [...notion.attendees].reverse(),
           }),
           { headers: { "content-type": "application/json" } },
         );
+      }
+
+      if (url.startsWith("/api/members/kiosk") && notion.kiosk) {
+        await notion.gate;
+        if (notion.kioskFailures > 0) {
+          notion.kioskFailures -= 1;
+          return new Response(JSON.stringify({ error: "rate limited" }), {
+            status: 429,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify(notion.kiosk), {
+          headers: { "content-type": "application/json" },
+        });
       }
 
       throw new Error(`unexpected request to ${url}`);
@@ -141,27 +145,17 @@ beforeEach(async () => {
   );
 });
 
-afterEach(async () => {
+afterEach(() => {
   cleanup();
-  /* a test that ends mid-queue leaves writes running, and an unmounted island
-     still finishes them. Letting them land here keeps them out of the next
-     test's notion */
-  await new Promise((done) => setTimeout(done, 120));
   vi.unstubAllGlobals();
 });
 
-function draw() {
+function draw(data = initial) {
   return render(
-    <AttendanceKiosk
-      initial={initial}
-      today="2026-09-08"
-      faces={{}}
-      guild={[]}
-    />,
+    <AttendanceKiosk initial={data} today="2026-09-08" faces={{}} guild={[]} />,
   );
 }
 
-/** the signed-in column, by the name its list carries */
 function signedIn(): string[] {
   const list = screen.queryByRole("list", { name: "Signed in" });
   if (!list) return [];
@@ -178,7 +172,6 @@ function order(): string[] {
   );
 }
 
-/** types a name and presses enter, the way somebody at the laptop does */
 function signIn(name: string) {
   const search = screen.getByLabelText("Type your name");
 
@@ -187,21 +180,17 @@ function signIn(name: string) {
 }
 
 test("five people signing in one after another all land, in order", async () => {
-  /* nothing answers until this is released, so "before any write landed" is a
-     fact rather than a race the test usually wins */
+  /* nothing answers until released */
   let release = () => {};
   fake.gate = new Promise<void>((done) => (release = done));
 
   draw();
 
-  /* no awaiting between them: this is the queue at the front of the room,
-     five people deep, and every earlier version of this page lost somebody */
   act(() => {
     for (const name of NAMES) signIn(name);
   });
 
-  /* all five are on screen while notion still has none of them: the queue is
-     drawn, not waited for */
+  /* drawn before notion has any of them */
   await act(async () => {});
   expect(signedIn()).toHaveLength(5);
   expect(fake.attendees).toEqual([]);
@@ -213,17 +202,10 @@ test("five people signing in one after another all land, in order", async () => 
 
   expect(fake.attendees).toEqual(["p1", "p2", "p3", "p4", "p5"]);
 
-  /* newest first, and never reordered by an answer that came back shuffled */
+  /* newest first, whatever order the answers came in */
   expect(order()).toEqual([...NAMES].reverse());
 });
 
-/*
-  the serialisation, stated as what the server was told rather than as timing.
-
-  each write has to be computed from the answer the last one got back. Two
-  writes derived from the same list is exactly how a tap disappears: both send
-  a whole list, and the second one does not know about the first
-*/
 test("each write is computed from what the last one answered", async () => {
   draw();
 
@@ -276,19 +258,168 @@ test("signing somebody in and out again leaves them out", async () => {
   expect(signedIn()).toHaveLength(0);
 });
 
-/* a second device signed somebody in while this one was open. the answer
-   carries them back, and they must not be thrown away by the next write */
 test("somebody another device signed in survives this device's writes", async () => {
   draw();
 
   act(() => signIn(NAMES[0]!));
   await waitFor(() => expect(fake.attendees).toEqual(["p1"]));
 
-  fake.attendees = [...fake.attendees, "p9"];
+  fake.attendees = [...fake.attendees, "p3"];
 
   act(() => signIn(NAMES[1]!));
-  await waitFor(() => expect(fake.writes).toHaveLength(2));
-  await waitFor(() => expect(fake.attendees).toContain("p9"));
+  await waitFor(() => expect(signedIn()).toHaveLength(3));
 
-  expect(fake.attendees).toEqual(["p1", "p9", "p2"]);
+  act(() => signIn(NAMES[3]!));
+  await waitFor(() => expect(fake.writes).toHaveLength(3));
+  await waitFor(() => expect(screen.queryByText("saving…")).toBeNull());
+
+  expect(order().sort()).toEqual(
+    ["Ana Diaz", "Ben Okafor", "Cass Lin", "Dev Patel"].sort(),
+  );
+});
+
+test("a write that failed takes the tap back off the screen", async () => {
+  fake.refuse = true;
+  draw();
+
+  act(() => signIn(NAMES[0]!));
+  expect(order()).toEqual([NAMES[0]]);
+
+  await waitFor(() => expect(signedIn()).toHaveLength(0));
+  expect(toast.error).toHaveBeenCalledWith(
+    expect.stringContaining("notion refused"),
+  );
+});
+
+test("the offers are the listbox's options, with nothing between them", () => {
+  draw();
+
+  fireEvent.change(screen.getByLabelText("Type your name"), {
+    target: { value: "Ana" },
+  });
+  const offers = screen.getByRole("listbox");
+
+  expect(within(offers).getAllByRole("option")).toHaveLength(1);
+  expect(within(offers).queryAllByRole("listitem")).toHaveLength(0);
+});
+
+test("a signed-in row this roster does not know has nothing to edit", () => {
+  draw({
+    ...initial,
+    meetings: [{ ...initial.meetings[0]!, attendeeIds: ["p9"] }],
+  });
+
+  const row = within(screen.getByRole("list", { name: "Signed in" })).getByRole(
+    "listitem",
+  );
+
+  expect(row.textContent).toContain("Someone not on this list");
+  expect(within(row).getAllByRole("button")).toEqual([
+    within(row).getByRole("button", { name: /^Remove/ }),
+  ]);
+});
+
+test("switching meeting shows who that meeting's read says is in", async () => {
+  const later = {
+    pageId: "m2",
+    name: "Writers' Room 2026-09-10",
+    date: "2026-09-10",
+    type: "General Body",
+    attendeeIds: [],
+  };
+  const data = { ...initial, meetings: [later, ...initial.meetings] };
+  fake.kiosk = {
+    ...data,
+    meetings: [{ ...later, attendeeIds: ["p3"] }, ...initial.meetings],
+    openingId: "m2",
+  };
+
+  let release = () => {};
+  fake.gate = new Promise<void>((done) => (release = done));
+
+  draw(data);
+  /* base-ui's select needs the full pointer sequence */
+  const user = userEvent.setup();
+  await user.click(screen.getByLabelText("Meeting"));
+  await user.click(
+    await screen.findByRole("option", { name: /Writers' Room/ }),
+  );
+
+  expect(screen.getByText("Reading who is signed in…")).toBeTruthy();
+
+  release();
+
+  await waitFor(() => expect(order()).toEqual(["Cass Lin"]));
+});
+
+test("a meeting whose read failed says so, and can be read again", async () => {
+  const later = {
+    pageId: "m2",
+    name: "Writers' Room 2026-09-10",
+    date: "2026-09-10",
+    type: "General Body",
+    attendeeIds: [],
+  };
+  const data = { ...initial, meetings: [later, ...initial.meetings] };
+  fake.kiosk = {
+    ...data,
+    meetings: [{ ...later, attendeeIds: ["p3"] }, ...initial.meetings],
+    openingId: "m2",
+  };
+  fake.kioskFailures = 1;
+
+  draw(data);
+  const user = userEvent.setup();
+  await user.click(screen.getByLabelText("Meeting"));
+  await user.click(
+    await screen.findByRole("option", { name: /Writers' Room/ }),
+  );
+
+  await user.click(await screen.findByRole("button", { name: "Try again" }));
+
+  await waitFor(() => expect(order()).toEqual(["Cass Lin"]));
+});
+
+test("a meeting the read no longer finds is not left reading", async () => {
+  const later = {
+    pageId: "m2",
+    name: "Writers' Room 2026-09-10",
+    date: "2026-09-10",
+    type: "General Body",
+    attendeeIds: [],
+  };
+  const data = { ...initial, meetings: [later, ...initial.meetings] };
+  /* trashed since the page loaded: the route falls back to today's meeting */
+  fake.kiosk = { ...initial };
+
+  draw(data);
+  const user = userEvent.setup();
+  await user.click(screen.getByLabelText("Meeting"));
+  await user.click(
+    await screen.findByRole("option", { name: /Writers' Room/ }),
+  );
+
+  expect(await screen.findByText("Nobody yet.")).toBeTruthy();
+  expect(screen.getByLabelText("Meeting").textContent).toContain(
+    "General Body Meeting",
+  );
+});
+
+test("a part of notion the kiosk could not read is said on screen", () => {
+  draw({ ...initial, notionProblem: "Members has no readable Status select" });
+
+  expect(screen.getByRole("alert").textContent).toBe(
+    "Members has no readable Status select",
+  );
+});
+
+test("a new member's status choices are one labelled group", () => {
+  draw();
+
+  fireEvent.change(screen.getByLabelText("Type your name"), {
+    target: { value: "Fern Ortiz" },
+  });
+
+  const status = screen.getByRole("group", { name: "Status" });
+  expect(within(status).getAllByRole("button")).toHaveLength(3);
 });

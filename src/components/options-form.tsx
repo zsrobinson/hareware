@@ -27,8 +27,7 @@ import {
 import { Slider } from "./ui/slider";
 import { Switch } from "./ui/switch";
 
-/* base ui's slider hands back a tuple when it has several thumbs and a bare
-   number when it has one. every slider here has one */
+/* base ui's slider may answer a tuple; every slider here has one thumb */
 function toSingle(value: number | readonly number[]) {
   return typeof value === "number" ? value : value[0];
 }

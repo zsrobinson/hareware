@@ -1,12 +1,6 @@
 /*
-  cloudflare runs crons in utc and has no timezone setting, so every reminder
-  that means "8am eastern" has to work it out itself. america/new_york shifts
-  twice a year; hardcoding an offset would silently drift by an hour for half of
-  each year, which for the social ping means the post lands before anyone has
-  had coffee, or after the day is half gone.
-
-  the cron fires hourly and each reminder asks these helpers whether this is its
-  hour, rather than the schedule encoding the answer
+  Eastern time from a UTC instant. Crons are UTC and a fixed offset would be an
+  hour off for half the year.
 */
 
 const ZONE = "America/New_York";
@@ -49,13 +43,7 @@ const clock = new Intl.DateTimeFormat("en-US", {
   hour12: true,
 });
 
-/**
- * an instant as a short eastern clock time — "8pm", "7:30pm".
- *
- * notion hands back a date with no time as a bare `YYYY-MM-DD`, which is a
- * calendar day and not an instant, so there is nothing to show for one of
- * those. callers get undefined and leave the time out of the sentence
- */
+/** "8pm", "7:30pm" — undefined for a bare `YYYY-MM-DD`, which has no time */
 export function easternTime(start: string): string | undefined {
   if (!start.includes("T")) return undefined;
 

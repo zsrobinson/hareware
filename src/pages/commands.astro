@@ -9,24 +9,12 @@ import {
   type CommandOption,
 } from "~/lib/services/discord/commands";
 
-/* Reaching this page is the permission: the guard already refused anybody it
-   would not admit, and its lookup knows what to call them. */
 const who = admitted(Astro.locals);
 
 Astro.response.headers.set("cache-control", "private, no-store");
 
-/*
-  the page is the registration payload, read back — the same `buildCommands()`
-  the cron puts on the guild, so a subcommand added to the code shows up here
-  without anyone remembering this page exists. a list typed out by hand could
-  disagree with what discord actually offers, which is worse than no list.
-
-  no notion choices are passed: fetching the schema to render a read-only page
-  would cost a notion request per view, and what an editor needs here is the
-  shape of each command rather than today's status names. an option that takes
-  a picker still says so, because `choicesFor()` gives it a choices array
-  either way — see ADR 0009 for why those values live in notion and not here
-*/
+/* the registered payload itself, without Notion's choices: a schema read per
+   view is not worth it */
 const commands = buildCommands([]);
 
 const usage = (command: ApplicationCommand, subcommand: CommandOption) =>

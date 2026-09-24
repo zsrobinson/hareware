@@ -1,24 +1,13 @@
-/*
-  what an Article looks like when notion hands one over.
+/* An Article page as Notion returns it. Any property may be missing. */
 
-  pure functions over a page object, because this is where the bugs are. every
-  property is optional in practice — a page often exists with nothing but a
-  Headline while somebody is still typing it — and `Article Status` is a
-  `status` where `Section` is a `select`, two different shapes carrying the same
-  word. see ADR 0009.
-*/
+import { inDataSource, plainText } from "~/lib/services/notion/client";
+import {
+  ARTICLE_PROPERTIES,
+  ARTICLES_DATA_SOURCE_ID,
+  UNTITLED,
+} from "./config";
 
-import { plainText } from "~/lib/services/notion/client";
-import { ARTICLE_PROPERTIES, UNTITLED } from "./config";
-
-/**
- * a property value, in every shape we read.
- *
- * wider than the client's `NotionProperty` because the client describes what
- * the meeting reminder needs; an Article carries statuses, selects and
- * relations too. every field is optional and nullable on purpose — notion
- * sends `null`, not an absent key, for an empty one
- */
+/** a property value in every shape we read; Notion sends `null` for empty */
 export type ArticleProperty = {
   type?: string;
   title?: { plain_text: string }[] | null;
@@ -29,7 +18,6 @@ export type ArticleProperty = {
   relation?: { id: string }[] | null;
 };
 
-/** a page as the Articles data source returns it */
 export type ArticlePage = {
   id: string;
   url?: string;
@@ -37,25 +25,37 @@ export type ArticlePage = {
   /* notion's two words for the same thing, depending on endpoint age */
   in_trash?: boolean;
   archived?: boolean;
+  parent?: { type?: string; data_source_id?: string };
   properties: Record<string, ArticleProperty>;
 };
 
-/*
-  older than anything notion can return, so a page that arrived without a
-  timestamp sorts last rather than first — a missing clock should not put an
-  Article at the top of the picker
-*/
-const NO_TIMESTAMP = "1970-01-01T00:00:00.000Z";
+const NOTION_ID =
+  /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i;
 
 /**
- * the chosen option's name, whichever of the two shapes it arrived in.
- *
- * a `status` carries it under `status` and a `select` under `select`. read
- * tolerantly here because the picker only wants the label, and a property
- * somebody converted from one to the other in notion should show its value
- * rather than go blank until the code catches up. writes are the opposite and
- * have to know which they are talking to
+ * The text as a page id, or null. It goes into a Notion url path, so `../` must
+ * not.
  */
+export function pageIdOf(text: string): string | null {
+  return NOTION_ID.test(text) ? text : null;
+}
+
+/** Whether the page is a row of Articles, not any page the token can reach. */
+export function isArticle(page: ArticlePage): boolean {
+  return inDataSource(page, ARTICLES_DATA_SOURCE_ID);
+}
+
+/* so a page without a timestamp sorts last */
+const NO_TIMESTAMP = "1970-01-01T00:00:00.000Z";
+
+export function propertyOf(
+  page: ArticlePage,
+  key: keyof typeof ARTICLE_PROPERTIES,
+): ArticleProperty | undefined {
+  return page.properties?.[ARTICLE_PROPERTIES[key].name];
+}
+
+/** the chosen option's name, from a `status` or a `select` alike */
 export function optionName(property: ArticleProperty | undefined) {
   return property?.status?.name ?? property?.select?.name ?? null;
 }
@@ -100,39 +100,19 @@ export function readableProperties(
   });
 }
 
-/**
- * an Article, flattened to what the picker and the card need.
- *
- * everything is read off the page rather than out of a store, so this is the
- * only shape either of them ever sees
- */
+/** an Article, as the picker needs it */
 export type Article = {
   pageId: string;
   headline: string;
   lastEdited: string;
-  section: string | null;
-  status: string | null;
-  imageStatus: string | null;
-  authorByline: string | null;
-  publicationDate: string | null;
 };
 
-/** a notion page as an Article */
 export function toArticle(page: ArticlePage): Article {
-  const property = (key: keyof typeof ARTICLE_PROPERTIES) =>
-    page.properties?.[ARTICLE_PROPERTIES[key].name];
-
-  const headline = plainText(property("headline")?.title).trim();
-  const byline = plainText(property("authorByline")?.rich_text).trim();
+  const headline = plainText(propertyOf(page, "headline")?.title).trim();
 
   return {
     pageId: page.id,
     headline: headline || UNTITLED,
     lastEdited: page.last_edited_time ?? NO_TIMESTAMP,
-    section: optionName(property("section")),
-    status: optionName(property("status")),
-    imageStatus: optionName(property("imageStatus")),
-    authorByline: byline || null,
-    publicationDate: property("publicationDate")?.date?.start ?? null,
   };
 }

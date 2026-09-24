@@ -55,11 +55,7 @@ test("rejects nonsense", async () => {
   expect(await withCookie("")).toBeNull();
 });
 
-/*
-  a signed cookie cannot be withdrawn once issued, so the expiry inside the
-  signature is the only bound on a stolen one. the browser's Max-Age is a
-  courtesy, not a control
-*/
+/* the expiry inside the signature is the only bound on a stolen cookie */
 test("rejects a session past its expiry", async () => {
   const header = await createSessionCookie({ discordUserId: "123" }, SECRET);
   const cookie = cookieFrom(header);
@@ -76,14 +72,8 @@ test("clearing sets an immediate expiry", () => {
 });
 
 test("a state cookie cannot be replayed as a session", async () => {
-  /*
-    `GET /auth/discord?returnTo=…` signs an attacker's string for them, without
-    authentication. The two payloads happen not to be interchangeable today
-    because each reader needs a field the other lacks — but that is a property
-    of the current field names, not of the design. Deriving the key from the
-    purpose means one added field with an unlucky name cannot turn sign-in into
-    a session-forgery oracle.
-  */
+  /* `/auth/discord?returnTo=…` signs an attacker's string unauthenticated, so
+     a purpose-bound key keeps it from ever passing as a session */
   const forged = await seal(
     JSON.stringify({ discordUserId: "1", expiresAt: Date.now() + 60_000 }),
     SECRET,

@@ -1,79 +1,40 @@
 /*
-  the hourly pass that turns approved discord applications into Members rows.
-
-  there is no webhook and nothing fires when an editor presses approve. The cron
-  that already carries the reminders reads the whole approved list, compares it
-  against Members, and creates the rows that cannot possibly be anybody who is
-  already there. See ADR 0010 on why the read is stateless rather than cursored.
-
-  this automation posts nothing. It exists so that somebody who applied on
-  monday autocompletes on the kiosk at wednesday's meeting without anyone having
-  opened the reconciler in between — which is the thing that keeps the kiosk
-  worth using.
-
-  the decisions are not here. `match.ts` works out what each application
-  resolves to and `write.ts` performs the create; what is left in this file is
-  which secrets are needed, the order the writes go out in, and one line of
-  english for the log.
+  the hourly pass that creates a Members row for each approved application that
+  matches nobody on the roster, and leaves the rest for the reconciler. The
+  read is stateless; ADR 0010 says why.
 */
 
 import type { EasternNow } from "~/lib/eastern";
 import { misconfigured, ok, skipped, type Result } from "~/lib/result";
 import { record } from "~/lib/log";
 import { plural } from "~/lib/utils";
-import { approvedApplications } from "~/lib/services/discord/join-requests";
+import { approvedApplications } from "./applications";
 import { resolveApplications, safeToCreate, type Resolution } from "./match";
 import { people } from "./roster";
 import { createFromApplication } from "./write";
 
-/**
- * how long to wait between creates.
- *
- * notion's budget is about three requests a second and the first run creates
- * roughly thirty-eight rows, so the writes are serial with a gap rather than a
- * `Promise.all`. Thirty-eight rows at this pace is under fifteen seconds, which
- * is nothing against a cron tick — and a 429 partway through a backfill leaves
- * a half-created roster that the next hour would have to reason about, which is
- * far more expensive than the wait
- */
+/* creates go out one at a time with this gap, inside notion's budget of about
+   three requests a second; a failure partway is picked up next hour */
 const BETWEEN_WRITES_MS = 350;
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/**
- * creates a Members row for every application that matches nothing at all.
- *
- * only the `new` resolutions, and deliberately only those — every other
- * outcome is a collision, and a collision is where a wrong guess makes two
- * people out of one. The cron has nobody to ask, so it defers to the
- * reconciler and says how many it left there.
- */
 export async function syncApplications(
   env: Env,
-  /* every automation is `(env, time) => Result`, and this one happens not to
-     care what time it is — the applications it acts on are the ones that are
-     there, whatever hour the cron woke on */
   _eastern: EasternNow,
 ): Promise<Result> {
-  /* inert until the club sets these up, the same way every other automation is
-     — see ADR 0006's "setup outside the repo" */
-  const missing = [
-    !env.NOTION_TOKEN && "NOTION_TOKEN",
-    !env.DISCORD_BOT_TOKEN && "DISCORD_BOT_TOKEN",
-  ].filter(Boolean);
-  /* not `ok`: nothing ran, and a row saying otherwise is the failure ADR 0007
-     exists to prevent */
-  if (missing.length > 0)
-    return misconfigured(`application sync unset: ${missing.join(", ")}`);
+  const token = env.NOTION_TOKEN;
+  const bot = env.DISCORD_BOT_TOKEN;
+  if (!token || !bot) {
+    const missing = [!token && "NOTION_TOKEN", !bot && "DISCORD_BOT_TOKEN"];
+    return misconfigured(
+      `application sync unset: ${missing.filter(Boolean).join(", ")}`,
+    );
+  }
 
-  /*
-    two different services holding nothing in common, and both answers are
-    needed before anything can be decided — serialising them would add a round
-    trip to a job that already has a write budget to spend
-  */
   const [applications, roster] = await Promise.all([
-    approvedApplications(env.DISCORD_BOT_TOKEN!),
-    people(env.NOTION_TOKEN!),
+    approvedApplications(bot),
+    people(token),
   ]);
 
   const resolutions = resolveApplications(roster, applications);
@@ -84,35 +45,20 @@ export async function syncApplications(
       `No new applications out of ${applications.length}. ${leftovers(resolutions)}`,
     );
 
-  /*
-    a dry run must not write. it is how somebody sees what the morning would do
-    before letting it — and `run.ts` deliberately records nothing for a dry run,
-    so this line goes to whoever pressed the button rather than into the log
-  */
   if (env.REMINDERS_DRY_RUN)
     return ok(
       `Would create ${plural(creatable.length, "member")} from applications. ${leftovers(resolutions)}`,
     );
 
-  /*
-    serially. notion allows about three requests a second and rejects the rest
-    with a 429, and a first run has roughly thirty-eight rows to make — a
-    `Promise.all` over that is thirty-eight simultaneous writes and a partial
-    roster. Plain awaits with a small gap keep it inside the budget, and the
-    hourly cron will pick up anything a failure here leaves behind, because the
-    read is stateless
-  */
   let created = 0;
   for (const application of creatable) {
     if (created > 0) await pause(BETWEEN_WRITES_MS);
-    await createFromApplication(env, application);
+    await createFromApplication(token, application);
     created += 1;
 
-    /*
-      one row per member, not one per run. ADR 0010 asks the log to answer
-      where a given row came from, and a summary saying "created 3" cannot:
-      it names a count, and the question is about a person
-    */
+    /* one row per member, so the log says where each row came from. A roster
+       edit, not the run's action: `reportFailure` reads the last row under
+       that action to decide whether a failure is new */
     await record(env.DB, {
       source: "cron",
       action: "roster-edit",
@@ -126,41 +72,24 @@ export async function syncApplications(
   );
 }
 
-/**
- * how many of each kind the cron left for a person, and what to call them.
- *
- * one list, in the order the summary reads. Written as data rather than as
- * four fields and four additions because that shape had the count, the sum and
- * the wording in three separate places, and `similar` had to be added to all
- * three — the fourth edit is the one somebody forgets
- */
-const DEFERS = [
-  { status: "linkable", say: (n: number) => `${n} to link` },
-  { status: "similar", say: (n: number) => `${n} near an existing name` },
-  { status: "ambiguous", say: (n: number) => `${n} ambiguous` },
-  { status: "conflicted", say: (n: number) => `${n} conflicted` },
-] as const satisfies readonly {
-  status: Resolution["status"];
-  say: (n: number) => string;
-}[];
+/* keyed by every status the cron defers on, so a new arm on `Resolution` is a
+   compile error here */
+const DEFERS: Record<
+  Exclude<Resolution["status"], "new" | "linked">,
+  (n: number) => string
+> = {
+  linkable: (n) => `${n} to link`,
+  similar: (n) => `${n} near an existing name`,
+  ambiguous: (n) => `${n} ambiguous`,
+  conflicted: (n) => `${n} conflicted`,
+  incomplete: (n) => `${n} missing a name or email`,
+};
 
-/**
- * the second sentence of the summary.
- *
- * the summary is one line in the invocation log and on the trigger panel, so it
- * is written as english rather than as a count dump: somebody reading it a
- * month later wants to know whether anything is waiting on them, and a bare
- * `{linkable: 2}` does not answer that.
- *
- * `linked` and `new` are absent from `DEFERS` on purpose. A row that already
- * carries the snowflake is finished business, not work waiting for somebody,
- * and counting it would put a permanent and growing number in a line that
- * never goes down
- */
+/** the summary's second sentence: what is waiting on the reconciler */
 function leftovers(resolutions: Resolution[]): string {
-  const counted = DEFERS.map((defer) => ({
-    ...defer,
-    n: resolutions.filter((one) => one.status === defer.status).length,
+  const counted = Object.entries(DEFERS).map(([status, say]) => ({
+    say,
+    n: resolutions.filter((one) => one.status === status).length,
   }));
 
   const total = counted.reduce((sum, one) => sum + one.n, 0);

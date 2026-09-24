@@ -1,6 +1,10 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { ARTICLES_DATA_SOURCE_ID } from "~/lib/articles/config";
-import { MEETINGS_DATA_SOURCE_ID, MEMBERS_DATA_SOURCE_ID } from "./config";
+import {
+  FALLBACK_MEMBER_STATUSES,
+  MEETINGS_DATA_SOURCE_ID,
+  MEMBERS_DATA_SOURCE_ID,
+} from "./config";
 
 vi.mock("cloudflare:workers", () => ({ env: {} }));
 
@@ -26,14 +30,7 @@ function watchNotion(): string[] {
   return asked;
 }
 
-/*
-  the point of Members' `Contributions` formula.
-
-  drawing the kiosk used to mean reading every article the club has ever
-  published — two requests today, one more every few years — to render an
-  all-time count beside a name. This goes red the day somebody reaches for the
-  corpus again from here
-*/
+/* the kiosk's counts come from the Contributions formula, not the article corpus */
 test("the attendance read never touches the article corpus", async () => {
   const asked = watchNotion();
 
@@ -79,21 +76,17 @@ test("a candidate carries the count notion computed for their row", async () => 
   expect(data.candidates.map((person) => person.contributions)).toEqual([4]);
 });
 
-/*
-  the roster travels to the page because the google group comparison happens in
-  the browser: an editor exports the group's members and the file is diffed
-  against these rows without going anywhere. A page missing the roster would
-  compare against nothing and report that everybody is already a member
-*/
+/* the roster is what the browser compares the Google Group export against */
 test("the reconciler carries the roster the group is compared against", async () => {
   const { reconcilerData } = await import("./views");
 
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
-      if (String(url).includes("discord.com")) {
-        return new Response(JSON.stringify({ guild_join_requests: [] }));
+      if (String(url).includes("/requests")) {
+        return Response.json({ guild_join_requests: [] });
       }
+      if (String(url).includes("/members")) return Response.json([]);
 
       return new Response(
         JSON.stringify({
@@ -116,9 +109,41 @@ test("the reconciler carries the roster the group is compared against", async ()
   const data = await reconcilerData({
     NOTION_TOKEN: "secret",
     DISCORD_BOT_TOKEN: "bot",
-  } as never);
+  });
 
   expect(data.roster.map((one) => one.name)).toEqual(["Ada Vance"]);
-  expect(data.discordSuggestions).toEqual([]);
-  expect(data.discordProblem).toMatch(/guild member response was not a list/);
+  expect(data.discordProblem).toBeNull();
+});
+
+test("an unreadable Status schema is reported, not offered as notion's", async () => {
+  watchNotion();
+
+  const data = await kioskData({ NOTION_TOKEN: "secret" }, "2026-09-07", null);
+
+  expect(data.statuses).toEqual(FALLBACK_MEMBER_STATUSES);
+  expect(data.notionProblem).toMatch(/Status options could not be read/);
+});
+
+test("no notion token is reported rather than drawn as an empty roster", async () => {
+  const { reconcilerData } = await import("./views");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify([]))),
+  );
+
+  const kiosk = await kioskData({}, "2026-09-07", null);
+  const reconciler = await reconcilerData({ DISCORD_BOT_TOKEN: "bot" });
+
+  expect(kiosk.notionProblem).toMatch(/NOTION_TOKEN/);
+  expect(reconciler.notionProblem).toMatch(/NOTION_TOKEN/);
+});
+
+test("no bot token is reported once, and asks Discord nothing", async () => {
+  const { reconcilerData } = await import("./views");
+  const asked = watchNotion();
+
+  const data = await reconcilerData({ NOTION_TOKEN: "secret" });
+
+  expect(data.discordProblem).toBe("DISCORD_BOT_TOKEN is not set.");
+  expect(asked.some((url) => url.includes("discord.com"))).toBe(false);
 });

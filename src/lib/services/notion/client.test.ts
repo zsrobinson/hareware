@@ -1,13 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { notion, together } from "./client";
+import { notion, queryAll, relationIds, together } from "./client";
 
-/*
-  the retry is tested through `notion()` rather than through `sendPatiently`
-  alone: a helper can be perfectly tested while nothing calls it, and the whole
-  value of putting this in the client is that every caller already goes through
-  it. Delete the `sendPatiently` wrapper in `notion()` and the first two tests
-  here go red.
-*/
+/* through `notion()`, so removing its `sendPatiently` turns the first two red */
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
@@ -41,8 +35,6 @@ test("a rate-limited read is retried and answers with notion's next reply", asyn
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 
-/* the failure the room actually saw: a page error naming a status code, with
-   nothing in it to say the integration was over its budget */
 test("a read that stays rate limited fails saying so, not with a bare 429", async () => {
   const fetch = vi.fn().mockResolvedValue(limited());
   vi.stubGlobal("fetch", fetch);
@@ -89,8 +81,6 @@ test("together never has more than two notion reads in flight", async () => {
   expect(most).toBe(2);
 });
 
-/* concurrent, not serial: bounding the burst may not cost a round trip per
-   read on a page that is re-read on every visit */
 test("together runs them concurrently, and answers in the order asked", async () => {
   vi.useRealTimers();
 
@@ -105,4 +95,48 @@ test("together runs them concurrently, and answers in the order asked", async ()
 
   expect(answers).toEqual(["slow", "quick"]);
   expect(Date.now() - started).toBeLessThan(40);
+});
+
+test("queryAll follows every page, not just the first", async () => {
+  const bodies: { start_cursor?: string }[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(init!.body as string) as {
+        start_cursor?: string;
+      };
+      bodies.push(body);
+
+      return body.start_cursor
+        ? json({ results: ["c"], has_more: false })
+        : json({ results: ["a", "b"], has_more: true, next_cursor: "second" });
+    }),
+  );
+
+  expect(await queryAll("source", "secret")).toEqual(["a", "b", "c"]);
+  expect(bodies.map((body) => body.start_cursor)).toEqual([
+    undefined,
+    "second",
+  ]);
+});
+
+test("queryAll refuses a page that says has_more but gives no cursor", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      json({ results: ["a"], has_more: true, next_cursor: null }),
+    ),
+  );
+
+  await expect(queryAll("source", "secret")).rejects.toThrow(/no cursor/);
+});
+
+test("a relation cut short with no id to read the rest by is refused", async () => {
+  const fetched = vi.fn();
+  vi.stubGlobal("fetch", fetched);
+
+  await expect(
+    relationIds("page", { relation: [{ id: "a" }], has_more: true }, "secret"),
+  ).rejects.toThrow(/cut short/);
+  expect(fetched).not.toHaveBeenCalled();
 });

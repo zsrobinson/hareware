@@ -1,9 +1,5 @@
 ---
-/*
-  A page with nothing on it but something to say: not found, no access, a
-  sign-in that went wrong. Set in the UI's own sans; the display serif belongs
-  to the Instagram templates, which are artwork.
-*/
+/* a page with only something to say: not found, no access, a failed sign-in */
 import { buttonVariants } from "~/components/ui/button";
 
 type Props = {
@@ -25,8 +21,7 @@ const { title, action } = Astro.props;
   {
     action &&
       (action.method === "post" ? (
-        /* signing in as somebody else means signing out first, and that is a
-           POST — the same one the account menu makes */
+        /* signing out is a POST, like the account menu's */
         <form method="post" action="/auth/logout" class="mt-6">
           <input type="hidden" name="returnTo" value={action.href} />
           <button type="submit" class={buttonVariants({ size: "lg" })}>

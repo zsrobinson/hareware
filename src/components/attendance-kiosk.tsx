@@ -12,6 +12,14 @@ import { NewMemberForm, type NewMember } from "~/components/new-member-form";
 import { Problem } from "~/components/problem";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import {
@@ -101,6 +109,8 @@ function Kiosk({ initial, today, faces, guild }: Props) {
   const [active, setActive] = useState(0);
   const [editing, setEditing] = useState<Editing | null>(null);
 
+  const [removing, setRemoving] = useState<Person | null>(null);
+  const cancelRemoval = useRef<HTMLButtonElement>(null);
   const search = useRef<HTMLInputElement>(null);
 
   const meeting = meetings.find((one) => one.pageId === meetingId) ?? null;
@@ -430,7 +440,7 @@ function Kiosk({ initial, today, faces, guild }: Props) {
                     variant="ghost"
                     size="sm"
                     aria-label={`Remove ${name}`}
-                    onClick={() => remove(pageId)}
+                    onClick={() => setRemoving(person)}
                   >
                     <XIcon className="size-4" />
                   </Button>
@@ -440,6 +450,47 @@ function Kiosk({ initial, today, faces, guild }: Props) {
           </ul>
         )}
       </div>
+
+      <Dialog
+        open={removing !== null}
+        onOpenChange={(open) => !open && setRemoving(null)}
+      >
+        <DialogContent
+          showCloseButton={false}
+          initialFocus={cancelRemoval}
+          finalFocus={search}
+        >
+          <DialogHeader>
+            <DialogTitle>Remove {removing?.name ?? "attendee"}?</DialogTitle>
+            <DialogDescription>
+              This removes their attendance for{" "}
+              {meeting ? describe(meeting) : "this meeting"}. Their member
+              profile stays on the roster.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              ref={cancelRemoval}
+              variant="outline"
+              className="h-12"
+              onClick={() => setRemoving(null)}
+            >
+              Keep signed in
+            </Button>
+            <Button
+              variant="destructive"
+              className="h-12"
+              onClick={() => {
+                if (!removing) return;
+                remove(removing.pageId);
+                setRemoving(null);
+              }}
+            >
+              Remove attendance
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <MemberEditDialog
         editing={editing}

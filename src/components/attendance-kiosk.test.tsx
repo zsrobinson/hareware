@@ -232,11 +232,10 @@ test("five removals one after another all take", async () => {
   });
   await waitFor(() => expect(fake.attendees).toHaveLength(5));
 
-  act(() => {
-    for (const name of NAMES) {
-      fireEvent.click(screen.getByRole("button", { name: `Remove ${name}` }));
-    }
-  });
+  for (const name of NAMES) {
+    fireEvent.click(screen.getByRole("button", { name: `Remove ${name}` }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove attendance" }));
+  }
 
   await waitFor(() => expect(fake.writes).toHaveLength(10));
   await waitFor(() => expect(fake.attendees).toEqual([]));
@@ -250,9 +249,8 @@ test("signing somebody in and out again leaves them out", async () => {
   act(() => signIn(NAMES[0]!));
   await waitFor(() => expect(fake.attendees).toEqual(["p1"]));
 
-  act(() => {
-    fireEvent.click(screen.getByRole("button", { name: `Remove ${NAMES[0]}` }));
-  });
+  fireEvent.click(screen.getByRole("button", { name: `Remove ${NAMES[0]}` }));
+  fireEvent.click(screen.getByRole("button", { name: "Remove attendance" }));
   await waitFor(() => expect(fake.attendees).toEqual([]));
 
   expect(signedIn()).toHaveLength(0);
@@ -422,4 +420,32 @@ test("a new member's status choices are one labelled group", () => {
 
   const status = screen.getByRole("group", { name: "Status" });
   expect(within(status).getAllByRole("button")).toHaveLength(3);
+});
+
+test("opening and cancelling removal leaves attendance unchanged", async () => {
+  draw();
+  act(() => signIn(NAMES[0]!));
+  await waitFor(() => expect(fake.attendees).toEqual(["p1"]));
+
+  fireEvent.click(screen.getByRole("button", { name: `Remove ${NAMES[0]}` }));
+  const dialog = screen.getByRole("dialog", { name: `Remove ${NAMES[0]}?` });
+  expect(dialog.textContent).toContain("2026-09-08");
+  expect(fake.writes).toHaveLength(1);
+  expect(fake.attendees).toEqual(["p1"]);
+  await waitFor(() =>
+    expect(document.activeElement).toBe(
+      within(dialog).getByRole("button", { name: "Keep signed in" }),
+    ),
+  );
+
+  fireEvent.click(
+    within(dialog).getByRole("button", { name: "Keep signed in" }),
+  );
+  await waitFor(() =>
+    expect(document.activeElement).toBe(
+      screen.getByLabelText("Type your name"),
+    ),
+  );
+  expect(fake.writes).toHaveLength(1);
+  expect(order()).toEqual([NAMES[0]]);
 });

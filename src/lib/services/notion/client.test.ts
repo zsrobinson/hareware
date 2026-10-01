@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { notion, queryAll, relationIds, together } from "./client";
+import {
+  notion,
+  propertyOfType,
+  queryAll,
+  relationIds,
+  together,
+} from "./client";
 
 /* through `notion()`, so removing its `sendPatiently` turns the first two red */
 
@@ -47,6 +53,145 @@ test("a read that stays rate limited fails saying so, not with a bare 429", asyn
   const thrown = await caught;
   expect((thrown as Error).message).toMatch(/rate limited/);
   expect((thrown as Error).message).toContain("databases/x");
+});
+
+const serverError = (status: number, requestId = "notion-request") =>
+  new Response(
+    JSON.stringify({
+      code: "internal_server_error",
+      message: "Cross-cell memcached access is not allowed",
+      request_id: requestId,
+    }),
+    { status },
+  );
+
+test.each([500, 502, 503, 504])(
+  "a schema read recovers after a Notion %i",
+  async (status) => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(serverError(status))
+      .mockResolvedValueOnce(json({ properties: { Date: { type: "date" } } }));
+    vi.stubGlobal("fetch", fetch);
+
+    const answered = propertyOfType("meetings", "secret", "date").catch(
+      (error: unknown) => error,
+    );
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(await answered).toBe("Date");
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[1]?.[1].method).toBe("GET");
+  },
+);
+
+test.each([500, 502, 503, 504])(
+  "a POST query recovers after a Notion %i without changing its filter",
+  async (status) => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(serverError(status))
+      .mockResolvedValueOnce(json({ results: ["a row"], has_more: false }));
+    vi.stubGlobal("fetch", fetch);
+    const filter = { property: "Name", title: { equals: "Someone" } };
+
+    const answered = queryAll("members", "secret", { filter }).catch(
+      (error: unknown) => error,
+    );
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(await answered).toEqual(["a row"]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[1]?.[1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({ page_size: 100, filter }),
+    });
+  },
+);
+
+test("a persistent server failure backs off three times and preserves the final error", async () => {
+  const fetch = vi.fn(async () =>
+    serverError(500, `request-${fetch.mock.calls.length}`),
+  );
+  vi.stubGlobal("fetch", fetch);
+  const caught = notion("data_sources/meetings", "secret-token").catch(
+    (error: unknown) => error,
+  );
+
+  await vi.advanceTimersByTimeAsync(499);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(999);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(fetch).toHaveBeenCalledTimes(3);
+  await vi.advanceTimersByTimeAsync(1_999);
+  expect(fetch).toHaveBeenCalledTimes(3);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(fetch).toHaveBeenCalledTimes(4);
+
+  const thrown = (await caught) as Error;
+  expect(thrown.message).toContain(
+    "notion returned 500 for data_sources/meetings",
+  );
+  expect(thrown.message).toContain(
+    "Cross-cell memcached access is not allowed",
+  );
+  expect(thrown.message).toContain("request-4");
+  expect(thrown.message).not.toContain("secret-token");
+});
+
+test.each([500, 502, 503, 504])(
+  "a Notion %i never retries page creation or updates",
+  async (status) => {
+    const fetch = vi.fn(async () => serverError(status));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(notion("pages", "secret", { properties: {} })).rejects.toThrow(
+      `notion returned ${status}`,
+    );
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    await expect(
+      notion("pages/member", "secret", { properties: {} }, "PATCH"),
+    ).rejects.toThrow(`notion returned ${status}`);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  },
+);
+
+test.each([400, 401, 403, 404, 409])(
+  "a read refused with %i fails without retrying",
+  async (status) => {
+    const fetch = vi.fn(async () => new Response("refused", { status }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(notion("data_sources/meetings", "secret")).rejects.toThrow(
+      `notion returned ${status}`,
+    );
+    expect(fetch).toHaveBeenCalledTimes(1);
+  },
+);
+
+test("a server retry still waits out a subsequent rate limit", async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(serverError(500))
+    .mockResolvedValueOnce(limited("1"))
+    .mockResolvedValueOnce(json({ results: [] }));
+  vi.stubGlobal("fetch", fetch);
+
+  const answered = notion("data_sources/members/query", "secret", {}).catch(
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(500);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(999);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(1);
+
+  expect(await answered).toEqual({ results: [] });
+  expect(fetch).toHaveBeenCalledTimes(3);
 });
 
 /* the token is in every request's headers and in none of its errors */

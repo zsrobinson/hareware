@@ -10,6 +10,10 @@ import { sendPatiently } from "~/lib/rate-limit";
 // can change shape. https://developers.notion.com/reference/versioning
 const NOTION_VERSION = "2026-03-11";
 
+const READ_RETRIES = 3;
+const READ_BACKOFF_MS = 500;
+const READ_RETRY_STATUSES = new Set([500, 502, 503, 504]);
+
 export type NotionPage = {
   url: string;
   properties: Record<string, NotionProperty>;
@@ -38,8 +42,8 @@ export function inDataSource(
 }
 
 /**
- * one request, with a 429 waited out. The method is inferred from the body;
- * an update must pass `"PATCH"`, because a `POST` with a body creates a page
+ * waits out 429s, and retries temporary server failures only on reads. The
+ * method is inferred from the body; updates must pass `"PATCH"`
  */
 export async function notion(
   path: string,
@@ -47,19 +51,38 @@ export async function notion(
   body?: unknown,
   method?: "POST" | "PATCH",
 ) {
-  const response = await sendPatiently(
-    () =>
-      fetch(`https://api.notion.com/v1/${path}`, {
-        method: method ?? (body ? "POST" : "GET"),
-        headers: {
-          authorization: `Bearer ${token}`,
-          "notion-version": NOTION_VERSION,
-          "content-type": "application/json",
-        },
-        body: body ? JSON.stringify(body) : undefined,
-      }),
-    `notion ${path}`,
-  );
+  const verb = method ?? (body ? "POST" : "GET");
+  // Queries use POST but do not write. A write can save its change and still
+  // return a server error, so retrying one risks duplicate pages.
+  const read =
+    verb === "GET" ||
+    (verb === "POST" && /^data_sources\/[^/]+\/query$/.test(path));
+  const send = () =>
+    fetch(`https://api.notion.com/v1/${path}`, {
+      method: verb,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "notion-version": NOTION_VERSION,
+        "content-type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+  let response: Response;
+  for (let attempt = 0; ; attempt++) {
+    response = await sendPatiently(send, `notion ${path}`);
+    if (
+      !read ||
+      !READ_RETRY_STATUSES.has(response.status) ||
+      attempt >= READ_RETRIES
+    )
+      break;
+
+    await response.body?.cancel();
+    await new Promise((wake) =>
+      setTimeout(wake, READ_BACKOFF_MS * 2 ** attempt),
+    );
+  }
 
   if (!response.ok) {
     throw new NotionError(

@@ -1,7 +1,7 @@
 /* Posts when a scheduled run fails, so a broken morning does not look quiet. */
 
 import { lastOutcome } from "~/lib/log";
-import type { Automation } from "./registry";
+import { hourLabel, type Automation } from "./registry";
 import { postMessage, text } from "~/lib/services/discord/post-message";
 import { ALERT_CHANNEL_ID, HAREWARE_ORIGIN } from "./config";
 
@@ -22,6 +22,11 @@ export async function reportFailure(
     const token = env.DISCORD_BOT_TOKEN;
     if (!token) return;
 
+    const retry =
+      automation.hour === "hourly"
+        ? "next hour"
+        : `tomorrow at ${hourLabel(automation.hour)} Eastern`;
+
     await postMessage(
       token,
       ALERT_CHANNEL_ID,
@@ -34,8 +39,8 @@ export async function reportFailure(
               `\`\`\`\n${clip(summary)}\n\`\`\``,
               "",
               HAREWARE_ORIGIN
-                ? `Nothing was posted. [The log](${HAREWARE_ORIGIN}/log) has the rest, and the reminder will try again tomorrow.`
-                : "Nothing was posted. The reminder will try again tomorrow.",
+                ? `Check [the log](${HAREWARE_ORIGIN}/log) for details. The automation will try again ${retry}.`
+                : `Check the log for details. The automation will try again ${retry}.`,
             ].join("\n"),
           ),
         ],

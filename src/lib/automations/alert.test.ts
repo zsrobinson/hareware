@@ -57,6 +57,24 @@ test("stays quiet while a failure is already the standing state", async () => {
   expect(postMessage).not.toHaveBeenCalled();
 });
 
+test.each([
+  [meetingAutomation, "tomorrow at 8am Eastern"],
+  [AUTOMATIONS.find((a) => a.id === "applications")!, "next hour"],
+  [{ ...meetingAutomation, hour: 14 }, "tomorrow at 2pm Eastern"],
+])("reports the registry schedule for $name", async (automation, retry) => {
+  await reportFailure(env, automation, "notion failed");
+
+  const [, , message] = postMessage.mock.calls[0] as [
+    string,
+    string,
+    { blocks: { content?: string }[] },
+  ];
+  const content = message.blocks[0]?.content;
+  expect(content).toContain(`The automation will try again ${retry}.`);
+  expect(content).toContain("Check [the log]");
+  expect(content).not.toContain("Nothing was posted");
+});
+
 test("speaks up again after a run that recovered", async () => {
   lastOutcome.mockResolvedValue("failed");
   await reportFailure(env, socialAutomation, "first");

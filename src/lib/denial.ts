@@ -41,7 +41,8 @@ export const DENIALS: Record<Denial, DenialCopy> = {
   "no-role": {
     status: 403,
     title: "This tool is for the Editorial Board",
-    body: (you) => `You are signed in as ${you}, who is not on the board.`,
+    body: (you) =>
+      `You are signed in as ${you}, who is not on the board. A board member can give you the role in Discord.`,
     action: "leave",
   },
 

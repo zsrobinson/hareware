@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLayoutState } from "~/lib/layout-state";
 import { useDebouncedEffect } from "~/lib/use-debounced-effect";
 import { ContentSlide } from "./content-slide";
+import { buttonVariants } from "./ui/button";
+import { cn } from "~/lib/utils";
 import { FitWidth } from "./fit-width";
 import { LoaderCircle } from "./loader-circle";
 import { OptionsForm } from "./options-form";
@@ -114,11 +116,14 @@ export function GeneratePage({
     <div className="flex flex-col items-start gap-8 md:flex-row">
       <div id="options" className="flex scroll-mt-4 flex-col gap-4">
         <div className="flex items-baseline justify-between gap-4">
-          <h2 className="text-xl font-semibold">Options</h2>
+          <h2 className="font-semibold">Options</h2>
           {/* on a phone the slides sit below every option */}
           <a
             href="#slides"
-            className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline md:hidden"
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "md:hidden",
+            )}
           >
             Skip to slides
           </a>
@@ -132,7 +137,7 @@ export function GeneratePage({
       >
         <div className="flex w-full max-w-96 flex-col gap-4 md:mr-4">
           <div className="flex justify-between" ref={animate}>
-            <h2 className="text-xl font-semibold">Title slide</h2>
+            <h2 className="font-semibold">Title slide</h2>
             {isOverflowing && (
               <div className="text-destructive flex items-center gap-2 text-sm">
                 <TriangleAlertIcon className="size-4" />
@@ -179,7 +184,7 @@ export function GeneratePage({
         </div>
 
         <div className="flex w-full max-w-96 flex-col gap-4">
-          <h2 className="text-xl font-semibold">Content slide</h2>
+          <h2 className="font-semibold">Content slide</h2>
 
           <FitWidth>
             <div className="relative">
@@ -207,6 +212,15 @@ export function GeneratePage({
               )}
             </div>
           </FitWidth>
+
+          <div className="text-muted-foreground flex items-center justify-center gap-2 text-sm leading-[1.1]">
+            <InfoIcon className="size-5 min-w-max" />
+            {state.renderImages ? (
+              <p>Press and hold, or right-click, a slide to save it.</p>
+            ) : (
+              <p>Take a screenshot of each slide to save it.</p>
+            )}
+          </div>
           <a
             href="#options"
             className="text-muted-foreground hover:text-foreground text-center text-sm underline-offset-4 hover:underline md:hidden"

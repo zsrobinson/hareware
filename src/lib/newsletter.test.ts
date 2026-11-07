@@ -25,8 +25,8 @@ test("fills in the meeting and the note, escaping what was typed", () => {
 
 test("leaves placeholders where nothing was typed", () => {
   const html = newsletterHtml({ meeting: " ", note: "", articles: [] });
-  expect(html).toContain("will be [when and where].");
-  expect(html).toContain("<p>[Your note]</p>");
+  expect(html).toContain("will be [DATE] at [TIME] in [LOCATION].");
+  expect(html).toContain("<p>[EMAIL BODY]</p>");
 });
 
 test("leaves out a credit the article does not print", () => {

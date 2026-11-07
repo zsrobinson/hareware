@@ -218,8 +218,12 @@ const who = viewerState(await viewer(Astro.request));
           console.error("could not copy the counts", error);
           copy.textContent = "Couldn't copy; select the column instead";
         })
+        /* a failure needs longer to read than a tick */
         .finally(() =>
-          setTimeout(() => (copy.textContent = "Copy word counts"), 1500),
+          setTimeout(
+            () => (copy.textContent = "Copy word counts"),
+            copy.textContent === "Copied" ? 1500 : 4000,
+          ),
         );
     });
 

@@ -76,10 +76,11 @@ export function newsletterHtml({
     /* the sentence brings its own full stop */
     meeting.trim()
       ? escapeHtml(meeting.trim().replace(/\.+$/, ""))
-      : "[when and where]"
+      : /* the placeholders the secretary types over in Gmail */
+        "[DATE] at [TIME] in [LOCATION]"
   }.</font></b>
 </div>
-${paragraphs(note) || "<p>[Your note]</p>"}
+${paragraphs(note) || "<p>[EMAIL BODY]</p>"}
 <br />
 <hr />
 <b><font size="4">Latest articles</font></b>

@@ -28,9 +28,6 @@ export function NewsletterPage({
     const timer = setTimeout(() => setShown(settled), 300);
     return () => clearTimeout(timer);
   }, [settled]);
-  const blank = [!meeting.trim() && "meeting", !note.trim() && "note"].filter(
-    Boolean,
-  );
 
   const copy = async () => {
     try {
@@ -58,7 +55,7 @@ export function NewsletterPage({
           <Input
             value={meeting}
             onChange={(event) => setMeeting(event.target.value)}
-            placeholder="Thursday at 7 pm in Tawes 1100"
+            placeholder="Optional: Thursday at 7 pm in Tawes 1100"
           />
         </label>
         <label className="block space-y-1.5">
@@ -66,7 +63,7 @@ export function NewsletterPage({
           <Textarea
             value={note}
             onChange={(event) => setNote(event.target.value)}
-            placeholder="Anything else this week. Leave a blank line between paragraphs."
+            placeholder="Optional. Leave a blank line between paragraphs."
             className="h-40"
           />
         </label>
@@ -78,9 +75,7 @@ export function NewsletterPage({
           <p className="text-muted-foreground text-sm">
             {copied === "failed"
               ? "Couldn't copy. Select the preview and copy it instead."
-              : blank.length > 0
-                ? `The ${blank.join(" and ")} ${blank.length > 1 ? "are" : "is"} still in brackets; fill ${blank.length > 1 ? "them" : "it"} in here or in Gmail.`
-                : "Then paste it into a new email."}
+              : "Paste it into a new email. Anything left blank stays in brackets to fill in there."}
           </p>
         </div>
       </div>

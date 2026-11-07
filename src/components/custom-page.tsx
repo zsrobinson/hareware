@@ -74,7 +74,7 @@ export function CustomPage() {
 
   return (
     <form
-      className="space-y-4"
+      className="max-w-2xl space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
         setHasSubmitted(true);

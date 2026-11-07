@@ -1,0 +1,11 @@
+---
+/* sends the page's first request before its JavaScript arrives; ~/lib/early */
+import { earlyScript, type Early } from "~/lib/early";
+
+interface Props {
+  early: Early;
+}
+const { early } = Astro.props;
+---
+
+<script is:inline set:html={earlyScript(early)} />

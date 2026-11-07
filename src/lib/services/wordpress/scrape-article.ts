@@ -8,23 +8,9 @@
 
 import { scrub, scrubFragment } from "./scrub-html";
 import { parseDocument } from "./parse-document";
-import { ORIGIN, toArticleSlug } from "./article-url";
+import { toArticleSlug } from "./article-url";
+import { articleUrl, latestUrl } from "./urls";
 import { readWordPress } from "./request";
-
-/**
- * everything we need off a post, in one request. _links looks redundant next to
- * _embed but isn't — _embed builds itself out of the links, and asking for
- * fields without it silently returns no _embedded at all
- */
-export const FIELDS = [
-  "title",
-  "content",
-  "date",
-  "link",
-  "jetpack_featured_media_url",
-  "_links",
-  "_embedded",
-].join(",");
 
 type Term = { name: string; taxonomy: string };
 
@@ -134,15 +120,7 @@ function readEntryContent(document: Document) {
  * bare slug permalink 301s to its dated form on the way in, which the api skips
  */
 async function fetchPost(slug: string): Promise<WordPressPost> {
-  const params = new URLSearchParams({
-    slug,
-    _embed: "wp:term",
-    _fields: FIELDS,
-  });
-  const res = await readWordPress(
-    `${ORIGIN}/wp-json/wp/v2/posts?${params}`,
-    `the article ${slug}`,
-  );
+  const res = await readWordPress(articleUrl(slug), `the article ${slug}`);
   if (!res.ok) throw new Error(`wordpress returned ${res.status} for ${slug}`);
 
   const [post] = (await res.json()) as WordPressPost[];
@@ -169,16 +147,7 @@ function formatDate(date: string): string {
  * request rather than one per article: the newsletter needs ten of them
  */
 export async function recentArticles(count: number) {
-  const params = new URLSearchParams({
-    per_page: String(count),
-    status: "publish",
-    _embed: "wp:term",
-    _fields: FIELDS,
-  });
-  const res = await readWordPress(
-    `${ORIGIN}/wp-json/wp/v2/posts?${params}`,
-    "the latest articles",
-  );
+  const res = await readWordPress(latestUrl(count), "the latest articles");
   if (!res.ok) throw new Error(`wordpress returned ${res.status}`);
 
   const posts = (await res.json()) as WordPressPost[];

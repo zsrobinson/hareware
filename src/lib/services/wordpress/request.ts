@@ -6,6 +6,7 @@
   gets a `Throttled` to explain in words rather than a page that just stops.
 */
 
+import { takeEarly } from "~/lib/early";
 import { errorMessage } from "~/lib/utils";
 
 /** WordPress turned the request away for now; waiting a minute is the fix */
@@ -41,7 +42,9 @@ export async function readWordPress(
   for (let attempt = 0; ; attempt++) {
     let response: Response;
     try {
-      response = await fetch(url);
+      /* the page may have sent the first one already: ~/lib/early */
+      response = await ((attempt === 0 && failed === 0 && takeEarly(url)) ||
+        fetch(url));
     } catch (thrown) {
       if (failed >= FAILED_RETRIES)
         throw new Throttled(`${describe}: ${errorMessage(thrown)}`);

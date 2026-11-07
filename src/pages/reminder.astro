@@ -4,6 +4,7 @@
   the log and the next run, and draws the refusal itself if the answer is no.
 */
 import Dashboard from "~/layouts/dashboard.astro";
+import EarlyFetch from "~/components/early-fetch.astro";
 import PageHeader from "~/components/page-header.astro";
 import { ReminderPage } from "~/components/reminder-page";
 
@@ -11,6 +12,7 @@ export const prerender = true;
 ---
 
 <Dashboard title="Social Reminder">
+  <EarlyFetch early={{ api: "/api/reminder.json" }} />
   <div class="space-y-6">
     <PageHeader
       title="Social Reminder"

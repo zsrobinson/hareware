@@ -4,7 +4,7 @@
   headers, and the API also says how many pages there are.
 */
 
-import { ORIGIN } from "./article-url";
+import { recentUrl } from "./urls";
 import { readWordPress } from "./request";
 import { scrubFragment } from "./scrub-html";
 
@@ -19,16 +19,7 @@ export type RecentArticle = {
 export async function getRecentArticles(
   page = 1,
 ): Promise<{ articles: RecentArticle[]; pages: number }> {
-  const params = new URLSearchParams({
-    per_page: "10",
-    page: String(page),
-    status: "publish",
-    _fields: "title,link,date",
-  });
-  const res = await readWordPress(
-    `${ORIGIN}/wp-json/wp/v2/posts?${params}`,
-    "the recent articles",
-  );
+  const res = await readWordPress(recentUrl(page), "the recent articles");
   /* past the last page, WordPress answers 400 rather than an empty list */
   if (res.status === 400) return { articles: [], pages: 0 };
   if (!res.ok) throw new Error(`wordpress answered ${res.status}`);

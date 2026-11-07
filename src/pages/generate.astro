@@ -6,11 +6,13 @@
 import { InstagramPosts } from "~/components/instagram-posts";
 import SlideFonts from "~/components/slide-fonts.astro";
 import Dashboard from "~/layouts/dashboard.astro";
+import EarlyFetch from "~/components/early-fetch.astro";
 
 export const prerender = true;
 ---
 
 <Dashboard title="Instagram Posts" width="full">
+  <EarlyFetch early={"article-or-recent"} />
   <SlideFonts slot="head" />
   <InstagramPosts client:only="react" />
 </Dashboard>

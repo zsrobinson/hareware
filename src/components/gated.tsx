@@ -7,6 +7,7 @@
 import { buttonVariants } from "~/components/ui/button";
 import type { RefusalBody } from "~/lib/admin-api";
 import { DENIALS, type Action } from "~/lib/denial";
+import { takeEarly } from "~/lib/early";
 
 /** a gated API's refusal, carried as an error so a query can hold it */
 export class Refused extends Error {
@@ -17,7 +18,8 @@ export class Refused extends Error {
 
 /** a gated API's answer, or a `Refused`, or an error saying what went wrong */
 export async function fetchGated<T>(url: string): Promise<T> {
-  const response = await fetch(url, { cache: "no-store" });
+  /* the page may have sent it already: ~/lib/early */
+  const response = await (takeEarly(url) ?? fetch(url, { cache: "no-store" }));
   if (response.ok) return (await response.json()) as T;
 
   const text = await response.text();

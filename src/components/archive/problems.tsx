@@ -117,7 +117,7 @@ function ArticleProblems({
   const ignore = () =>
     save.mutate({
       edit: { kind: "ignore", postId: article.id, ignored: true },
-      done: `Ignored “${article.title}”`,
+      done: `Ignored “${article.title}”; it still counts`,
       undo: { kind: "ignore", postId: article.id, ignored: false },
     });
 

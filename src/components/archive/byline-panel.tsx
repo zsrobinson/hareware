@@ -187,6 +187,7 @@ export function BylinePanel({
           />
           <span className="text-muted-foreground block text-xs">
             On every article below without its own answer, and on later ones.
+            Separate two people with a comma.
           </span>
         </label>
 
@@ -196,7 +197,7 @@ export function BylinePanel({
             <label className="flex items-start gap-2">
               <input
                 type="radio"
-                className="mt-1"
+                className="accent-foreground mt-1"
                 checked={keepEarlier}
                 onChange={() => setKeepEarlier(true)}
               />
@@ -209,7 +210,7 @@ export function BylinePanel({
             <label className="flex items-start gap-2">
               <input
                 type="radio"
-                className="mt-1"
+                className="accent-foreground mt-1"
                 checked={!keepEarlier}
                 onChange={() => setKeepEarlier(false)}
               />
@@ -230,6 +231,7 @@ export function BylinePanel({
                   <span className="text-muted-foreground block text-xs">
                     {formatDate(use.article.publishedAt)} ·{" "}
                     {use.roles.map((role) => ROLE_NAMES[role]).join(", ")}
+                    {use.own.length > 0 && " · only this article"}
                   </span>
                 </div>
                 <div className="grid grid-cols-[auto_1fr] items-center gap-2">

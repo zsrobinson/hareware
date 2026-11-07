@@ -448,6 +448,12 @@ function RoleEditor({
                     entries: entriesOf({ renamed, added }),
                   },
                   done: SAVED[role](article.title),
+                  undo: {
+                    kind: "article-credits",
+                    postId: article.id,
+                    role,
+                    entries: entriesOf(initial),
+                  },
                 })
               }
             >

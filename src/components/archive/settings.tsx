@@ -597,6 +597,7 @@ function Labels({ archive }: { archive: Archive }) {
                 saveAll(
                   archive.labels.map((l, i) => (i === index ? next : l)),
                   `Saved “${next.label}”`,
+                  { undoable: true },
                 )
               }
               onRemove={() => {
@@ -711,6 +712,14 @@ function LabelRow({
   );
 }
 
+/* a guess at the role a new label credits, for one offered from Problems */
+const roleFor = (label: string): Role =>
+  /image|photo|picture|illustrat|graphic|art\b|draw|cartoon|thumbnail|video/i.test(
+    label,
+  )
+    ? "image"
+    : "writer";
+
 function AddLabel({
   busy,
   onAdd,
@@ -719,17 +728,19 @@ function AddLabel({
   onAdd: (label: Label, done: () => void) => void;
 }) {
   /* Problems links here with the unknown line's label to add */
-  const [label, setLabel] = useState(() => {
-    if (typeof window === "undefined") return "";
-    const offered = new URLSearchParams(window.location.search).get("label");
-    return offered ? `${offered}:` : "";
-  });
-  const [role, setRole] = useState<Role>("image");
+  const [offered] = useState(() =>
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("label"),
+  );
+  const [label, setLabel] = useState(offered ? `${offered}:` : "");
+  const [role, setRole] = useState<Role>(offered ? roleFor(offered) : "image");
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    if (label) input.current?.focus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- on arrival only
-  }, []);
+    if (!offered) return;
+    input.current?.scrollIntoView({ block: "center" });
+    input.current?.focus({ preventScroll: true });
+  }, [offered]);
 
   return (
     <form
@@ -765,6 +776,14 @@ function AddLabel({
       >
         <PlusIcon /> Add
       </Button>
+      {offered && (
+        <a
+          href="/problems"
+          className="text-muted-foreground hover:text-foreground ml-auto text-sm underline-offset-4 hover:underline"
+        >
+          Back to Problems
+        </a>
+      )}
     </form>
   );
 }

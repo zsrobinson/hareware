@@ -1,7 +1,6 @@
 import { ChevronRightIcon, ExternalLinkIcon, PlusIcon } from "lucide-react";
 import { useId, useMemo, useState } from "react";
-import { Button, buttonVariants } from "~/components/ui/button";
-import { cn } from "~/lib/utils";
+import { Button } from "~/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
@@ -49,6 +48,7 @@ function Settings({ archive }: ViewProps) {
         everyone={everyone}
         printedCount={printedCount}
       />
+      <ArticleRows archive={archive} />
       <Labels archive={archive} />
       <SheetStatus archive={archive} />
     </div>
@@ -104,6 +104,7 @@ function PenNames({
       </datalist>
 
       <div className="rounded-xl border">
+        <AddPenName list={list} printedCount={printedCount} />
         {archive.penNames.length === 0 ? (
           <p className="text-muted-foreground px-4 py-6 text-center text-sm">
             No pen names yet.
@@ -115,7 +116,6 @@ function PenNames({
             ))}
           </ul>
         )}
-        <AddPenName list={list} printedCount={printedCount} />
       </div>
 
       <PasteSeveral
@@ -123,7 +123,6 @@ function PenNames({
         printedCount={printedCount}
         penNames={archive.penNames}
       />
-      <ArticleRows archive={archive} />
     </Section>
   );
 }
@@ -209,7 +208,14 @@ function PenNameRow({ pen, list }: { pen: PenName; list: string }) {
                     kind: "pen-names",
                     entries: [{ byline: pen.byline, realName: "" }],
                   },
-                  done: `${pen.byline} is no longer a pen name`,
+                  done: `${pen.byline} no longer counts as ${pen.realName.join(" and ")}`,
+                  undo: {
+                    kind: "pen-names",
+                    entries: pen.realName.map((realName) => ({
+                      byline: pen.byline,
+                      realName,
+                    })),
+                  },
                 })
               }
             >
@@ -236,7 +242,7 @@ function AddPenName({
 
   return (
     <form
-      className="bg-muted/30 flex flex-wrap items-center gap-2 border-t px-4 py-3"
+      className="bg-muted/30 flex flex-wrap items-center gap-2 border-b px-4 py-3"
       onSubmit={(event) => {
         event.preventDefault();
         if (!byline.trim() || !realName.trim()) return;
@@ -415,68 +421,71 @@ function ArticleRows({ archive }: { archive: Archive }) {
   const others = (
     postId: number,
     role: Role | null,
-    keep: (typeof archive.articleOverrides)[number],
+    keep: (typeof archive.articleOverrides)[number] | undefined,
   ) =>
     archive.articleOverrides
       .filter((o) => o.postId === postId && o.role === role && o !== keep)
       .map((o) => ({ byline: o.byline, realName: o.realName }));
 
   return (
-    <Collapsible>
-      <CollapsibleTrigger className="group text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm">
-        <ChevronRightIcon className="size-4 transition-transform group-data-[panel-open]:rotate-90" />
-        Changes to single articles ({archive.articleOverrides.length})
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <ul className="mt-3 divide-y rounded-xl border text-sm">
-          {archive.articleOverrides.map((o, index) => (
-            <li
-              key={index}
-              className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2"
-            >
-              <span className="min-w-0 flex-1">
-                <span className="text-muted-foreground">
-                  {o.title ?? `article ${o.postId}`} ·{" "}
-                  {o.role ? ROLE_NAMES[o.role] : "any role"} ·{" "}
-                </span>
-                {o.byline ? (
-                  <>
-                    {o.byline}
-                    <span className="text-muted-foreground"> counts as </span>
-                    {o.realName}
-                  </>
-                ) : (
-                  <>
-                    <span className="text-muted-foreground">adds </span>
-                    {o.realName}
-                  </>
-                )}
+    <Section
+      title="Counted differently on one article"
+      description="Set from an article's panel in Articles."
+    >
+      <ul className="divide-y rounded-xl border text-sm">
+        {archive.articleOverrides.map((o, index) => (
+          <li
+            key={index}
+            className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="text-muted-foreground">
+                {o.title ?? `article ${o.postId}`} ·{" "}
+                {o.role ? ROLE_NAMES[o.role] : "any role"} ·{" "}
               </span>
-              {o.role && (
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  disabled={save.isPending}
-                  onClick={() =>
-                    save.mutate({
-                      edit: {
-                        kind: "article-credits",
-                        postId: o.postId!,
-                        role: o.role!,
-                        entries: others(o.postId!, o.role, o),
-                      },
-                      done: `Removed the change on “${o.title ?? `article ${o.postId}`}”`,
-                    })
-                  }
-                >
-                  Remove
-                </Button>
+              {o.byline ? (
+                <>
+                  {o.byline}
+                  <span className="text-muted-foreground"> counts as </span>
+                  {o.realName}
+                </>
+              ) : (
+                <>
+                  <span className="text-muted-foreground">adds </span>
+                  {o.realName}
+                </>
               )}
-            </li>
-          ))}
-        </ul>
-      </CollapsibleContent>
-    </Collapsible>
+            </span>
+            {o.role && (
+              <Button
+                variant="ghost"
+                size="xs"
+                disabled={save.isPending}
+                onClick={() =>
+                  save.mutate({
+                    edit: {
+                      kind: "article-credits",
+                      postId: o.postId!,
+                      role: o.role!,
+                      entries: others(o.postId!, o.role, o),
+                    },
+                    done: `“${o.title ?? `Article ${o.postId}`}” counts its bylines again`,
+                    undo: {
+                      kind: "article-credits",
+                      postId: o.postId!,
+                      role: o.role!,
+                      entries: others(o.postId!, o.role, undefined),
+                    },
+                  })
+                }
+              >
+                Remove
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Section>
   );
 }
 
@@ -488,8 +497,22 @@ function Labels({ archive }: { archive: Archive }) {
     archive.articles.filter((a) => a.credits.some((c) => same(c.label, label)))
       .length;
   /* the whole list is saved each time, as the Sheet's tab holds it */
-  const saveAll = (labels: Label[], done: string, onSuccess?: () => void) =>
-    save.mutate({ edit: { kind: "labels", labels }, done }, { onSuccess });
+  const saveAll = (
+    labels: Label[],
+    done: string,
+    {
+      onSuccess,
+      undoable,
+    }: { onSuccess?: () => void; undoable?: boolean } = {},
+  ) =>
+    save.mutate(
+      {
+        edit: { kind: "labels", labels },
+        done,
+        undo: undoable ? { kind: "labels", labels: archive.labels } : undefined,
+      },
+      { onSuccess },
+    );
 
   return (
     <Section
@@ -501,7 +524,9 @@ function Labels({ archive }: { archive: Archive }) {
         <AddLabel
           busy={save.isPending}
           onAdd={(label, done) =>
-            saveAll([...archive.labels, label], `Added “${label.label}”`, done)
+            saveAll([...archive.labels, label], `Added “${label.label}”`, {
+              onSuccess: done,
+            })
           }
         />
         <ul className="divide-y">
@@ -519,16 +544,12 @@ function Labels({ archive }: { archive: Archive }) {
               }
               onRemove={() => {
                 const uses = used(label.label);
-                if (
-                  uses > 0 &&
-                  !window.confirm(
-                    `Remove “${label.label}”? ${uses} ${uses === 1 ? "article stops" : "articles stop"} counting it as a credit line.`,
-                  )
-                )
-                  return;
                 saveAll(
                   archive.labels.filter((_, i) => i !== index),
-                  `Removed “${label.label}”`,
+                  uses > 0
+                    ? `Removed “${label.label}”; ${uses} ${uses === 1 ? "article stops" : "articles stop"} counting it`
+                    : `Removed “${label.label}”`,
+                  { undoable: true },
                 );
               }}
             />
@@ -711,9 +732,9 @@ function SheetStatus({ archive }: { archive: Archive }) {
             href={sheet.url}
             target="_blank"
             rel="noreferrer"
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 underline-offset-4 hover:underline"
           >
-            Open in Google Sheets <ExternalLinkIcon />
+            Open in Google Sheets <ExternalLinkIcon className="size-3.5" />
           </a>
         )}
       </div>

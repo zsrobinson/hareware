@@ -1,6 +1,5 @@
 import { ChevronRightIcon, ExternalLinkIcon } from "lucide-react";
 import { useMemo } from "react";
-import { toast } from "sonner";
 import { Button, buttonVariants } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import {
@@ -93,26 +92,15 @@ function Problems({ archive, filters }: ViewProps) {
 
 function ArticleProblems({ article }: { article: ArchiveArticle }) {
   const save = useEdit();
-  const ignore = (ignored: boolean) =>
-    save.mutate(
-      { edit: { kind: "ignore", postId: article.id, ignored } },
-      {
-        onSuccess: () =>
-          ignored &&
-          toast(`Ignored “${article.title}”`, {
-            action: {
-              label: "Undo",
-              onClick: () =>
-                save.mutate({
-                  edit: { kind: "ignore", postId: article.id, ignored: false },
-                }),
-            },
-          }),
-      },
-    );
+  const ignore = () =>
+    save.mutate({
+      edit: { kind: "ignore", postId: article.id, ignored: true },
+      done: `Ignored “${article.title}”`,
+      undo: { kind: "ignore", postId: article.id, ignored: false },
+    });
 
   return (
-    <li className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+    <li className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
       <div className="min-w-0 flex-1 space-y-2">
         <div>
           <a
@@ -142,7 +130,7 @@ function ArticleProblems({ article }: { article: ArchiveArticle }) {
               {(problem.kind === "unrecognised" ||
                 problem.kind === "unparsed" ||
                 problem.kind === "odd-name") && (
-                <span className="bg-muted text-muted-foreground mt-1 block w-fit max-w-full rounded px-1.5 py-0.5 text-xs break-words">
+                <span className="text-muted-foreground mt-1 block border-l-2 pl-2 text-[13px] break-words">
                   {problem.detail}
                 </span>
               )}
@@ -150,12 +138,12 @@ function ArticleProblems({ article }: { article: ArchiveArticle }) {
           ))}
         </ul>
       </div>
-      <div className="flex shrink-0 gap-1">
+      <div className="text-muted-foreground -ml-2 flex shrink-0 gap-1 sm:-mr-2 sm:ml-0">
         <a
           href={EDIT_IN_WORDPRESS(article.id)}
           target="_blank"
           rel="noreferrer"
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+          className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
         >
           Edit in WordPress <ExternalLinkIcon />
         </a>
@@ -163,7 +151,7 @@ function ArticleProblems({ article }: { article: ArchiveArticle }) {
           variant="ghost"
           size="sm"
           disabled={save.isPending}
-          onClick={() => ignore(true)}
+          onClick={ignore}
           title="Hide this article's problems; it stays in every count"
         >
           Ignore

@@ -222,7 +222,8 @@ function Charts({ archive, filters }: ViewProps) {
             aria-expanded={customizing}
             onClick={() => setCustomizing(!customizing)}
           >
-            <SlidersHorizontalIcon /> Customize
+            <SlidersHorizontalIcon />
+            <span className="sr-only sm:not-sr-only">Customize</span>
           </Button>
         </div>
         {customizing && (

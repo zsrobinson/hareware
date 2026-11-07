@@ -178,7 +178,7 @@ function Shell({
               title={`Read from WordPress ${formatDateTime(archive.fetchedAt)}`}
             >
               <RefreshCwIcon className={cn(refreshing && "animate-spin")} />
-              Refresh
+              <span className="sr-only sm:not-sr-only">Refresh</span>
             </Button>
           }
         />
@@ -208,11 +208,9 @@ function SheetNotice({ archive }: { archive: Archive }) {
       ? "The Sheet isn't connected, so pen names count as their own people."
       : sheet.status === "failed"
         ? `The Sheet couldn't be read, so pen names count as their own people. ${sheet.reason}`
-        : sheet.missingTabs.includes("Overrides")
-          ? "No pen names yet. Add them in Settings."
-          : archive.sheetProblems.length > 0
-            ? `${archive.sheetProblems.length} ${archive.sheetProblems.length === 1 ? "row" : "rows"} in the Sheet couldn't be used. Settings lists them.`
-            : null;
+        : archive.sheetProblems.length > 0
+          ? `${archive.sheetProblems.length} ${archive.sheetProblems.length === 1 ? "row" : "rows"} in the Sheet couldn't be used. Settings lists them.`
+          : null;
   if (!message) return null;
 
   return (
@@ -290,7 +288,7 @@ function FilterBar({
         />
       )}
 
-      <label className="relative min-w-48 flex-1">
+      <label className="relative order-first w-full sm:order-none sm:w-auto sm:min-w-48 sm:flex-1">
         <span className="sr-only">Search</span>
         <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
         <Input

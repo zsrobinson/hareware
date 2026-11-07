@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { ExternalLinkIcon, PlusIcon, XIcon } from "lucide-react";
+import { ExternalLinkIcon, PlusIcon, UserRoundIcon, XIcon } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { DataTable, sortable } from "~/components/data-table";
 import { Button } from "~/components/ui/button";
@@ -225,10 +225,13 @@ function PersonPanel({
         <SheetDescription>
           {person.contributions}{" "}
           {person.contributions === 1 ? "contribution" : "contributions"}
-          {summary && <> ({summary})</>} · {formatMonth(person.first)}
-          {person.first.slice(0, 7) !== person.last.slice(0, 7) && (
-            <> – {formatMonth(person.last)}</>
-          )}
+          {summary && <> ({summary})</>}
+          <span className="block whitespace-nowrap">
+            {formatMonth(person.first)}
+            {person.first.slice(0, 7) !== person.last.slice(0, 7) && (
+              <> – {formatMonth(person.last)}</>
+            )}
+          </span>
         </SheetDescription>
       </SheetHeader>
 
@@ -241,7 +244,7 @@ function PersonPanel({
             </Button>
             {printedOn > 0 && (
               <Button variant="ghost" size="xs" onClick={() => setForm("of")}>
-                Someone else is behind this name…
+                <UserRoundIcon /> Someone else is behind this name
               </Button>
             )}
           </div>
@@ -350,7 +353,14 @@ function PenNames({
                         : [{ byline: pen.byline, realName: "" }];
                     })(),
                   },
-                  done: `${pen.byline} is no longer a pen name`,
+                  done: `${pen.byline} no longer counts as ${person.name}`,
+                  undo: {
+                    kind: "pen-names",
+                    entries: pen.realName.map((realName) => ({
+                      byline: pen.byline,
+                      realName,
+                    })),
+                  },
                 })
               }
             >

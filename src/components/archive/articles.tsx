@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { ExternalLinkIcon, PencilIcon, PlusIcon, XIcon } from "lucide-react";
+import { ExternalLinkIcon, PlusIcon, XIcon } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { DataTable, sortable } from "~/components/data-table";
 import { Button, buttonVariants } from "~/components/ui/button";
@@ -106,14 +106,13 @@ function Articles({ archive, filters }: ViewProps) {
             row.original.problems.length > 0 && !row.original.ignored;
           return (
             <div className="max-w-md min-w-56 whitespace-normal">
-              <a
-                href={row.original.link}
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium hover:underline"
+              <button
+                type="button"
+                className="decoration-muted-foreground/40 text-left font-medium underline-offset-4 hover:underline"
+                onClick={() => setEditing(row.original.id)}
               >
                 {row.original.title}
-              </a>
+              </button>
               {open && (
                 <a
                   href={`/problems?q=${encodeURIComponent(row.original.title)}`}
@@ -144,23 +143,6 @@ function Articles({ archive, filters }: ViewProps) {
           ),
         }),
       ),
-      {
-        id: "edit",
-        header: "",
-        enableHiding: false,
-        cell: ({ row }) => (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="text-muted-foreground"
-            title="Edit contributors"
-            aria-label={`Edit contributors of ${row.original.title}`}
-            onClick={() => setEditing(row.original.id)}
-          >
-            <PencilIcon />
-          </Button>
-        ),
-      },
     ],
     [anyOther],
   );
@@ -241,6 +223,9 @@ function ArticlePanel({
         </div>
       </SheetHeader>
       <div className="space-y-6 px-4 pb-6">
+        <p className="text-muted-foreground text-sm">
+          Changes here count on this article only.
+        </p>
         {ROLES.map((role) => (
           <RoleEditor
             /* a save changes the contributors, which starts the form afresh */

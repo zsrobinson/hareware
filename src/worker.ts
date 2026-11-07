@@ -8,9 +8,9 @@ import "./middleware";
   first imported during a request is, and Astro imports each route lazily.
   Measured on the preview (2026-11-07, about 150 requests each), this moved
   p90 from 4.1 ms to 3.4 ms and left the outliers where they were: a fresh
-  isolate's first request still costs 10-13 ms, which is the runtime compiling
-  what it runs for the first time, not the imports. Tests under src/pages
-  start with _.
+  isolate's first request still costs 10-13 ms, most likely the runtime
+  compiling what it runs for the first time rather than the imports. Tests
+  under src/pages start with _.
 */
 import.meta.glob(["./pages/api/**/*.ts", "./pages/auth/**/*.ts", "!**/_*"], {
   eager: true,

@@ -68,10 +68,13 @@ export function BylinePanel({
   everyone,
   onBack,
   onDone,
+  handOverTo,
 }: {
   byline: string;
   archive: Archive;
   everyone: string[];
+  /** opens with this person already typed in, as a hand-over to them */
+  handOverTo?: string;
   /** shows a way back to where the panel was opened from */
   onBack?: () => void;
   onDone?: () => void;
@@ -82,7 +85,7 @@ export function BylinePanel({
   const before =
     archive.penNames.find((pen) => same(pen.byline, byline))?.realName ?? [];
 
-  const [everywhere, setEverywhere] = useState(before.join(", "));
+  const [everywhere, setEverywhere] = useState(handOverTo ?? before.join(", "));
   const [own, setOwn] = useState<Record<string, string>>(() =>
     Object.fromEntries(uses.map((use) => [key(use), use.own.join(", ")])),
   );

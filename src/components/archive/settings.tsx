@@ -94,6 +94,7 @@ function PenNames({
 }) {
   const list = useId();
   const [open, setOpen] = useState<string | null>(null);
+  const [handOverTo, setHandOverTo] = useState<string | undefined>();
 
   return (
     <Section
@@ -111,6 +112,10 @@ function PenNames({
           list={list}
           printedCount={printedCount}
           penNames={archive.penNames}
+          onHandOver={(byline, to) => {
+            setHandOverTo(to);
+            setOpen(byline);
+          }}
         />
         {archive.penNames.length === 0 ? (
           <p className="text-muted-foreground px-4 py-6 text-center text-sm">
@@ -123,7 +128,10 @@ function PenNames({
                 key={pen.byline}
                 pen={pen}
                 archive={archive}
-                onOpen={() => setOpen(pen.byline)}
+                onOpen={() => {
+                  setHandOverTo(undefined);
+                  setOpen(pen.byline);
+                }}
               />
             ))}
           </ul>
@@ -145,6 +153,7 @@ function PenNames({
               byline={open}
               archive={archive}
               everyone={everyone}
+              handOverTo={handOverTo}
               onDone={() => setOpen(null)}
             />
           )}
@@ -225,15 +234,23 @@ function AddPenName({
   list,
   printedCount,
   penNames,
+  onHandOver,
 }: {
   list: string;
   printedCount: (byline: string) => number;
   penNames: PenName[];
+  /** the pen name counts as someone else already: hand it over instead */
+  onHandOver: (byline: string, to: string) => void;
 }) {
   const save = useEdit();
   const [byline, setByline] = useState("");
   const [realName, setRealName] = useState("");
   const count = byline.trim() ? printedCount(byline) : null;
+  const taken = penNames.find(
+    (pen) =>
+      same(pen.byline, byline.trim()) &&
+      !pen.realName.some((name) => same(name, realName.trim())),
+  );
 
   return (
     <form
@@ -241,6 +258,12 @@ function AddPenName({
       onSubmit={(event) => {
         event.preventDefault();
         if (!byline.trim() || !realName.trim()) return;
+        if (taken) {
+          onHandOver(taken.byline, realName.trim());
+          setByline("");
+          setRealName("");
+          return;
+        }
         save.mutate(
           {
             edit: {
@@ -288,13 +311,21 @@ function AddPenName({
         variant="outline"
         disabled={!byline.trim() || !realName.trim() || save.isPending}
       >
-        <PlusIcon /> Add
+        {taken ? (
+          "Continue"
+        ) : (
+          <>
+            <PlusIcon /> Add
+          </>
+        )}
       </Button>
       {count !== null && (
         <span className="text-muted-foreground w-full text-xs">
-          {count === 0
-            ? "Not printed yet."
-            : `${count} ${count === 1 ? "article" : "articles"}.`}
+          {taken
+            ? `Counts as ${taken.realName.join(" and ")} now. Continue to choose which articles stay theirs.`
+            : count === 0
+              ? "Not printed yet."
+              : `${count} ${count === 1 ? "article" : "articles"}.`}
         </span>
       )}
     </form>

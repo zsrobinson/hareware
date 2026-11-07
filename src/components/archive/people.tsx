@@ -212,6 +212,7 @@ function PersonPanel({
 }) {
   const [form, setForm] = useState<null | "own" | "of">(null);
   const [byline, setByline] = useState<string | null>(null);
+  const [handOver, setHandOver] = useState(false);
   const byId = new Map(archive.articles.map((a) => [a.id, a]));
   const articles = person.articleIds
     .map((id) => byId.get(id))
@@ -236,8 +237,15 @@ function PersonPanel({
         byline={byline}
         archive={archive}
         everyone={everyone}
-        onBack={() => setByline(null)}
-        onDone={() => setByline(null)}
+        handOverTo={handOver ? person.name : undefined}
+        onBack={() => {
+          setByline(null);
+          setHandOver(false);
+        }}
+        onDone={() => {
+          setByline(null);
+          setHandOver(false);
+        }}
       />
     );
 
@@ -276,6 +284,11 @@ function PersonPanel({
             person={person}
             archive={archive}
             onClose={() => setForm(null)}
+            onHandOver={(pen) => {
+              setForm(null);
+              setHandOver(true);
+              setByline(pen);
+            }}
           />
         ) : (
           <PenNameOf
@@ -457,10 +470,13 @@ function AddOwnPenName({
   person,
   archive,
   onClose,
+  onHandOver,
 }: {
   person: PersonRow;
   archive: Archive;
   onClose: () => void;
+  /** the pen name counts as someone else already: hand it over instead */
+  onHandOver: (byline: string) => void;
 }) {
   const save = useEdit();
   const list = useId();
@@ -488,12 +504,17 @@ function AddOwnPenName({
         a.credits.some((c) => c.bylines.some((b) => same(b, byline))),
       ).length
     : null;
+  const taken = archive.penNames.find(
+    (pen) =>
+      same(pen.byline, byline.trim()) && !pen.realName.includes(person.name),
+  );
   return (
     <form
       className="bg-muted/40 w-full space-y-3 rounded-lg border p-4"
       onSubmit={(event) => {
         event.preventDefault();
         if (!byline.trim()) return;
+        if (taken) return onHandOver(taken.byline);
         save.mutate(
           {
             edit: {
@@ -537,9 +558,11 @@ function AddOwnPenName({
       </label>
       {count !== null && (
         <p className="text-muted-foreground text-xs">
-          {count === 0
-            ? "Not printed yet."
-            : `${count} ${count === 1 ? "article" : "articles"}, and any later ones.`}
+          {taken
+            ? `Counts as ${taken.realName.join(" and ")} now. Continue to choose which articles stay theirs.`
+            : count === 0
+              ? "Not printed yet."
+              : `${count} ${count === 1 ? "article" : "articles"}, and any later ones.`}
         </p>
       )}
       <div className="flex gap-2">
@@ -548,7 +571,7 @@ function AddOwnPenName({
           size="sm"
           disabled={!byline.trim() || save.isPending}
         >
-          {save.isPending ? "Saving…" : "Save"}
+          {save.isPending ? "Saving…" : taken ? "Continue" : "Save"}
         </Button>
         <Button type="button" variant="ghost" size="sm" onClick={onClose}>
           Cancel

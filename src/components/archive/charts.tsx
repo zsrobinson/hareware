@@ -191,8 +191,8 @@ function Charts({ archive, filters }: ViewProps) {
           <div
             role="tablist"
             aria-label="Quick views"
-            /* scrolls on a phone, fading at the edge so it reads as more */
-            className="-mx-1 flex min-w-0 flex-1 gap-1 overflow-x-auto [mask-image:linear-gradient(to_right,black_80%,transparent)] px-1 sm:[mask-image:none]"
+            /* wraps on a phone, so no view hides off the edge */
+            className="-mx-1 flex min-w-0 flex-1 flex-wrap gap-x-1 px-1"
           >
             {QUICK.map((quick) => (
               <button

@@ -86,7 +86,7 @@ const who = viewerState(await viewer(Astro.request));
         <div class="space-y-4">
           <Field label="Title" id="title" value={title ?? ""} />
           <Field
-            label="Article byline"
+            label="Section, byline and date"
             id="article-by"
             value={[
               section?.toUpperCase(),
@@ -109,7 +109,7 @@ const who = viewerState(await viewer(Astro.request));
                 <img
                   src={toSizedImage(image, PREVIEW_IMAGE_WIDTH)}
                   alt=""
-                  class="bg-secondary w-full rounded-md object-contain"
+                  class="bg-secondary max-h-56 w-auto max-w-full rounded-md object-contain"
                 />
                 <Button
                   id="image-download"

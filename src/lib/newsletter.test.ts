@@ -11,7 +11,7 @@ const article = {
 
 test("fills in the meeting and the note, escaping what was typed", () => {
   const html = newsletterHtml({
-    meeting: "Thursday at 7 pm in <Tawes>",
+    meeting: "Thursday at 7 pm in <Tawes>.",
     note: "First line\nsame paragraph\n\nSecond paragraph",
     articles: [article],
   });

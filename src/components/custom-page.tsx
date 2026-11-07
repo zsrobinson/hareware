@@ -65,6 +65,7 @@ export function CustomPage() {
       <span className="text-sm font-medium">{label}</span>
       <Input
         value={value}
+        required={label === "Title"}
         placeholder={placeholder}
         onChange={(e) => set(e.target.value)}
       />
@@ -73,7 +74,7 @@ export function CustomPage() {
 
   return (
     <form
-      className="max-w-xl space-y-4"
+      className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
         setHasSubmitted(true);

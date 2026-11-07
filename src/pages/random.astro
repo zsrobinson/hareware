@@ -3,5 +3,6 @@ import { getRandomArticle } from "~/lib/services/wordpress/get-random-article";
 
 const article = await getRandomArticle();
 
-return Astro.redirect(article ?? "/generate?error", 307);
+/* no article to pick is not a bad link: fall back to the plain landing */
+return Astro.redirect(article ?? "/generate", 307);
 ---

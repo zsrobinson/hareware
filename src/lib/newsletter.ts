@@ -73,7 +73,10 @@ export function newsletterHtml({
 <p>Hey everyone,</p>
 <div style="background-color: rgb(244, 204, 204); padding: 8px 12px; line-height: 1.15;">
   <b><font size="4">Our next general body meeting will be ${
-    meeting.trim() ? escapeHtml(meeting.trim()) : "[when and where]"
+    /* the sentence brings its own full stop */
+    meeting.trim()
+      ? escapeHtml(meeting.trim().replace(/\.+$/, ""))
+      : "[when and where]"
   }.</font></b>
 </div>
 ${paragraphs(note) || "<p>[Your note]</p>"}

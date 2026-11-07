@@ -28,7 +28,8 @@ const error = !config
 
 if (who.session && !error) return Astro.redirect(returnTo);
 
-const title = who.session ? "Signed in" : "Sign in to HareWare";
+/* signed in already and back with an error: the error is what happened */
+const title = who.session ? "Sign in again" : "Sign in to HareWare";
 
 const action = config
   ? {
@@ -38,7 +39,7 @@ const action = config
   : undefined;
 ---
 
-<Dashboard title="Sign in" viewer={who}>
+<Dashboard title={title} viewer={who}>
   <Message title={title} action={action}>
     {error ?? "HareWare uses your Discord account to know who you are."}
   </Message>

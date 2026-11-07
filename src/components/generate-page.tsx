@@ -26,6 +26,8 @@ export function GeneratePage({
 }) {
   const state = useLayoutState();
   const [isOverflowing, setIsOverflowing] = useState(false);
+  /* a render that fails would otherwise leave "Rendering" up for good */
+  const [renderFailed, setRenderFailed] = useState(false);
   const [animate] = useAutoAnimate();
 
   const titleSlideRef = useRef<HTMLDivElement>(null);
@@ -48,6 +50,7 @@ export function GeneratePage({
       if (!state.renderImages) return;
 
       let cancelled = false;
+      setRenderFailed(false);
 
       void (async () => {
         const { domToPng } = await import("modern-screenshot");
@@ -77,6 +80,7 @@ export function GeneratePage({
           contentSlideImgRef.current.src = contentURI;
       })().catch((error: unknown) => {
         console.error("could not render the slides", error);
+        if (!cancelled) setRenderFailed(true);
       });
 
       // a newer layout supersedes whatever this run was about to paint
@@ -143,8 +147,17 @@ export function GeneratePage({
               {state.renderImages && (
                 <>
                   <div className="absolute top-0 left-0 z-10 flex h-full w-full items-center justify-center gap-2 bg-black/50 text-white">
-                    <LoaderCircle className="animate-spin" />
-                    Rendering
+                    {renderFailed ? (
+                      <span className="px-6 text-center text-sm">
+                        Couldn't make the image. Turn off Save as images and
+                        take a screenshot instead.
+                      </span>
+                    ) : (
+                      <>
+                        <LoaderCircle className="animate-spin" />
+                        Rendering
+                      </>
+                    )}
                   </div>
                   <img
                     className="absolute top-0 left-0 z-20 w-full"
@@ -174,8 +187,17 @@ export function GeneratePage({
               {state.renderImages && (
                 <>
                   <div className="absolute top-0 left-0 z-10 flex h-full w-full items-center justify-center gap-2 bg-black/50 text-white">
-                    <LoaderCircle className="animate-spin" />
-                    Rendering
+                    {renderFailed ? (
+                      <span className="px-6 text-center text-sm">
+                        Couldn't make the image. Turn off Save as images and
+                        take a screenshot instead.
+                      </span>
+                    ) : (
+                      <>
+                        <LoaderCircle className="animate-spin" />
+                        Rendering
+                      </>
+                    )}
                   </div>
                   <img
                     className="absolute top-0 left-0 z-20 w-full"

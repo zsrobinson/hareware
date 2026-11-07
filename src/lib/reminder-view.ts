@@ -1,7 +1,6 @@
 /*
   What the Social Reminder page draws: the log and the next run's plan, in
-  words. Its route imports this only once the gate has admitted the viewer
-  (ADR 0012), so a refused request never loads D1's client or the planner.
+  words, for /api/reminder.json once the gate has admitted the viewer.
 */
 
 import { env } from "cloudflare:workers";

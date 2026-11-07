@@ -1,7 +1,11 @@
 import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 import { adminAccess } from "~/lib/admin";
+import { applyEdit, describeEdit, parseEdit } from "~/lib/credits/edits";
+import { sheetsClient } from "~/lib/credits/load";
 import { refusal } from "~/lib/admin-api";
+import { record } from "~/lib/log";
+import { Sheets } from "~/lib/services/google/sheets";
 
 export const prerender = false;
 
@@ -11,19 +15,6 @@ export const POST: APIRoute = async ({ request }) => {
   if (!access.allowed) {
     return refusal(access.denial, access.who?.profile);
   }
-
-  /* loaded after the gate, so a refusal never loads the Sheets client or D1's */
-  const [
-    { applyEdit, describeEdit, parseEdit },
-    { sheetsClient },
-    { record },
-    { Sheets },
-  ] = await Promise.all([
-    import("~/lib/credits/edits"),
-    import("~/lib/credits/load"),
-    import("~/lib/log"),
-    import("~/lib/services/google/sheets"),
-  ]);
 
   const edit = parseEdit(await request.json().catch(() => undefined));
   if ("error" in edit) return new Response(edit.error, { status: 400 });

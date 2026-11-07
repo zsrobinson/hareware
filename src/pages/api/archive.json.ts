@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { refusal } from "~/lib/admin-api";
 import { adminAccess } from "~/lib/admin";
+import { loadSheet } from "~/lib/credits/load";
 
 export const prerender = false;
 
@@ -11,8 +12,6 @@ export const GET: APIRoute = async ({ request }) => {
   if (!access.allowed) return refusal(access.denial, access.who?.profile);
 
   try {
-    /* loaded after the gate, so a refusal never loads the Sheets client */
-    const { loadSheet } = await import("~/lib/credits/load");
     return Response.json(await loadSheet(), {
       /* no-store: a save must show on the next read, and real names must not
          sit in a browser cache after signing out */

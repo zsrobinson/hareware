@@ -1,5 +1,18 @@
 import { handle } from "@astrojs/cloudflare/handler";
 import { runScheduled } from "~/lib/automations/run";
+import "./middleware";
+
+/*
+  Every route the Worker serves, loaded at startup. Startup has its own limit
+  (a second, once per isolate) and is not billed to any request, but a module
+  first imported during a request is: Astro imports each route on its first
+  request in an isolate, and on a site this quiet most isolates are fresh, so
+  that first request paid 5-15 ms of the 10 ms (ADR 0012). Loaded here, the
+  route's own import later finds it ready. Tests under src/pages start with _.
+*/
+import.meta.glob(["./pages/api/**/*.ts", "./pages/auth/**/*.ts", "!**/_*"], {
+  eager: true,
+});
 
 /*
   the adapter's own entrypoint is `{ fetch: handle }` and nothing else, so a

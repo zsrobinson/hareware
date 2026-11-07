@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { ExternalLinkIcon, XIcon } from "lucide-react";
+import { ExternalLinkIcon, PlusIcon, XIcon } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { DataTable, sortable } from "~/components/data-table";
 import { Button } from "~/components/ui/button";
@@ -44,7 +44,7 @@ const count = (
     id === "contributions" ? row.contributions : row.counts[id],
   header: ({ column }) => (
     <div className="flex justify-end" title={title}>
-      {sortable(label)({ column })}
+      {sortable(label, "right")({ column })}
     </div>
   ),
   meta: { csvHeader: label },
@@ -158,7 +158,7 @@ function People({ archive, filters }: ViewProps) {
               value={minimum}
               options={["1", "2", "3", "5", "10"].map((n) => ({
                 id: n,
-                label: n === "1" ? "Everyone" : `${n}+ contributions`,
+                label: n === "1" ? "All people" : `${n}+ contributions`,
               }))}
               onChange={setMinimum}
             />
@@ -233,14 +233,17 @@ function PersonPanel({
 
       <div className="space-y-6 px-4 pb-6">
         <PenNames person={person} archive={archive} />
-        {printedOn > 0 && (
-          <PenNameOf
-            byline={person.name}
-            articles={printedOn}
-            everyone={everyone.filter((name) => name !== person.name)}
-            onSaved={onRenamed}
-          />
-        )}
+        <div className="-ml-2 flex flex-wrap gap-x-1 gap-y-2">
+          <AddOwnPenName person={person} archive={archive} />
+          {printedOn > 0 && (
+            <PenNameOf
+              byline={person.name}
+              articles={printedOn}
+              everyone={everyone.filter((name) => name !== person.name)}
+              onSaved={onRenamed}
+            />
+          )}
+        </div>
 
         <section className="space-y-1">
           <h3 className="text-muted-foreground text-xs font-medium">
@@ -330,7 +333,7 @@ function PenNames({
                         : [{ byline: pen.byline, realName: "" }];
                     })(),
                   },
-                  done: `${pen.byline} counts as printed again`,
+                  done: `${pen.byline} is no longer a pen name`,
                 })
               }
             >
@@ -340,6 +343,117 @@ function PenNames({
         ))}
       </ul>
     </section>
+  );
+}
+
+/** starts from the person: one of the bylines they publish under */
+function AddOwnPenName({
+  person,
+  archive,
+}: {
+  person: PersonRow;
+  archive: Archive;
+}) {
+  const save = useEdit();
+  const list = useId();
+  const [open, setOpen] = useState(false);
+  const [byline, setByline] = useState("");
+  const printed = useMemo(
+    () =>
+      [
+        ...new Set(
+          archive.articles.flatMap((a) =>
+            a.credits.flatMap((c) =>
+              c.contributors
+                .filter((p) => p.source === "printed")
+                .map((p) => p.name),
+            ),
+          ),
+        ),
+      ]
+        .filter((name) => name !== person.name)
+        .sort(),
+    [archive, person.name],
+  );
+
+  if (!open)
+    return (
+      <Button variant="ghost" size="xs" onClick={() => setOpen(true)}>
+        <PlusIcon /> Add a pen name
+      </Button>
+    );
+
+  const count = byline.trim()
+    ? archive.articles.filter((a) =>
+        a.credits.some((c) => c.bylines.some((b) => same(b, byline))),
+      ).length
+    : null;
+  return (
+    <form
+      className="bg-muted/40 ml-2 w-full space-y-2 rounded-lg border p-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!byline.trim()) return;
+        save.mutate(
+          {
+            edit: {
+              kind: "pen-names",
+              entries: [{ byline: byline.trim(), realName: person.name }],
+            },
+            done: `${byline.trim()} now counts as ${person.name}`,
+          },
+          {
+            onSuccess: () => {
+              setByline("");
+              setOpen(false);
+            },
+          },
+        );
+      }}
+    >
+      <label className="block space-y-1.5 text-sm">
+        <span className="font-medium">
+          A byline {person.name} publishes under
+        </span>
+        <Input
+          autoFocus
+          list={list}
+          value={byline}
+          onChange={(event) => setByline(event.target.value)}
+          placeholder="Pen name"
+          className="bg-background"
+        />
+        <datalist id={list}>
+          {printed.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
+      </label>
+      {count !== null && (
+        <p className="text-muted-foreground text-xs">
+          {count === 0
+            ? "Not printed yet; it will count once it is."
+            : `${count} ${count === 1 ? "article" : "articles"}, and any later ones.`}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <Button
+          type="submit"
+          size="sm"
+          disabled={!byline.trim() || save.isPending}
+        >
+          {save.isPending ? "Saving…" : "Save"}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => setOpen(false)}
+        >
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }
 
@@ -362,15 +476,15 @@ function PenNameOf({
 
   if (!editing)
     return (
-      <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
-        This is a pen name…
+      <Button variant="ghost" size="xs" onClick={() => setEditing(true)}>
+        This name is a pen name…
       </Button>
     );
 
   const known = everyone.find((name) => same(name, realName));
   return (
     <form
-      className="bg-muted/40 space-y-2 rounded-lg border p-3"
+      className="bg-muted/40 ml-2 w-full space-y-2 rounded-lg border p-3"
       onSubmit={(event) => {
         event.preventDefault();
         if (!realName.trim()) return;
@@ -387,7 +501,7 @@ function PenNameOf({
       }}
     >
       <label className="block space-y-1.5 text-sm">
-        <span className="font-medium">Who writes as {byline}?</span>
+        <span className="font-medium">Who is behind {byline}?</span>
         <Input
           autoFocus
           list={list}

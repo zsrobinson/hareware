@@ -31,6 +31,12 @@ export function ArticlesPage() {
   return <ArchiveShell>{(props) => <Articles {...props} />}</ArchiveShell>;
 }
 
+const SAVED: Record<Role, (title: string) => string> = {
+  writer: (title) => `Saved who wrote “${title}”`,
+  image: (title) => `Saved who made the image for “${title}”`,
+  other: (title) => `Saved the other contributors to “${title}”`,
+};
+
 const namesFor = (article: ArchiveArticle, role: Role) =>
   article.credits
     .filter((credit) => credit.role === role)
@@ -144,6 +150,8 @@ function Articles({ archive, filters }: ViewProps) {
           <Button
             variant="ghost"
             size="icon-sm"
+            className="text-muted-foreground"
+            title="Edit contributors"
             aria-label={`Edit contributors of ${row.original.title}`}
             onClick={() => setEditing(row.original.id)}
           >
@@ -233,7 +241,12 @@ function ArticlePanel({
       <div className="space-y-6 px-4 pb-6">
         {ROLES.map((role) => (
           <RoleEditor
-            key={`${article.id}-${role}`}
+            /* a save changes the contributors, which starts the form afresh */
+            key={`${article.id}-${role}-${JSON.stringify(
+              article.credits
+                .filter((c) => c.role === role)
+                .map((c) => c.contributors),
+            )}`}
             article={article}
             role={role}
             everyone={everyone}
@@ -380,6 +393,28 @@ function RoleEditor({
           <PlusIcon /> Add someone not printed
         </Button>
         <span className="flex-1" />
+        {!changed &&
+          (initial.added.length > 0 ||
+            Object.values(initial.renamed).some(Boolean)) && (
+            <Button
+              variant="ghost"
+              size="xs"
+              disabled={save.isPending}
+              onClick={() =>
+                save.mutate({
+                  edit: {
+                    kind: "article-credits",
+                    postId: article.id,
+                    role,
+                    entries: [],
+                  },
+                  done: `“${article.title}” uses its printed names again`,
+                })
+              }
+            >
+              Use printed names
+            </Button>
+          )}
         {changed && (
           <>
             <Button
@@ -410,7 +445,7 @@ function RoleEditor({
                         .map((realName) => ({ byline: null, realName })),
                     ],
                   },
-                  done: `Saved ${ROLE_NAMES[role].toLowerCase()} on “${article.title}”`,
+                  done: SAVED[role](article.title),
                 })
               }
             >

@@ -48,10 +48,10 @@ export type Credit = {
 export const PROBLEM_KINDS = {
   "no-writer": "No writing credit",
   "no-image": "No image credit",
-  unrecognised: "Credit line HareWare can't read",
+  unrecognised: "Unknown credit label",
   unparsed: "Credit line with no name",
   "odd-name": "Name reads like a sentence",
-  uncategorized: "Uncategorized",
+  uncategorized: "No section",
 } as const;
 export type ProblemKind = keyof typeof PROBLEM_KINDS;
 

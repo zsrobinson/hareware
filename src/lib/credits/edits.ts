@@ -97,7 +97,13 @@ export function parseEdit(body: unknown): Edit | { error: string } {
 
 /** applies an edit; `who` signs the rows it writes */
 export async function applyEdit(sheets: Sheets, edit: Edit, who: string) {
-  const note = `${who}, ${new Date().toISOString().slice(0, 10)}`;
+  const day = new Date().toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const note = `${who}, ${day}`;
   switch (edit.kind) {
     case "pen-names":
       return setPenNames(sheets, edit.entries, note);

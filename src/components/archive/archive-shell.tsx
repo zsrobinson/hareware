@@ -36,7 +36,13 @@ import {
   type FilterState,
 } from "./filters";
 
-export type ViewProps = { archive: Archive; filters: Filters };
+export type ViewProps = {
+  archive: Archive;
+  filters: Filters;
+  /** rereads WordPress now, for a page where someone just fixed an article */
+  refresh: () => void;
+  refreshing: boolean;
+};
 
 const client = new QueryClient({
   defaultOptions: {
@@ -64,15 +70,22 @@ export function ArchiveShell({
   children,
   searchPlaceholder = "Search titles and names",
   filters = true,
+  roleFilter = true,
 }: {
   children: (props: ViewProps) => ReactNode;
   searchPlaceholder?: string;
   /** false on a page about the Sheet rather than the archive */
   filters?: boolean;
+  /** false where a role means nothing, as on Problems */
+  roleFilter?: boolean;
 }) {
   return (
     <QueryClientProvider client={client}>
-      <Shell searchPlaceholder={searchPlaceholder} showFilters={filters}>
+      <Shell
+        searchPlaceholder={searchPlaceholder}
+        showFilters={filters}
+        roleFilter={roleFilter}
+      >
         {children}
       </Shell>
     </QueryClientProvider>
@@ -83,10 +96,12 @@ function Shell({
   children,
   searchPlaceholder,
   showFilters,
+  roleFilter,
 }: {
   children: (props: ViewProps) => ReactNode;
   searchPlaceholder: string;
   showFilters: boolean;
+  roleFilter: boolean;
 }) {
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
@@ -152,11 +167,17 @@ function Shell({
           state={state}
           setState={setState}
           searchPlaceholder={searchPlaceholder}
+          roleFilter={roleFilter}
         />
       )}
-      <SheetNotice archive={archive} />
+      {showFilters && <SheetNotice archive={archive} />}
       <div className={cn("transition-opacity", refreshing && "opacity-60")}>
-        {children({ archive, filters })}
+        {children({
+          archive,
+          filters,
+          refresh: () => void refresh(),
+          refreshing,
+        })}
       </div>
       <p className="text-muted-foreground flex flex-wrap items-center gap-x-2 text-xs">
         Read from WordPress {formatDateTime(archive.fetchedAt)}.
@@ -182,7 +203,7 @@ function SheetNotice({ archive }: { archive: Archive }) {
       : sheet.status === "failed"
         ? `The Sheet couldn't be read, so pen names count as their own people. ${sheet.reason}`
         : sheet.missingTabs.includes("Overrides")
-          ? "The Sheet has no Overrides tab, so no pen names apply. Adding one in Settings creates it."
+          ? "No pen names yet. Add them in Settings."
           : archive.sheetProblems.length > 0
             ? `${archive.sheetProblems.length} ${archive.sheetProblems.length === 1 ? "row" : "rows"} in the Sheet couldn't be used. Settings lists them.`
             : null;
@@ -200,19 +221,18 @@ function FilterBar({
   state,
   setState,
   searchPlaceholder,
+  roleFilter,
 }: {
   archive: Archive;
   state: FilterState;
   setState: (state: FilterState) => void;
   searchPlaceholder: string;
+  roleFilter: boolean;
 }) {
   const changed = JSON.stringify(state) !== JSON.stringify(DEFAULT_STATE);
 
   return (
-    <section
-      aria-label="Filters"
-      className="bg-muted/40 flex flex-wrap items-center gap-2 rounded-xl border p-2"
-    >
+    <section aria-label="Filters" className="flex flex-wrap items-center gap-2">
       <Choice
         label="Period"
         hideLabel
@@ -248,16 +268,18 @@ function FilterBar({
         selected={state.sections}
         onChange={(sections) => setState({ ...state, sections })}
       />
-      <MultiSelect
-        label="Role"
-        all="Any role"
-        options={ROLES.map((role) => ({
-          value: role,
-          label: ROLE_NAMES[role],
-        }))}
-        selected={state.roles}
-        onChange={(roles) => setState({ ...state, roles: roles as Role[] })}
-      />
+      {roleFilter && (
+        <MultiSelect
+          label="Role"
+          all="Any role"
+          options={ROLES.map((role) => ({
+            value: role,
+            label: ROLE_NAMES[role],
+          }))}
+          selected={state.roles}
+          onChange={(roles) => setState({ ...state, roles: roles as Role[] })}
+        />
+      )}
 
       <label className="relative min-w-48 flex-1">
         <span className="sr-only">Search</span>

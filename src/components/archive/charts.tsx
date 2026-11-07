@@ -82,7 +82,7 @@ const QUICK: { label: string; config: Config }[] = [
     },
   },
   {
-    label: "By section",
+    label: "Section totals",
     config: {
       measure: "articles",
       by: "section",
@@ -176,7 +176,7 @@ function Charts({ archive, filters }: ViewProps) {
 
   const title = `${MEASURES.find((m) => m.id === grouped.measure)!.label} by ${DIMENSIONS.find((d) => d.id === by)!.label.toLowerCase()}${
     split === "none" ? "" : `, split by ${split}`
-  }${asShare ? ", as a share of each" : ""}`;
+  }${asShare ? ", in percent" : ""}`;
 
   const active = QUICK.find(
     (q) => JSON.stringify(q.config) === JSON.stringify(config),
@@ -204,10 +204,11 @@ function Charts({ archive, filters }: ViewProps) {
                   setHidden([]);
                 }}
                 className={cn(
-                  "h-8 shrink-0 rounded-md px-3 text-sm whitespace-nowrap transition-colors",
+                  /* the active view is underlined, so a hovered tab never looks chosen */
+                  "-mb-2 h-10 shrink-0 border-b-2 px-3 text-sm whitespace-nowrap transition-colors",
                   active === quick
-                    ? "bg-muted text-foreground font-medium"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                    ? "border-foreground text-foreground font-medium"
+                    : "text-muted-foreground hover:text-foreground border-transparent",
                 )}
               >
                 {quick.label}
@@ -283,7 +284,7 @@ function Charts({ archive, filters }: ViewProps) {
                 value={scale}
                 options={[
                   { id: "count", label: "Counts" },
-                  { id: "share", label: "Share of each" },
+                  { id: "share", label: "Percent" },
                 ]}
                 onChange={(scale) => set({ scale })}
               />
@@ -297,20 +298,13 @@ function Charts({ archive, filters }: ViewProps) {
             <div className="text-muted-foreground text-sm">
               {unitLine(grouped, by, shown.length)}
               {partial.size > 0 && (
-                <>
-                  {" "}
-                  <span className="inline-flex items-center gap-1 align-middle">
-                    <HatchSwatch />
-                    Hatched
-                  </span>{" "}
-                  {by === "month"
-                    ? "months"
-                    : by === "year"
-                      ? "years"
-                      : "semesters"}{" "}
-                  are only partly counted: still running, or cut off by the
-                  period filter.
-                </>
+                <span
+                  className="ml-2 inline-flex items-center gap-1 align-middle"
+                  title="Still running, or cut off by the period filter"
+                >
+                  <HatchSwatch />
+                  partly counted
+                </span>
               )}
             </div>
           </figcaption>
@@ -410,6 +404,7 @@ function Legend({
             key={series.key}
             type="button"
             aria-pressed={!off}
+            title={off ? "Show" : "Hide"}
             onClick={() => onToggle(series.key)}
             className={cn(
               "hover:bg-muted flex items-center gap-1.5 rounded-md px-1.5 py-0.5",
@@ -427,9 +422,6 @@ function Legend({
           </button>
         );
       })}
-      <span className="text-muted-foreground ml-1 text-xs">
-        Select one to hide it
-      </span>
     </div>
   );
 }
@@ -546,12 +538,11 @@ function Readout({
   return (
     <div
       aria-live="polite"
-      className="mb-2 flex min-h-6 flex-wrap items-center gap-x-4 gap-y-1 text-sm"
+      /* over the plot's top margin, so it takes no room until it has something to say */
+      className="bg-card absolute inset-x-0 top-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
     >
       {!category ? (
-        <span className="text-muted-foreground">
-          Hover over or tap a {lines ? "month" : "column"} for its numbers.
-        </span>
+        <span aria-hidden />
       ) : (
         <>
           <span className="font-medium">
@@ -662,7 +653,7 @@ function TimeChart({
   const height = 280 + (counted ? 14 : 0);
   const endLabels = lines && grouped.series.length <= 5 && width > 480;
   const margin = {
-    top: 20,
+    top: 28,
     right: endLabels ? 104 : 8,
     bottom: counted ? 44 : 30,
     left: share ? 44 : 36,

@@ -1,4 +1,8 @@
-import { ChevronRightIcon, ExternalLinkIcon } from "lucide-react";
+import {
+  ChevronRightIcon,
+  ExternalLinkIcon,
+  RefreshCwIcon,
+} from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { Button, buttonVariants } from "~/components/ui/button";
@@ -10,7 +14,6 @@ import {
 import {
   PROBLEM_KINDS,
   type ArchiveArticle,
-  type ProblemKind,
   type SimilarNames,
 } from "~/lib/credits/archive";
 import { applyFilters, NO_FILTERS } from "~/lib/credits/stats";
@@ -21,25 +24,18 @@ import { useEdit } from "./use-edit";
 const EDIT_IN_WORDPRESS = (id: number) =>
   `https://theumdhare.com/wp-admin/post.php?post=${id}&action=edit`;
 
-/* what to do, in a line; the fix is nearly always in WordPress */
-const FIXES: Record<ProblemKind, string> = {
-  "no-writer": "Add an “Article by:” line in WordPress.",
-  "no-image": "Add an “Image Credits:” line in WordPress.",
-  unrecognised:
-    "Looks like a credit, but no label matches. Reword it in WordPress, or add the label in Settings.",
-  unparsed: "The credit line names no one HareWare can read.",
-  "odd-name": "Reads like a sentence. Check the line's punctuation.",
-  uncategorized: "Pick a section in WordPress.",
-};
-
 const needsWork = (article: ArchiveArticle) =>
   article.problems.length > 0 && !article.ignored;
 
 export function ProblemsPage() {
-  return <ArchiveShell>{(props) => <Problems {...props} />}</ArchiveShell>;
+  return (
+    <ArchiveShell roleFilter={false}>
+      {(props) => <Problems {...props} />}
+    </ArchiveShell>
+  );
 }
 
-function Problems({ archive, filters }: ViewProps) {
+function Problems({ archive, filters, refresh, refreshing }: ViewProps) {
   const shown = useMemo(
     () => applyFilters(archive.articles, filters),
     [archive, filters],
@@ -67,7 +63,32 @@ function Problems({ archive, filters }: ViewProps) {
               {outside} more outside these filters
             </span>
           )}
+          <Button
+            variant="ghost"
+            size="xs"
+            className="ml-auto"
+            disabled={refreshing}
+            onClick={refresh}
+          >
+            <RefreshCwIcon
+              className={refreshing ? "animate-spin" : undefined}
+            />
+            Refresh from WordPress
+          </Button>
         </div>
+        {open.length > 0 && (
+          <p className="text-muted-foreground text-sm">
+            Fix credits in WordPress, where readers see them too. An unknown
+            label can also be added in{" "}
+            <a
+              href="/settings"
+              className="text-foreground underline underline-offset-2"
+            >
+              Settings
+            </a>
+            .
+          </p>
+        )}
         {open.length > 0 && (
           <ul className="divide-y rounded-xl border">
             {open.map((article) => (
@@ -119,7 +140,7 @@ function ArticleProblems({ article }: { article: ArchiveArticle }) {
     );
 
   return (
-    <li className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 p-4">
+    <li className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
       <div className="min-w-0 flex-1 space-y-2">
         <div>
           <a
@@ -137,16 +158,11 @@ function ArticleProblems({ article }: { article: ArchiveArticle }) {
         <ul className="space-y-1.5 text-sm">
           {article.problems.map((problem, index) => (
             <li key={index}>
-              <span className="font-medium">
-                {PROBLEM_KINDS[problem.kind]}.
-              </span>{" "}
-              <span className="text-muted-foreground">
-                {FIXES[problem.kind]}
-              </span>
+              {PROBLEM_KINDS[problem.kind]}
               {(problem.kind === "unrecognised" ||
                 problem.kind === "unparsed" ||
                 problem.kind === "odd-name") && (
-                <span className="bg-muted text-muted-foreground mt-1 block w-fit max-w-full truncate rounded px-1.5 py-0.5 text-xs">
+                <span className="bg-muted text-muted-foreground mt-1 block w-fit max-w-full rounded px-1.5 py-0.5 text-xs break-words">
                   {problem.detail}
                 </span>
               )}
@@ -209,7 +225,7 @@ function PairRow({ pair }: { pair: SimilarNames }) {
               names: pair.names,
               different: true,
             },
-            done: "Noted as different people",
+            done: `${pair.names.join(" and ")} are different people`,
           })
         }
       >
@@ -292,7 +308,7 @@ function Ignored({
                       names: pair.names,
                       different: false,
                     },
-                    done: "Restored",
+                    done: `Restored ${pair.names.join(" and ")}`,
                   })
                 }
               >

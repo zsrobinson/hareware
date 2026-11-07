@@ -48,7 +48,7 @@ import {
  * a sortable header showing its direction. The column is typed structurally so
  * it fits any table's row type
  */
-export function sortable(label: string) {
+export function sortable(label: string, align: "left" | "right" = "left") {
   const Header = ({
     column,
   }: {
@@ -69,11 +69,17 @@ export function sortable(label: string) {
       <Button
         variant="ghost"
         size="sm"
-        className="-ml-2 h-8"
+        /* a number column's header ends where its digits do, arrow first */
+        className={align === "right" ? "-mr-2 ml-auto flex h-8" : "-ml-2 h-8"}
         onClick={() => column.toggleSorting(sorted === "asc")}
       >
+        {align === "right" && (
+          <Arrow className={sorted ? "size-3.5" : "size-3.5 opacity-60"} />
+        )}
         {label}
-        <Arrow className={sorted ? "size-3.5" : "size-3.5 opacity-60"} />
+        {align === "left" && (
+          <Arrow className={sorted ? "size-3.5" : "size-3.5 opacity-60"} />
+        )}
       </Button>
     );
   };

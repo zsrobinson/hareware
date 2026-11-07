@@ -1,9 +1,4 @@
-import {
-  ChevronRightIcon,
-  ExternalLinkIcon,
-  PlusIcon,
-  XIcon,
-} from "lucide-react";
+import { ChevronRightIcon, ExternalLinkIcon, PlusIcon } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { Button, buttonVariants } from "~/components/ui/button";
 import {
@@ -47,7 +42,7 @@ function Settings({ archive }: ViewProps) {
     ).length;
 
   return (
-    <div className="space-y-12">
+    <div className="max-w-3xl space-y-12">
       <PenNames
         archive={archive}
         everyone={everyone}
@@ -198,18 +193,17 @@ function PenNameRow({ pen, list }: { pen: PenName; list: string }) {
               variant="ghost"
               size="xs"
               disabled={save.isPending}
-              aria-label={`Remove ${pen.byline}`}
               onClick={() =>
                 save.mutate({
                   edit: {
                     kind: "pen-names",
                     entries: [{ byline: pen.byline, realName: "" }],
                   },
-                  done: `${pen.byline} counts as printed again`,
+                  done: `${pen.byline} is no longer a pen name`,
                 })
               }
             >
-              <XIcon />
+              Remove
             </Button>
           </span>
         </>
@@ -279,8 +273,8 @@ function AddPenName({
       {count !== null && (
         <span className="text-muted-foreground w-full text-xs">
           {count === 0
-            ? "No article prints this byline yet."
-            : `Printed on ${count} ${count === 1 ? "article" : "articles"}.`}
+            ? "Not printed yet."
+            : `${count} ${count === 1 ? "article" : "articles"}.`}
         </span>
       )}
     </form>
@@ -319,7 +313,9 @@ function PasteSeveral({
         <div className="mt-3 space-y-3">
           <Textarea
             rows={5}
-            placeholder={"One per line:\nPen Name = Real Name"}
+            placeholder={
+              "One per line: Pen name = Real name\nPasting two columns from a spreadsheet works too."
+            }
             value={text}
             onChange={(event) => setText(event.target.value)}
             className="font-mono text-sm"
@@ -341,14 +337,14 @@ function PasteSeveral({
                         <span>{p.realName}</span>
                         <span className="text-muted-foreground ml-auto text-xs">
                           {count === 0
-                            ? "not printed anywhere"
+                            ? "Not printed yet"
                             : `${count} ${count === 1 ? "article" : "articles"}`}
                           {!known && " · new name"}
                         </span>
                       </>
                     ) : (
-                      <span className="text-destructive">
-                        Can't read “{p.line}”. Use “Pen name = Real name”.
+                      <span className="text-muted-foreground">
+                        Skipped “{p.line}”: use “Pen name = Real name”.
                       </span>
                     )}
                   </li>
@@ -358,11 +354,7 @@ function PasteSeveral({
           )}
           <Button
             size="sm"
-            disabled={
-              valid.length === 0 ||
-              valid.length !== parsed.length ||
-              save.isPending
-            }
+            disabled={valid.length === 0 || save.isPending}
             onClick={() =>
               save.mutate(
                 {
@@ -408,8 +400,7 @@ function ArticleRows({ archive }: { archive: Archive }) {
     <Collapsible>
       <CollapsibleTrigger className="group text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm">
         <ChevronRightIcon className="size-4 transition-transform group-data-[panel-open]:rotate-90" />
-        {archive.articleOverrides.length} single-article{" "}
-        {archive.articleOverrides.length === 1 ? "change" : "changes"}
+        Changes to single articles ({archive.articleOverrides.length})
       </CollapsibleTrigger>
       <CollapsibleContent>
         <ul className="mt-3 divide-y rounded-xl border text-sm">
@@ -420,7 +411,7 @@ function ArticleRows({ archive }: { archive: Archive }) {
             >
               <span className="min-w-0 flex-1">
                 <span className="text-muted-foreground">
-                  {o.title ?? `post ${o.postId}`} ·{" "}
+                  {o.title ?? `article ${o.postId}`} ·{" "}
                   {o.role ? ROLE_NAMES[o.role] : "any role"} ·{" "}
                 </span>
                 {o.byline ? (
@@ -441,7 +432,6 @@ function ArticleRows({ archive }: { archive: Archive }) {
                   variant="ghost"
                   size="xs"
                   disabled={save.isPending}
-                  aria-label="Remove"
                   onClick={() =>
                     save.mutate({
                       edit: {
@@ -450,11 +440,11 @@ function ArticleRows({ archive }: { archive: Archive }) {
                         role: o.role!,
                         entries: others(o.postId!, o.role, o),
                       },
-                      done: "Removed",
+                      done: `Removed the change on “${o.title ?? `article ${o.postId}`}”`,
                     })
                   }
                 >
-                  <XIcon />
+                  Remove
                 </Button>
               )}
             </li>
@@ -465,99 +455,202 @@ function ArticleRows({ archive }: { archive: Archive }) {
   );
 }
 
-/* ---- labels --------------------------------------------------------------- */
+/* ---- labels ------------------------------------------------------------- */
 
 function Labels({ archive }: { archive: Archive }) {
   const save = useEdit();
-  const [labels, setLabels] = useState<Label[]>(archive.labels);
-  const changed = JSON.stringify(labels) !== JSON.stringify(archive.labels);
   const used = (label: string) =>
     archive.articles.filter((a) => a.credits.some((c) => same(c.label, label)))
       .length;
+  /* the whole list is saved each time, as the Sheet's tab holds it */
+  const saveAll = (labels: Label[], done: string, onSuccess?: () => void) =>
+    save.mutate({ edit: { kind: "labels", labels }, done }, { onSuccess });
 
   return (
     <Section
       title="Credit labels"
-      description="A short paragraph starting with one of these and a colon is a credit line."
+      description="A short paragraph that starts with one of these and a colon is a credit line."
     >
-      <ul className="divide-y rounded-xl border">
-        {labels.map((label, index) => (
-          <li key={index} className="flex items-center gap-3 px-4 py-2">
-            <Input
-              className="h-8 w-56"
-              value={label.label}
-              aria-label="Label"
-              onChange={(event) =>
-                setLabels(
-                  labels.map((l, i) =>
-                    i === index ? { ...l, label: event.target.value } : l,
-                  ),
+      <div className="rounded-xl border">
+        <ul className="divide-y">
+          {archive.labels.map((label, index) => (
+            <LabelRow
+              key={`${label.label}-${index}`}
+              label={label}
+              uses={used(label.label)}
+              busy={save.isPending}
+              onSave={(next) =>
+                saveAll(
+                  archive.labels.map((l, i) => (i === index ? next : l)),
+                  `Saved “${next.label}”`,
                 )
               }
-            />
-            <Choice
-              label="Role"
-              hideLabel
-              width="w-32"
-              value={label.role}
-              options={ROLES.map((role) => ({
-                id: role,
-                label: ROLE_NAMES[role],
-              }))}
-              onChange={(role) =>
-                setLabels(
-                  labels.map((l, i) => (i === index ? { ...l, role } : l)),
+              onRemove={() => {
+                const uses = used(label.label);
+                if (
+                  uses > 0 &&
+                  !window.confirm(
+                    `Remove “${label.label}”? ${uses} ${uses === 1 ? "article stops" : "articles stop"} counting it as a credit line.`,
+                  )
                 )
-              }
+                  return;
+                saveAll(
+                  archive.labels.filter((_, i) => i !== index),
+                  `Removed “${label.label}”`,
+                );
+              }}
             />
-            <span className="text-muted-foreground flex-1 text-right text-sm tabular-nums">
-              {used(label.label) || "unused"}
-            </span>
-            <Button
-              variant="ghost"
-              size="xs"
-              aria-label={`Remove ${label.label}`}
-              onClick={() => setLabels(labels.filter((_, i) => i !== index))}
-            >
-              <XIcon />
-            </Button>
-          </li>
-        ))}
-      </ul>
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setLabels([...labels, { label: "", role: "writer" }])}
-        >
-          <PlusIcon /> Add label
-        </Button>
-        <span className="flex-1" />
-        {changed && (
-          <>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setLabels(archive.labels)}
-            >
-              Undo
-            </Button>
-            <Button
-              size="sm"
-              disabled={save.isPending || labels.some((l) => !l.label.trim())}
-              onClick={() =>
-                save.mutate({
-                  edit: { kind: "labels", labels },
-                  done: "Saved credit labels",
-                })
-              }
-            >
-              {save.isPending ? "Saving…" : "Save labels"}
-            </Button>
-          </>
-        )}
+          ))}
+        </ul>
+        <AddLabel
+          busy={save.isPending}
+          onAdd={(label, done) =>
+            saveAll([...archive.labels, label], `Added “${label.label}”`, done)
+          }
+        />
       </div>
     </Section>
+  );
+}
+
+function LabelRow({
+  label,
+  uses,
+  busy,
+  onSave,
+  onRemove,
+}: {
+  label: Label;
+  uses: number;
+  busy: boolean;
+  onSave: (label: Label) => void;
+  onRemove: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(label);
+
+  if (editing)
+    return (
+      <li>
+        <form
+          className="flex flex-wrap items-center gap-2 px-4 py-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!draft.label.trim()) return;
+            onSave({ ...draft, label: draft.label.trim() });
+            setEditing(false);
+          }}
+        >
+          <Input
+            autoFocus
+            className="h-8 w-56"
+            aria-label="Label"
+            value={draft.label}
+            onChange={(event) =>
+              setDraft({ ...draft, label: event.target.value })
+            }
+          />
+          <Choice
+            label="Role"
+            hideLabel
+            width="w-32"
+            value={draft.role}
+            options={ROLES.map((role) => ({
+              id: role,
+              label: ROLE_NAMES[role],
+            }))}
+            onChange={(role) => setDraft({ ...draft, role })}
+          />
+          <span className="flex-1" />
+          <Button
+            size="xs"
+            type="submit"
+            disabled={busy || !draft.label.trim()}
+          >
+            Save
+          </Button>
+          <Button
+            size="xs"
+            variant="ghost"
+            type="button"
+            onClick={() => {
+              setDraft(label);
+              setEditing(false);
+            }}
+          >
+            Cancel
+          </Button>
+        </form>
+      </li>
+    );
+
+  return (
+    <li className="flex items-center gap-4 px-4 py-2.5 text-sm">
+      <span className="w-44 font-medium">{label.label}:</span>
+      <span className="text-muted-foreground flex-1">
+        {ROLE_NAMES[label.role]}
+      </span>
+      <span className="text-muted-foreground tabular-nums">
+        {uses === 0
+          ? "Unused"
+          : `${uses} ${uses === 1 ? "article" : "articles"}`}
+      </span>
+      <span className="flex gap-1">
+        <Button variant="ghost" size="xs" onClick={() => setEditing(true)}>
+          Edit
+        </Button>
+        <Button variant="ghost" size="xs" disabled={busy} onClick={onRemove}>
+          Remove
+        </Button>
+      </span>
+    </li>
+  );
+}
+
+function AddLabel({
+  busy,
+  onAdd,
+}: {
+  busy: boolean;
+  onAdd: (label: Label, done: () => void) => void;
+}) {
+  const [label, setLabel] = useState("");
+  const [role, setRole] = useState<Role>("image");
+
+  return (
+    <form
+      className="bg-muted/30 flex flex-wrap items-center gap-2 border-t px-4 py-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!label.trim()) return;
+        onAdd({ label: label.trim().replace(/:$/, ""), role }, () =>
+          setLabel(""),
+        );
+      }}
+    >
+      <Input
+        className="bg-background h-8 w-56"
+        placeholder="New label, like Photos by"
+        value={label}
+        onChange={(event) => setLabel(event.target.value)}
+      />
+      <Choice
+        label="Role"
+        hideLabel
+        width="w-32"
+        value={role}
+        options={ROLES.map((r) => ({ id: r, label: ROLE_NAMES[r] }))}
+        onChange={setRole}
+      />
+      <Button
+        type="submit"
+        size="sm"
+        variant="outline"
+        disabled={!label.trim() || busy}
+      >
+        <PlusIcon /> Add
+      </Button>
+    </form>
   );
 }
 

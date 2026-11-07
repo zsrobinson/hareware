@@ -222,3 +222,9 @@
     transition: opacity 120ms linear;
   }
 }
+
+/* a name field with suggestions keeps the look of every other text field:
+   Chrome would add its own arrow */
+input[list]::-webkit-calendar-picker-indicator {
+  display: none !important;
+}

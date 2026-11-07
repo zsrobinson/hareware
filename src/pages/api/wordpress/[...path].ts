@@ -29,8 +29,18 @@ const KEYS = new Set([
   "_embed",
   "_fields",
 ]);
-/* WordPress's own headers worth keeping: what it is, and how many pages */
-const PASSED = ["content-type", "x-wp-total", "x-wp-totalpages"];
+/* WordPress's own headers worth keeping: what it is, how it is compressed,
+   and how many pages. Content-Encoding has to stay: with it, the Worker
+   forwards WordPress's compressed bytes as they are; without it, the Worker
+   decompresses them and the edge compresses them again, which on the
+   archive's 500 KB pages is CPU the Worker pays for */
+const PASSED = [
+  "content-type",
+  "content-encoding",
+  "vary",
+  "x-wp-total",
+  "x-wp-totalpages",
+];
 
 export const GET: APIRoute = async ({ params, url }) => {
   const collection = params.path ?? "";
@@ -44,7 +54,7 @@ export const GET: APIRoute = async ({ params, url }) => {
   let upstream: Response;
   try {
     upstream = await fetch(`${ORIGIN}/wp-json/${collection}?${query}`, {
-      headers: { accept: "application/json" },
+      headers: { accept: "application/json", "accept-encoding": "br, gzip" },
     });
   } catch (error) {
     console.error("[wordpress] could not pass the request through", error);

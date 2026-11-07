@@ -75,7 +75,8 @@ test("every API that hands out board data asks the gate first", () => {
       new URL(`../pages/${file}`, import.meta.url),
       "utf8",
     );
-    const private_ = /loadSheet|sheetsClient|recent\(|env\.DB/.test(source);
+    const private_ =
+      /loadSheet|sheetsClient|reminderView|recent\(|env\.DB/.test(source);
     /* Discord signs every interaction; it writes the log and answers Discord,
        and hands nothing from the Sheet or the log back to anyone */
     const signed = file === "api/discord/interactions.ts";

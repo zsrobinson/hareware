@@ -5,7 +5,7 @@
 */
 
 import { useEffect, useState } from "react";
-import type { ReminderView } from "~/pages/api/reminder.json";
+import type { ReminderView } from "~/lib/reminder-view";
 import { DenialMessage, Refused, fetchGated } from "./gated";
 import { LoaderCircle } from "./loader-circle";
 import { OUTCOMES, ReminderLog } from "./reminder-log";

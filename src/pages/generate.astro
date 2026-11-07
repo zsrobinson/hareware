@@ -12,7 +12,7 @@ export const prerender = true;
 ---
 
 <Dashboard title="Instagram Posts" width="full">
-  <EarlyFetch early={"article-or-recent"} />
+  <EarlyFetch slot="head" early={"article-or-recent"} />
   <SlideFonts slot="head" />
   <InstagramPosts client:only="react" />
 </Dashboard>

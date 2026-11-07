@@ -205,7 +205,7 @@ export function BylinePanel({
                 onChange={() => setKeepEarlier(true)}
               />
               <span>
-                Keep the {following.length} published{" "}
+                Keep the {following.length} earlier{" "}
                 {following.length === 1 ? "article" : "articles"} as{" "}
                 {shown(before)}
               </span>

@@ -341,9 +341,7 @@ function RoleEditor({
               className="h-8"
               value={renamed[byline] ?? ""}
               placeholder={
-                fallback(byline) === byline
-                  ? "as printed"
-                  : `${fallback(byline)} (pen name)`
+                fallback(byline) === byline ? "as printed" : fallback(byline)
               }
               onChange={(event) =>
                 setRenamed({ ...renamed, [byline]: event.target.value })
@@ -427,16 +425,6 @@ function RoleEditor({
         {changed && (
           <>
             <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => {
-                setRenamed(initial.renamed);
-                setAdded(initial.added);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
               size="xs"
               disabled={save.isPending}
               onClick={() =>
@@ -458,6 +446,16 @@ function RoleEditor({
               }
             >
               {save.isPending ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => {
+                setRenamed(initial.renamed);
+                setAdded(initial.added);
+              }}
+            >
+              Cancel
             </Button>
           </>
         )}

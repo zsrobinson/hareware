@@ -613,7 +613,7 @@ function Labels({ archive }: { archive: Archive }) {
         <AddLabel
           busy={save.isPending}
           onAdd={(label, done) =>
-            saveAll([...archive.labels, label], `Added “${label.label}”`, {
+            saveAll([...archive.labels, label], `Added “${label.label}:”`, {
               onSuccess: done,
             })
           }

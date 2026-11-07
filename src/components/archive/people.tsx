@@ -275,7 +275,7 @@ function PersonPanel({
             </Button>
             {printedOn > 0 && (
               <Button variant="ghost" size="xs" onClick={() => setForm("of")}>
-                <UserRoundIcon /> {person.name} counts as someone else
+                <UserRoundIcon /> Say who {person.name} counts as
               </Button>
             )}
           </div>

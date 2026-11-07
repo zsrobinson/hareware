@@ -101,7 +101,9 @@ export type Archive = {
   labels: Label[];
   penNames: PenName[];
   articleOverrides: ArticleOverride[];
-  similarNames: SimilarNames[];
+  /** pair keys of similar names marked different people, with their notes;
+      `similarNames()` reads it, on the one page that shows the pairs */
+  differentPeople: Record<string, string>;
   sheet: SheetSummary;
   sheetProblems: SheetProblem[];
   /** when WordPress was read, which may be before this archive was built */
@@ -188,7 +190,11 @@ export function buildArchive(input: {
     articleOverrides: overrides
       .filter((o) => o.postId !== null)
       .map((o) => ({ ...o, title: titles.get(o.postId!) ?? null })),
-    similarNames: similarNames(articles, ignoredRows),
+    differentPeople: Object.fromEntries(
+      ignoredRows
+        .filter((i) => i.names)
+        .map((i) => [i.names!, i.note || "different people"]),
+    ),
     sheet: summarize(sheet),
     sheetProblems,
     fetchedAt: input.fetchedAt,
@@ -352,37 +358,34 @@ function distance(a: string, b: string, limit: number) {
  * "Clare Dombrosky"), or equal once accents and punctuation go ("Mat H." and
  * "Mat H"). Spelling is fixed in WordPress, so these are only pointed at.
  */
-function similarNames(
-  articles: ArchiveArticle[],
-  ignored: Ignored[],
-): SimilarNames[] {
+/**
+ * Pairs of names a letter or two apart, which may be one person. Every name is
+ * compared with every other, which is most of the cost of reading the archive,
+ * so only the page that shows them asks; names are compared only with those
+ * close enough in length to be within the distance at all.
+ */
+export function similarNames(archive: Archive): SimilarNames[] {
   const counts = new Map<string, number>();
-  for (const article of articles)
+  for (const article of archive.articles)
     for (const credit of article.credits)
       for (const c of credit.contributors)
         counts.set(c.name, (counts.get(c.name) ?? 0) + 1);
 
-  const dismissed = new Map(
-    ignored
-      .filter((i) => i.names)
-      .map((i) => [i.names!, i.note || "different people"]),
-  );
-  const names = [...counts.keys()];
-  const folded = names.map(fold);
+  const named = [...counts.keys()]
+    .map((name) => ({ name, folded: fold(name) }))
+    .filter(({ folded }) => folded.length >= 6)
+    .sort((x, y) => x.folded.length - y.folded.length);
   const pairs: SimilarNames[] = [];
 
-  for (let i = 0; i < names.length; i++)
-    for (let j = i + 1; j < names.length; j++) {
-      const a = folded[i]!;
-      const b = folded[j]!;
-      if (a.length < 6 || b.length < 6) continue;
-      if (
-        a !== b &&
-        distance(a, b, 2) > (Math.min(a.length, b.length) >= 10 ? 2 : 1)
-      )
-        continue;
-      const pair = [names[i]!, names[j]!].sort() as [string, string];
-      const note = dismissed.get(pairKey(pair));
+  for (let i = 0; i < named.length; i++)
+    for (let j = i + 1; j < named.length; j++) {
+      const a = named[i]!.folded;
+      const b = named[j]!.folded;
+      /* sorted by length, so every name after this one is longer still */
+      if (b.length - a.length > 2) break;
+      if (a !== b && distance(a, b, 2) > (a.length >= 10 ? 2 : 1)) continue;
+      const pair = [named[i]!.name, named[j]!.name].sort() as [string, string];
+      const note = archive.differentPeople[pairKey(pair)];
       pairs.push({
         names: pair,
         counts: [counts.get(pair[0])!, counts.get(pair[1])!],

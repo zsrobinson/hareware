@@ -1,16 +1,13 @@
 ---
 import Dashboard from "~/layouts/dashboard.astro";
 import { ChartsPage } from "~/components/archive/charts";
-import { viewerState } from "~/lib/admin";
-import { admitted } from "~/lib/admin-guard";
 
-const who = admitted(Astro.locals);
-
-/* real names from the Sheet reach this page's data, so nothing may cache it */
-Astro.response.headers.set("cache-control", "private, no-store");
+/* a static shell: the island asks the gated /api/archive.json for the data,
+   and draws the refusal itself if the answer is no (ADR 0012) */
+export const prerender = true;
 ---
 
-<Dashboard title="Charts" viewer={viewerState(who)}>
+<Dashboard title="Charts">
   <div class="space-y-6">
     <header class="space-y-1">
       <h1 class="text-2xl font-semibold tracking-tight">Charts</h1>

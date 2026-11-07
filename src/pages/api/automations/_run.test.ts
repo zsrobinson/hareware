@@ -1,3 +1,5 @@
+/* named with a leading underscore so Astro does not route it: a test under
+   src/pages became an endpoint, and pulled vitest into the Worker bundle */
 import { afterEach, expect, test, vi } from "vitest";
 
 /* `cloudflare:workers` exists only in workerd, so it is stubbed per test */

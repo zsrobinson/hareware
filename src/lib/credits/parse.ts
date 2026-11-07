@@ -87,7 +87,20 @@ export function paragraphs(html: string): string[] {
     .filter((text) => text && text.length <= MAX_CREDIT_LENGTH);
 }
 
+/* one build reads every post with the same labels, so the pattern is compiled
+   once per list rather than twice per post */
+const compiled = new WeakMap<Label[], ReturnType<typeof compileMatcher>>();
+
 function labelMatcher(labels: Label[]) {
+  let matcher = compiled.get(labels);
+  if (matcher === undefined && !compiled.has(labels)) {
+    matcher = compileMatcher(labels);
+    compiled.set(labels, matcher);
+  }
+  return matcher;
+}
+
+function compileMatcher(labels: Label[]) {
   const byKey = new Map(
     labels.map((label) => [label.label.trim().toLowerCase(), label]),
   );

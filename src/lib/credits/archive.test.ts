@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { buildArchive, type SourcePost } from "./archive";
+import { buildArchive, similarNames, type SourcePost } from "./archive";
 import { DEFAULT_LABELS } from "./labels";
 import type { Ignored, Override, SheetState } from "./sheet";
 
@@ -201,23 +201,25 @@ test("points at names one letter apart, and remembers different people", () => {
     post(2, ["Article by: Cleo Dombrosky", "Image Credits: Ida Imager"]),
   ];
 
-  expect(build(posts).similarNames).toEqual([
+  expect(similarNames(build(posts))).toEqual([
     { names: ["Cleo Dombroksy", "Cleo Dombrosky"], counts: [1, 2] },
   ]);
   expect(
-    build(
-      posts,
-      read(
-        [],
-        [
-          {
-            postId: null,
-            names: "Cleo Dombroksy | Cleo Dombrosky",
-            note: "sisters",
-          },
-        ],
+    similarNames(
+      build(
+        posts,
+        read(
+          [],
+          [
+            {
+              postId: null,
+              names: "Cleo Dombroksy | Cleo Dombrosky",
+              note: "sisters",
+            },
+          ],
+        ),
       ),
-    ).similarNames[0]!.ignored,
+    )[0]!.ignored,
   ).toBe("sisters");
 });
 

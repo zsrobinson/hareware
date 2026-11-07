@@ -1,0 +1,45 @@
+/* what /access-denied draws: the refusal /api/access.json names, or, for a
+   member it admits, the way back in */
+import { useEffect, useState } from "react";
+import type { RefusalBody } from "~/lib/admin-api";
+import { DenialMessage, Refused } from "./gated";
+import { buttonVariants } from "./ui/button";
+
+export function AccessCheck() {
+  const [answer, setAnswer] = useState<RefusalBody | "allowed" | "unknown">();
+
+  useEffect(() => {
+    fetch("/api/access.json", { cache: "no-store" })
+      .then(async (response) => {
+        if (response.ok) return setAnswer("allowed");
+        const body = (await response.json()) as RefusalBody;
+        setAnswer(new Refused(body).body);
+      })
+      .catch(() => setAnswer("unknown"));
+  }, []);
+
+  if (answer === undefined) return null;
+  if (answer === "allowed")
+    return (
+      <section className="max-w-md space-y-6">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            You have access
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            This account can use the admin tools.
+          </p>
+        </div>
+        <a href="/charts" className={buttonVariants()}>
+          Open the admin tools
+        </a>
+      </section>
+    );
+  if (answer === "unknown")
+    return (
+      <p className="text-muted-foreground text-sm">
+        HareWare couldn't check your access just now. Try again in a minute.
+      </p>
+    );
+  return <DenialMessage refusal={answer} />;
+}

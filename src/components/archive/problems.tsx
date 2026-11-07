@@ -9,6 +9,7 @@ import {
 } from "~/components/ui/collapsible";
 import {
   PROBLEM_KINDS,
+  similarNames,
   type ArchiveArticle,
   type SimilarNames,
 } from "~/lib/credits/archive";
@@ -54,8 +55,10 @@ function Problems({ archive, filters, refresh }: ViewProps) {
   const outside =
     applyFilters(archive.articles, NO_FILTERS).filter(needsWork).length -
     open.length;
-  const similar = archive.similarNames.filter((pair) => !pair.ignored);
-  const different = archive.similarNames.filter((pair) => pair.ignored);
+  /* the costly comparison, so only this page makes it, and once per archive */
+  const pairs = useMemo(() => similarNames(archive), [archive]);
+  const similar = pairs.filter((pair) => !pair.ignored);
+  const different = pairs.filter((pair) => pair.ignored);
 
   return (
     <div className="space-y-10">

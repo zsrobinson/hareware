@@ -1,32 +1,12 @@
 ---
-/*
-  The guard rewrites a refused request here, with the reason in
-  `locals.admission`. A direct visit has none, so it is sent to a guarded route.
-*/
+/* A static page (ADR 0012): the island asks /api/access.json and draws which
+   of the refusals it is. The admin tools draw the same message in place. */
 import Dashboard from "~/layouts/dashboard.astro";
-import AccessDenied from "~/components/access-denied.astro";
-import { viewerState } from "~/lib/admin";
-import { DENIALS } from "~/lib/denial";
+import { AccessCheck } from "~/components/access-check";
 
-const admission = Astro.locals.admission;
-
-if (!admission || admission.access.allowed) {
-  return Astro.redirect("/charts");
-}
-
-const { access, returnTo } = admission;
-
-/* names the member, so no cache may hold it; the guard sets the status */
-Astro.response.headers.set("cache-control", "private, no-store");
+export const prerender = true;
 ---
 
-<Dashboard
-  title={DENIALS[access.denial].title}
-  viewer={viewerState(access.who)}
->
-  <AccessDenied
-    denial={access.denial}
-    profile={access.who?.profile ?? null}
-    returnTo={returnTo}
-  />
+<Dashboard title="No access">
+  <AccessCheck client:load />
 </Dashboard>

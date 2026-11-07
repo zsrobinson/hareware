@@ -1,7 +1,10 @@
 ---
-/* No viewer is resolved: that would be a Discord request per stray link. */
+/* A static file: Cloudflare serves it for any address that is not a file and
+   not under /api or /auth, without waking the Worker (ADR 0012). */
 import Dashboard from "~/layouts/dashboard.astro";
 import Message from "~/components/message.astro";
+
+export const prerender = true;
 ---
 
 <Dashboard title="Page not found">

@@ -12,6 +12,10 @@ database of our own.
 > still holds; mentions of Notion, `/article` and the meeting reminder are
 > history.
 
+> Amended by [ADR 0012](0012-static-pages-gated-data.md): the admin pages are
+> static shells and the gate below now runs in the APIs that hold their data.
+> The four refusals and their statuses are unchanged.
+
 ## Context
 
 **The bot does things nobody can see.** It posts at 8am from a cron. When it

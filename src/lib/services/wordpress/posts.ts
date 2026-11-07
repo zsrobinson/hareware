@@ -1,11 +1,12 @@
 /*
-  Published posts from the public REST API, which needs no sign-in. WordPress.com
-  answers 429 to a handful of quick requests, so pages are read one at a time
-  and every read goes through `sendPatiently`.
+  Published posts from the public REST API, which needs no sign-in and answers
+  any origin: the cron reads it from the Worker, and the archive from the
+  browser. WordPress.com answers 429 to a handful of quick requests, so pages
+  are read one at a time and every read goes through `readWordPress`.
 */
 
-import { sendPatiently } from "~/lib/rate-limit";
 import { ORIGIN } from "./article-url";
+import { readWordPress } from "./request";
 
 const API = `${ORIGIN}/wp-json/wp/v2`;
 const PER_PAGE = 100;
@@ -75,8 +76,8 @@ export async function postsPublishedAfter(instant: Date): Promise<Post[]> {
 }
 
 export async function categories(): Promise<Category[]> {
-  const response = await sendPatiently(
-    () => fetch(`${API}/categories?per_page=100&_fields=id,name`),
+  const response = await readWordPress(
+    `${API}/categories?per_page=100&_fields=id,name`,
     "wordpress categories",
   );
   if (!response.ok)
@@ -96,8 +97,8 @@ async function readPage(
     ...query,
   });
 
-  const response = await sendPatiently(
-    () => fetch(`${API}/posts?${params}`),
+  const response = await readWordPress(
+    `${API}/posts?${params}`,
     `wordpress ${describe}`,
   );
   if (!response.ok)

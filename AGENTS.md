@@ -28,7 +28,7 @@ src/lib/
                                         Sheet's tabs, and slicing for the pages
   db/ log.ts                            the invocation record
   session · auth · admin · member       who is asking, and whether they may
-  admin-routes · admin-guard · denial   which tools need the role, and the gate
+  admin-routes · admin-api · denial     which tools need the role, and the gate
 src/components/archive/                 the archive pages' islands
 src/pages/api/                          the routes those answer
 ```
@@ -56,27 +56,27 @@ passes nothing and the island asks `/api/session.json`, which makes the same
 lookup. Passing part of it is what put a raw Discord id in the sidebar for a
 week — see below.
 
-**No admin page guards itself.** Every tool lives at the top level, public and
-gated alike — `ADMIN_ROUTES` in `~/lib/admin-routes` is the only thing that says
-which is which, and both the nav and the guard read it, so a tool in the sidebar
-is a tool that is guarded. `nav.test.ts` holds those to each other.
+**The gate is on the data, not the pages.** Every page is a static file served
+without waking the Worker ([ADR 0012](docs/adr/0012-static-pages-gated-data.md)):
+on the Workers free plan a request gets 10 ms of CPU. An admin page is an empty
+shell, and its island asks a gated API — `/api/archive.json`, `/api/sheet`,
+`/api/reminder.json`, `/api/access.json`, `/api/automations/run` — each of which
+calls `adminAccess(request)` first and refuses with `refusal()` from
+`~/lib/admin-api`. The island draws that refusal with `DenialMessage` from
+`~/components/gated`: which of four things is wrong, rather than claiming the
+page does not exist (ADR 0007), and `~/lib/denial` is the one table those four
+live in. `ADMIN_ROUTES` in `~/lib/admin-routes` still says which tools are the
+board's, for the nav. `nav.test.ts` holds it together: every admin page is
+prerendered and reads nothing on the server, and every API that touches the
+Sheet or the log is gated.
 
-The middleware runs `guardAdmin` from `~/lib/admin-guard`: it resolves the
-viewer once, leaves it in `locals.admission`, and rewrites anybody it refuses to
-`/access-denied` with the status that fits — 401, 403 or 503. A gated page calls
-`admitted(Astro.locals)`, which hands back the member or throws, so reaching the
-page is the permission and a page whose route fell off `ADMIN_ROUTES` fails
-loudly rather than quietly serving. That last part only holds while every gated
-page actually calls it, so `nav.test.ts` checks that too. A refusal says which
-of four things is wrong rather than claiming the page does not exist; ADR 0007
-explains why, and `~/lib/denial` is the one table those four live in. The
-`/api/archive.json` and `/api/sheet/*` routes refuse with the same statuses.
-
-`~/lib/admin-guard` must not import `~/lib/admin` at the top level. Middleware
-is in every route's module graph, the prerendered `/custom` is built by node,
-and node cannot load a `cloudflare:` url — the import lives inside the guard,
-past the route check. `npm run build` is what catches a regression here, and it
-is why `admin-routes` and `denial` import nothing.
+**Nothing heavy runs in the Worker.** WordPress is read and parsed in the
+browser (its REST API answers any origin), and the archive is built there too;
+the Worker hands out only what needs a secret. A new route under `/api` or
+`/auth` must stay well under 10 ms of CPU: no parsing article bodies, no
+building the archive, no linkedom (a dev dependency, for tests only). Anything
+else under `src/pages` must be `export const prerender = true`. A test file
+under `src/pages` must start with `_`, or Astro routes it and bundles vitest.
 
 ## Working here
 

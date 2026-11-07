@@ -11,6 +11,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { Button } from "~/components/ui/button";
 import {
   DropdownMenu,
@@ -25,7 +26,10 @@ import type { Archive } from "~/lib/credits/archive";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import type { Filters } from "~/lib/credits/stats";
 import { cn } from "~/lib/utils";
+import { DenialMessage, Refused } from "~/components/gated";
 import { Choice } from "./choice";
+import { Throttled } from "~/lib/services/wordpress/request";
+import { loadArchive } from "./load-archive";
 import { formatDateTime } from "./dates";
 import {
   DEFAULT_STATE,
@@ -49,21 +53,11 @@ const client = new QueryClient({
     queries: {
       staleTime: 2 * 60_000,
       refetchOnWindowFocus: false,
-      retry: 1,
+      /* a refusal is an answer, not a hiccup to retry */
+      retry: (count, error) => !(error instanceof Refused) && count < 1,
     },
   },
 });
-
-async function fetchArchive(fresh: boolean): Promise<Archive> {
-  const response = await fetch(`/api/archive.json${fresh ? "?fresh=1" : ""}`, {
-    cache: fresh ? "no-store" : "default",
-  });
-  if (!response.ok)
-    throw new Error(
-      (await response.text()) || `HareWare answered ${response.status}`,
-    );
-  return response.json();
-}
 
 /** the archive, the filter bar, and whichever view is handed in */
 export function ArchiveShell({
@@ -107,7 +101,7 @@ function Shell({
   const [refreshing, setRefreshing] = useState(false);
   const query = useQuery({
     queryKey: ["archive"],
-    queryFn: () => fetchArchive(false),
+    queryFn: () => loadArchive(false),
   });
 
   /* the bar renders only once the archive has loaded, which the server never
@@ -128,9 +122,15 @@ function Shell({
   async function refresh() {
     setRefreshing(true);
     try {
-      queryClient.setQueryData(["archive"], await fetchArchive(true));
+      queryClient.setQueryData(["archive"], await loadArchive(true));
     } catch (error) {
       console.error(error);
+      /* what was on screen stays; this says it is not fresher */
+      toast.error(
+        error instanceof Throttled
+          ? "Couldn't refresh: WordPress is busy. Try again in a minute."
+          : `Couldn't refresh: ${error instanceof Error ? error.message : String(error)}`,
+      );
     } finally {
       setRefreshing(false);
     }
@@ -143,10 +143,16 @@ function Shell({
         Loading every published article…
       </p>
     );
+  if (query.isError && query.error instanceof Refused)
+    return <DenialMessage refusal={query.error.body} />;
   if (query.isError)
     return (
       <div className="space-y-2 text-sm">
-        <p className="text-destructive">{query.error.message}</p>
+        <p className="text-destructive">
+          {query.error instanceof Throttled
+            ? "WordPress is busy right now, so the archive couldn't be read. Try again in a minute."
+            : query.error.message}
+        </p>
         <Button
           variant="outline"
           size="sm"

@@ -1,6 +1,9 @@
 import { clearSessionCookie, createSessionCookie } from "./session";
 import { requestCookie } from "./request-cookie";
 import { seal, unseal } from "./sealed-value";
+import { returnToOf, safeReturnTo } from "./return-to";
+
+export { returnToOf };
 
 export type AuthConfig = {
   clientId: string;
@@ -104,26 +107,6 @@ function clearOAuthStateCookie() {
   the Location header, not the input: `/..//evil.com` normalises to
   `//evil.com`, which a browser follows off-site.
 */
-function safeReturnTo(value: string) {
-  const base = "https://hareware.invalid";
-
-  try {
-    const url = new URL(value, base);
-    if (url.origin !== base) return "/generate";
-
-    const path = `${url.pathname}${url.search}${url.hash}`;
-
-    return path.startsWith("/") && !path.startsWith("//") ? path : "/generate";
-  } catch {
-    return "/generate";
-  }
-}
-
-/** where a sign-in reached at this url may send somebody afterwards */
-export function returnToOf(url: URL) {
-  return safeReturnTo(url.searchParams.get("returnTo") ?? "/generate");
-}
-
 function redirect(location: string, cookies: string[] = []) {
   const headers = new Headers({
     location,

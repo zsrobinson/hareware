@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 import { adminAccess } from "~/lib/admin";
 import { applyEdit, describeEdit, parseEdit } from "~/lib/credits/edits";
 import { sheetsClient } from "~/lib/credits/load";
-import { DENIALS } from "~/lib/denial";
+import { refusal } from "~/lib/admin-api";
 import { record } from "~/lib/log";
 import { Sheets } from "~/lib/services/google/sheets";
 
@@ -13,8 +13,7 @@ export const prerender = false;
 export const POST: APIRoute = async ({ request }) => {
   const access = await adminAccess(request);
   if (!access.allowed) {
-    const { status, title } = DENIALS[access.denial];
-    return new Response(title, { status });
+    return refusal(access.denial, access.who?.profile);
   }
 
   const edit = parseEdit(await request.json().catch(() => undefined));

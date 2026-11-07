@@ -1,153 +1,21 @@
 ---
-import { env } from "cloudflare:workers";
+/*
+  A static shell (ADR 0012): the island asks the gated /api/reminder.json for
+  the log and the next run, and draws the refusal itself if the answer is no.
+*/
 import Dashboard from "~/layouts/dashboard.astro";
-import { OUTCOMES, ReminderLog } from "~/components/reminder-log";
-import { viewerState } from "~/lib/admin";
-import { admitted } from "~/lib/admin-guard";
-import { REMINDER_HOUR, SOCIAL_CHANNEL_ID } from "~/lib/automations/config";
-import { channelLabel } from "~/lib/automations/registry";
-import {
-  easternLabel as eastern,
-  planSocialPing,
-} from "~/lib/automations/social";
-import { easternInstant, easternNow } from "~/lib/eastern";
-import { faces } from "~/lib/faces";
-import { recent } from "~/lib/log";
-import { ROLE_NAMES } from "~/lib/services/discord/config";
+import PageHeader from "~/components/page-header.astro";
+import { ReminderPage } from "~/components/reminder-page";
 
-const who = admitted(Astro.locals);
-
-/* "8:00 AM", the way the cards on this page write a time */
-const runTime = `${REMINDER_HOUR % 12 || 12}:00 ${REMINDER_HOUR < 12 ? "AM" : "PM"}`;
-
-Astro.response.headers.set("cache-control", "private, no-store");
-
-/* the next 8am, and what it would announce if nothing else published first */
-const now = new Date();
-const today = easternNow(now);
-const todayRun = easternInstant(today.date, REMINDER_HOUR);
-const nextRun =
-  todayRun > now
-    ? todayRun
-    : easternInstant(
-        easternNow(new Date(now.getTime() + 24 * 3600_000)).date,
-        REMINDER_HOUR,
-      );
-const plan = await planSocialPing(nextRun);
-
-/* a log that cannot be read must not take the page down with it */
-let rows: Awaited<ReturnType<typeof recent>> = [];
-let logError: string | undefined;
-try {
-  rows = env.DB
-    ? (await recent(env.DB, 300)).filter(
-        (row) => row.action === "social-ping" || row.action === "mark-posted",
-      )
-    : [];
-} catch (error) {
-  console.error("[reminder] could not read the log", error);
-  logError = "The history could not be read just now.";
-}
-const profiles = await faces(rows.map((row) => row.actor));
-const names = Object.fromEntries(
-  Object.entries(profiles).map(([id, profile]) => [id, profile.displayName]),
-);
-
-const lastRun = rows.find((row) => row.action === "social-ping");
+export const prerender = true;
 ---
 
-<Dashboard title="Social Reminder" viewer={viewerState(who)}>
+<Dashboard title="Social Reminder">
   <div class="space-y-6">
-    <header class="space-y-1">
-      <h1 class="text-2xl font-semibold tracking-tight">Social Reminder</h1>
-      <p class="text-muted-foreground text-sm">
-        New articles, announced in {channelLabel(SOCIAL_CHANNEL_ID)} at {
-          runTime
-        } Eastern each day.
-      </p>
-    </header>
-
-    <div class="grid gap-4 md:grid-cols-2">
-      <section class="bg-card space-y-2 rounded-xl border p-4 sm:p-5">
-        <h2 class="font-semibold">Last run</h2>
-        {
-          lastRun ? (
-            <>
-              <p class="font-semibold">
-                {OUTCOMES[lastRun.outcome]}
-                <span class="text-muted-foreground font-normal">
-                  {" "}
-                  · {eastern(lastRun.at * 1000)}
-                </span>
-              </p>
-              <p class="text-muted-foreground text-sm">{lastRun.summary}</p>
-            </>
-          ) : (
-            <p class="text-muted-foreground text-sm">
-              {logError ?? "No run recorded yet."}
-            </p>
-          )
-        }
-      </section>
-
-      <section class="bg-card space-y-2 rounded-xl border p-4 sm:p-5">
-        <h2 class="font-semibold">Next run</h2>
-        <p class="font-semibold">
-          {eastern(nextRun)}
-          {
-            plan.status === "ready" && (
-              <span class="text-muted-foreground font-normal">
-                {" "}
-                · pings @{ROLE_NAMES[plan.roleId] ?? plan.weekday}
-              </span>
-            )
-          }
-        </p>
-        {
-          plan.status !== "ready" ? (
-            <p class="text-destructive text-sm">{plan.summary}</p>
-          ) : plan.articles.length === 0 ? (
-            <p class="text-muted-foreground text-sm">
-              Nothing new since {eastern(plan.since)}.
-            </p>
-          ) : (
-            <>
-              <p class="text-muted-foreground text-sm">
-                Would announce so far ({plan.articles.length}):
-              </p>
-              <ul class="divide-y rounded-lg border text-sm">
-                {plan.articles.map((article) => (
-                  <li class="flex flex-wrap items-baseline justify-between gap-2 px-3 py-2">
-                    <a
-                      href={article.link}
-                      target="_blank"
-                      rel="noreferrer"
-                      class="font-medium hover:underline"
-                    >
-                      {article.title}
-                    </a>
-                    <span class="text-muted-foreground text-xs">
-                      {eastern(article.publishedAt)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )
-        }
-      </section>
-    </div>
-
-    <section class="space-y-2">
-      <div>
-        <h2 class="font-semibold">History</h2>
-        <p class="text-muted-foreground text-sm">
-          Every run, and every time someone marks an article posted or not
-          posted in Discord.
-        </p>
-      </div>
-      {logError && <p class="text-destructive text-sm">{logError}</p>}
-      <ReminderLog rows={rows} names={names} client:load />
-    </section>
+    <PageHeader
+      title="Social Reminder"
+      description="New articles, announced in Discord each morning."
+    />
+    <ReminderPage client:load />
   </div>
 </Dashboard>

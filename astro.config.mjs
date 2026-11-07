@@ -14,16 +14,23 @@ export default defineConfig({
   session: false,
   integrations: [react()],
 
-  // the admin tools moved out from under /admin to sit beside the public ones,
-  // because nothing a member does with them cares which is which. these keep
-  // the old urls working: they are in Discord messages the bot has already
-  // posted, and one of them is what an alert tells somebody to go and read
+  // the old admin urls are in Discord messages the bot has already posted, and
+  // one of them is what an alert tells somebody to go and read. the reminder,
+  // its log and its commands are all one page now. prerendered, these are
+  // static redirect pages, served without the Worker
   redirects: {
-    "/admin": "/automations",
-    "/admin/automations": "/automations",
-    "/admin/commands": "/commands",
-    "/admin/log": "/log",
+    "/admin": "/reminder",
+    "/admin/automations": "/reminder",
+    "/admin/commands": "/reminder",
+    "/admin/log": "/reminder",
+    "/automations": "/reminder",
+    "/commands": "/reminder",
+    "/log": "/reminder",
   },
+
+  // `/generate` is served as generate.html; the default, generate/index.html,
+  // would have the asset server redirect every visit to `/generate/`
+  build: { format: "file" },
 
   adapter: cloudflare({
     // nothing here goes through astro:assets — every image is already a

@@ -1,14 +1,22 @@
-import { parseHTML } from "linkedom";
+/*
+  An article, read from WordPress's REST API in the browser (ADR 0012): the API
+  answers any origin, and parsing a body is more CPU than a Worker request may
+  spend. The rendered-page fallback went with the move: a page cannot be read
+  cross-origin, and from each reader's own address the API's throttle, which is
+  per address, is far less likely to bite than it was from one Worker.
+*/
+
 import { scrub, scrubFragment } from "./scrub-html";
-import { ORIGIN, toArticleLink, toArticleSlug } from "./article-url";
-import { errorMessage } from "~/lib/utils";
+import { parseDocument } from "./parse-document";
+import { ORIGIN, toArticleSlug } from "./article-url";
+import { readWordPress } from "./request";
 
 /**
  * everything we need off a post, in one request. _links looks redundant next to
  * _embed but isn't — _embed builds itself out of the links, and asking for
  * fields without it silently returns no _embedded at all
  */
-const FIELDS = [
+export const FIELDS = [
   "title",
   "content",
   "date",
@@ -18,23 +26,10 @@ const FIELDS = [
   "_embedded",
 ].join(",");
 
-/** one quick retry for a momentary refusal, then the rendered page instead */
-const RETRIES = 1;
-
-/**
- * the longest we will wait before giving up on the api and reading the page
- *
- * this caps retry-after as well as our own backoff. the header is a request,
- * not an instruction, and honouring a large one would hold the whole function
- * open — ten articles at once on /email is exactly when a long one arrives, and
- * timing out serves nobody when a slower answer is sitting right there
- */
-const MAX_RETRY_WAIT = 1500;
-
 type Term = { name: string; taxonomy: string };
 
 /** a post as the wordpress rest api returns it */
-type WordPressPost = {
+export type WordPressPost = {
   title: { rendered: string };
   content: { rendered: string };
   date: string;
@@ -43,48 +38,19 @@ type WordPressPost = {
   _embedded?: { "wp:term"?: Term[][] };
 };
 
-type Document = ReturnType<typeof parseHTML>["document"];
-
-/** the api couldn't answer, so the rendered page is worth a try */
-class Unavailable extends Error {}
-
-/**
- * scrapes the article content from wordpress
- * @param link the full link, including schema and domain
- */
+/** the article a link names, read from the API */
 export async function scrapeArticle(link: string) {
-  try {
-    return fromPost(await fetchPost(toArticleSlug(link)));
-  } catch (e) {
-    if (!(e instanceof Unavailable)) throw e;
-
-    /*
-      the api is throttled long before the rendered pages are, so the slow
-      route is still a better answer than no article.
-
-      no `?? link` fallback: that fetched the caller's string unvalidated in
-      exactly the case where it is not one of ours, which made the host
-      allow-list in article-url.ts optional. every path into fetch goes
-      through it
-    */
-    const url = toArticleLink(link);
-    if (!url) {
-      throw new Error(`not an article on this site: ${link}`, { cause: e });
-    }
-
-    return fromRenderedPage(url);
-  }
+  return fromPost(await fetchPost(toArticleSlug(link)));
 }
 
 /** the fields we need, off a rest api response */
-function fromPost(post: WordPressPost) {
+export function fromPost(post: WordPressPost) {
   // content.rendered is the markup that lands inside .entry-content on the
   // page, so wrapping it lets one set of selectors serve both sources
   /* wordpress decides this markup, so it is scrubbed before anything reads it
      — see ~/lib/services/wordpress/scrub-html for what that is defending against */
   const document = scrub(
-    parseHTML(`<div class="entry-content">${post.content.rendered}</div>`)
-      .document,
+    parseDocument(`<div class="entry-content">${post.content.rendered}</div>`),
   );
 
   return {
@@ -99,46 +65,6 @@ function fromPost(post: WordPressPost) {
     section: post._embedded?.["wp:term"]
       ?.flat()
       .find((term) => term.taxonomy === "category")?.name,
-  };
-}
-
-/**
- * the same fields read off the rendered article page
- *
- * this is the original approach, kept for when the api turns us away. it moves
- * 183 KB rather than 10 and eats a redirect on the way in, but wordpress.com
- * serves these out of batcache and throttles them far less aggressively
- */
-async function fromRenderedPage(link: string) {
-  const res = await fetch(link);
-  if (!res.ok) throw new Error(`wordpress returned ${res.status} for ${link}`);
-
-  const { document } = parseHTML(await res.text());
-
-  /*
-    read before scrubbing. `scrub` drops <meta> outright — correctly, it is not
-    content — and this reads a url out of one, so scrubbing first meant the
-    featured image was silently always undefined on this path. the value is a
-    url we hand to an <img src>, not markup we render, so taking it from the
-    unscrubbed tree costs nothing
-  */
-  const image = document
-    .querySelector(`meta[property="og:image"]`)
-    ?.getAttribute("content")
-    ?.split("?")[0];
-
-  scrub(document);
-
-  return {
-    ...readEntryContent(document),
-    title:
-      document.querySelector(".wp-block-post-title")?.innerHTML.trim() ?? "",
-    image,
-    date: document
-      .querySelector(".wp-block-post-date.has-text-align-right time")
-      ?.innerHTML.trim(),
-    link: res.url,
-    section: document.querySelector(".taxonomy-category > a")?.innerHTML.trim(),
   };
 }
 
@@ -213,51 +139,16 @@ async function fetchPost(slug: string): Promise<WordPressPost> {
     _embed: "wp:term",
     _fields: FIELDS,
   });
-  const url = `${ORIGIN}/wp-json/wp/v2/posts?${params}`;
+  const res = await readWordPress(
+    `${ORIGIN}/wp-json/wp/v2/posts?${params}`,
+    `the article ${slug}`,
+  );
+  if (!res.ok) throw new Error(`wordpress returned ${res.status} for ${slug}`);
 
-  for (let attempt = 0; ; attempt++) {
-    let res: Response;
+  const [post] = (await res.json()) as WordPressPost[];
+  if (!post) throw new Error(`no published post matches ${slug}`);
 
-    try {
-      res = await fetch(url);
-    } catch (thrown) {
-      // a refused connection or dns wobble is no less worth falling back on
-      // than a refusal we can read a status off
-      const reason = errorMessage(thrown);
-      throw new Unavailable(`${slug}: ${reason}`);
-    }
-
-    // 429 is what wordpress.com throttles with, but a 5xx is the same story
-    // from our side: the api can't answer and the rendered page still might
-    if (res.status === 429 || res.status >= 500) {
-      const wait = retryDelay(res.headers.get("retry-after"), attempt);
-      if (attempt >= RETRIES || wait > MAX_RETRY_WAIT)
-        throw new Unavailable(`${slug} (${res.status})`);
-
-      await sleep(wait);
-      continue;
-    }
-
-    if (!res.ok)
-      throw new Error(`wordpress returned ${res.status} for ${slug}`);
-
-    const [post] = (await res.json()) as WordPressPost[];
-    if (!post) throw new Error(`no published post matches ${slug}`);
-
-    return post;
-  }
-}
-
-/** honour retry-after when we get one, otherwise back off with jitter so a
- * batch of parallel requests doesn't retry in lockstep */
-function retryDelay(retryAfter: string | null, attempt: number): number {
-  const seconds = Number(retryAfter);
-  if (Number.isFinite(seconds) && seconds > 0) return seconds * 1000;
-  return 2 ** attempt * 400 + Math.random() * 400;
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return post;
 }
 
 /**
@@ -271,4 +162,25 @@ function formatDate(date: string): string {
     year: "numeric",
     timeZone: "UTC",
   });
+}
+
+/**
+ * the latest articles, each read as `scrapeArticle` reads one, in a single
+ * request rather than one per article: the newsletter needs ten of them
+ */
+export async function recentArticles(count: number) {
+  const params = new URLSearchParams({
+    per_page: String(count),
+    status: "publish",
+    _embed: "wp:term",
+    _fields: FIELDS,
+  });
+  const res = await readWordPress(
+    `${ORIGIN}/wp-json/wp/v2/posts?${params}`,
+    "the latest articles",
+  );
+  if (!res.ok) throw new Error(`wordpress returned ${res.status}`);
+
+  const posts = (await res.json()) as WordPressPost[];
+  return posts.map(fromPost);
 }

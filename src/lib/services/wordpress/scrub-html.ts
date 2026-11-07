@@ -1,4 +1,4 @@
-import { parseHTML } from "linkedom";
+import { parseDocument } from "./parse-document";
 /*
   making scraped markup safe to render.
 
@@ -259,12 +259,12 @@ export function scrub<T>(root: T): T {
 /**
  * the same treatment for a bare markup string rather than a whole document.
  *
- * wrapped in a div rather than a body: linkedom builds an odd tree for a bare
- * `<body>` and `document.body` comes back empty, which looked exactly like the
- * scrubber deleting everything
+ * wrapped in a div rather than a body: linkedom, which the tests parse with,
+ * builds an odd tree for a bare `<body>` and `document.body` comes back empty,
+ * which looked exactly like the scrubber deleting everything
  */
 export function scrubFragment(html: string) {
-  const { document } = parseHTML(`<div id="fragment">${html}</div>`);
+  const document = parseDocument(`<div id="fragment">${html}</div>`);
   scrub(document);
 
   return document.querySelector("#fragment")?.innerHTML.trim() ?? "";

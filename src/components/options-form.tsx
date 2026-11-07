@@ -244,6 +244,7 @@ export function OptionsForm({
             <Button
               variant="outline"
               className="w-full"
+              nativeButton={false}
               render={<a href={articleLink} target="_blank" />}
             >
               <ExternalLinkIcon className="mr-2" />

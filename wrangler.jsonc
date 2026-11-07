@@ -28,5 +28,15 @@
   // hourly, since crons are UTC and src/lib/eastern.ts picks the Eastern hour.
   // `REMINDER_CRON` in src/lib/automations/run.ts must match
   "triggers": { "crons": ["0 * * * *"] },
-  "assets": { "directory": "./dist", "binding": "ASSETS" },
+  /*
+    Only /api and /auth wake the Worker. Every page is a static file, served
+    without it, and an address that is neither gets dist/404.html straight from
+    the asset server, so crawlers and probes cost no CPU. ADR 0012.
+  */
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/api/*", "/auth/*"],
+  },
 }

@@ -5,8 +5,7 @@ import { adminNav, isActive, toolsNav } from "./nav";
 
 /*
   Nothing about a url says which tools need the role, so `ADMIN_ROUTES` says it
-  and three things have to agree with it: the nav a member clicks, the guard,
-  and the pages on disk.
+  and the nav a member clicks and the pages on disk have to agree with it.
 */
 
 test("the sidebar's admin tools are exactly the guarded routes", () => {
@@ -28,18 +27,59 @@ test("every guarded route has a page to render", () => {
 });
 
 /*
-  `admitted()` is what turns a missing admission into a fault somebody sees, so
-  a page that skips it would serve quietly if its route ever fell off
-  ADMIN_ROUTES. AGENTS.md promises that fails loudly; this is why it does.
+  The admin pages are static shells and the gate is on the APIs (ADR 0012), so
+  what has to hold is that a shell carries nothing private: it is prerendered,
+  reads nothing on the server, and gets its data from an API that asks
+  `adminAccess` before answering.
 */
-test("every admin page asks the guard who it is rendering for", () => {
+test("every admin page is a static shell that reads nothing on the server", () => {
   for (const route of ADMIN_ROUTES) {
     const source = readFileSync(
       new URL(`../pages${route}.astro`, import.meta.url),
       "utf8",
     );
 
-    expect(source).toContain("admitted(Astro.locals)");
+    expect(source).toContain("export const prerender = true");
+    for (const server of ["cloudflare:workers", "~/lib/admin", "Astro.request"])
+      expect(source).not.toContain(server);
+  }
+});
+
+test("every API that hands out board data asks the gate first", () => {
+  const gated = [
+    "api/archive.json.ts",
+    "api/reminder.json.ts",
+    "api/sheet.ts",
+    "api/access.json.ts",
+    "api/automations/run.ts",
+  ];
+  for (const file of gated) {
+    const source = readFileSync(
+      new URL(`../pages/${file}`, import.meta.url),
+      "utf8",
+    );
+    expect(source, file).toContain("adminAccess(request)");
+  }
+
+  /* and no other api route quietly reads the Sheet or the log */
+  const all = (dir: string): string[] =>
+    readdirSync(new URL(`../pages/${dir}`, import.meta.url), {
+      withFileTypes: true,
+    }).flatMap((entry) =>
+      entry.isDirectory()
+        ? all(`${dir}/${entry.name}`)
+        : [`${dir}/${entry.name}`],
+    );
+  for (const file of all("api").filter((f) => !f.endsWith(".test.ts"))) {
+    const source = readFileSync(
+      new URL(`../pages/${file}`, import.meta.url),
+      "utf8",
+    );
+    const private_ = /loadSheet|sheetsClient|recent\(|env\.DB/.test(source);
+    /* Discord signs every interaction; it writes the log and answers Discord,
+       and hands nothing from the Sheet or the log back to anyone */
+    const signed = file === "api/discord/interactions.ts";
+    if (private_ && !signed) expect(gated, file).toContain(file);
   }
 });
 

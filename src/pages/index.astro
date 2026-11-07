@@ -1,4 +1,5 @@
 ---
-/* the front door is the tool people actually came for */
-return Astro.redirect("/generate", 302);
+/* the front door is the tool people actually came for; a static redirect */
+export const prerender = true;
+return Astro.redirect("/generate");
 ---

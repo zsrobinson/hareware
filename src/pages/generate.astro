@@ -1,161 +1,18 @@
 ---
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
-import { GeneratePage } from "~/components/generate-page";
+/*
+  A static file (ADR 0012): the island reads `?article=` and `?page=` and asks
+  WordPress itself, so serving this costs the Worker nothing.
+*/
+import { InstagramPosts } from "~/components/instagram-posts";
 import SlideFonts from "~/components/slide-fonts.astro";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Link } from "~/components/ui/link";
 import Dashboard from "~/layouts/dashboard.astro";
-import PageHeader from "~/components/page-header.astro";
-import { viewer, viewerState } from "~/lib/admin";
-import {
-  toArticleLink,
-  toArticleSlug,
-} from "~/lib/services/wordpress/article-url";
-import {
-  SLIDE_IMAGE_WIDTH,
-  toSizedImage,
-} from "~/lib/services/wordpress/image-url";
-import { getRecentArticles } from "~/lib/services/wordpress/get-recent-articles";
-import { scrapeArticle } from "~/lib/services/wordpress/scrape-article";
 
-const param = Astro.url.searchParams.get("article") || "";
-const errorKind = Astro.url.searchParams.get("error");
-const invalid = errorKind !== null;
-const typed = Astro.url.searchParams.get("link") ?? "";
-
-let link: string | undefined;
-let post: Awaited<ReturnType<typeof scrapeArticle>> | null = null;
-
-if (param) {
-  link = toArticleLink(param);
-  /* the typed link comes back with the error, so it can be fixed in place */
-  if (!link)
-    return Astro.redirect(`/generate?error&link=${encodeURIComponent(param)}`);
-
-  const slug = toArticleSlug(link);
-  if (param !== slug) return Astro.redirect(`/generate?article=${slug}`);
-
-  try {
-    post = await scrapeArticle(link);
-  } catch {
-    return Astro.redirect(
-      `/generate?error=unread&link=${encodeURIComponent(param)}`,
-    );
-  }
-}
-
-const pageParam = Number(Astro.url.searchParams.get("page") ?? "1");
-const page = isNaN(pageParam) || pageParam < 0 ? 1 : pageParam;
-
-/* only the landing is cached: an article must show as it stands now */
-if (post) {
-  Astro.response.headers.set("cache-control", "private, no-store");
-} else {
-  Astro.response.headers.set(
-    "cache-control",
-    "public, s-maxage=30, stale-while-revalidate=300",
-  );
-}
-
-const articles = post ? null : await getRecentArticles(page);
-/* the cached landing passes `undefined`, so the island asks who is viewing */
-const who = post ? viewerState(await viewer(Astro.request)) : undefined;
+export const prerender = true;
 ---
 
-<Dashboard title="Instagram Posts" viewer={who} width="full">
+<Dashboard title="Instagram Posts" width="full">
   <SlideFonts slot="head" />
-
-  {
-    post ? (
-      <GeneratePage
-        defaultTitle={post.title}
-        defaultArticleByline={post.author ?? ""}
-        defaultImageByline={post.imageCredits ?? ""}
-        articleLink={link!}
-        imageURI={toSizedImage(post.image, SLIDE_IMAGE_WIDTH)}
-        client:load
-      >
-        {/* must render here, cannot pass Element[] as prop since it gets serialized */}
-        {post.body.map((para) => (
-          <Fragment set:html={para.outerHTML} />
-        ))}
-      </GeneratePage>
-    ) : (
-      <>
-        <PageHeader
-          title="Instagram Posts"
-          description="The title and content slides for an article, ready to save and post."
-        />
-
-        <form action="/generate" class="mt-6 flex max-w-xl gap-2">
-          <Input
-            type="text"
-            name="article"
-            defaultValue={typed}
-            placeholder="Paste an article link"
-            aria-label="Article link"
-            aria-invalid={invalid || undefined}
-          />
-          <Button type="submit">Make slides</Button>
-        </form>
-
-        {invalid && (
-          <p class="text-destructive pt-2 text-sm">
-            {errorKind === "unread"
-              ? "That article couldn't be read. Check the link, and that it's published."
-              : "That isn't a link to a Hare article. It should start with theumdhare.com."}
-          </p>
-        )}
-
-        <h2 class="pt-8 pb-2 font-semibold">Or start from a recent article</h2>
-
-        {articles ? (
-          <>
-            <ul class="pb-2">
-              {articles.map((article) => (
-                <li class="flex pb-1">
-                  <span
-                    set:html={article.date}
-                    class="text-muted-foreground w-16 shrink-0 pr-4 text-nowrap"
-                  />
-                  <a
-                    class="decoration-muted-foreground/40 hover:decoration-foreground underline underline-offset-4"
-                    href={"/generate?article=" + toArticleSlug(article.link)}
-                    set:html={article.title}
-                  />
-                </li>
-              ))}
-            </ul>
-
-            <div class="text-muted-foreground flex max-w-fit gap-4 pt-1 text-sm">
-              {page > 1 && (
-                <a href={`/generate?page=${page - 1}`} data-keep-scroll>
-                  <ChevronLeftIcon className="inline mb-0.5" />
-                  <span class="underline">Previous</span>
-                </a>
-              )}
-              <p>Page {page}</p>
-              <a href={`/generate?page=${page + 1}`} data-keep-scroll>
-                <span class="underline">Next</span>
-                <ChevronRightIcon className="inline mb-0.5" />
-              </a>
-            </div>
-          </>
-        ) : (
-          <p class="text-muted-foreground text-sm">
-            The recent articles couldn't be read just now.
-          </p>
-        )}
-
-        <h2 class="pt-8 pb-2 font-semibold">Or make a custom post</h2>
-
-        <Link variant="outline" href="/custom" data-astro-prefetch>
-          Custom post
-        </Link>
-      </>
-    )
-  }
+  <InstagramPosts client:only="react" />
 </Dashboard>
 
 <script>

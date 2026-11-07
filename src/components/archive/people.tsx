@@ -422,6 +422,15 @@ function AddOwnPenName({
               entries: [{ byline: byline.trim(), realName: person.name }],
             },
             done: `${byline.trim()} now counts as ${person.name}`,
+            undo: {
+              kind: "pen-names",
+              entries: archive.penNames
+                .find((pen) => same(pen.byline, byline.trim()))
+                ?.realName.map((realName) => ({
+                  byline: byline.trim(),
+                  realName,
+                })) ?? [{ byline: byline.trim(), realName: "" }],
+            },
           },
           {
             onSuccess: onClose,
@@ -502,6 +511,7 @@ function PenNameOf({
               entries: [{ byline, realName: known ?? realName.trim() }],
             },
             done: `${byline} now counts as ${known ?? realName.trim()}`,
+            undo: { kind: "pen-names", entries: [{ byline, realName: "" }] },
           },
           { onSuccess: onSaved },
         );

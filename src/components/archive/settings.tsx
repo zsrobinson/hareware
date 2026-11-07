@@ -159,7 +159,14 @@ function PenNameRow({ pen, list }: { pen: PenName; list: string }) {
                 done:
                   realNames.length > 0
                     ? `${pen.byline} now counts as ${realNames.join(" and ")}`
-                    : `${pen.byline} is no longer a pen name`,
+                    : `${pen.byline} no longer counts as ${pen.realName.join(" and ")}`,
+                undo: {
+                  kind: "pen-names",
+                  entries: pen.realName.map((realName) => ({
+                    byline: pen.byline,
+                    realName,
+                  })),
+                },
               },
               { onSuccess: () => setEditing(false) },
             );
@@ -490,7 +497,9 @@ function ArticleRows({ archive }: { archive: Archive }) {
                       role: o.role!,
                       entries: others(o.postId!, o.role, o),
                     },
-                    done: `“${o.title ?? `Article ${o.postId}`}” counts its bylines again`,
+                    done: o.byline
+                      ? `${o.byline} counts as printed again on “${o.title ?? `article ${o.postId}`}”`
+                      : `${o.realName} is no longer added to “${o.title ?? `article ${o.postId}`}”`,
                     undo: {
                       kind: "article-credits",
                       postId: o.postId!,

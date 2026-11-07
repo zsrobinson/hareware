@@ -84,7 +84,18 @@ export default defineConfig({
             output: {
               codeSplitting: {
                 groups: [
-                  { name: "vendor", test: /node_modules/ },
+                  /* only the archive's tables use it */
+                  {
+                    name: "table",
+                    test: /node_modules[\\/]@tanstack[\\/](react-)?table/,
+                  },
+                  /* every library but those two: modern-screenshot is
+                     imported only when slides are saved, and a group here
+                     would load it with every page */
+                  {
+                    name: "vendor",
+                    test: /node_modules[\\/](?!modern-screenshot|@tanstack[\\/](react-)?table)/,
+                  },
                   {
                     name: "shared",
                     test: /src[\\/](lib|components[\\/]ui)[\\/]/,

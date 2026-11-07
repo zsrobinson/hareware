@@ -88,6 +88,12 @@ back.
   stored read opens every admin page without it. Under ten minutes old it is
   used as it is; up to a day old it is shown at once and replaced by a fresh
   read made behind it.
+- Every island reads through one TanStack QueryClient
+  (`~/lib/query-client`), which Astro's client router keeps between pages:
+  an article read on hover is there when the slides open, the list is there
+  on the way back, and the archive moves between its pages without reading
+  or building again. The archive pages say how old what they show is, and
+  when they are checking WordPress for newer behind it.
 - A page can no longer redirect on the server. Instagram Posts and InDesign
   Export rewrite their own address to the short `?article=slug` form.
 - The old admin URLs (`/automations`, `/log`, `/commands` and their `/admin/`

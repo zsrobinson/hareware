@@ -5,7 +5,9 @@
 */
 
 import { DownloadIcon } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { queryClient } from "~/lib/query-client";
 import { getTaggedText } from "~/lib/get-tagged-text";
 import { saveFile } from "~/lib/save-file";
 import {
@@ -17,11 +19,12 @@ import {
   toOriginalImage,
   toSizedImage,
 } from "~/lib/services/wordpress/image-url";
-import { scrapeArticle } from "~/lib/services/wordpress/scrape-article";
+import type { scrapeArticle } from "~/lib/services/wordpress/scrape-article";
 import { slugify } from "~/lib/utils";
 import { CopyButton } from "./copy-button";
 import { articleError, NOT_OURS } from "./instagram-posts";
 import { LoaderCircle } from "./loader-circle";
+import { articleQuery } from "./queries";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
@@ -34,30 +37,22 @@ export function InDesignExport() {
       : (new URLSearchParams(window.location.search).get("article") ?? ""),
   );
   const link = typed ? toArticleLink(typed) : undefined;
-  const [article, setArticle] = useState<Article | null>(null);
-  const [error, setError] = useState<string | null>(
-    typed && !link ? NOT_OURS : null,
+  const slug = link && toArticleSlug(link);
+  const query = useQuery(
+    { ...articleQuery(slug ?? ""), enabled: Boolean(slug) },
+    queryClient,
   );
+  if (query.error) console.error("could not read the article", query.error);
+  const article = query.data;
+  const error =
+    typed && !link ? NOT_OURS : query.error ? articleError(query.error) : null;
 
   useEffect(() => {
-    if (!link) return;
-    let cancelled = false;
-    scrapeArticle(link)
-      .then((read) => {
-        if (cancelled) return;
-        setArticle(read);
-        const url = new URL(window.location.href);
-        url.searchParams.set("article", toArticleSlug(link));
-        window.history.replaceState(window.history.state, "", url);
-      })
-      .catch((thrown: unknown) => {
-        console.error("could not read the article", thrown);
-        if (!cancelled) setError(articleError(thrown));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [link]);
+    if (!article || !slug) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("article", slug);
+    window.history.replaceState(window.history.state, "", url);
+  }, [article, slug]);
 
   return (
     <div className="space-y-6">
@@ -77,7 +72,7 @@ export function InDesignExport() {
 
       {error && <p className="text-destructive -mt-4 text-sm">{error}</p>}
 
-      {link && !error && !article && (
+      {slug && query.isPending && (
         <p className="text-muted-foreground flex items-center gap-2 text-sm">
           <LoaderCircle className="size-4 animate-spin" />
           Reading the article…

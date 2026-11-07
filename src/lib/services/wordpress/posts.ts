@@ -35,8 +35,13 @@ type ApiPost = {
   content?: { rendered: string };
 };
 
-/** every published post, newest first. Throws rather than answering short */
-export async function allPosts(): Promise<Post[]> {
+/**
+ * every published post, newest first. Throws rather than answering short.
+ * `onPage` hears each page as it lands, for a page that shows the progress
+ */
+export async function allPosts(
+  onPage?: (read: number, total: number) => void,
+): Promise<Post[]> {
   const posts: Post[] = [];
 
   for (let page = 1; ; page++) {
@@ -49,6 +54,7 @@ export async function allPosts(): Promise<Post[]> {
       `posts page ${page}`,
     );
     posts.push(...rows);
+    onPage?.(page, totalPages);
     if (page >= totalPages) return posts;
   }
 }

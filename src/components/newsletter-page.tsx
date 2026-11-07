@@ -1,12 +1,15 @@
 import { CheckIcon, CopyIcon } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useState } from "react";
+import { queryClient } from "~/lib/query-client";
 import { newsletterHtml, type NewsletterArticle } from "~/lib/newsletter";
 import {
   EMAIL_IMAGE_WIDTH,
   toSizedImage,
 } from "~/lib/services/wordpress/image-url";
-import { recentArticles } from "~/lib/services/wordpress/scrape-article";
+import { Throttled } from "~/lib/services/wordpress/request";
 import { LoaderCircle } from "./loader-circle";
+import { latestQuery, useHydrated } from "./queries";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
@@ -16,50 +19,57 @@ import { Textarea } from "./ui/textarea";
 const frame = (html: string) =>
   `<!doctype html><html><head><meta charset="utf-8" /><base target="_blank" /></head><body style="margin: 12px; font-family: Arial, sans-serif; font-size: 14px; color: #222; background: #fff;">${html}</body></html>`;
 
+/* stable, so the list is mapped once per read rather than once per render */
+const toNewsletter = (
+  posts: Awaited<ReturnType<NonNullable<typeof latestQuery.queryFn>>>,
+): NewsletterArticle[] =>
+  posts.map((post) => ({
+    title: post.title,
+    link: post.link,
+    image: toSizedImage(post.image, EMAIL_IMAGE_WIDTH),
+    author: post.author ?? undefined,
+    imageCredits: post.imageCredits ?? undefined,
+  }));
+
 /** the latest articles, read in the browser (ADR 0012), then the newsletter */
 export function NewsletterPage() {
-  const [articles, setArticles] = useState<
-    NewsletterArticle[] | "failed" | null
-  >(null);
+  const hydrated = useHydrated();
+  const latest = useQuery(
+    {
+      ...latestQuery,
+      select: toNewsletter,
+    },
+    queryClient,
+  );
+  if (latest.error)
+    console.error("could not read the latest articles", latest.error);
 
-  useEffect(() => {
-    let cancelled = false;
-    recentArticles(10)
-      .then((posts) => {
-        if (cancelled) return;
-        setArticles(
-          posts.map((post) => ({
-            title: post.title,
-            link: post.link,
-            image: toSizedImage(post.image, EMAIL_IMAGE_WIDTH),
-            author: post.author ?? undefined,
-            imageCredits: post.imageCredits ?? undefined,
-          })),
-        );
-      })
-      .catch((thrown: unknown) => {
-        console.error("could not read the latest articles", thrown);
-        if (!cancelled) setArticles("failed");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (articles === null)
+  if (!hydrated || latest.isPending)
     return (
       <p className="text-muted-foreground flex items-center gap-2 text-sm">
         <LoaderCircle className="size-4 animate-spin" />
         Reading the latest articles…
       </p>
     );
-  if (articles === "failed")
+  if (latest.isError)
     return (
-      <p className="text-muted-foreground text-sm">
-        The latest articles couldn't be read just now. Try again in a minute.
-      </p>
+      <div className="flex items-center gap-3 text-sm">
+        <p className="text-muted-foreground">
+          {latest.error instanceof Throttled
+            ? "WordPress is busy right now, so the latest articles couldn't be read."
+            : "The latest articles couldn't be read just now."}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void latest.refetch()}
+          disabled={latest.isFetching}
+        >
+          {latest.isFetching ? "Trying…" : "Try again"}
+        </Button>
+      </div>
     );
-  return <Newsletter articles={articles} />;
+  return <Newsletter articles={latest.data} />;
 }
 
 function Newsletter({ articles }: { articles: NewsletterArticle[] }) {

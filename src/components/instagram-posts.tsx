@@ -13,12 +13,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { startEarly } from "~/lib/early";
-import { articleUrl } from "~/lib/services/wordpress/urls";
-import {
-  getRecentArticles,
-  type RecentArticle,
-} from "~/lib/services/wordpress/get-recent-articles";
+import { useQuery } from "@tanstack/react-query";
+import { queryClient } from "~/lib/query-client";
 import {
   toArticleLink,
   toArticleSlug,
@@ -28,13 +24,11 @@ import {
   toSizedImage,
 } from "~/lib/services/wordpress/image-url";
 import { Throttled } from "~/lib/services/wordpress/request";
-import { scrapeArticle } from "~/lib/services/wordpress/scrape-article";
 import { GeneratePage } from "./generate-page";
+import { articleQuery, recentQuery } from "./queries";
 import { LoaderCircle } from "./loader-circle";
 import { Button, buttonVariants } from "./ui/button";
 import { Input } from "./ui/input";
-
-type Article = Awaited<ReturnType<typeof scrapeArticle>>;
 
 /** why an article couldn't be shown, in the words the page uses */
 export function articleError(error: unknown): string {
@@ -66,34 +60,30 @@ export function InstagramPosts() {
   );
   const typed = params.get("article") ?? "";
   const link = typed ? toArticleLink(typed) : undefined;
+  const slug = link && toArticleSlug(link);
 
-  const [article, setArticle] = useState<Article | null>(null);
-  const [error, setError] = useState<string | null>(
-    typed && !link ? NOT_OURS : null,
+  const article = useQuery(
+    { ...articleQuery(slug ?? ""), enabled: Boolean(slug) },
+    queryClient,
   );
+  if (article.error) console.error("could not read the article", article.error);
 
+  /* the address names the article the short way, as it always has */
   useEffect(() => {
-    if (!link) return;
-    let cancelled = false;
-    scrapeArticle(link)
-      .then((read) => {
-        if (cancelled) return;
-        setArticle(read);
-        /* the address names the article the short way, as it always has */
-        const url = new URL(window.location.href);
-        url.searchParams.set("article", toArticleSlug(link));
-        window.history.replaceState(window.history.state, "", url);
-      })
-      .catch((thrown: unknown) => {
-        console.error("could not read the article", thrown);
-        if (!cancelled) setError(articleError(thrown));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [link]);
+    if (!article.data || !slug) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("article", slug);
+    window.history.replaceState(window.history.state, "", url);
+  }, [article.data, slug]);
 
-  if (link && !error && !article)
+  const error =
+    typed && !link
+      ? NOT_OURS
+      : article.error
+        ? articleError(article.error)
+        : null;
+
+  if (slug && article.isPending)
     return (
       <p className="text-muted-foreground flex items-center gap-2 text-sm">
         <LoaderCircle className="size-4 animate-spin" />
@@ -101,16 +91,16 @@ export function InstagramPosts() {
       </p>
     );
 
-  if (article && link)
+  if (article.data && link)
     return (
       <GeneratePage
-        defaultTitle={article.title}
-        defaultArticleByline={article.author ?? ""}
-        defaultImageByline={article.imageCredits ?? ""}
+        defaultTitle={article.data.title}
+        defaultArticleByline={article.data.author ?? ""}
+        defaultImageByline={article.data.imageCredits ?? ""}
         articleLink={link}
-        imageURI={toSizedImage(article.image, SLIDE_IMAGE_WIDTH)}
+        imageURI={toSizedImage(article.data.image, SLIDE_IMAGE_WIDTH)}
       >
-        {bodyNodes(article.body)}
+        {bodyNodes(article.data.body)}
       </GeneratePage>
     );
 
@@ -127,31 +117,20 @@ function Landing({
   error: string | null;
   page: number;
 }) {
-  /* a short dwell, so sweeping across the list does not read every article */
+  /* a pointer resting on a title, or a finger on it, is a click on its way:
+     the article is read in the meantime, and the page it opens finds it in
+     the shared client. A short dwell, so sweeping across the list does not
+     read every article */
   const hover = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const prefetch = (link: string) =>
+    void queryClient.prefetchQuery(articleQuery(toArticleSlug(link)));
   const soon = (link: string) => {
     clearTimeout(hover.current);
-    hover.current = setTimeout(
-      () => startEarly(articleUrl(toArticleSlug(link))),
-      120,
-    );
+    hover.current = setTimeout(() => prefetch(link), 120);
   };
-  const [recent, setRecent] = useState<
-    { articles: RecentArticle[]; pages: number } | "failed" | null
-  >(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getRecentArticles(page)
-      .then((read) => !cancelled && setRecent(read))
-      .catch((thrown: unknown) => {
-        console.error("could not read the recent articles", thrown);
-        if (!cancelled) setRecent("failed");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [page]);
+  const recent = useQuery(recentQuery(page), queryClient);
+  if (recent.error)
+    console.error("could not read the recent articles", recent.error);
 
   return (
     <>
@@ -183,19 +162,31 @@ function Landing({
         Or start from a recent article
       </h2>
 
-      {recent === null ? (
+      {recent.isPending ? (
         <p className="text-muted-foreground flex items-center gap-2 text-sm">
           <LoaderCircle className="size-4 animate-spin" />
           Reading the latest articles…
         </p>
-      ) : recent === "failed" ? (
-        <p className="text-muted-foreground text-sm">
-          The recent articles couldn't be read just now. Try again in a minute.
-        </p>
+      ) : recent.isError ? (
+        <div className="flex items-center gap-3 text-sm">
+          <p className="text-muted-foreground">
+            {recent.error instanceof Throttled
+              ? "WordPress is busy right now, so the recent articles couldn't be read."
+              : "The recent articles couldn't be read just now."}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void recent.refetch()}
+            disabled={recent.isFetching}
+          >
+            {recent.isFetching ? "Trying…" : "Try again"}
+          </Button>
+        </div>
       ) : (
         <>
           <ul className="pb-2">
-            {recent.articles.map((article) => (
+            {recent.data.articles.map((article) => (
               <li key={article.link} className="flex pb-1">
                 <span className="text-muted-foreground w-16 shrink-0 pr-4 text-nowrap">
                   {article.date}
@@ -203,13 +194,9 @@ function Landing({
                 <a
                   className="decoration-muted-foreground/40 hover:decoration-foreground underline underline-offset-4"
                   href={`/generate?article=${toArticleSlug(article.link)}`}
-                  /* a pointer resting on it, or a finger on it, is a click on
-                     its way: the article is read in the meantime */
                   onPointerEnter={() => soon(article.link)}
                   onPointerLeave={() => clearTimeout(hover.current)}
-                  onTouchStart={() =>
-                    startEarly(articleUrl(toArticleSlug(article.link)))
-                  }
+                  onTouchStart={() => prefetch(article.link)}
                   onFocus={() => soon(article.link)}
                   dangerouslySetInnerHTML={{ __html: article.title }}
                 />
@@ -225,7 +212,7 @@ function Landing({
               </a>
             )}
             <p>Page {page}</p>
-            {page < recent.pages && (
+            {page < recent.data.pages && (
               <a href={`/generate?page=${page + 1}`} data-keep-scroll>
                 <span className="underline">Next</span>
                 <ChevronRightIcon className="mb-0.5 inline size-4" />

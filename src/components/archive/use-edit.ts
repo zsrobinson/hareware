@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Edit } from "~/lib/credits/edits";
+import { SHEET_KEY } from "./archive-data";
 
 type Save = { edit: Edit; done?: string; undo?: Edit };
 
@@ -24,7 +25,7 @@ async function send(edit: Edit) {
 async function undoWith(queryClient: QueryClient, edit: Edit) {
   try {
     await send(edit);
-    await queryClient.invalidateQueries({ queryKey: ["archive"] });
+    await queryClient.invalidateQueries({ queryKey: SHEET_KEY });
     toast.success("Undone");
   } catch (error) {
     toast.error(`Not undone: ${(error as Error).message}`);
@@ -42,7 +43,7 @@ export function useEdit() {
   return useMutation({
     mutationFn: ({ edit }: Save) => send(edit),
     onSuccess: async (_, { done, undo }) => {
-      await queryClient.invalidateQueries({ queryKey: ["archive"] });
+      await queryClient.invalidateQueries({ queryKey: SHEET_KEY });
       if (!done) return;
       toast.success(
         done,

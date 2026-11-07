@@ -4,34 +4,43 @@
   and draws the refusal itself when the answer is no.
 */
 
-import { useEffect, useState } from "react";
-import type { ReminderView } from "~/lib/reminder-view";
-import { DenialMessage, Refused, fetchGated } from "./gated";
+import { useQuery } from "@tanstack/react-query";
+import { queryClient } from "~/lib/query-client";
+import { DenialMessage, Refused } from "./gated";
 import { LoaderCircle } from "./loader-circle";
+import { reminderQuery, useHydrated } from "./queries";
+import { Button } from "./ui/button";
 import { OUTCOMES, ReminderLog } from "./reminder-log";
 
 export function ReminderPage() {
-  const [view, setView] = useState<ReminderView | Error | null>(null);
+  const hydrated = useHydrated();
+  const query = useQuery(reminderQuery, queryClient);
 
-  useEffect(() => {
-    fetchGated<ReminderView>("/api/reminder.json")
-      .then(setView)
-      .catch((thrown: unknown) =>
-        setView(thrown instanceof Error ? thrown : new Error(String(thrown))),
-      );
-  }, []);
-
-  if (view === null)
+  if (!hydrated || query.isPending)
     return (
       <p className="text-muted-foreground flex items-center gap-2 text-sm">
         <LoaderCircle className="size-4 animate-spin" />
         Reading the log…
       </p>
     );
-  if (view instanceof Refused) return <DenialMessage refusal={view.body} />;
-  if (view instanceof Error)
-    return <p className="text-destructive text-sm">{view.message}</p>;
+  if (query.error instanceof Refused)
+    return <DenialMessage refusal={query.error.body} />;
+  if (query.isError)
+    return (
+      <div className="flex items-center gap-3 text-sm">
+        <p className="text-destructive">{query.error.message}</p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void query.refetch()}
+          disabled={query.isFetching}
+        >
+          {query.isFetching ? "Trying…" : "Try again"}
+        </Button>
+      </div>
+    );
 
+  const view = query.data;
   const lastRun = view.rows.find((row) => row.action === "social-ping");
   const { next } = view;
 

@@ -1,9 +1,4 @@
-import {
-  QueryClient,
-  QueryClientProvider,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import {
   ChevronDownIcon,
   RefreshCwIcon,
@@ -29,7 +24,9 @@ import { cn } from "~/lib/utils";
 import { DenialMessage, Refused } from "~/components/gated";
 import { Choice } from "./choice";
 import { Throttled } from "~/lib/services/wordpress/request";
-import { loadArchive } from "./load-archive";
+import { queryClient } from "~/lib/query-client";
+import { useHydrated } from "~/components/queries";
+import { useArchive, useReadProgress, type ArchiveState } from "./archive-data";
 import { formatDateTime } from "./dates";
 import {
   DEFAULT_STATE,
@@ -48,17 +45,6 @@ export type ViewProps = {
   refreshing: boolean;
 };
 
-const client = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 2 * 60_000,
-      refetchOnWindowFocus: false,
-      /* a refusal is an answer, not a hiccup to retry */
-      retry: (count, error) => !(error instanceof Refused) && count < 1,
-    },
-  },
-});
-
 /** the archive, the filter bar, and whichever view is handed in */
 export function ArchiveShell({
   children,
@@ -74,7 +60,7 @@ export function ArchiveShell({
   roleFilter?: boolean;
 }) {
   return (
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={queryClient}>
       <Shell
         searchPlaceholder={searchPlaceholder}
         showFilters={filters}
@@ -97,18 +83,59 @@ function Shell({
   showFilters: boolean;
   roleFilter: boolean;
 }) {
-  const queryClient = useQueryClient();
-  const [refreshing, setRefreshing] = useState(false);
-  const query = useQuery({
-    queryKey: ["archive"],
-    queryFn: () =>
-      loadArchive(false, (fresher) =>
-        queryClient.setQueryData(["archive"], fresher),
-      ),
-  });
+  const state = useArchive();
+  /* the build drew "Opening the archive…"; an archive already in memory, as
+     after moving between pages, is drawn just after hydration rather than in
+     it, so the two agree */
+  const hydrated = useHydrated();
 
-  /* the bar renders only once the archive has loaded, which the server never
-     waits for, so reading the url here cannot mismatch hydration */
+  if (!hydrated || state.status === "access")
+    return <Waiting>Opening the archive…</Waiting>;
+  if (state.status === "reading") return <FirstRead />;
+  if (state.status === "refused")
+    return <DenialMessage refusal={state.refusal.body} />;
+  if (state.status === "failed")
+    return (
+      <div className="space-y-2 text-sm">
+        <p className="text-destructive">
+          {state.error instanceof Throttled
+            ? "WordPress is busy right now, so the archive couldn't be read. Try again in a minute."
+            : state.error.message}
+        </p>
+        <Button variant="outline" size="sm" onClick={state.retry}>
+          Try again
+        </Button>
+      </div>
+    );
+
+  return (
+    <Ready
+      state={state}
+      searchPlaceholder={searchPlaceholder}
+      showFilters={showFilters}
+      roleFilter={roleFilter}
+    >
+      {children}
+    </Ready>
+  );
+}
+
+function Ready({
+  state: { archive, checking, checkFailed, refresh: reread },
+  children,
+  searchPlaceholder,
+  showFilters,
+  roleFilter,
+}: {
+  state: Extract<ArchiveState, { status: "ready" }>;
+  children: (props: ViewProps) => ReactNode;
+  searchPlaceholder: string;
+  showFilters: boolean;
+  roleFilter: boolean;
+}) {
+  /* asked for by a person, as against a read behind the page: only this one
+     dims the page, since only here are they waiting on it */
+  const [refreshing, setRefreshing] = useState(false);
   const [state, setState] = useState<FilterState>(() =>
     typeof window === "undefined"
       ? DEFAULT_STATE
@@ -125,8 +152,9 @@ function Shell({
   async function refresh() {
     setRefreshing(true);
     try {
-      queryClient.setQueryData(["archive"], await loadArchive(true));
+      await reread();
     } catch (error) {
+      if (error instanceof Refused) return;
       console.error(error);
       /* what was on screen stays; this says it is not fresher */
       toast.error(
@@ -139,34 +167,14 @@ function Shell({
     }
   }
 
-  if (query.isPending)
-    return (
-      <p className="text-muted-foreground flex items-center gap-2 text-sm">
-        <RefreshCwIcon className="size-4 animate-spin" />
-        Loading every published article…
-      </p>
-    );
-  if (query.isError && query.error instanceof Refused)
-    return <DenialMessage refusal={query.error.body} />;
-  if (query.isError)
-    return (
-      <div className="space-y-2 text-sm">
-        <p className="text-destructive">
-          {query.error instanceof Throttled
-            ? "WordPress is busy right now, so the archive couldn't be read. Try again in a minute."
-            : query.error.message}
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void query.refetch()}
-        >
-          Try again
-        </Button>
-      </div>
-    );
-
-  const archive = query.data;
+  const freshness = (
+    <Freshness
+      fetchedAt={archive.fetchedAt}
+      checking={checking}
+      checkFailed={!refreshing && checkFailed !== null}
+      onRefresh={() => void refresh()}
+    />
+  );
 
   return (
     <div className="space-y-6">
@@ -177,19 +185,7 @@ function Shell({
           setState={setState}
           searchPlaceholder={searchPlaceholder}
           roleFilter={roleFilter}
-          refresh={
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-9"
-              onClick={() => void refresh()}
-              disabled={refreshing}
-              title={`Read from WordPress ${formatDateTime(archive.fetchedAt)}`}
-            >
-              <RefreshCwIcon className={cn(refreshing && "animate-spin")} />
-              <span className="sr-only sm:not-sr-only">Refresh</span>
-            </Button>
-          }
+          refresh={freshness}
         />
       )}
       {showFilters && <SheetNotice archive={archive} />}
@@ -201,12 +197,116 @@ function Shell({
           refreshing,
         })}
       </div>
-      {!showFilters && (
-        <p className="text-muted-foreground text-xs">
-          Read from WordPress {formatDateTime(archive.fetchedAt)}.
-        </p>
-      )}
+      {!showFilters && freshness}
     </div>
+  );
+}
+
+function Waiting({ children }: { children: ReactNode }) {
+  return (
+    <p className="text-muted-foreground flex items-center gap-2 text-sm">
+      <RefreshCwIcon className="size-4 animate-spin" />
+      {children}
+    </p>
+  );
+}
+
+/* the one slow load: a browser that has never read the archive, or not for a
+   day. Saying how far it has got, and that it is only this once, keeps a few
+   seconds from reading as a hang */
+function FirstRead() {
+  const { read, total } = useReadProgress();
+  return (
+    <div className="max-w-sm space-y-2" role="status">
+      <Waiting>
+        Reading every published article from WordPress…
+        {total > 1 && (
+          <span className="tabular-nums">
+            {" "}
+            {read} of {total}
+          </span>
+        )}
+      </Waiting>
+      <div className="bg-muted h-1 overflow-hidden rounded-full">
+        <div
+          className="bg-foreground/60 h-full rounded-full transition-[width] duration-500"
+          style={{ width: `${total ? Math.max(8, (read / total) * 100) : 8}%` }}
+        />
+      </div>
+      <p className="text-muted-foreground text-xs">
+        This takes a few seconds the first time. After that the archive opens at
+        once and checks for new articles in the background.
+      </p>
+    </div>
+  );
+}
+
+/** "just now", "12 min ago", "3 hr ago", or the date */
+function ago(at: string, now: number): string {
+  const minutes = Math.floor((now - Date.parse(at)) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} hr ago`;
+  return formatDateTime(at);
+}
+
+/* re-renders once a minute, so "12 min ago" does not go stale on screen */
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  return now;
+}
+
+/* how old the articles on screen are, and whether a newer read is coming:
+   the stored read is shown at once, so the page has to say when it is old
+   and being checked, or a new article missing from it reads as a bug */
+function Freshness({
+  fetchedAt,
+  checking,
+  checkFailed,
+  onRefresh,
+}: {
+  fetchedAt: string;
+  checking: boolean;
+  checkFailed: boolean;
+  onRefresh: () => void;
+}) {
+  const now = useNow();
+  return (
+    <span className="flex items-center gap-1">
+      <span
+        className={cn(
+          /* a set width, so the search box beside it does not shift as the
+             words change */
+          "text-xs leading-tight sm:w-40 sm:text-right",
+          checkFailed
+            ? "text-amber-700 dark:text-amber-400"
+            : "text-muted-foreground",
+        )}
+        role="status"
+        title={`Read from WordPress ${formatDateTime(fetchedAt)}`}
+      >
+        {checking
+          ? "Checking for new articles…"
+          : checkFailed
+            ? `Couldn't check WordPress. As of ${ago(fetchedAt, now)}`
+            : `Updated ${ago(fetchedAt, now)}`}
+      </span>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-9"
+        onClick={onRefresh}
+        disabled={checking}
+        aria-label="Refresh from WordPress"
+      >
+        <RefreshCwIcon className={cn(checking && "animate-spin")} />
+        <span className="sr-only sm:not-sr-only">Refresh</span>
+      </Button>
+    </span>
   );
 }
 

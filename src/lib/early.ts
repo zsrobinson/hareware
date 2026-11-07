@@ -31,21 +31,6 @@ export function takeEarly(url: string): Promise<Response> | undefined {
   return early;
 }
 
-/**
- * starts a request a page is about to make, as a link is pointed at: moving
- * between pages keeps this window (Astro's client router), so the page it
- * opens finds the request under the same address
- */
-export function startEarly(url: string) {
-  const early = (globalThis.__early ??= new Map());
-  if (!early.has(url)) {
-    const request = fetch(url);
-    /* a request nobody takes must not surface as an unhandled rejection */
-    request.catch(() => early.delete(url));
-    early.set(url, request);
-  }
-}
-
 /** what a page starts early */
 export type Early =
   /** `?article=slug`, or the recent list when there is none */
@@ -77,10 +62,17 @@ export function earlyScript(early: Early): string {
           : `go(${JSON.stringify(early.api)}, { cache: "no-store" });`;
 
   /* an old browser without `??=`, or anything else going wrong, leaves the
-     island to send the request itself, as it would have anyway */
+     island to send the request itself, as it would have anyway. A request
+     that fails before the island takes it is marked handled, so it does not
+     surface as an unhandled rejection; the island still gets the failure */
   return `try {
     const m = (window.__early ??= new Map());
-    const go = (url, init) => { if (!m.has(url)) m.set(url, fetch(url, init)); };
+    const go = (url, init) => {
+      if (m.has(url)) return;
+      const r = fetch(url, init);
+      r.catch(() => {});
+      m.set(url, r);
+    };
     const q = new URLSearchParams(location.search);
     ${body}
   } catch {}`;

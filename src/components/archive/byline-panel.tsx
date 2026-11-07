@@ -186,7 +186,7 @@ export function BylinePanel({
             onChange={(event) => setEverywhere(event.target.value)}
           />
           <span className="text-muted-foreground block text-xs">
-            On every article below without its own answer, and on later ones.
+            On every article below unless it says otherwise, and on later ones.
             Separate two people with a comma.
           </span>
         </label>
@@ -214,7 +214,10 @@ export function BylinePanel({
                 checked={!keepEarlier}
                 onChange={() => setKeepEarlier(false)}
               />
-              <span>Count them as {shown(after)} too</span>
+              <span>
+                Count {following.length === 1 ? "it" : "them"} as {shown(after)}{" "}
+                too
+              </span>
             </label>
           </fieldset>
         )}

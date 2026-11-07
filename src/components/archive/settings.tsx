@@ -98,7 +98,7 @@ function PenNames({
   return (
     <Section
       title="Pen names"
-      description="Bylines that stand for someone else."
+      description="Bylines that count as someone else."
     >
       <datalist id={list}>
         {everyone.map((name) => (
@@ -180,7 +180,8 @@ function PenNameRow({
           {pen.realName.join(" and ")}
           {[...elsewhere].map(([name, count]) => (
             <span key={name} className="text-muted-foreground block text-xs">
-              {name} on {count} {count === 1 ? "article" : "articles"}
+              {count} {count === 1 ? "article counts" : "articles count"} as{" "}
+              {name} instead
             </span>
           ))}
         </span>
@@ -452,7 +453,7 @@ function ArticleRows({ archive }: { archive: Archive }) {
   return (
     <Section
       title="Counted differently on one article"
-      description="Set from an article's panel in Articles."
+      description="Set from an article's panel, or from a pen name's Edit."
     >
       {archive.articleOverrides.length === 0 ? (
         <p className="text-muted-foreground text-sm">None yet.</p>

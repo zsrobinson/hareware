@@ -339,29 +339,82 @@ function PenNames({
   onOpen: (byline: string) => void;
 }) {
   const save = useEdit();
-  /* every byline they are credited through, on every article or on some */
-  const counts = new Map<string, { byline: string; articles: number }>();
-  for (const article of archive.articles) {
-    const seen = new Set<string>();
-    for (const p of article.credits.flatMap((c) => c.contributors))
-      if (p.name === person.name && p.byline && p.source !== "printed")
-        seen.add(p.byline);
-    for (const byline of seen) {
-      const entry = counts.get(byline.toLowerCase()) ?? { byline, articles: 0 };
-      entry.articles += 1;
-      counts.set(byline.toLowerCase(), entry);
+  /* every byline they are credited through: as a pen name on every article,
+     or on particular articles only, as when a series changed hands */
+  const found = new Map<
+    string,
+    {
+      byline: string;
+      articles: number;
+      /* the rows naming them on particular articles */
+      rows: { postId: number; role: Role; realNames: string[] }[];
     }
+  >();
+  for (const article of archive.articles) {
+    let credited = false;
+    for (const credit of article.credits)
+      for (const p of credit.contributors) {
+        if (p.name !== person.name || !p.byline || p.source === "printed")
+          continue;
+        const entry = found.get(p.byline.toLowerCase()) ?? {
+          byline: p.byline,
+          articles: 0,
+          rows: [],
+        };
+        found.set(p.byline.toLowerCase(), entry);
+        if (!credited) entry.articles += 1;
+        credited = true;
+        if (p.source === "article")
+          entry.rows.push({
+            postId: article.id,
+            role: credit.role,
+            realNames: credit.contributors
+              .filter(
+                (q) =>
+                  q.source === "article" &&
+                  q.byline &&
+                  same(q.byline, p.byline!),
+              )
+              .map((q) => q.name),
+          });
+      }
   }
-  const mine = [...counts.values()].sort((a, b) => b.articles - a.articles);
+  const mine = [...found.values()].sort((a, b) => b.articles - a.articles);
   if (mine.length === 0) return null;
+
+  const remove = (byline: string, rows: (typeof mine)[number]["rows"]) => {
+    const pen = archive.penNames.find((p) => same(p.byline, byline));
+    const everywhere = pen?.realName.includes(person.name) ?? false;
+    const without = (names: string[]) =>
+      names.filter((name) => name !== person.name);
+    save.mutate({
+      edit: {
+        kind: "byline",
+        byline,
+        everywhere: everywhere ? without(pen!.realName) : undefined,
+        articles: rows.map((row) => ({
+          ...row,
+          realNames: without(row.realNames),
+        })),
+      },
+      done: `${byline} no longer counts as ${person.name}`,
+      undo: {
+        kind: "byline",
+        byline,
+        everywhere: everywhere ? pen!.realName : undefined,
+        articles: rows,
+      },
+    });
+  };
 
   return (
     <section className="space-y-1">
       <h3 className="text-muted-foreground text-xs font-medium">Pen names</h3>
       <ul className="text-sm">
-        {mine.map(({ byline, articles }) => {
-          const pen = archive.penNames.find((p) => same(p.byline, byline));
-          const everywhere = pen?.realName.includes(person.name);
+        {mine.map(({ byline, articles, rows }) => {
+          const everywhere = archive.penNames
+            .find((p) => same(p.byline, byline))
+            ?.realName.includes(person.name);
           return (
             <li
               key={byline}
@@ -376,42 +429,21 @@ function PenNames({
                   {byline}
                 </button>{" "}
                 <span className="text-muted-foreground">
-                  · {articles} {articles === 1 ? "article" : "articles"}
+                  ·{" "}
+                  {everywhere
+                    ? `on every article (${articles})`
+                    : `only on ${articles} ${articles === 1 ? "article" : "articles"}`}
                 </span>
               </span>
-              {pen && everywhere && (
-                <Button
-                  className="text-muted-foreground"
-                  variant="ghost"
-                  size="xs"
-                  disabled={save.isPending}
-                  onClick={() => {
-                    /* keep anyone else who shares the pen name */
-                    const others = pen.realName.filter(
-                      (n) => n !== person.name,
-                    );
-                    save.mutate({
-                      edit: {
-                        kind: "pen-names",
-                        entries:
-                          others.length > 0
-                            ? others.map((realName) => ({ byline, realName }))
-                            : [{ byline, realName: "" }],
-                      },
-                      done: `${byline} no longer counts as ${person.name}`,
-                      undo: {
-                        kind: "pen-names",
-                        entries: pen.realName.map((realName) => ({
-                          byline,
-                          realName,
-                        })),
-                      },
-                    });
-                  }}
-                >
-                  <XIcon /> Remove
-                </Button>
-              )}
+              <Button
+                className="text-muted-foreground"
+                variant="ghost"
+                size="xs"
+                disabled={save.isPending}
+                onClick={() => remove(byline, rows)}
+              >
+                <XIcon /> Remove
+              </Button>
             </li>
           );
         })}
@@ -487,7 +519,7 @@ function AddOwnPenName({
     >
       <label className="block space-y-1.5 text-sm">
         <span className="font-medium">
-          A byline {person.name} publishes under
+          A pen name that counts as {person.name}
         </span>
         <Input
           autoFocus
@@ -567,7 +599,7 @@ function PenNameOf({
       }}
     >
       <label className="block space-y-1.5 text-sm">
-        <span className="font-medium">Who is behind {byline}?</span>
+        <span className="font-medium">Who does {byline} count as?</span>
         <Input
           autoFocus
           list={list}

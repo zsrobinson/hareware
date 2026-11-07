@@ -69,6 +69,33 @@ export default defineConfig({
       these only after checking a cold `rm -rf node_modules/.vite && astro dev`
       still logs no "dependency optimized" line
     */
+    /*
+      the browser's code in a few chunks rather than sixty. every page is a
+      static shell whose island asks WordPress itself (ADR 0012), and each
+      chunk an island imports is another round trip before it can draw: split
+      finely, the slides waited about a second behind the chain of imports.
+      the Worker's own bundle is left as it is
+    */
+    environments: {
+      client: {
+        build: {
+          rolldownOptions: {
+            output: {
+              codeSplitting: {
+                groups: [
+                  { name: "vendor", test: /node_modules/ },
+                  {
+                    name: "shared",
+                    test: /src[\\/](lib|components[\\/]ui)[\\/]/,
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
+
     ssr: {
       optimizeDeps: {
         include: ["astro/assets/services/noop", "astro/app/manifest"],

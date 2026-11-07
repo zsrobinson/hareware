@@ -111,12 +111,7 @@ const who = viewerState(await viewer(Astro.request));
                   alt=""
                   class="bg-secondary max-h-56 w-auto max-w-full rounded-md object-contain"
                 />
-                <Button
-                  id="image-download"
-                  data-src={image}
-                  variant="outline"
-                  className="w-full"
-                >
+                <Button id="image-download" data-src={image} variant="outline">
                   <DownloadIcon />
                   Download image
                 </Button>
@@ -128,7 +123,7 @@ const who = viewerState(await viewer(Astro.request));
 
           <div class="space-y-1.5">
             <span class="text-sm font-medium">Text</span>
-            <Button id="button" variant="outline" className="w-full">
+            <Button id="button" variant="outline">
               <DownloadIcon />
               Download text for InDesign
             </Button>

@@ -40,8 +40,9 @@ if (articlesStr && !error) {
   /* a column pasted from the page-order sheet may have gaps; they stay as
      rows, so the counts paste back beside the right links */
   const lines = articlesStr.split(/\r?\n/).map((a) => a.trim());
+  /* trailing blanks are the end of the paste; leading ones are rows of the
+     sheet, and dropping them would move every count up a row */
   while (lines.at(-1) === "") lines.pop();
-  while (lines[0] === "") lines.shift();
   const articles = lines.filter((a) => a !== "");
 
   if (articles.length > 10) return redirectError("too-many");
@@ -216,7 +217,7 @@ const who = viewerState(await viewer(Astro.request));
         .then(() => (copy.textContent = "Copied"))
         .catch((error: unknown) => {
           console.error("could not copy the counts", error);
-          copy.textContent = "Couldn't copy; select the column instead";
+          copy.textContent = "Couldn't copy";
         })
         /* a failure needs longer to read than a tick */
         .finally(() =>

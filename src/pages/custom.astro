@@ -1,14 +1,21 @@
 ---
 import SlideFonts from "~/components/slide-fonts.astro";
 import Dashboard from "~/layouts/dashboard.astro";
+import PageHeader from "~/components/page-header.astro";
 import { CustomPage } from "../components/custom-page";
 
 /* nothing here is per-request — the whole page is one client island */
 export const prerender = true;
 ---
 
-<Dashboard title="Custom Instagram Post" width="full">
+<Dashboard title="Custom post" width="full">
   <SlideFonts slot="head" />
 
-  <CustomPage client:load />
+  <div class="space-y-6">
+    <PageHeader
+      title="Custom post"
+      description="Instagram slides for an article that isn't on the site yet."
+    />
+    <CustomPage client:load />
+  </div>
 </Dashboard>

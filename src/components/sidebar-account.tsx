@@ -139,13 +139,14 @@ export function SidebarAccount({
           href={signInHref}
           title="Sign in with Discord"
           className={cn(
-            "flex h-9 min-w-0 flex-1 items-center justify-center gap-2 rounded-md bg-[#5865F2] text-sm font-medium text-white transition-colors hover:bg-[#4752c4]",
+            /* quiet, like every other control: the Discord mark says whose sign-in it is */
+            "bg-background hover:bg-muted flex h-9 min-w-0 flex-1 items-center justify-center gap-2 rounded-md border text-sm font-medium transition-colors",
             /* in the stacked rail `flex-1` would grow down, not across */
             !inSheet &&
               "group-data-[state=collapsed]/shell:size-9 group-data-[state=collapsed]/shell:flex-none",
           )}
         >
-          <DiscordMark className="size-4 shrink-0" />
+          <DiscordMark className="size-4 shrink-0 text-[#5865F2]" />
           <span className={cn("truncate", railHidden)}>
             Sign in with Discord
           </span>

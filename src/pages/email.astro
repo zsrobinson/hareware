@@ -1,4 +1,7 @@
 ---
+import Dashboard from "~/layouts/dashboard.astro";
+import PageHeader from "~/components/page-header.astro";
+import { NewsletterPage } from "~/components/newsletter-page";
 import {
   EMAIL_IMAGE_WIDTH,
   toSizedImage,
@@ -30,61 +33,22 @@ const scraped = (
     }
   })
 ).filter((post) => post !== null);
+
+const newsletter = scraped.map((post) => ({
+  title: post.title,
+  link: post.link,
+  image: toSizedImage(post.image, EMAIL_IMAGE_WIDTH),
+  author: post.author ?? undefined,
+  imageCredits: post.imageCredits ?? undefined,
+}));
 ---
 
-<meta charset="utf-8" />
-
-<div
-  style="background-color: #5b2218 !important; padding: 8px 12px 8px 12px; line-height: 1.15; text-align: center;"
->
-  <img
-    src="https://i0.wp.com/theumdhare.com/wp-content/uploads/2026/02/combination-mark.png?h=90"
-    style="height: 30px;"
-  />
-</div>
-
-<p>Hey Everyone,</p>
-
-<div
-  style="background-color: rgb(244, 204, 204); padding: 8px 12px 8px 12px; line-height: 1.15;"
->
-  <b
-    ><font size="4"
-      >Our next general body meeting will be [DATE] at [TIME] in [LOCATION].</font
-    ></b
-  >
-</div>
-
-<p>[EMAIL BODY]</p>
-
-<br />
-<br />
-
-<hr />
-<b><font size="4">Latest Articles</font></b>
-<br />
-<br />
-
-<table>
-  {
-    scraped?.map((post) => (
-      <tr>
-        <td style="vertical-align: top; padding: 0 0 12px 0;">
-          <img
-            src={toSizedImage(post.image, EMAIL_IMAGE_WIDTH)}
-            style="width: 150px"
-          />
-        </td>
-        <td style="vertical-align: top; padding: 0 0 12px 12px;">
-          <strong>
-            <a href={post.link} set:html={post.title} />
-          </strong>
-          <br />
-          Article by {post.author}
-          <br />
-          Image by {post.imageCredits}
-        </td>
-      </tr>
-    ))
-  }
-</table>
+<Dashboard title="Newsletter" width="wide">
+  <div class="space-y-6">
+    <PageHeader
+      title="Newsletter"
+      description="This week's club email, with the latest articles, to paste into Gmail."
+    />
+    <NewsletterPage articles={newsletter} client:load />
+  </div>
+</Dashboard>

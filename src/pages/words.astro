@@ -3,17 +3,12 @@ import { Textarea } from "~/components/ui/textarea";
 import { Button } from "~/components/ui/button";
 import Dashboard from "~/layouts/dashboard.astro";
 import { viewer, viewerState } from "~/lib/admin";
-import {
-  ChevronRightIcon,
-  TriangleAlertIcon,
-  Link2Icon,
-  QuoteIcon,
-} from "lucide-react";
+import { ChevronRightIcon } from "lucide-react";
+import PageHeader from "~/components/page-header.astro";
 import { toArticleLink } from "~/lib/services/wordpress/article-url";
 import { getWordCount } from "~/lib/get-word-count";
 import { scrapeArticle } from "~/lib/services/wordpress/scrape-article";
 import { mapLimit } from "~/lib/map-limit";
-import { FormItem, FormLabel } from "~/components/options-form";
 
 function redirectError(error: string) {
   const params = Astro.url.searchParams;
@@ -22,9 +17,18 @@ function redirectError(error: string) {
 }
 
 const error = Astro.url.searchParams.get("error");
+const ERRORS: Record<string, string> = {
+  "too-many": "Ten links at most.",
+  "too-few": "Paste at least one article link.",
+  "invalid-url":
+    "One of those isn't a link to a Hare article. Each should start with theumdhare.com.",
+};
 
 const articlesStr = Astro.url.searchParams.get("articles");
-let counts: (number | null)[] = [];
+/* one row per link, in the order pasted; a link that could not be read keeps
+   its row so the rest still line up */
+type Row = { link: string; title: string | null; words: number | null };
+let counts: Row[] = [];
 if (articlesStr && !error) {
   /* CRLF or LF: `URL` strips newlines, so an unsplit blob would parse as one
      link */
@@ -43,10 +47,10 @@ if (articlesStr && !error) {
   /* ten at once draws 429s */
   counts = await mapLimit(links as string[], 3, async (link) => {
     try {
-      const { body } = await scrapeArticle(link);
-      return getWordCount(body);
+      const { body, title } = await scrapeArticle(link);
+      return { link, title, words: getWordCount(body) };
     } catch {
-      return null;
+      return { link, title: null, words: null };
     }
   });
 }
@@ -56,45 +60,75 @@ const who = viewerState(await viewer(Astro.request));
 ---
 
 <Dashboard title="Word Counter" viewer={who} width="form">
-  <div class="flex flex-col gap-2">
-    <FormItem>
-      <Link2Icon className="size-5 min-w-max" />
-      <FormLabel>Article Links</FormLabel>
-    </FormItem>
+  <div class="space-y-6">
+    <PageHeader
+      title="Word Counter"
+      description="How long each article is, for planning the print issue."
+    />
 
-    <form action="/words" class="mb-4 flex flex-col gap-2">
+    <form action="/words" class="space-y-2">
       <Textarea
         name="articles"
-        className="h-56 resize-none"
+        aria-label="Article links"
+        className="h-40"
         defaultValue={articlesStr ?? ""}
-        placeholder="Enter up to ten article links or slugs, each on its own line."
+        placeholder="Paste up to ten article links, one per line"
+        aria-invalid={error ? true : undefined}
       />
-      <Button variant="secondary">Count Words <ChevronRightIcon /></Button>
-
       {
         error && (
-          <div class="ml-4 flex items-center gap-2 pt-2 text-sm font-medium text-red-500">
-            <TriangleAlertIcon className="mt-0.5" />
-            <span>{error}</span>
-          </div>
+          <p class="text-destructive text-sm">
+            {ERRORS[error] ?? "Those links couldn't be read."}
+          </p>
         )
       }
+      <Button type="submit">Count words <ChevronRightIcon /></Button>
     </form>
 
     {
-      counts.length !== 0 && (
-        <>
-          <FormItem>
-            <QuoteIcon className="size-5 min-w-max" />
-            <FormLabel>Word Counts</FormLabel>
-          </FormItem>
-
-          <Textarea
-            className="h-56 resize-none"
-            readOnly
-            value={counts.map((count) => count ?? "—").join("\n")}
-          />
-        </>
+      counts.length > 0 && (
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-muted-foreground border-b text-left">
+              <th class="py-2 font-medium">Article</th>
+              <th class="py-2 text-right font-medium">Words</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y">
+            {counts.map((row) => (
+              <tr>
+                <td class="py-2 pr-4">
+                  <a
+                    href={row.link}
+                    target="_blank"
+                    rel="noreferrer"
+                    class="decoration-muted-foreground/40 hover:decoration-foreground underline underline-offset-4"
+                    set:html={row.title ?? row.link}
+                  />
+                </td>
+                <td class="py-2 text-right tabular-nums">
+                  {row.words === null ? (
+                    <span class="text-muted-foreground">Couldn't read it</span>
+                  ) : (
+                    row.words.toLocaleString("en-US")
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          {counts.length > 1 && (
+            <tfoot>
+              <tr class="border-t font-medium">
+                <td class="py-2">Total</td>
+                <td class="py-2 text-right tabular-nums">
+                  {counts
+                    .reduce((sum, row) => sum + (row.words ?? 0), 0)
+                    .toLocaleString("en-US")}
+                </td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
       )
     }
   </div>

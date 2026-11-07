@@ -100,18 +100,27 @@ export function GeneratePage({
   return (
     <div className="flex flex-col items-start gap-8 md:flex-row">
       <div className="flex flex-col gap-4">
-        <h2 className="text-xl font-semibold">Layout Options</h2>
+        <div className="flex items-baseline justify-between gap-4">
+          <h2 className="text-xl font-semibold">Layout options</h2>
+          {/* on a phone the slides sit below every option */}
+          <a
+            href="#slides"
+            className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline md:hidden"
+          >
+            Skip to slides
+          </a>
+        </div>
         <OptionsForm articleLink={articleLink} />
       </div>
 
-      <div className="flex flex-wrap items-start gap-8">
+      <div id="slides" className="flex scroll-mt-4 flex-wrap items-start gap-8">
         <div className="mr-4 flex w-96 flex-col gap-4">
           <div className="flex justify-between" ref={animate}>
-            <h2 className="text-xl font-semibold">Title Slide</h2>
+            <h2 className="text-xl font-semibold">Title slide</h2>
             {isOverflowing && (
-              <div className="flex items-center gap-2 text-sm font-medium text-red-500">
-                <TriangleAlertIcon className="mt-0.5" />
-                <span>Content may be overflowing</span>
+              <div className="text-destructive flex items-center gap-2 text-sm">
+                <TriangleAlertIcon className="size-4" />
+                <span>The title may not fit</span>
               </div>
             )}
           </div>
@@ -135,15 +144,15 @@ export function GeneratePage({
           <div className="text-muted-foreground flex items-center justify-center gap-2 text-sm leading-[1.1]">
             <InfoIcon className="size-5 min-w-max" />
             {state.renderImages ? (
-              <p>Hold or right click the image to save.</p>
+              <p>Press and hold, or right-click, a slide to save it.</p>
             ) : (
-              <p>Screenshot the image to save.</p>
+              <p>Take a screenshot of each slide to save it.</p>
             )}
           </div>
         </div>
 
         <div className="flex w-96 flex-col gap-4">
-          <h2 className="text-xl font-semibold">Content Slide</h2>
+          <h2 className="text-xl font-semibold">Content slide</h2>
 
           <div className="relative">
             <ContentSlide ref={contentSlideRef}>{children}</ContentSlide>
@@ -158,15 +167,6 @@ export function GeneratePage({
                   ref={contentSlideImgRef}
                 />
               </>
-            )}
-          </div>
-
-          <div className="text-muted-foreground flex items-center justify-center gap-2 text-sm leading-[1.1]">
-            <InfoIcon className="size-5 min-w-max" />
-            {state.renderImages ? (
-              <p>Hold or right click the image to save.</p>
-            ) : (
-              <p>Screenshot the image to save.</p>
             )}
           </div>
         </div>

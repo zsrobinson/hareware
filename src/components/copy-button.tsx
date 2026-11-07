@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "./ui/button";
-import { CheckIcon, CopyIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, XIcon } from "lucide-react";
 
 export function CopyButton({
   id,
@@ -9,7 +9,12 @@ export function CopyButton({
   id: string;
   label?: string;
 }) {
-  const [copied, setCopied] = useState(false);
+  /* the outcome shows for a moment, long enough to notice */
+  const [result, setResult] = useState<"copied" | "failed" | null>(null);
+  const show = (outcome: "copied" | "failed") => {
+    setResult(outcome);
+    setTimeout(() => setResult(null), 1500);
+  };
 
   return (
     <Button
@@ -27,20 +32,35 @@ export function CopyButton({
         */
         navigator.clipboard
           .writeText(input?.value ?? "")
-          .then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 500);
-          })
+          .then(() => show("copied"))
           .catch((error: unknown) => {
             console.error("could not write to the clipboard", error);
+            show("failed");
           });
       }}
-      aria-label={label}
+      aria-label={
+        result === "copied"
+          ? "Copied"
+          : result === "failed"
+            ? "Couldn't copy; it's selected to copy by hand"
+            : label
+      }
+      title={
+        result === "failed"
+          ? "Couldn't copy; it's selected to copy by hand"
+          : undefined
+      }
       variant="outline"
       size="icon"
       className="px-3"
     >
-      {copied ? <CheckIcon /> : <CopyIcon />}
+      {result === "copied" ? (
+        <CheckIcon />
+      ) : result === "failed" ? (
+        <XIcon />
+      ) : (
+        <CopyIcon />
+      )}
     </Button>
   );
 }

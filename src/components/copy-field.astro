@@ -1,0 +1,22 @@
+---
+/* a read-only value with its label above and a copy button beside it */
+import { Input } from "~/components/ui/input";
+import { CopyButton } from "./copy-button";
+
+interface Props {
+  label: string;
+  id: string;
+  value: string;
+  /** said in the field when there is nothing to copy */
+  empty?: string;
+}
+const { label, id, value, empty } = Astro.props;
+---
+
+<div class="space-y-1.5">
+  <label for={id} class="text-sm font-medium">{label}</label>
+  <div class="flex gap-2">
+    <Input type="text" value={value} placeholder={empty} id={id} readOnly />
+    {value && <CopyButton id={id} client:load />}
+  </div>
+</div>

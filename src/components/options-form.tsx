@@ -32,6 +32,19 @@ function toSingle(value: number | readonly number[]) {
   return typeof value === "number" ? value : value[0];
 }
 
+/* what the closed selects show, matching their menus */
+const PRESETS = [
+  { value: "maroon", label: "Maroon" },
+  { value: "pink", label: "Pink" },
+  { value: "pinkOld", label: "Pink (old)" },
+  { value: "white", label: "White" },
+  { value: "custom", label: "Custom" },
+];
+const RATIOS = ["1/1", "4/5", "3/4", "9/16"].map((value) => ({
+  value,
+  label: value.replace("/", ":"),
+}));
+
 export function FormItem({ children }: { children: ReactNode }) {
   return <div className="flex h-9 items-center gap-2">{children}</div>;
 }
@@ -55,6 +68,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
           <FormLabel>Preset</FormLabel>
           <Select
             value={currentPreset}
+            items={PRESETS}
             onValueChange={(value) => {
               if (
                 typeof value === "string" &&
@@ -73,7 +87,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
               <SelectGroup>
                 <SelectItem value="maroon">Maroon</SelectItem>
                 <SelectItem value="pink">Pink</SelectItem>
-                <SelectItem value="pinkOld">Pink (Old)</SelectItem>
+                <SelectItem value="pinkOld">Pink (old)</SelectItem>
                 <SelectItem value="white">White</SelectItem>
                 <SelectItem value="custom" disabled>
                   Custom
@@ -85,7 +99,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
 
         <FormItem>
           <BlendIcon className="size-5 min-w-max" />
-          <FormLabel>Text Color</FormLabel>
+          <FormLabel>Text color</FormLabel>
           <Input
             type="color"
             value={state.textColor}
@@ -95,7 +109,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
 
         <FormItem>
           <BlendIcon className="size-5 min-w-max" />
-          <FormLabel>Background Color</FormLabel>
+          <FormLabel>Background color</FormLabel>
           <Input
             type="color"
             value={state.bgColor}
@@ -105,9 +119,10 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
 
         <FormItem>
           <ProportionsIcon className="size-5 min-w-max" />
-          <FormLabel>Aspect Ratio</FormLabel>
+          <FormLabel>Aspect ratio</FormLabel>
           <Select
             value={state.ratio}
+            items={RATIOS}
             onValueChange={(value) => value && state.setRatio(value)}
           >
             <SelectTrigger className="w-full">
@@ -130,7 +145,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
       <div className="flex flex-col gap-2">
         <FormItem>
           <AlignCenterIcon className="size-5 min-w-max" />
-          <FormLabel>Title Content</FormLabel>
+          <FormLabel>Title</FormLabel>
           <Input
             type="text"
             value={state.title}
@@ -140,7 +155,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
 
         <FormItem>
           <ScalingIcon className="size-5 min-w-max" />
-          <FormLabel>Title Size</FormLabel>
+          <FormLabel>Title size</FormLabel>
           <Slider
             value={[state.titleSize]}
             onValueChange={(value) => state.setTitleSize(toSingle(value))}
@@ -157,7 +172,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
       <div className="flex flex-col gap-2">
         <FormItem>
           <AlignCenterIcon className="size-5 min-w-max" />
-          <FormLabel>Article Byline</FormLabel>
+          <FormLabel>Article byline</FormLabel>
           <Input
             type="text"
             value={state.articleByline}
@@ -167,7 +182,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
 
         <FormItem>
           <AlignCenterIcon className="size-5 min-w-max" />
-          <FormLabel>Image Byline</FormLabel>
+          <FormLabel>Image byline</FormLabel>
           <Input
             type="text"
             value={state.imageByline}
@@ -177,7 +192,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
 
         <FormItem>
           <ScalingIcon className="size-5 min-w-max" />
-          <FormLabel>Byline Size</FormLabel>
+          <FormLabel>Byline size</FormLabel>
           <Slider
             value={[state.bylineSize]}
             onValueChange={(value) => state.setBylineSize(toSingle(value))}
@@ -199,7 +214,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
             onClick={() => state.reset()}
           >
             <RefreshCwIcon className="mr-2" />
-            Reset Options
+            Reset options
           </Button>
 
           <Button
@@ -208,7 +223,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
             onClick={() => state.incParagraphShift()}
           >
             <SkipForwardIcon className="mr-2" />
-            Shift Paragraph
+            Shift paragraph
           </Button>
         </div>
 
@@ -217,11 +232,10 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
             <Button
               variant="secondary"
               className="w-full"
-              onClick={() => state.reset()}
               render={<a href={articleLink} target="_blank" />}
             >
               <ExternalLinkIcon className="mr-2" />
-              View Original Article
+              View original article
             </Button>
           </div>
         )}
@@ -229,18 +243,14 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
 
       <div className="text-muted-foreground my-4 flex items-center gap-2 text-sm leading-[1.1]">
         <InfoIcon className="size-5 min-w-max" />
-        <p>
-          HTML tags are supported in the Title Content and Byline fields. If
-          needed, try adding a "&lt;br&gt;" tag to manually trigger a line
-          break.
-        </p>
+        <p>The title and bylines take HTML: &lt;br&gt; breaks a line.</p>
       </div>
 
       <hr className="my-4" />
 
       <FormItem>
         <ImageIcon className="size-5 min-w-max" />
-        <FormLabel>Render Images</FormLabel>
+        <FormLabel>Render images</FormLabel>
         <Switch
           checked={state.renderImages}
           onCheckedChange={(checked) => state.setRenderImages(checked)}
@@ -248,11 +258,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
       </FormItem>
 
       <div className="text-muted-foreground flex items-center gap-2 pl-7 text-sm leading-[1.1]">
-        <p>
-          Only disable if the image renderer is not displaying the expected
-          output. This will fallback to the browser’s rendering and requires you
-          to take a screenshot.
-        </p>
+        <p>Turn off only if the slides look wrong; then take a screenshot.</p>
       </div>
     </div>
   );

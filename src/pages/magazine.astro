@@ -1,17 +1,9 @@
 ---
-import {
-  ChevronRightIcon,
-  TriangleAlertIcon,
-  FileTextIcon,
-  ImageIcon,
-  InfoIcon,
-  AlignCenterIcon,
-  TypeIcon,
-} from "lucide-react";
-import { FormItem, FormLabel } from "~/components/options-form";
+import { ChevronRightIcon, DownloadIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { CopyButton } from "../components/copy-button";
+import Field from "~/components/copy-field.astro";
+import PageHeader from "~/components/page-header.astro";
 import Dashboard from "~/layouts/dashboard.astro";
 import { viewer, viewerState } from "~/lib/admin";
 import {
@@ -27,6 +19,7 @@ import { getTaggedText } from "../lib/get-tagged-text";
 
 const param = Astro.url.searchParams.get("article") || "";
 const invalid = Astro.url.searchParams.get("error") !== null;
+const typed = Astro.url.searchParams.get("link") ?? "";
 
 Astro.response.headers.set("cache-control", "private, no-store");
 
@@ -35,7 +28,9 @@ let post: Awaited<ReturnType<typeof scrapeArticle>> | null = null;
 
 if (param) {
   link = toArticleLink(param);
-  if (!link) return Astro.redirect("/magazine?error");
+  /* the typed link comes back with the error, so it can be fixed in place */
+  if (!link)
+    return Astro.redirect(`/magazine?error&link=${encodeURIComponent(param)}`);
 
   const slug = toArticleSlug(link);
   if (param !== slug) return Astro.redirect(`/magazine?article=${slug}`);
@@ -43,7 +38,7 @@ if (param) {
   try {
     post = await scrapeArticle(link);
   } catch {
-    return Astro.redirect("/magazine?error");
+    return Astro.redirect(`/magazine?error&link=${encodeURIComponent(param)}`);
   }
 }
 
@@ -55,126 +50,101 @@ const who = viewerState(await viewer(Astro.request));
 ---
 
 <Dashboard title="InDesign Export" viewer={who} width="form">
-  <div class="flex flex-col gap-2">
-    {
-      /* the landing state is otherwise a field floating on its own, with
-         nothing saying what it wants or what it will do with it */
-      !post && (
-        <h2 class="pb-2 font-semibold">
-          Paste an article link to export its content for InDesign:
-        </h2>
-      )
-    }
+  <div class="space-y-6">
+    <PageHeader
+      title="InDesign Export"
+      description="An article's title, bylines, image and text, ready for the print issue."
+    />
 
-    <form action="/magazine" class="mb-4 flex gap-2">
+    <form action="/magazine" class="flex gap-2">
       <Input
         type="text"
         name="article"
-        placeholder="Article Link"
-        className="w-full font-mono"
-        defaultValue={link}
+        placeholder="Paste an article link"
+        aria-label="Article link"
+        defaultValue={link ?? typed}
+        aria-invalid={invalid || undefined}
       />
-      <Button type="submit" variant="secondary">
-        Export Content
+      <Button type="submit" variant={post ? "secondary" : "default"}>
+        Export
         <ChevronRightIcon />
       </Button>
     </form>
 
     {
       invalid && (
-        <div class="flex items-center gap-2 pb-2 text-sm font-medium text-red-500">
-          <TriangleAlertIcon className="mt-0.5" />
-          <span>Please double check your link and try again</span>
-        </div>
+        <p class="text-destructive -mt-4 text-sm">
+          That isn't a link to a Hare article. It should start with
+          theumdhare.com.
+        </p>
       )
     }
 
     {
       post && (
-        <>
-          <FormItem>
-            <TypeIcon className="size-5 min-w-max" />
-            <FormLabel>Title</FormLabel>
-            <Input type="text" value={title} id="title" readOnly />
-            <CopyButton id="title" client:load />
-          </FormItem>
+        <div class="space-y-4">
+          <Field label="Title" id="title" value={title ?? ""} />
+          <Field
+            label="Article byline"
+            id="article-by"
+            value={[
+              section?.toUpperCase(),
+              author ? `Article by ${author}\t${date}` : date,
+            ]
+              .filter(Boolean)
+              .join(" | ")}
+          />
+          <Field
+            label="Image byline"
+            id="image-by"
+            value={imageCredits ? `Image by ${imageCredits}` : ""}
+            empty="No image credit on the article"
+          />
 
-          <FormItem>
-            <AlignCenterIcon className="size-5 min-w-max" />
-            <FormLabel>Article Byline</FormLabel>
-            <Input
-              type="text"
-              value={`${section?.toUpperCase()} | Article by ${author}\t${date}`}
-              id="article-by"
-              readOnly
-            />
-            <CopyButton id="article-by" client:load />
-          </FormItem>
-
-          <FormItem>
-            <AlignCenterIcon className="size-5 min-w-max" />
-            <FormLabel>Image Byline</FormLabel>
-            <Input
-              type="text"
-              value={`Image by ${imageCredits}`}
-              id="image-by"
-              readOnly
-            />
-            <CopyButton id="image-by" client:load />
-          </FormItem>
-
-          <div class="my-4 flex items-start gap-2 overflow-hidden">
-            <FormItem>
-              <ImageIcon className="size-5 min-w-max" />
-              <FormLabel>Image</FormLabel>
-            </FormItem>
-            <img
-              src={toSizedImage(image, PREVIEW_IMAGE_WIDTH)}
-              class="bg-secondary min-w-0 rounded-md object-contain"
-            />
-          </div>
-
-          <FormItem>
-            <FileTextIcon className="size-5 min-w-max" />
-            <FormLabel>Content</FormLabel>
-            <Button id="button" variant="outline" className="w-full">
-              Download Text File
-            </Button>
-          </FormItem>
-
-          {unprocessed.size > 0 && (
-            <div class="flex items-start gap-2 text-sm text-amber-600">
-              <TriangleAlertIcon className="inline size-5 min-w-max p-0.5" />
-              <p>
-                Some content uses special formatting and may not be accurately
-                represented. (tag{unprocessed.size > 1 && "s"}:
-                {[...unprocessed]
-                  .map((tag) => (
-                    <a
-                      href={`https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/${tag.toLowerCase()}`}
-                      target="_blank"
-                      class="whitespace inline-block underline"
-                    >
-                      {tag.toLowerCase()}
-                    </a>
-                  ))
-                  .reduce(
-                    (acc, x) => (acc === null ? [x] : [acc, ", ", x]),
-                    null,
-                  )}
-                )
-              </p>
+          <div class="space-y-1.5">
+            <div class="flex items-baseline justify-between gap-4">
+              <span class="text-sm font-medium">Image</span>
+              {image && (
+                <a
+                  href={image}
+                  target="_blank"
+                  rel="noreferrer"
+                  class="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline"
+                >
+                  Open full size
+                </a>
+              )}
             </div>
-          )}
-
-          <div class="text-muted-foreground flex items-start gap-2 text-sm">
-            <InfoIcon className="inline size-5 min-w-max p-0.5" />
-            <p>
-              To import into InDesign, go to “File → Place” and select the text
-              file. Make sure to check that all content gets imported correctly!
-            </p>
+            {image ? (
+              <img
+                src={toSizedImage(image, PREVIEW_IMAGE_WIDTH)}
+                alt=""
+                class="bg-secondary w-full rounded-md object-contain"
+              />
+            ) : (
+              <p class="text-muted-foreground text-sm">No featured image.</p>
+            )}
           </div>
-        </>
+
+          <div class="space-y-1.5">
+            <span class="text-sm font-medium">Text</span>
+            <Button id="button" variant="outline" className="w-full">
+              <DownloadIcon />
+              Download text for InDesign
+            </Button>
+            <p class="text-muted-foreground text-sm">
+              In InDesign, use File → Place with this file, then check the
+              result against the article.
+            </p>
+            {unprocessed.size > 0 && (
+              <p class="text-muted-foreground text-sm">
+                Some formatting won't carry over (
+                {[...unprocessed].map((tag) => tag.toLowerCase()).join(", ")}
+                ); check those parts by hand.
+              </p>
+            )}
+          </div>
+        </div>
       )
     }
   </div>

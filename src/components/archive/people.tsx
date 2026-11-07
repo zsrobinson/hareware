@@ -97,7 +97,7 @@ function People({ archive, filters }: ViewProps) {
         cell: ({ row }) => (
           <button
             type="button"
-            className="text-left hover:underline"
+            className="decoration-muted-foreground/40 text-left underline-offset-4 hover:underline"
             onClick={() => setOpen(row.original.name)}
           >
             <span className="font-medium">{row.original.name}</span>
@@ -199,6 +199,7 @@ function PersonPanel({
   everyone: string[];
   onRenamed: () => void;
 }) {
+  const [form, setForm] = useState<null | "own" | "of">(null);
   const byId = new Map(archive.articles.map((a) => [a.id, a]));
   const articles = person.articleIds
     .map((id) => byId.get(id))
@@ -233,17 +234,32 @@ function PersonPanel({
 
       <div className="space-y-6 px-4 pb-6">
         <PenNames person={person} archive={archive} />
-        <div className="-ml-2 flex flex-wrap gap-x-1 gap-y-2">
-          <AddOwnPenName person={person} archive={archive} />
-          {printedOn > 0 && (
-            <PenNameOf
-              byline={person.name}
-              articles={printedOn}
-              everyone={everyone.filter((name) => name !== person.name)}
-              onSaved={onRenamed}
-            />
-          )}
-        </div>
+        {form === null ? (
+          <div className="-ml-2 flex flex-wrap gap-x-1 gap-y-2">
+            <Button variant="ghost" size="xs" onClick={() => setForm("own")}>
+              <PlusIcon /> Add a pen name they use
+            </Button>
+            {printedOn > 0 && (
+              <Button variant="ghost" size="xs" onClick={() => setForm("of")}>
+                Someone else is behind this name…
+              </Button>
+            )}
+          </div>
+        ) : form === "own" ? (
+          <AddOwnPenName
+            person={person}
+            archive={archive}
+            onClose={() => setForm(null)}
+          />
+        ) : (
+          <PenNameOf
+            byline={person.name}
+            articles={printedOn}
+            everyone={everyone.filter((name) => name !== person.name)}
+            onSaved={onRenamed}
+            onClose={() => setForm(null)}
+          />
+        )}
 
         <section className="space-y-1">
           <h3 className="text-muted-foreground text-xs font-medium">
@@ -304,7 +320,7 @@ function PenNames({
         {mine.map((pen) => (
           <li
             key={pen.byline}
-            className="flex items-center justify-between gap-2 py-1"
+            className="group flex items-center justify-between gap-2 py-1"
           >
             <span>
               {pen.byline}{" "}
@@ -313,6 +329,7 @@ function PenNames({
               </span>
             </span>
             <Button
+              className="reveal-on-hover"
               variant="ghost"
               size="xs"
               disabled={save.isPending}
@@ -350,13 +367,14 @@ function PenNames({
 function AddOwnPenName({
   person,
   archive,
+  onClose,
 }: {
   person: PersonRow;
   archive: Archive;
+  onClose: () => void;
 }) {
   const save = useEdit();
   const list = useId();
-  const [open, setOpen] = useState(false);
   const [byline, setByline] = useState("");
   const printed = useMemo(
     () =>
@@ -376,13 +394,6 @@ function AddOwnPenName({
     [archive, person.name],
   );
 
-  if (!open)
-    return (
-      <Button variant="ghost" size="xs" onClick={() => setOpen(true)}>
-        <PlusIcon /> Add a pen name
-      </Button>
-    );
-
   const count = byline.trim()
     ? archive.articles.filter((a) =>
         a.credits.some((c) => c.bylines.some((b) => same(b, byline))),
@@ -390,7 +401,7 @@ function AddOwnPenName({
     : null;
   return (
     <form
-      className="bg-muted/40 ml-2 w-full space-y-2 rounded-lg border p-3"
+      className="bg-muted/40 w-full space-y-3 rounded-lg border p-4"
       onSubmit={(event) => {
         event.preventDefault();
         if (!byline.trim()) return;
@@ -403,10 +414,7 @@ function AddOwnPenName({
             done: `${byline.trim()} now counts as ${person.name}`,
           },
           {
-            onSuccess: () => {
-              setByline("");
-              setOpen(false);
-            },
+            onSuccess: onClose,
           },
         );
       }}
@@ -432,7 +440,7 @@ function AddOwnPenName({
       {count !== null && (
         <p className="text-muted-foreground text-xs">
           {count === 0
-            ? "Not printed yet; it will count once it is."
+            ? "Not printed yet."
             : `${count} ${count === 1 ? "article" : "articles"}, and any later ones.`}
         </p>
       )}
@@ -444,12 +452,7 @@ function AddOwnPenName({
         >
           {save.isPending ? "Saving…" : "Save"}
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => setOpen(false)}
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={onClose}>
           Cancel
         </Button>
       </div>
@@ -463,28 +466,22 @@ function PenNameOf({
   articles,
   everyone,
   onSaved,
+  onClose,
 }: {
   byline: string;
   articles: number;
   everyone: string[];
   onSaved: () => void;
+  onClose: () => void;
 }) {
   const save = useEdit();
   const list = useId();
-  const [editing, setEditing] = useState(false);
   const [realName, setRealName] = useState("");
-
-  if (!editing)
-    return (
-      <Button variant="ghost" size="xs" onClick={() => setEditing(true)}>
-        This name is a pen name…
-      </Button>
-    );
 
   const known = everyone.find((name) => same(name, realName));
   return (
     <form
-      className="bg-muted/40 ml-2 w-full space-y-2 rounded-lg border p-3"
+      className="bg-muted/40 w-full space-y-3 rounded-lg border p-4"
       onSubmit={(event) => {
         event.preventDefault();
         if (!realName.trim()) return;
@@ -507,7 +504,7 @@ function PenNameOf({
           list={list}
           value={realName}
           onChange={(event) => setRealName(event.target.value)}
-          placeholder="Their real name"
+          placeholder="Real name"
           className="bg-background"
         />
         <datalist id={list}>
@@ -517,10 +514,9 @@ function PenNameOf({
         </datalist>
       </label>
       <p className="text-muted-foreground text-xs">
-        {articles === 1
-          ? `Applies to the article printing “${byline}”, and to any later ones.`
-          : `Applies to all ${articles} articles printing “${byline}”, and to any later ones.`}
-        {realName.trim() && !known && " This name isn't credited anywhere yet."}
+        {articles === 1 ? "1 article" : `${articles} articles`}, and any later
+        ones.
+        {realName.trim() && !known && " Not credited yet."}
       </p>
       <div className="flex gap-2">
         <Button
@@ -530,12 +526,7 @@ function PenNameOf({
         >
           {save.isPending ? "Saving…" : "Save"}
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => setEditing(false)}
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={onClose}>
           Cancel
         </Button>
       </div>

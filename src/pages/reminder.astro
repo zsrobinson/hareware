@@ -5,7 +5,7 @@ import { OUTCOMES, ReminderLog } from "~/components/reminder-log";
 import { viewerState } from "~/lib/admin";
 import { admitted } from "~/lib/admin-guard";
 import { REMINDER_HOUR, SOCIAL_CHANNEL_ID } from "~/lib/automations/config";
-import { channelLabel, hourLabel } from "~/lib/automations/registry";
+import { channelLabel } from "~/lib/automations/registry";
 import {
   easternLabel as eastern,
   planSocialPing,
@@ -16,6 +16,9 @@ import { recent } from "~/lib/log";
 import { ROLE_NAMES } from "~/lib/services/discord/config";
 
 const who = admitted(Astro.locals);
+
+/* "8:00 AM", the way the cards on this page write a time */
+const runTime = `${REMINDER_HOUR % 12 || 12}:00 ${REMINDER_HOUR < 12 ? "AM" : "PM"}`;
 
 Astro.response.headers.set("cache-control", "private, no-store");
 
@@ -58,10 +61,9 @@ const lastRun = rows.find((row) => row.action === "social-ping");
     <header class="space-y-1">
       <h1 class="text-2xl font-semibold tracking-tight">Social Reminder</h1>
       <p class="text-muted-foreground text-sm">
-        Every day at {hourLabel(REMINDER_HOUR)} Eastern, HareWare announces the articles
-        published since the previous morning in {
-          channelLabel(SOCIAL_CHANNEL_ID)
-        } and pings that day's poster role.
+        New articles, announced in {channelLabel(SOCIAL_CHANNEL_ID)} at {
+          runTime
+        } Eastern each day.
       </p>
     </header>
 

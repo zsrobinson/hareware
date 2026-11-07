@@ -1,11 +1,8 @@
-import {
-  ChevronRightIcon,
-  ExternalLinkIcon,
-  RefreshCwIcon,
-} from "lucide-react";
+import { ChevronRightIcon, ExternalLinkIcon } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { Button, buttonVariants } from "~/components/ui/button";
+import { cn } from "~/lib/utils";
 import {
   Collapsible,
   CollapsibleContent,
@@ -35,7 +32,7 @@ export function ProblemsPage() {
   );
 }
 
-function Problems({ archive, filters, refresh, refreshing }: ViewProps) {
+function Problems({ archive, filters }: ViewProps) {
   const shown = useMemo(
     () => applyFilters(archive.articles, filters),
     [archive, filters],
@@ -63,32 +60,7 @@ function Problems({ archive, filters, refresh, refreshing }: ViewProps) {
               {outside} more outside these filters
             </span>
           )}
-          <Button
-            variant="ghost"
-            size="xs"
-            className="ml-auto"
-            disabled={refreshing}
-            onClick={refresh}
-          >
-            <RefreshCwIcon
-              className={refreshing ? "animate-spin" : undefined}
-            />
-            Refresh from WordPress
-          </Button>
         </div>
-        {open.length > 0 && (
-          <p className="text-muted-foreground text-sm">
-            Fix credits in WordPress, where readers see them too. An unknown
-            label can also be added in{" "}
-            <a
-              href="/settings"
-              className="text-foreground underline underline-offset-2"
-            >
-              Settings
-            </a>
-            .
-          </p>
-        )}
         {open.length > 0 && (
           <ul className="divide-y rounded-xl border">
             {open.map((article) => (
@@ -159,6 +131,14 @@ function ArticleProblems({ article }: { article: ArchiveArticle }) {
           {article.problems.map((problem, index) => (
             <li key={index}>
               {PROBLEM_KINDS[problem.kind]}
+              {problem.kind === "unrecognised" && (
+                <a
+                  href="/settings#labels"
+                  className="text-muted-foreground ml-2 text-xs underline underline-offset-2"
+                >
+                  Add the label
+                </a>
+              )}
               {(problem.kind === "unrecognised" ||
                 problem.kind === "unparsed" ||
                 problem.kind === "odd-name") && (
@@ -175,7 +155,7 @@ function ArticleProblems({ article }: { article: ArchiveArticle }) {
           href={EDIT_IN_WORDPRESS(article.id)}
           target="_blank"
           rel="noreferrer"
-          className={buttonVariants({ variant: "outline", size: "sm" })}
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
         >
           Edit in WordPress <ExternalLinkIcon />
         </a>
@@ -203,7 +183,7 @@ function PairRow({ pair }: { pair: SimilarNames }) {
             {i > 0 && <span className="text-muted-foreground"> and </span>}
             <a
               href={`/articles?q=${encodeURIComponent(name)}`}
-              className="font-medium hover:underline"
+              className="decoration-muted-foreground/40 font-medium underline underline-offset-4"
             >
               {name}
             </a>
@@ -225,7 +205,7 @@ function PairRow({ pair }: { pair: SimilarNames }) {
               names: pair.names,
               different: true,
             },
-            done: `${pair.names.join(" and ")} are different people`,
+            done: `Marked ${pair.names.join(" and ")} as different people`,
           })
         }
       >
@@ -263,7 +243,7 @@ function Ignored({
                 {article.title}
                 <span className="text-muted-foreground">
                   {" "}
-                  · {article.ignored}
+                  · ignored by {article.ignored}
                 </span>
               </span>
               <Button
@@ -277,7 +257,7 @@ function Ignored({
                       postId: article.id,
                       ignored: false,
                     },
-                    done: `Restored “${article.title}”`,
+                    done: `“${article.title}” is back on the list`,
                   })
                 }
               >
@@ -308,7 +288,7 @@ function Ignored({
                       names: pair.names,
                       different: false,
                     },
-                    done: `Restored ${pair.names.join(" and ")}`,
+                    done: `${pair.names.join(" and ")} are back on the list`,
                   })
                 }
               >

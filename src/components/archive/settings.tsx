@@ -1,6 +1,7 @@
 import { ChevronRightIcon, ExternalLinkIcon, PlusIcon } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { Button, buttonVariants } from "~/components/ui/button";
+import { cn } from "~/lib/utils";
 import {
   Collapsible,
   CollapsibleContent,
@@ -55,16 +56,18 @@ function Settings({ archive }: ViewProps) {
 }
 
 function Section({
+  id,
   title,
   description,
   children,
 }: {
+  id?: string;
   title: string;
   description?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-3">
+    <section id={id} className="scroll-mt-6 space-y-3">
       <div>
         <h2 className="font-semibold">{title}</h2>
         {description && (
@@ -92,7 +95,7 @@ function PenNames({
   return (
     <Section
       title="Pen names"
-      description="A byline that stands for someone else counts as them, on every article that prints it."
+      description="Bylines that stand for someone else."
     >
       <datalist id={list}>
         {everyone.map((name) => (
@@ -115,7 +118,11 @@ function PenNames({
         <AddPenName list={list} printedCount={printedCount} />
       </div>
 
-      <PasteSeveral everyone={everyone} printedCount={printedCount} />
+      <PasteSeveral
+        everyone={everyone}
+        printedCount={printedCount}
+        penNames={archive.penNames}
+      />
       <ArticleRows archive={archive} />
     </Section>
   );
@@ -127,7 +134,7 @@ function PenNameRow({ pen, list }: { pen: PenName; list: string }) {
   const [names, setNames] = useState(pen.realName.join(", "));
 
   return (
-    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 text-sm">
+    <li className="group flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 text-sm">
       <span className="w-44 shrink-0 font-medium">{pen.byline}</span>
       {editing ? (
         <form
@@ -150,7 +157,10 @@ function PenNameRow({ pen, list }: { pen: PenName; list: string }) {
                         }))
                       : [{ byline: pen.byline, realName: "" }],
                 },
-                done: `Saved ${pen.byline}`,
+                done:
+                  realNames.length > 0
+                    ? `${pen.byline} now counts as ${realNames.join(" and ")}`
+                    : `${pen.byline} is no longer a pen name`,
               },
               { onSuccess: () => setEditing(false) },
             );
@@ -162,7 +172,7 @@ function PenNameRow({ pen, list }: { pen: PenName; list: string }) {
             className="h-8 flex-1"
             value={names}
             onChange={(event) => setNames(event.target.value)}
-            aria-label={`Who writes as ${pen.byline}`}
+            aria-label={`Who is behind ${pen.byline}`}
           />
           <Button size="xs" type="submit" disabled={save.isPending}>
             Save
@@ -185,7 +195,7 @@ function PenNameRow({ pen, list }: { pen: PenName; list: string }) {
           <span className="text-muted-foreground tabular-nums">
             {pen.articles} {pen.articles === 1 ? "article" : "articles"}
           </span>
-          <span className="flex gap-1">
+          <span className="reveal-on-hover flex gap-1">
             <Button variant="ghost" size="xs" onClick={() => setEditing(true)}>
               Edit
             </Button>
@@ -285,9 +295,11 @@ function AddPenName({
 function PasteSeveral({
   everyone,
   printedCount,
+  penNames,
 }: {
   everyone: string[];
   printedCount: (byline: string) => number;
+  penNames: PenName[];
 }) {
   const save = useEdit();
   const [text, setText] = useState("");
@@ -301,7 +313,10 @@ function PasteSeveral({
       .map((part) => part.trim());
     return { line, byline, realName };
   });
-  const valid = parsed.filter((p) => p.byline && p.realName);
+  /* a header row copied from a spreadsheet is not a pen name */
+  const header = (p: (typeof parsed)[number]) =>
+    /^(pen ?name|byline)s?$/i.test(p.byline);
+  const valid = parsed.filter((p) => p.byline && p.realName && !header(p));
 
   return (
     <Collapsible>
@@ -325,21 +340,31 @@ function PasteSeveral({
               {parsed.map((p, index) => {
                 const count = p.byline ? printedCount(p.byline) : 0;
                 const known = everyone.some((n) => same(n, p.realName));
+                const was = penNames.find((pen) => same(pen.byline, p.byline));
+                const replaces =
+                  was && !was.realName.some((n) => same(n, p.realName))
+                    ? was.realName.join(" and ")
+                    : null;
                 return (
                   <li
                     key={index}
-                    className="flex flex-wrap items-baseline gap-x-3 px-3 py-1.5"
+                    className="flex flex-wrap items-baseline gap-x-2 px-3 py-1.5"
                   >
-                    {p.byline && p.realName ? (
+                    {header(p) ? (
+                      <span className="text-muted-foreground">
+                        Skipped the header row
+                      </span>
+                    ) : p.byline && p.realName ? (
                       <>
                         <span className="font-medium">{p.byline}</span>
-                        <span className="text-muted-foreground">→</span>
+                        <span className="text-muted-foreground">counts as</span>
                         <span>{p.realName}</span>
-                        <span className="text-muted-foreground ml-auto text-xs">
+                        <span className="text-muted-foreground ml-auto">
                           {count === 0
                             ? "Not printed yet"
                             : `${count} ${count === 1 ? "article" : "articles"}`}
-                          {!known && " · new name"}
+                          {!known && " · not credited yet"}
+                          {replaces && ` · replaces ${replaces}`}
                         </span>
                       </>
                     ) : (
@@ -468,10 +493,17 @@ function Labels({ archive }: { archive: Archive }) {
 
   return (
     <Section
+      id="labels"
       title="Credit labels"
-      description="A short paragraph that starts with one of these and a colon is a credit line."
+      description="How a credit line starts."
     >
       <div className="rounded-xl border">
+        <AddLabel
+          busy={save.isPending}
+          onAdd={(label, done) =>
+            saveAll([...archive.labels, label], `Added “${label.label}”`, done)
+          }
+        />
         <ul className="divide-y">
           {archive.labels.map((label, index) => (
             <LabelRow
@@ -502,12 +534,6 @@ function Labels({ archive }: { archive: Archive }) {
             />
           ))}
         </ul>
-        <AddLabel
-          busy={save.isPending}
-          onAdd={(label, done) =>
-            saveAll([...archive.labels, label], `Added “${label.label}”`, done)
-          }
-        />
       </div>
     </Section>
   );
@@ -585,7 +611,7 @@ function LabelRow({
     );
 
   return (
-    <li className="flex items-center gap-4 px-4 py-2.5 text-sm">
+    <li className="group flex items-center gap-4 px-4 py-2.5 text-sm">
       <span className="w-44 font-medium">{label.label}:</span>
       <span className="text-muted-foreground flex-1">
         {ROLE_NAMES[label.role]}
@@ -595,7 +621,7 @@ function LabelRow({
           ? "Unused"
           : `${uses} ${uses === 1 ? "article" : "articles"}`}
       </span>
-      <span className="flex gap-1">
+      <span className="reveal-on-hover flex gap-1">
         <Button variant="ghost" size="xs" onClick={() => setEditing(true)}>
           Edit
         </Button>
@@ -619,7 +645,7 @@ function AddLabel({
 
   return (
     <form
-      className="bg-muted/30 flex flex-wrap items-center gap-2 border-t px-4 py-3"
+      className="bg-muted/30 flex flex-wrap items-center gap-2 border-b px-4 py-3"
       onSubmit={(event) => {
         event.preventDefault();
         if (!label.trim()) return;
@@ -630,7 +656,7 @@ function AddLabel({
     >
       <Input
         className="bg-background h-8 w-56"
-        placeholder="New label, like Photos by"
+        placeholder="New label, like Photos by:"
         value={label}
         onChange={(event) => setLabel(event.target.value)}
       />
@@ -660,7 +686,7 @@ function SheetStatus({ archive }: { archive: Archive }) {
   const { sheet } = archive;
   const status =
     sheet.status === "unconfigured"
-      ? `Not connected: ${sheet.missing.join(" and ")} unset.`
+      ? "Not connected yet."
       : sheet.status === "failed"
         ? `Couldn't be read: ${sheet.reason}`
         : sheet.missingTabs.length > 0
@@ -668,13 +694,15 @@ function SheetStatus({ archive }: { archive: Archive }) {
           : "Connected.";
 
   return (
-    <Section
-      title="The Sheet"
-      description="Where HareWare keeps what WordPress doesn't. It's private to the board."
-    >
+    <Section title="The Sheet">
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <span
-          className={sheet.status === "read" ? undefined : "text-destructive"}
+          className={sheet.status === "failed" ? "text-destructive" : undefined}
+          title={
+            sheet.status === "unconfigured"
+              ? `${sheet.missing.join(" and ")} unset`
+              : undefined
+          }
         >
           {status}
         </span>
@@ -683,7 +711,7 @@ function SheetStatus({ archive }: { archive: Archive }) {
             href={sheet.url}
             target="_blank"
             rel="noreferrer"
-            className={buttonVariants({ variant: "outline", size: "sm" })}
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
           >
             Open in Google Sheets <ExternalLinkIcon />
           </a>

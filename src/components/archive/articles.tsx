@@ -3,6 +3,7 @@ import { ExternalLinkIcon, PencilIcon, PlusIcon, XIcon } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { DataTable, sortable } from "~/components/data-table";
 import { Button, buttonVariants } from "~/components/ui/button";
+import { cn } from "~/lib/utils";
 import { Input } from "~/components/ui/input";
 import {
   Sheet,
@@ -81,7 +82,8 @@ function Articles({ archive, filters }: ViewProps) {
         );
   }, [archive, filters]);
 
-  const anyOther = rows.some((a) => a.credits.some((c) => c.role === "other"));
+  /* "other" credits are rare, so their column waits until someone asks for them */
+  const anyOther = filters.roles.includes("other");
 
   const columns = useMemo<ColumnDef<ArchiveArticle, unknown>[]>(
     () => [
@@ -224,7 +226,7 @@ function ArticlePanel({
             href={article.link}
             target="_blank"
             rel="noreferrer"
-            className={buttonVariants({ variant: "outline", size: "sm" })}
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
           >
             View <ExternalLinkIcon />
           </a>
@@ -232,7 +234,7 @@ function ArticlePanel({
             href={EDIT_IN_WORDPRESS(article.id)}
             target="_blank"
             rel="noreferrer"
-            className={buttonVariants({ variant: "outline", size: "sm" })}
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
           >
             Edit in WordPress <ExternalLinkIcon />
           </a>
@@ -252,10 +254,6 @@ function ArticlePanel({
             everyone={everyone}
           />
         ))}
-        <p className="text-muted-foreground text-xs">
-          Changes here apply to this article only. Fix a misspelled byline in
-          WordPress instead, so readers see it too.
-        </p>
       </div>
     </>
   );
@@ -341,7 +339,11 @@ function RoleEditor({
               list={list}
               className="h-8"
               value={renamed[byline] ?? ""}
-              placeholder={fallback(byline)}
+              placeholder={
+                fallback(byline) === byline
+                  ? "as printed"
+                  : `${fallback(byline)} (pen name)`
+              }
               onChange={(event) =>
                 setRenamed({ ...renamed, [byline]: event.target.value })
               }
@@ -408,11 +410,11 @@ function RoleEditor({
                     role,
                     entries: [],
                   },
-                  done: `“${article.title}” uses its printed names again`,
+                  done: `“${article.title}” is back to its printed bylines`,
                 })
               }
             >
-              Use printed names
+              Reset to bylines
             </Button>
           )}
         {changed && (
@@ -425,7 +427,7 @@ function RoleEditor({
                 setAdded(initial.added);
               }}
             >
-              Undo
+              Cancel
             </Button>
             <Button
               size="xs"

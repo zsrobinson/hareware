@@ -107,7 +107,7 @@ const plural = (count: number, one: string, many: string) =>
 function unitLine(grouped: Grouped, by: Dimension, inView: number) {
   const missing =
     inView > grouped.articles && grouped.measure === "contributions"
-      ? ` ${plural(inView - grouped.articles, "article credits", "articles credit")} no one.`
+      ? ` ${plural(inView - grouped.articles, "article has", "articles have")} no credits.`
       : "";
   const counted =
     grouped.measure === "contributions"
@@ -187,11 +187,12 @@ function Charts({ archive, filters }: ViewProps) {
     <div className="space-y-4">
       <figure className="bg-card rounded-xl border">
         {/* the questions first; the knobs behind them */}
-        <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+        <div className="flex items-center justify-between gap-2 border-b px-3">
           <div
             role="tablist"
             aria-label="Quick views"
-            className="-mx-1 flex min-w-0 flex-1 gap-1 overflow-x-auto px-1"
+            /* scrolls on a phone, fading at the edge so it reads as more */
+            className="-mx-1 flex min-w-0 flex-1 gap-1 overflow-x-auto [mask-image:linear-gradient(to_right,black_80%,transparent)] px-1 sm:[mask-image:none]"
           >
             {QUICK.map((quick) => (
               <button
@@ -205,7 +206,7 @@ function Charts({ archive, filters }: ViewProps) {
                 }}
                 className={cn(
                   /* the active view is underlined, so a hovered tab never looks chosen */
-                  "-mb-2 h-10 shrink-0 border-b-2 px-3 text-sm whitespace-nowrap transition-colors",
+                  "h-11 shrink-0 border-b-2 px-3 text-sm whitespace-nowrap transition-colors",
                   active === quick
                     ? "border-foreground text-foreground font-medium"
                     : "text-muted-foreground hover:text-foreground border-transparent",
@@ -303,7 +304,7 @@ function Charts({ archive, filters }: ViewProps) {
                   title="Still running, or cut off by the period filter"
                 >
                   <HatchSwatch />
-                  partly counted
+                  Partly counted
                 </span>
               )}
             </div>

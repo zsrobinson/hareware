@@ -168,6 +168,19 @@ function Shell({
           setState={setState}
           searchPlaceholder={searchPlaceholder}
           roleFilter={roleFilter}
+          refresh={
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9"
+              onClick={() => void refresh()}
+              disabled={refreshing}
+              title={`Read from WordPress ${formatDateTime(archive.fetchedAt)}`}
+            >
+              <RefreshCwIcon className={cn(refreshing && "animate-spin")} />
+              Refresh
+            </Button>
+          }
         />
       )}
       {showFilters && <SheetNotice archive={archive} />}
@@ -179,18 +192,11 @@ function Shell({
           refreshing,
         })}
       </div>
-      <p className="text-muted-foreground flex flex-wrap items-center gap-x-2 text-xs">
-        Read from WordPress {formatDateTime(archive.fetchedAt)}.
-        <Button
-          variant="ghost"
-          size="xs"
-          onClick={() => void refresh()}
-          disabled={refreshing}
-        >
-          <RefreshCwIcon className={cn(refreshing && "animate-spin")} />
-          Refresh from WordPress
-        </Button>
-      </p>
+      {!showFilters && (
+        <p className="text-muted-foreground text-xs">
+          Read from WordPress {formatDateTime(archive.fetchedAt)}.
+        </p>
+      )}
     </div>
   );
 }
@@ -222,12 +228,15 @@ function FilterBar({
   setState,
   searchPlaceholder,
   roleFilter,
+  refresh,
 }: {
   archive: Archive;
   state: FilterState;
   setState: (state: FilterState) => void;
   searchPlaceholder: string;
   roleFilter: boolean;
+  /** rereading WordPress, at the end of the row on every page */
+  refresh: ReactNode;
 }) {
   const changed = JSON.stringify(state) !== JSON.stringify(DEFAULT_STATE);
 
@@ -305,6 +314,7 @@ function FilterBar({
           <XIcon /> Clear
         </Button>
       )}
+      {refresh}
     </section>
   );
 }

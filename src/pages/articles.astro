@@ -1,0 +1,26 @@
+---
+import Dashboard from "~/layouts/dashboard.astro";
+import { ArticlesPage } from "~/components/archive/articles";
+import { viewerState } from "~/lib/admin";
+import { admitted } from "~/lib/admin-guard";
+
+const who = admitted(Astro.locals);
+
+/* real names from the Sheet reach this page's data, so nothing may cache it */
+Astro.response.headers.set("cache-control", "private, no-store");
+---
+
+<Dashboard title="Articles" viewer={viewerState(who)}>
+  <div class="space-y-6">
+    <header class="space-y-1">
+      <h1 class="text-2xl font-semibold tracking-tight">Articles</h1>
+      <p class="text-muted-foreground text-sm">
+        Every published article with its section and credits. Where the Sheet
+        names the person behind a post, their name shows with the printed byline
+        beneath; elsewhere the byline counts as printed.
+      </p>
+    </header>
+
+    <ArticlesPage client:load />
+  </div>
+</Dashboard>

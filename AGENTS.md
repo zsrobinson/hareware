@@ -2,43 +2,39 @@
 
 An Astro app on Cloudflare Workers for [The Hare](https://theumdhare.com):
 public tools that turn published articles into Instagram posts, InDesign copy
-and newsletter content; a Discord bot that posts the club's recurring reminders
-on a cron; an `/article` slash command for editing Articles from Discord; and
-the membership pages (attendance kiosk, reconciler, standing) that work out who
-may vote.
+and newsletter content; a Discord bot that posts the morning social reminder;
+and, for the Editorial Board, an archive viewer (charts, people, articles,
+problems) over every published post.
 
-HareWare is **not** the article tracker. The tracker stays in Notion, maintained
-by hand, and nothing here may depend on its workflow state being current.
-[ADR 0006](docs/adr/0006-hareware-is-a-reminder-bot.md) has the argument, and
-its opening note says which of its original limits ADRs 0007, 0009 and 0010 have
-since lifted. Read it before proposing anything that reads the tracker to decide
-something.
+**WordPress is the record.** HareWare reads it live from the public REST API
+and keeps no copy. The one fact WordPress lacks — who is really behind a
+pseudonymous byline — lives in a Google Sheet owned by the club, as overrides
+only. Nothing here reads Notion or tracks work in progress.
+[ADR 0011](docs/adr/0011-wordpress-is-the-record.md) has the reasoning; read it
+before proposing that HareWare store articles or track anything unpublished.
+
+**What is in the Sheet is private.** It never goes into WordPress, the
+repository, logs, or any page or route reachable without `@Editorial Board`.
 
 ## Where things are
 
 ```
 src/lib/
-  services/{discord,notion,wordpress}/  how to talk to each outside system
+  services/{discord,google,wordpress}/  how to talk to each outside system
   automations/                          what runs on a schedule
-  articles/                             Article behavior and Notion's shapes
-  members/                              the roster: applications, matching,
-                                        kiosk, reconciler and standing
+  credits/                              the archive: parsing credits, the
+                                        Sheet's tabs, and slicing for the pages
   db/ log.ts                            the invocation record
   session · auth · admin · member       who is asking, and whether they may
   admin-routes · admin-guard · denial   which tools need the role, and the gate
+src/components/archive/                 the archive pages' islands
 src/pages/api/                          the routes those answer
 ```
 
 Three outside systems, and everything about talking to one lives in its folder:
 credentials, quirks, and the shapes it returns. **Nothing in `services/` knows
-what a reminder is**, so the slash commands and the membership pages use the
-same clients the automations do.
-
-Discord payloads and presentation stay in `services/discord`; Article behavior
-stays in `articles`. Dependencies point from the Discord adapter into Article
-modules, never back from Article modules into Discord. `members/` reads Discord
-data (applications, the member list) through `services/discord`, but never
-builds a Discord message.
+what a credit or a reminder is.** Domain modules depend on services, never the
+reverse, and `credits/` never builds a Discord message.
 
 An automation is an entry in `src/lib/automations/registry.ts` — id, hour,
 channel, and the function that runs it — plus its module. The registry is what
@@ -72,7 +68,7 @@ loudly rather than quietly serving. That last part only holds while every gated
 page actually calls it, so `nav.test.ts` checks that too. A refusal says which
 of four things is wrong rather than claiming the page does not exist; ADR 0007
 explains why, and `~/lib/denial` is the one table those four live in. The
-`/api/members/*` routes refuse with the same statuses.
+`/api/archive.json` and `/api/sheet/*` routes refuse with the same statuses.
 
 `~/lib/admin-guard` must not import `~/lib/admin` at the top level. Middleware
 is in every route's module graph, the prerendered `/custom` is built by node,
@@ -99,13 +95,20 @@ touches bindings or a route's `Request`.
 `REMINDERS_TEST_CHANNEL` is set. Messages can be deleted; the pings they send
 cannot.
 
+**A preview deploy shares production's secrets.** Every non-`main` push uploads
+a preview version that reads the same Sheet and could post to the same
+channels. Previews run no crons, but a manual trigger on one is real.
+
+**Dashboard variables do not survive a deploy.** Wrangler replaces them with
+`wrangler.jsonc`'s, so every value the code reads is a secret.
+
 ### Silent failures
 
 Everything expensive here has failed the same way: it reported success. A ping
 that rendered and notified nobody. A Notion filter that matched nothing. A
 scrubber that approved markup it never examined. A curl served by the previous
 deploy. **Read `docs/agents/silent-failures.md`** before changing anything that
-talks to Discord, Notion or the deployed Worker, and before reviewing a fix —
+talks to Discord, WordPress, Google or the deployed Worker, and before reviewing a fix —
 the second half is the shapes these bugs take in our own code, and the test that
 catches them.
 

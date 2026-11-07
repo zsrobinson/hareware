@@ -76,7 +76,7 @@ test("lets a board member through to the page they asked for", async () => {
   mockDiscord([EDITORIAL_BOARD_ROLE_ID]);
 
   const { ctx, next, rendered, locals } = context(
-    "/log",
+    "/people",
     await signedInCookie(),
   );
   const response = await guardAdmin(ctx, next);
@@ -115,7 +115,7 @@ test.each([
     }
 
     const cookie = denial === "signed-out" ? undefined : await signedInCookie();
-    const { ctx, next, rendered, locals } = context("/log", cookie);
+    const { ctx, next, rendered, locals } = context("/people", cookie);
 
     const response = await guardAdmin(ctx, next);
 
@@ -129,7 +129,7 @@ test("keeps the page's own headers on the refusal it returns", async () => {
   workers.env.SESSION_SECRET = SECRET;
   workers.env.DISCORD_BOT_TOKEN = "bot";
 
-  const { ctx, next } = context("/log");
+  const { ctx, next } = context("/people");
   const response = await guardAdmin(ctx, next);
 
   /* the security headers are set inside `next`, so dropping them here would
@@ -142,12 +142,12 @@ test("hands the refusal page somewhere to send them back to", async () => {
   workers.env.SESSION_SECRET = SECRET;
   workers.env.DISCORD_BOT_TOKEN = "bot";
 
-  const { ctx, next, locals } = context("/log?page=2");
+  const { ctx, next, locals } = context("/people?page=2");
   await guardAdmin(ctx, next);
 
   /* the query string too: signing back in should return them to the row they
      were looking at, not the top of the log */
-  expect(locals.admission?.returnTo).toBe("/log?page=2");
+  expect(locals.admission?.returnTo).toBe("/people?page=2");
 });
 
 test("throws when a page reads an admission the guard never left", () => {
@@ -159,7 +159,7 @@ test("throws rather than rendering an admin page for a refused viewer", () => {
     admitted({
       admission: {
         access: { allowed: false, who: null, denial: "no-role" },
-        returnTo: "/log",
+        returnTo: "/people",
       },
     }),
   ).toThrow(/refused/);

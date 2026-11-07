@@ -55,10 +55,10 @@ test("no public tool is sitting on a guarded route", () => {
   trailing-slash form to the page, so the guard has to catch that one too
 */
 test("guards the route itself, not everything beginning with it", () => {
-  expect(isAdminPath("/log")).toBe(true);
-  expect(isAdminPath("/log/")).toBe(true);
-  expect(isAdminPath("/logout")).toBe(false);
-  expect(isAdminPath("/log/2026")).toBe(false);
+  expect(isAdminPath("/people")).toBe(true);
+  expect(isAdminPath("/people/")).toBe(true);
+  expect(isAdminPath("/peoples")).toBe(false);
+  expect(isAdminPath("/people/2026")).toBe(false);
   expect(isAdminPath("/generate")).toBe(false);
 });
 

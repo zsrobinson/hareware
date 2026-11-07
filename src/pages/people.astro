@@ -1,0 +1,25 @@
+---
+import Dashboard from "~/layouts/dashboard.astro";
+import { PeoplePage } from "~/components/archive/people";
+import { viewerState } from "~/lib/admin";
+import { admitted } from "~/lib/admin-guard";
+
+const who = admitted(Astro.locals);
+
+/* real names from the Sheet reach this page's data, so nothing may cache it */
+Astro.response.headers.set("cache-control", "private, no-store");
+---
+
+<Dashboard title="People" viewer={viewerState(who)}>
+  <div class="space-y-6">
+    <header class="space-y-1">
+      <h1 class="text-2xl font-semibold tracking-tight">People</h1>
+      <p class="text-muted-foreground text-sm">
+        Everyone credited on a published article, with real names from the Sheet
+        in place of pseudonyms. Pick a name to see their articles.
+      </p>
+    </header>
+
+    <PeoplePage client:load />
+  </div>
+</Dashboard>

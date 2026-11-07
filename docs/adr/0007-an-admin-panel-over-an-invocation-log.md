@@ -3,8 +3,14 @@
 **Status:** Accepted — 2026-09-04. Refusals and routes revised 2026-09-04 and
 2026-09-05; folded in below.
 
-Amends [ADR 0006](0006-hareware-is-a-reminder-bot.md), which removed every
-signed-in surface and ruled out a database of our own.
+Amends ADR 0006, which removed every signed-in surface and ruled out a
+database of our own.
+
+> **Since [ADR 0011](0011-wordpress-is-the-record.md):** the panel is the
+> archive pages and the social reminder's page, which folds the log and the
+> manual trigger together. What follows about sign-in, the role check and D1
+> still holds; mentions of Notion, `/article` and the meeting reminder are
+> history.
 
 ## Context
 

@@ -4,8 +4,8 @@ The traps in this codebase that report success. Each one here cost real time,
 and none is discoverable by reading the config — the API returns `200`, the
 build goes green, the tests pass, and the thing you wanted did not happen.
 
-Read this before changing anything that talks to Discord, Notion, or the
-deployed Worker.
+Read this before changing anything that talks to Discord, WordPress, Google,
+or the deployed Worker.
 
 The habit all of them argue for: **verify, don't infer.** Every entry below was
 first diagnosed wrongly from a plausible guess, and settled by going and
@@ -33,59 +33,34 @@ strips `custom_id` while editing a message shows the user "HareWare didn't
 respond in time" — even though the endpoint returned `200` with a body Discord
 read. `togglePosted()` keeps the id for this reason.
 
-**Join requests answer `200 {}` when the bot may not read them.** Every other
-guild endpoint refuses with a clean `403`; `GET /guilds/{id}/requests` returns
-an empty object — no list, no count. The bot read fifty-one applications while
-it held Administrator, and `{}` the moment its role was narrowed to Manage
-Server; a status-code check called that success, and the sync would have
-reported "no new applications" every hour. Reading applications needs **Kick
-Members**. `approvedJoinRequests()` in
-`src/lib/services/discord/join-requests.ts` refuses an answer carrying neither a
-list nor a count, and names the permission.
+## WordPress
 
-**A join-request answer is in `response`, not `values`.** Each entry in
-`form_responses` carries both. `values` echoes the question's configured options
-and holds one empty string for every free-text field, so reading it produces a
-complete-looking set of applications in which every answer is blank.
+**WordPress.com answers a quick burst with 429, sometimes as a `200` HTML page.**
+Five pages of posts fetched back to back were enough. `allPosts()` reads pages
+one at a time through `sendPatiently`, and `readPage()` refuses any body that
+is not a JSON list, so a throttle page can never parse as "no posts".
 
-## Notion
+**`after` compares against the site's local date, whatever offset you give
+it.** The reminder asks for a day earlier than it needs and compares
+`date_gmt` itself. `date_gmt` has no zone marker either; `Date.parse` reads it
+as local time unless a `Z` is appended, which `toPost()` does.
 
-**A database is not where the rows are.** `databases/{id}` returns an empty
-`properties` and there is no `databases/{id}/query`. Resolve
-`data_sources[0].id` first and query `data_sources/{id}/query`.
+**`x-wp-totalpages` is absent on an empty result.** Read naively it is `NaN`,
+which goes into a URL. `readPage()` treats a missing header as one page.
 
-**Date filters compare to millisecond precision and assume UTC.**
-`date: { equals: "2026-09-10" }` means midnight, so it matches nothing once a
-meeting has a time on it — and the Meetings database holds both kinds, so this
-fails on half the rows and looks like "no meeting today". Query a window wide
-enough to hold the Eastern day under any offset and filter in code, as
-`findTodaysMeeting()` does.
+## Google Sheets
 
-**A date with no time carries no instant.** Notion writes it as a bare
-`YYYY-MM-DD`. Running that through a timezone parses it as UTC midnight and
-lands it on the previous evening, so a meeting with no time set is missed every
-time. `startsOn()` compares those as strings and only converts the ones with a
-`T` in them.
+**A tab that does not exist and a tab with no rows are different answers.**
+`Sheets.read()` leaves a missing tab out of its result rather than returning
+`[]`, so a renamed `Overrides` tab is reported, not read as "no overrides".
 
-**A relation stops at 25 entries inside a page object.** A `pages/{id}` read and
-a data source query both truncate it, and `has_more` on the property is the only
-sign. A general body meeting is thirty people: standing silently stopped
-counting the twenty-sixth onward, and the kiosk, which merges into the attendee
-list before writing it back, deleted the back half of the room on the next tap.
-`relationIds()` in `src/lib/services/notion/client.ts` reads the rest from the
-property item endpoint, and only when `has_more` says to.
+**A Sheet that cannot be read must not look like an empty one.** `readSheet()`
+returns `{ status: "failed" }`, and every archive page says so in a banner,
+because otherwise every pseudonym would quietly count as its own person.
 
-**A property id goes into the URL verbatim.** Notion returns ids already
-percent-encoded (`c%3CLo`), so `encodeURIComponent` asks for a property that
-does not exist — and Notion answers `200` with an empty relation rather than a
-`404`. A caller merging against that writes the empty list back.
-
-**A relation whose target is not shared with the integration disappears.**
-Notion drops it from the schema and reads its value as `[]`, which looks like an
-empty field. A write appending to it deletes the entries nobody could see. Check
-the schema before writing a relation, as `notSharing()` in
-`src/lib/articles/choices.ts` does, and treat absent and empty as different
-answers.
+**A service account sees only what is shared with it.** Google answers `403`
+or `404` for a Sheet that exists but was not shared, and the setup button
+shows Google's own message, which names the cause.
 
 ## Cloudflare and Astro
 
@@ -110,8 +85,7 @@ for weeks. Every variable the code reads belongs in `HareWareEnv` in
 
 ## Testing against the real thing
 
-`#instagram-posting` and `#editorial-board` are the club's real channels, and
-the channel ids are compiled into `src/lib/automations/config.ts` rather than
+`#instagram-posting` is the club's real channel, and the channel ids are compiled into `src/lib/automations/config.ts` rather than
 supplied per environment — so a local run with no other setting posts to them
 for real. Messages can be deleted; the pings they send cannot be taken back.
 

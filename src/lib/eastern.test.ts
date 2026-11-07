@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { easternNow, easternTime } from "./eastern";
+import { dayBefore, easternInstant, easternNow } from "./eastern";
 
 describe("easternNow", () => {
   test("resolves the eastern day, hour and weekday from a utc instant", () => {
@@ -62,13 +62,27 @@ describe("easternNow", () => {
   });
 });
 
-describe("easternTime", () => {
-  test("formats an instant as a short eastern clock time", () => {
-    expect(easternTime("2026-04-14T20:00:00.000-04:00")).toBe("8pm");
-    expect(easternTime("2026-04-14T19:30:00.000-04:00")).toBe("7:30pm");
+describe("easternInstant", () => {
+  test("is 12:00 utc in summer and 13:00 utc in winter for 8am", () => {
+    expect(easternInstant("2026-09-03", 8).toISOString()).toBe(
+      "2026-09-03T12:00:00.000Z",
+    );
+    expect(easternInstant("2026-01-15", 8).toISOString()).toBe(
+      "2026-01-15T13:00:00.000Z",
+    );
   });
 
-  test("a date with no time is a calendar day and has no clock time", () => {
-    expect(easternTime("2026-09-08")).toBeUndefined();
+  test("lands on the right side of both DST changes", () => {
+    expect(easternInstant("2026-03-08", 8).toISOString()).toBe(
+      "2026-03-08T12:00:00.000Z",
+    );
+    expect(easternInstant("2026-11-01", 8).toISOString()).toBe(
+      "2026-11-01T13:00:00.000Z",
+    );
   });
+});
+
+test("the day before crosses months and years", () => {
+  expect(dayBefore("2026-03-01")).toBe("2026-02-28");
+  expect(dayBefore("2027-01-01")).toBe("2026-12-31");
 });

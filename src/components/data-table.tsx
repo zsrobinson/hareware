@@ -22,7 +22,7 @@ import {
   DownloadIcon,
   SlidersHorizontalIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { toCsv } from "~/lib/csv";
 import { Button } from "~/components/ui/button";
 import {
@@ -102,6 +102,10 @@ type Props<T> = {
   /** the columns offered as a dropdown of the values present */
   facets?: FacetedFilter[];
   searchPlaceholder?: string;
+  /** false when a search outside the table already narrows `data` */
+  searchable?: boolean;
+  /** the page's own controls, at the start of the table's toolbar */
+  toolbar?: ReactNode;
   empty?: string;
   /**
    * when set, a download button exporting what is currently on screen, named
@@ -115,6 +119,8 @@ export function DataTable<T>({
   data,
   facets = [],
   searchPlaceholder = "Search…",
+  searchable = true,
+  toolbar,
   empty = "Nothing to show.",
   csv,
 }: Props<T>) {
@@ -173,15 +179,31 @@ export function DataTable<T>({
     );
   }
 
+  /* nothing to sort, export or page through: say so and stop */
+  if (data.length === 0)
+    return (
+      <div className="space-y-3">
+        {toolbar && (
+          <div className="flex flex-wrap items-center gap-2">{toolbar}</div>
+        )}
+        <p className="text-muted-foreground rounded-lg border px-4 py-8 text-center text-sm">
+          {empty}
+        </p>
+      </div>
+    );
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder={searchPlaceholder}
-          className="h-9 max-w-xs"
-        />
+        {toolbar}
+        {searchable && (
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={searchPlaceholder}
+            className="h-9 max-w-xs"
+          />
+        )}
 
         {facets.map((facet) => {
           const column = table.getColumn(facet.id);
@@ -330,26 +352,30 @@ export function DataTable<T>({
 
       <div className="text-muted-foreground flex items-center justify-between text-sm">
         <span>
-          {table.getFilteredRowModel().rows.length} of {data.length}
+          {table.getFilteredRowModel().rows.length === data.length
+            ? `${data.length} ${data.length === 1 ? "row" : "rows"}`
+            : `${table.getFilteredRowModel().rows.length} of ${data.length} rows`}
         </span>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            Next
-          </Button>
-        </div>
+        {table.getPageCount() > 1 && (
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+            >
+              Next
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -11,7 +11,7 @@ const ATTEMPTS = 3;
 /** the wait when the response named none, doubling per attempt */
 const BACKOFF_MS = 500;
 
-/** the longest one wait, however long we were told: notion has said 60 seconds */
+/** the longest one wait, however long we were told: a server can say 60 seconds */
 const CAP_MS = 5_000;
 
 const sleep = (ms: number) => new Promise((wake) => setTimeout(wake, ms));

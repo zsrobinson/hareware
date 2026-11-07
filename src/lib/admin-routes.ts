@@ -4,12 +4,11 @@
 */
 
 export const ADMIN_ROUTES = [
-  "/attendance",
-  "/reconciler",
-  "/standing",
-  "/automations",
-  "/commands",
-  "/log",
+  "/charts",
+  "/people",
+  "/articles",
+  "/problems",
+  "/reminder",
 ] as const;
 
 export type AdminRoute = (typeof ADMIN_ROUTES)[number];

@@ -2,10 +2,8 @@ import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 import { adminAccess } from "~/lib/admin";
 import { DENIALS } from "~/lib/denial";
-import { easternNow } from "~/lib/eastern";
 import { ALL, runAutomations, type Which } from "~/lib/automations/run";
 import { automation } from "~/lib/automations/registry";
-import { refreshCommands } from "~/lib/services/discord/refresh-commands";
 
 export const prerender = false;
 
@@ -48,16 +46,6 @@ export const POST: APIRoute = async ({ request }) => {
 
   const query = new URL(request.url).searchParams;
 
-  /* `?sync=1` refreshes the command surface only, and runs no automation */
-  if (query.get("sync")) {
-    const sync = await refreshCommands(env);
-
-    return Response.json(
-      { sync },
-      { status: sync.outcome === "failed" ? 500 : 200 },
-    );
-  }
-
   /* `?only=<id>` fires one; all by default */
   const only = query.get("only");
   if (only && !automation(only)) {
@@ -76,7 +64,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   const report = await runAutomations(
     options,
-    easternNow(new Date()),
+    new Date(),
     which,
     "manual",
     actor,

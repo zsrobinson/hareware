@@ -80,7 +80,7 @@ test("says it could not check a signed-in editor during an outage", async () => 
 });
 
 /* with nothing configured, each automation reports itself unset offline */
-test("runs both reminders for a correct secret", async () => {
+test("runs the reminder for a correct secret", async () => {
   const response = await call(
     { REMINDERS_TRIGGER_SECRET: SECRET },
     `Bearer ${SECRET}`,
@@ -88,23 +88,7 @@ test("runs both reminders for a correct secret", async () => {
 
   expect(response.status).toBe(200);
   const report = await response.json();
-  expect(Object.keys(report as object)).toEqual([
-    "meeting-reminder",
-    "social-ping",
-    "application-sync",
-  ]);
-});
-
-test("?only=meeting runs just the meeting reminder", async () => {
-  const response = await call(
-    { REMINDERS_TRIGGER_SECRET: SECRET },
-    `Bearer ${SECRET}`,
-    "?only=meeting",
-  );
-
-  const report = (await response.json()) as Record<string, string>;
-  expect(report["social-ping"]).toBe("not requested");
-  expect(report["meeting-reminder"]).not.toBe("not requested");
+  expect(Object.keys(report as object)).toEqual(["social-ping"]);
 });
 
 test("rejects an unknown reminder name", async () => {

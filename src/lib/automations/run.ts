@@ -1,6 +1,5 @@
-import { easternNow, type EasternNow } from "~/lib/eastern";
+import { easternNow } from "~/lib/eastern";
 import { record } from "~/lib/log";
-import { refreshCommands } from "~/lib/services/discord/refresh-commands";
 import { reportFailure } from "./alert";
 import { failed, type Result } from "~/lib/result";
 import { AUTOMATIONS, type Automation, type AutomationId } from "./registry";
@@ -10,8 +9,8 @@ export type Which = Set<AutomationId>;
 export const ALL: Which = new Set(AUTOMATIONS.map((a) => a.id));
 
 /**
- * Must match `triggers.crons` in wrangler.jsonc. Reminders are due by Eastern
- * hour, so another schedule ticking inside 8am would resend them.
+ * Must match `triggers.crons` in wrangler.jsonc. The reminder is due by Eastern
+ * hour, so another schedule ticking inside 8am would resend it.
  */
 const REMINDER_CRON = "0 * * * *";
 
@@ -19,32 +18,27 @@ const REMINDER_CRON = "0 * * * *";
  * the cron entry: due by Eastern hour, so DST cannot move it (`~/lib/eastern`)
  */
 export async function runScheduled(controller: ScheduledController, env: Env) {
-  const eastern = easternNow(new Date(controller.scheduledTime));
+  const at = new Date(controller.scheduledTime);
+  const eastern = easternNow(at);
 
   /* `REMINDERS_IGNORE_HOUR` ignores the hour, never the schedule */
   const hourly = controller.cron === REMINDER_CRON;
   const due = new Set(
     hourly
       ? AUTOMATIONS.filter(
-          (a) =>
-            a.hour === "hourly" ||
-            a.hour === eastern.hour ||
-            env.REMINDERS_IGNORE_HOUR,
+          (a) => a.hour === eastern.hour || env.REMINDERS_IGNORE_HOUR,
         ).map((a) => a.id)
       : [],
   );
 
   if (due.size > 0) {
     try {
-      await runAutomations(env, eastern, due, "cron");
+      await runAutomations(env, at, due, "cron");
     } catch (error) {
       /* inside `waitUntil` a rejection would only surface as unhandled */
       console.error("[automations] failed before dispatch", error);
     }
   }
-
-  /* after the reminders: a slow Notion here must not delay the morning ping */
-  await refreshTheCommandSurface(env);
 }
 
 /**
@@ -53,7 +47,7 @@ export async function runScheduled(controller: ScheduledController, env: Env) {
  */
 export async function runAutomations(
   env: Env,
-  eastern: EasternNow,
+  at: Date,
   which: Which,
   source: "cron" | "manual" = "manual",
   actor?: string,
@@ -61,9 +55,7 @@ export async function runAutomations(
   const asked = AUTOMATIONS.filter((a) => which.has(a.id));
 
   /* all run even if one throws */
-  const results = await Promise.allSettled(
-    asked.map((a) => a.run(env, eastern)),
-  );
+  const results = await Promise.allSettled(asked.map((a) => a.run(env, at)));
 
   const report: Record<string, string> = {};
   for (const a of AUTOMATIONS) {
@@ -118,32 +110,4 @@ async function recordRun(
     summary: result.summary,
     actor,
   });
-}
-
-/**
- * logs only a refresh that went wrong: 24 healthy rows a day would bury the
- * reminders
- */
-async function refreshTheCommandSurface(env: Env) {
-  try {
-    const result = await refreshCommands(env);
-
-    if (result.outcome === "ok" || result.outcome === "skipped") return;
-
-    await record(env.DB, {
-      source: "cron",
-      action: "command-surface",
-      outcome: result.outcome,
-      summary: result.summary,
-    });
-  } catch (error) {
-    console.error("[articles] command surface refresh failed", error);
-
-    await record(env.DB, {
-      source: "cron",
-      action: "command-surface",
-      outcome: "failed",
-      summary: `command surface refresh threw: ${String(error)}`,
-    });
-  }
 }

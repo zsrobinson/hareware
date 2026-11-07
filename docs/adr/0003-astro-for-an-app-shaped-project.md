@@ -1,7 +1,7 @@
 # 3. Astro, for a project that is becoming an app
 
-**Status:** Superseded by [ADR 0006](0006-hareware-is-a-reminder-bot.md) —
-2026-09-03
+**Status:** Superseded by ADR 0006 (since deleted; see
+[ADR 0011](0011-wordpress-is-the-record.md)) — 2026-09-03
 
 > The premise — that v2 turns this into app-shaped work — did not happen, so
 > staying on Astro was never in question. `nuqs` was never installed. TanStack

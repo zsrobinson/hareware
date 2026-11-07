@@ -1,0 +1,165 @@
+---
+import { env } from "cloudflare:workers";
+import Dashboard from "~/layouts/dashboard.astro";
+import { ReminderLog } from "~/components/reminder-log";
+import { viewerState } from "~/lib/admin";
+import { admitted } from "~/lib/admin-guard";
+import { REMINDER_HOUR, SOCIAL_CHANNEL_ID } from "~/lib/automations/config";
+import { channelLabel, hourLabel } from "~/lib/automations/registry";
+import { planSocialPing } from "~/lib/automations/social";
+import { easternInstant, easternNow } from "~/lib/eastern";
+import { faces } from "~/lib/faces";
+import { recent } from "~/lib/log";
+import { ROLE_NAMES } from "~/lib/services/discord/config";
+
+const who = admitted(Astro.locals);
+
+Astro.response.headers.set("cache-control", "private, no-store");
+
+/* the next 8am, and what it would announce if nothing else published first */
+const now = new Date();
+const today = easternNow(now);
+const todayRun = easternInstant(today.date, REMINDER_HOUR);
+const nextRun =
+  todayRun > now
+    ? todayRun
+    : easternInstant(
+        easternNow(new Date(now.getTime() + 24 * 3600_000)).date,
+        REMINDER_HOUR,
+      );
+const plan = await planSocialPing(nextRun);
+
+/* a log that cannot be read must not take the page down with it */
+let rows: Awaited<ReturnType<typeof recent>> = [];
+let logError: string | undefined;
+try {
+  rows = env.DB
+    ? (await recent(env.DB, 300)).filter(
+        (row) => row.action === "social-ping" || row.action === "mark-posted",
+      )
+    : [];
+} catch (error) {
+  console.error("[reminder] could not read the log", error);
+  logError = "The history could not be read just now.";
+}
+const profiles = await faces(rows.map((row) => row.actor));
+const names = Object.fromEntries(
+  Object.entries(profiles).map(([id, profile]) => [id, profile.displayName]),
+);
+
+const lastRun = rows.find((row) => row.action === "social-ping");
+const LAST_RUN = {
+  ok: "Posted",
+  skipped: "Nothing to post",
+  misconfigured: "Not set up",
+  failed: "Failed",
+} as const;
+
+const eastern = (date: Date | string | number) =>
+  new Date(date).toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+---
+
+<Dashboard title="Social Reminder" viewer={viewerState(who)}>
+  <div class="space-y-6">
+    <header class="space-y-1">
+      <h1 class="text-2xl font-semibold tracking-tight">Social Reminder</h1>
+      <p class="text-muted-foreground text-sm">
+        Every day at {hourLabel(REMINDER_HOUR)} Eastern, HareWare posts everything
+        published since the previous morning to {
+          channelLabel(SOCIAL_CHANNEL_ID)
+        } and pings that day's poster role. Nothing published means nothing posted.
+      </p>
+    </header>
+
+    <div class="grid items-start gap-4 md:grid-cols-2">
+      <section class="bg-card space-y-2 rounded-xl border p-4 sm:p-5">
+        <h2 class="font-semibold">Last run</h2>
+        {
+          lastRun ? (
+            <>
+              <p class="font-semibold">
+                {LAST_RUN[lastRun.outcome]}
+                <span class="text-muted-foreground font-normal">
+                  {" "}
+                  · {eastern(lastRun.at * 1000)}
+                </span>
+              </p>
+              <p class="text-muted-foreground text-sm">{lastRun.summary}</p>
+            </>
+          ) : (
+            <p class="text-muted-foreground text-sm">
+              {logError ?? "No run recorded yet."}
+            </p>
+          )
+        }
+      </section>
+
+      <section class="bg-card space-y-2 rounded-xl border p-4 sm:p-5">
+        <h2 class="font-semibold">Next run</h2>
+        <p class="font-semibold">
+          {eastern(nextRun)}
+          {
+            plan.status === "ready" && (
+              <span class="text-muted-foreground font-normal">
+                {" "}
+                · pings @{ROLE_NAMES[plan.roleId] ?? plan.weekday}
+              </span>
+            )
+          }
+        </p>
+        {
+          plan.status !== "ready" ? (
+            <p class="text-destructive text-sm">{plan.summary}</p>
+          ) : plan.articles.length === 0 ? (
+            <p class="text-muted-foreground text-sm">
+              Nothing has published since {eastern(plan.since)}. If that holds,
+              it posts nothing.
+            </p>
+          ) : (
+            <>
+              <p class="text-muted-foreground text-sm">
+                Would announce, so far ({plan.articles.length}):
+              </p>
+              <ul class="divide-y rounded-lg border text-sm">
+                {plan.articles.map((article) => (
+                  <li class="flex flex-wrap items-baseline justify-between gap-2 px-3 py-2">
+                    <a
+                      href={article.link}
+                      target="_blank"
+                      rel="noreferrer"
+                      class="font-medium hover:underline"
+                    >
+                      {article.title}
+                    </a>
+                    <span class="text-muted-foreground text-xs">
+                      {eastern(article.publishedAt)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )
+        }
+      </section>
+    </div>
+
+    <section class="space-y-2">
+      <div>
+        <h2 class="font-semibold">History</h2>
+        <p class="text-muted-foreground text-sm">
+          Every run, and every time someone in Discord flips a post's button
+          between "Not posted" and "Posted" once it is on Instagram.
+        </p>
+      </div>
+      {logError && <p class="text-destructive text-sm">{logError}</p>}
+      <ReminderLog rows={rows} names={names} client:load />
+    </section>
+  </div>
+</Dashboard>

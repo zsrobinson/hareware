@@ -10,7 +10,7 @@ import { viewerState } from "~/lib/admin";
 const admission = Astro.locals.admission;
 
 if (!admission || admission.access.allowed) {
-  return Astro.redirect("/automations");
+  return Astro.redirect("/charts");
 }
 
 const { access, returnTo } = admission;

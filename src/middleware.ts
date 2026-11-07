@@ -12,7 +12,7 @@ const POLICY = [
   "base-uri 'self'",
   "object-src 'none'",
   "form-action 'self'",
-  /* clickjacking /automations would fire a real automation */
+  /* clickjacking an admin page could press a button that writes or posts */
   "frame-ancestors 'none'",
 ].join("; ");
 

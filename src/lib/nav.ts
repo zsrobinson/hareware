@@ -1,14 +1,13 @@
 import {
-  ClipboardCheckIcon,
-  CodeIcon,
+  BellIcon,
+  ChartColumnIcon,
   FileTextIcon,
   ImageIcon,
   MailIcon,
-  ScaleIcon,
-  SquareActivityIcon,
+  NewspaperIcon,
+  TriangleAlertIcon,
   TypeIcon,
   UsersIcon,
-  ZapIcon,
   type LucideIcon,
 } from "lucide-react";
 import type { AdminRoute } from "./admin-routes";
@@ -36,12 +35,11 @@ export const toolsNav: NavItem[] = [
 
 /* The admin tools, shown to everybody: the guard refuses in person (ADR 0007). */
 export const adminNav: (NavItem & { href: AdminRoute })[] = [
-  { href: "/attendance", label: "Attendance", icon: ClipboardCheckIcon },
-  { href: "/reconciler", label: "Reconciler", icon: UsersIcon },
-  { href: "/standing", label: "Standing", icon: ScaleIcon },
-  { href: "/automations", label: "Automations", icon: ZapIcon },
-  { href: "/commands", label: "Slash Commands", icon: CodeIcon },
-  { href: "/log", label: "Invocation Log", icon: SquareActivityIcon },
+  { href: "/charts", label: "Charts", icon: ChartColumnIcon },
+  { href: "/people", label: "People", icon: UsersIcon },
+  { href: "/articles", label: "Articles", icon: NewspaperIcon },
+  { href: "/problems", label: "Problems", icon: TriangleAlertIcon },
+  { href: "/reminder", label: "Social Reminder", icon: BellIcon },
 ];
 
 /* `/` would otherwise light up on every page */

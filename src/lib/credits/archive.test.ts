@@ -1,7 +1,10 @@
 import { expect, test } from "vitest";
 import { buildArchive, type SourcePost } from "./archive";
 import { DEFAULT_LABELS } from "./labels";
-import type { Override, SheetState } from "./sheet";
+import type { Ignored, Override, SheetState } from "./sheet";
+
+/* invented names only: what the Sheet maps is private, so no test may pair a
+   real byline with a real person */
 
 const post = (
   id: number,
@@ -21,13 +24,21 @@ const categories = new Map([
   [1, "Uncategorized"],
 ]);
 
-const read = (overrides: Omit<Override, "row">[] = []): SheetState => ({
+const row = (o: Partial<Override> & { realName: string }): Override => ({
+  postId: null,
+  role: null,
+  byline: null,
+  note: "",
+  ...o,
+});
+
+const read = (
+  overrides: Override[] = [],
+  ignored: Ignored[] = [],
+): SheetState => ({
   status: "read",
-  overrides: overrides.map((override, index) => ({
-    ...override,
-    row: index + 2,
-  })),
-  ignored: [],
+  overrides,
+  ignored,
   labels: null,
   problems: [],
   tabs: { overrides: true, labels: true, ignored: true },
@@ -42,93 +53,161 @@ const build = (posts: SourcePost[], sheet: SheetState = read()) =>
     fetchedAt: "now",
   });
 
-const credited = (paragraphs: string[]) => post(1, paragraphs);
+const names = (archive: ReturnType<typeof build>, index = 0, role = "writer") =>
+  archive.articles[index]!.credits.filter((c) => c.role === role).flatMap((c) =>
+    c.contributors.map((p) => p.name),
+  );
 
-test("credits a post as printed when the Sheet has nothing for it", () => {
-  const [article] = build([
-    credited(["Article by: Penn Name", "Image Credits: Ida Imager"]),
-  ]).articles;
-
-  expect(article!.section).toBe("News");
-  expect(article!.credits.map((credit) => credit.names)).toEqual([
-    ["Penn Name"],
-    ["Ida Imager"],
+test("credits an article as printed when the Sheet says nothing about it", () => {
+  const archive = build([
+    post(1, ["Article by: Penn Name", "Image Credits: Ida Imager"]),
   ]);
-  expect(article!.problems).toEqual([]);
+
+  expect(names(archive)).toEqual(["Penn Name"]);
+  expect(names(archive, 0, "image")).toEqual(["Ida Imager"]);
+  expect(archive.articles[0]!.problems).toEqual([]);
 });
 
-test("the Sheet's rows replace a role's names, and keep the printed byline", () => {
-  const [article] = build(
+test("one row for a pen name resolves it on every article, and only that name", () => {
+  const archive = build(
     [
-      credited([
-        "Article by: Penn Name and Sam Second",
-        "Image Credits: Ida Imager",
-      ]),
+      post(1, ["Article by: Penn Name and Sam Second", "Image Credits: B"]),
+      post(2, ["Article by: Penn Name", "Image Credits: B"]),
+    ],
+    read([row({ byline: "penn name", realName: "Riley Real" })]),
+  );
+
+  expect(names(archive, 0)).toEqual(["Riley Real", "Sam Second"]);
+  expect(names(archive, 1)).toEqual(["Riley Real"]);
+  const riley = archive.articles[0]!.credits[0]!.contributors[0]!;
+  expect(riley).toEqual({
+    name: "Riley Real",
+    byline: "Penn Name",
+    source: "everywhere",
+  });
+  expect(archive.penNames).toEqual([
+    { byline: "penn name", realName: ["Riley Real"], articles: 2 },
+  ]);
+});
+
+test("a row for one article wins over the row for every article", () => {
+  const archive = build(
+    [
+      post(1, ["Article by: Penn Name", "Image Credits: B"]),
+      post(2, ["Article by: Penn Name", "Image Credits: B"]),
     ],
     read([
-      { postId: 1, role: "writer", realName: "Riley Real" },
-      { postId: 1, role: "writer", realName: "Sam Second" },
+      row({ byline: "Penn Name", realName: "Riley Real" }),
+      row({
+        postId: 2,
+        role: "writer",
+        byline: "Penn Name",
+        realName: "Other Person",
+      }),
     ]),
-  ).articles;
+  );
 
-  const writer = article!.credits.find((credit) => credit.role === "writer")!;
-  expect(writer.names).toEqual(["Riley Real", "Sam Second"]);
-  expect(writer.printed).toBe("Penn Name and Sam Second");
-  expect(writer.overridden).toBe(true);
-  /* the image credit had no rows, so it is untouched */
-  expect(
-    article!.credits.find((credit) => credit.role === "image")!.overridden,
-  ).toBe(false);
+  expect(names(archive, 0)).toEqual(["Riley Real"]);
+  expect(names(archive, 1)).toEqual(["Other Person"]);
 });
 
-test("a role the post never printed can still be credited from the Sheet", () => {
-  const [article] = build(
-    [credited(["Article by: Somebody"])],
-    read([{ postId: 1, role: "image", realName: "Cleo Drawer" }]),
-  ).articles;
+test("a pen name can stand for two people", () => {
+  const archive = build(
+    [post(1, ["Article by: Penn Name", "Image Credits: B"])],
+    read([
+      row({ byline: "Penn Name", realName: "Riley Real" }),
+      row({ byline: "Penn Name", realName: "Sam Second" }),
+    ]),
+  );
 
-  expect(
-    article!.credits.find((credit) => credit.role === "image")?.names,
-  ).toEqual(["Cleo Drawer"]);
-  expect(article!.problems.map((problem) => problem.kind)).not.toContain(
+  expect(names(archive)).toEqual(["Riley Real", "Sam Second"]);
+});
+
+test("a row with no byline adds someone the article does not print", () => {
+  const archive = build(
+    [post(1, ["Article by: Somebody"])],
+    read([row({ postId: 1, role: "image", realName: "Cleo Drawer" })]),
+  );
+
+  expect(names(archive, 0, "image")).toEqual(["Cleo Drawer"]);
+  expect(archive.articles[0]!.problems.map((p) => p.kind)).not.toContain(
     "no-image",
   );
 });
 
-test("a Sheet row for a post that does not exist is reported, not dropped", () => {
+test("a row for an article that does not exist is reported, not dropped", () => {
   const archive = build(
-    [credited(["Article by: A", "Image Credits: B"])],
-    read([{ postId: 99, role: "writer", realName: "X" }]),
+    [post(1, ["Article by: A", "Image Credits: B"])],
+    read([row({ postId: 99, role: "writer", byline: "X", realName: "Y" })]),
   );
 
-  expect(archive.sheetProblems).toEqual([
-    { tab: "Overrides", row: 2, message: "no published post has id 99" },
+  expect(archive.sheetProblems.map((p) => p.message)).toEqual([
+    "no published article has post id 99",
   ]);
 });
 
-test("flags a post with no credits and no section", () => {
+test("flags an article with no credits and no section", () => {
   const [article] = build([post(1, ["Just a body paragraph."], [1])]).articles;
 
-  expect(article!.problems.map((problem) => problem.kind).sort()).toEqual([
+  expect(article!.problems.map((p) => p.kind).sort()).toEqual([
     "no-image",
     "no-writer",
     "uncategorized",
   ]);
 });
 
-test("flags a credit line that named nobody", () => {
+test("flags a line shaped like a credit that no label reads", () => {
   const [article] = build([
-    credited(["Article by: the whole staff", "Image Credits: B"]),
+    post(1, [
+      "Article by: A",
+      "Image Credits: B",
+      "Squirrel Photos by: Cleo Drawer",
+    ]),
   ]).articles;
 
   expect(article!.problems).toEqual([
-    { kind: "unparsed", detail: "Article by: the whole staff" },
+    { kind: "unrecognised", detail: "Squirrel Photos by: Cleo Drawer" },
   ]);
 });
 
-test("a Sheet that could not be read leaves every post as printed, and says so", () => {
+test("an article marked not a problem carries the note", () => {
   const archive = build(
-    [credited(["Article by: Penn Name", "Image Credits: B"])],
+    [post(1, ["Just a body."])],
+    read([], [{ postId: 1, names: null, note: "an editor's note" }]),
+  );
+
+  expect(archive.articles[0]!.ignored).toBe("an editor's note");
+});
+
+test("points at names one letter apart, and remembers different people", () => {
+  const posts = [
+    post(1, ["Article by: Cleo Dombrosky", "Image Credits: Cleo Dombroksy"]),
+    post(2, ["Article by: Cleo Dombrosky", "Image Credits: Ida Imager"]),
+  ];
+
+  expect(build(posts).similarNames).toEqual([
+    { names: ["Cleo Dombroksy", "Cleo Dombrosky"], counts: [1, 2] },
+  ]);
+  expect(
+    build(
+      posts,
+      read(
+        [],
+        [
+          {
+            postId: null,
+            names: "Cleo Dombroksy | Cleo Dombrosky",
+            note: "sisters",
+          },
+        ],
+      ),
+    ).similarNames[0]!.ignored,
+  ).toBe("sisters");
+});
+
+test("a Sheet that could not be read leaves every article as printed, and says so", () => {
+  const archive = build(
+    [post(1, ["Article by: Penn Name", "Image Credits: B"])],
     {
       status: "failed",
       reason: "google sheets answered 403",
@@ -139,15 +218,17 @@ test("a Sheet that could not be read leaves every post as printed, and says so",
     status: "failed",
     reason: "google sheets answered 403",
   });
-  expect(archive.articles[0]!.credits[0]!.names).toEqual(["Penn Name"]);
+  expect(names(archive)).toEqual(["Penn Name"]);
 });
 
-test("a post marked fine in the Sheet keeps its problems but carries the note", () => {
-  const [article] = build([post(1, ["Just a body."])], {
+test("a missing tab is named, so a renamed Overrides tab is never mistaken for an empty one", () => {
+  const archive = build([post(1, ["Article by: A"])], {
     ...read(),
-    ignored: [{ postId: 1, note: "intentional", row: 2 }],
-  } as SheetState).articles;
+    tabs: { overrides: false, labels: true, ignored: true },
+  } as SheetState);
 
-  expect(article!.ignored).toBe("intentional");
-  expect(article!.problems.length).toBeGreaterThan(0);
+  expect(archive.sheet).toMatchObject({
+    status: "read",
+    missingTabs: ["Overrides"],
+  });
 });

@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { ALERT_CHANNEL_ID } from "./config";
+import { ALERT_CHANNEL_ID, HAREWARE_ORIGIN } from "./config";
 import { AUTOMATIONS } from "./registry";
 
 const socialAutomation = AUTOMATIONS.find((a) => a.id === "social")!;
@@ -44,7 +44,9 @@ test("reports a failure that follows a run that worked", async () => {
   ];
 
   expect(channel).toBe(ALERT_CHANNEL_ID);
-  expect(message.blocks[0]?.content).toContain(socialAutomation.name);
+  expect(message.blocks[0]?.content).toContain(
+    "### ⚠️ Social reminder did not run",
+  );
   expect(message.blocks[0]?.content).toContain("wordpress returned 502");
 });
 
@@ -68,8 +70,8 @@ test.each([
     { blocks: { content?: string }[] },
   ];
   const content = message.blocks[0]?.content;
-  expect(content).toContain(`The automation will try again ${retry}.`);
-  expect(content).toContain("Check [the log]");
+  expect(content).toContain(`It will try again ${retry}.`);
+  expect(content).toContain(`[See the history](${HAREWARE_ORIGIN}/reminder)`);
   expect(content).not.toContain("Nothing was posted");
 });
 

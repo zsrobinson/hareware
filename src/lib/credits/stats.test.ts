@@ -9,18 +9,21 @@ import {
   periodOf,
 } from "./stats";
 
+/** a credit line; `bylines` are what it prints when the Sheet changes a name */
 const credit = (
   role: Credit["role"],
   names: string[],
-  overridden = false,
-  parsed = names,
+  bylines: (string | null)[] = names.map(() => null),
 ): Credit => ({
   role,
   label: role,
-  printed: parsed.join(" and "),
-  names,
-  parsed,
-  overridden,
+  printed: names.join(" and "),
+  bylines: names.map((name, i) => bylines[i] ?? name),
+  contributors: names.map((name, i) => ({
+    name,
+    byline: bylines[i] ?? null,
+    source: bylines[i] ? "everywhere" : "printed",
+  })),
 });
 
 const article = (
@@ -48,7 +51,7 @@ const archive = [
     credit("image", ["Ann"]),
   ]),
   article(3, "2026-09-10T15:00:00Z", "Sports", [
-    credit("writer", ["Riley Real"], true, ["Penn Name"]),
+    credit("writer", ["Riley Real"], ["Penn Name"]),
   ]),
 ];
 
@@ -101,17 +104,18 @@ test("a month with nothing published still has a column", () => {
   expect(grouped.values["2026-02"]).toBeUndefined();
 });
 
-test("credits by person count a co-author once each, and a role filter narrows them", () => {
+test("contributions count a person once per role per article", () => {
   const all = group(archive, {
-    measure: "credits",
+    measure: "contributions",
     by: "person",
     breakdown: "none",
     filters: NO_FILTERS,
   });
+  /* wrote 1 and 2, and illustrated 2: three contributions on two articles */
   expect(all.values.Ann!.all).toBe(3);
 
   const writing = group(archive, {
-    measure: "credits",
+    measure: "contributions",
     by: "person",
     breakdown: "none",
     filters: { ...NO_FILTERS, roles: ["writer"] },
@@ -120,24 +124,38 @@ test("credits by person count a co-author once each, and a role filter narrows t
   expect(writing.values.Bo).toBeUndefined();
 });
 
-test("articles by person count an article once even when they did two jobs on it", () => {
+test("grouping by person always counts contributions", () => {
   const grouped = group(archive, {
     measure: "articles",
     by: "person",
     breakdown: "none",
     filters: NO_FILTERS,
   });
-  expect(grouped.values.Ann!.all).toBe(2);
+  expect(grouped.measure).toBe("contributions");
+  expect(grouped.values.Ann!.all).toBe(3);
 });
 
-test("people resolve through the Sheet and remember the pseudonym", () => {
-  const [riley] = people(archive, NO_FILTERS).filter(
-    (row) => row.name === "Riley Real",
+test("people count contributions and remember the byline the Sheet resolved", () => {
+  const rows = people(archive, NO_FILTERS);
+  const ann = rows.find((row) => row.name === "Ann")!;
+  expect(ann.contributions).toBe(3);
+  expect(ann.counts).toEqual({ writer: 2, image: 1, other: 0 });
+
+  const riley = rows.find((row) => row.name === "Riley Real")!;
+  expect(riley.bylines).toEqual(["Penn Name"]);
+  expect(rows.some((row) => row.name === "Penn Name")).toBe(false);
+});
+
+test("search ignores accents and curly quotes", () => {
+  const found = applyFilters(
+    [
+      article(9, "2026-01-10T15:00:00Z", "News", [
+        credit("writer", ["Emme Périal"]),
+      ]),
+    ],
+    { ...NO_FILTERS, search: "perial" },
   );
-  expect(riley!.aliases).toEqual(["Penn Name"]);
-  expect(
-    people(archive, NO_FILTERS).some((row) => row.name === "Penn Name"),
-  ).toBe(false);
+  expect(found).toHaveLength(1);
 });
 
 test("summer belongs to Fall, so the semester axis has no near-empty summers", () => {

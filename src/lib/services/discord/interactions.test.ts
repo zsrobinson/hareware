@@ -1,5 +1,9 @@
 import { expect, test } from "vitest";
-import { handleInteraction, type InteractionResponse } from "./interactions";
+import {
+  describePress,
+  handleInteraction,
+  type InteractionResponse,
+} from "./interactions";
 import { postedId } from "./posted-button";
 
 const IS_COMPONENTS_V2 = 1 << 15;
@@ -177,4 +181,44 @@ test("answers a slash command left over from an older deploy", () => {
 
   expect(reply?.type).toBe(4);
   expect(reply?.data?.content).toContain("/article");
+});
+
+test("logs a press as the state the reply shows, by display name", () => {
+  const pressed = {
+    ...press(postedId("first")),
+    member: {
+      nick: "Zach",
+      user: { username: "zsrobinson", global_name: "Zachary" },
+    },
+  };
+
+  expect(describePress(pressed, handleInteraction(pressed)!)).toBe(
+    "Zach marked first posted",
+  );
+});
+
+test("logs an un-press as not posted", () => {
+  const pressed = press(postedId("first"));
+  pressed.message.components[1]!.components![0] = {
+    type: 2,
+    style: 3,
+    label: "Posted by someone else",
+    custom_id: postedId("first"),
+  };
+
+  expect(describePress(pressed, handleInteraction(pressed)!)).toBe(
+    "zsrobinson marked first not posted",
+  );
+});
+
+test("does not claim a state the reply does not show", () => {
+  const pressed = press(postedId("first"));
+
+  expect(describePress(pressed, { type: 7, data: { components: [] } })).toBe(
+    "zsrobinson pressed the button for first",
+  );
+});
+
+test("logs nothing for an interaction that is not a press", () => {
+  expect(describePress({ type: 1 }, { type: 1 })).toBeUndefined();
 });

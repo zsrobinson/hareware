@@ -62,14 +62,19 @@ async function fetchArchive(fresh: boolean): Promise<Archive> {
 /** the archive, the filter bar, and whichever view is handed in */
 export function ArchiveShell({
   children,
-  searchPlaceholder = "Titles and names",
+  searchPlaceholder = "Search titles and names",
+  filters = true,
 }: {
   children: (props: ViewProps) => ReactNode;
   searchPlaceholder?: string;
+  /** false on a page about the Sheet rather than the archive */
+  filters?: boolean;
 }) {
   return (
     <QueryClientProvider client={client}>
-      <Shell searchPlaceholder={searchPlaceholder}>{children}</Shell>
+      <Shell searchPlaceholder={searchPlaceholder} showFilters={filters}>
+        {children}
+      </Shell>
     </QueryClientProvider>
   );
 }
@@ -77,9 +82,11 @@ export function ArchiveShell({
 function Shell({
   children,
   searchPlaceholder,
+  showFilters,
 }: {
   children: (props: ViewProps) => ReactNode;
   searchPlaceholder: string;
+  showFilters: boolean;
 }) {
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
@@ -118,7 +125,7 @@ function Shell({
     return (
       <p className="text-muted-foreground flex items-center gap-2 text-sm">
         <RefreshCwIcon className="size-4 animate-spin" />
-        Reading every post from WordPress…
+        Loading every published article…
       </p>
     );
   if (query.isError)
@@ -139,12 +146,14 @@ function Shell({
 
   return (
     <div className="space-y-6">
-      <FilterBar
-        archive={archive}
-        state={state}
-        setState={setState}
-        searchPlaceholder={searchPlaceholder}
-      />
+      {showFilters && (
+        <FilterBar
+          archive={archive}
+          state={state}
+          setState={setState}
+          searchPlaceholder={searchPlaceholder}
+        />
+      )}
       <SheetNotice archive={archive} />
       <div className={cn("transition-opacity", refreshing && "opacity-60")}>
         {children({ archive, filters })}
@@ -167,18 +176,20 @@ function Shell({
 
 function SheetNotice({ archive }: { archive: Archive }) {
   const { sheet } = archive;
-  if (sheet.status === "read" && archive.sheetProblems.length === 0)
-    return null;
-
   const message =
     sheet.status === "unconfigured"
-      ? "The Sheet is not connected, so pseudonyms are counted as their own people."
+      ? "The Sheet isn't connected, so pen names count as their own people."
       : sheet.status === "failed"
-        ? `The Sheet could not be read, so pseudonyms are counted as their own people. ${sheet.reason}`
-        : `${archive.sheetProblems.length} row${archive.sheetProblems.length === 1 ? "" : "s"} in the Sheet could not be used. Problems lists them.`;
+        ? `The Sheet couldn't be read, so pen names count as their own people. ${sheet.reason}`
+        : sheet.missingTabs.includes("Overrides")
+          ? "The Sheet has no Overrides tab, so no pen names apply. Adding one in Settings creates it."
+          : archive.sheetProblems.length > 0
+            ? `${archive.sheetProblems.length} ${archive.sheetProblems.length === 1 ? "row" : "rows"} in the Sheet couldn't be used. Settings lists them.`
+            : null;
+  if (!message) return null;
 
   return (
-    <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+    <p className="text-muted-foreground border-l-2 border-amber-500/60 pl-3 text-sm">
       {message}
     </p>
   );
@@ -238,8 +249,8 @@ function FilterBar({
         onChange={(sections) => setState({ ...state, sections })}
       />
       <MultiSelect
-        label="Credited for"
-        all="Any credit"
+        label="Role"
+        all="Any role"
         options={ROLES.map((role) => ({
           value: role,
           label: ROLE_NAMES[role],
@@ -315,7 +326,7 @@ function MultiSelect({
       ? all
       : selected.length === 1
         ? options.find((o) => o.value === selected[0])?.label
-        : `${selected.length} ${label.toLowerCase()}`;
+        : `${selected.length} selected`;
 
   return (
     <DropdownMenu>

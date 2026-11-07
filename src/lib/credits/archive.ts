@@ -1,12 +1,19 @@
 /*
-  The archive: every published post with its section and credits, the Sheet's
-  overrides applied, and what looks wrong flagged. Pure, so the pages and the
+  The archive: every published article with its section and contributors,
+  the Sheet applied, and what looks wrong flagged. Pure, so the pages and the
   tests build it the same way; ./load is where the reading happens.
 */
 
-import { creditLines } from "./parse";
 import type { Label, Role } from "./labels";
-import type { Override, SheetProblem, SheetState } from "./sheet";
+import { creditLines, unrecognisedLines } from "./parse";
+import {
+  pairKey,
+  same,
+  type Ignored,
+  type Override,
+  type SheetProblem,
+  type SheetState,
+} from "./sheet";
 
 /** a post as the archive keeps it between reads: its body cut to the paragraphs a credit could be */
 export type SourcePost = {
@@ -18,24 +25,33 @@ export type SourcePost = {
   paragraphs: string[];
 };
 
+/** someone counted for a credit, and why they count as who they do */
+export type Contributor = {
+  name: string;
+  /** the name as printed, when the Sheet says it is someone else */
+  byline: string | null;
+  /** where the name came from: the article, a Sheet row for every article, or one for this article */
+  source: "printed" | "everywhere" | "article";
+};
+
 export type Credit = {
   role: Role;
-  /** "Article by"; "Sheet" for a credit only the Sheet gives */
+  /** "Article by"; empty for someone only the Sheet credits */
   label: string;
-  /** as the post prints it; empty for a credit only the Sheet gives */
+  /** the line as the article prints it; empty for someone only the Sheet credits */
   printed: string;
-  /** who is counted: the Sheet's names when it has rows for this, else `parsed` */
-  names: string[];
-  parsed: string[];
-  overridden: boolean;
+  /** the names the line prints, before the Sheet */
+  bylines: string[];
+  contributors: Contributor[];
 };
 
 export const PROBLEM_KINDS = {
   "no-writer": "No writing credit",
   "no-image": "No image credit",
-  unparsed: "Credit with no names",
-  "odd-name": "Name looks wrong",
-  uncategorized: "No section",
+  unrecognised: "Credit line HareWare can't read",
+  unparsed: "Credit line with no name",
+  "odd-name": "Name reads like a sentence",
+  uncategorized: "Uncategorized",
 } as const;
 export type ProblemKind = keyof typeof PROBLEM_KINDS;
 
@@ -47,16 +63,31 @@ export type ArchiveArticle = {
   section: string;
   credits: Credit[];
   problems: { kind: ProblemKind; detail: string }[];
-  /** the Sheet's note when somebody marked this post fine as it is */
+  /** the Sheet's note when someone marked this article fine as it is */
   ignored?: string;
 };
+
+/** two names that are probably one person spelled two ways */
+export type SimilarNames = {
+  names: [string, string];
+  counts: [number, number];
+  /** the Sheet's note when someone said they are different people */
+  ignored?: string;
+};
+
+/** a pen name the Sheet resolves on every article */
+export type PenName = { byline: string; realName: string[]; articles: number };
+
+/** a Sheet row that holds for one article only */
+export type ArticleOverride = Override & { title: string | null };
 
 export type SheetSummary =
   | { status: "unconfigured"; missing: string[] }
   | { status: "failed"; reason: string }
   | {
       status: "read";
-      overrides: number;
+      /** tabs the Sheet does not have yet; HareWare adds them on the first save */
+      missingTabs: string[];
       customLabels: boolean;
       /** set by the loader, which knows the id; only signed-in pages see it */
       url?: string;
@@ -66,6 +97,9 @@ export type Archive = {
   articles: ArchiveArticle[];
   sections: string[];
   labels: Label[];
+  penNames: PenName[];
+  articleOverrides: ArticleOverride[];
+  similarNames: SimilarNames[];
   sheet: SheetSummary;
   sheetProblems: SheetProblem[];
   /** when WordPress was read, which may be before this archive was built */
@@ -87,47 +121,43 @@ export function buildArchive(input: {
 }): Archive {
   const { posts, categories, sheet, labels } = input;
   const overrides = sheet.status === "read" ? sheet.overrides : [];
+  const ignoredRows = sheet.status === "read" ? sheet.ignored : [];
   const sheetProblems = sheet.status === "read" ? [...sheet.problems] : [];
 
-  const ignored = new Map(
-    (sheet.status === "read" ? sheet.ignored : []).map((row) => [
-      row.postId,
-      row.note || "marked fine",
-    ]),
+  const everywhere = overrides.filter((o) => o.postId === null);
+  const byPost = new Map<number, Override[]>();
+  for (const o of overrides)
+    if (o.postId !== null)
+      byPost.set(o.postId, [...(byPost.get(o.postId) ?? []), o]);
+
+  const ignoredPosts = new Map(
+    ignoredRows
+      .filter((i): i is Ignored & { postId: number } => i.postId !== null)
+      .map((i) => [i.postId, i.note || "marked not a problem"]),
   );
 
-  const byPost = new Map<number, Override[]>();
-  for (const override of overrides) {
-    byPost.set(override.postId, [
-      ...(byPost.get(override.postId) ?? []),
-      override,
-    ]);
-  }
-
-  const known = new Set(posts.map((post) => post.id));
-  for (const override of overrides) {
-    if (!known.has(override.postId))
+  const titles = new Map(posts.map((post) => [post.id, post.title]));
+  for (const o of overrides)
+    if (o.postId !== null && !titles.has(o.postId))
       sheetProblems.push({
         tab: "Overrides",
-        row: override.row,
-        message: `no published post has id ${override.postId}`,
+        row: 0,
+        message: `no published article has post id ${o.postId}`,
       });
-  }
 
-  const articles = posts.map((post) => {
+  const articles = posts.map((post): ArchiveArticle => {
     const section =
       post.categoryIds.map((id) => categories.get(id)).find(Boolean) ??
       UNCATEGORIZED;
-    const credits = applyOverrides(
-      creditLines(post.paragraphs, labels).map((line): Credit => ({
+    const credits = resolve(
+      creditLines(post.paragraphs, labels).map((line) => ({
         role: line.role,
         label: line.label,
         printed: line.printed,
-        names: line.names,
-        parsed: line.names,
-        overridden: false,
+        bylines: line.names,
       })),
       byPost.get(post.id) ?? [],
+      everywhere,
     );
 
     return {
@@ -137,19 +167,26 @@ export function buildArchive(input: {
       publishedAt: post.publishedAt,
       section,
       credits,
-      problems: problemsOf(section, credits),
-      ...(ignored.has(post.id) ? { ignored: ignored.get(post.id) } : {}),
+      problems: problemsOf(
+        section,
+        credits,
+        unrecognisedLines(post.paragraphs, labels),
+      ),
+      ...(ignoredPosts.has(post.id)
+        ? { ignored: ignoredPosts.get(post.id) }
+        : {}),
     };
   });
 
-  const sections = [
-    ...new Set(articles.map((article) => article.section)),
-  ].sort();
-
   return {
     articles,
-    sections,
+    sections: [...new Set(articles.map((a) => a.section))].sort(),
     labels,
+    penNames: penNames(everywhere, articles),
+    articleOverrides: overrides
+      .filter((o) => o.postId !== null)
+      .map((o) => ({ ...o, title: titles.get(o.postId!) ?? null })),
+    similarNames: similarNames(articles, ignoredRows),
     sheet: summarize(sheet),
     sheetProblems,
     fetchedAt: input.fetchedAt,
@@ -157,92 +194,204 @@ export function buildArchive(input: {
 }
 
 /**
- * A role with Sheet rows is credited to those rows: the first printed line of
- * that role takes their names and any further lines of it count nobody, so a
- * person is never counted twice for one post.
+ * Who each printed name counts as: a row for this article and role first,
+ * then a row for every article, then the name as printed. Rows for this
+ * article with no byline add people the article does not print.
  */
-function applyOverrides(credits: Credit[], overrides: Override[]): Credit[] {
-  if (overrides.length === 0) return credits;
+function resolve(
+  lines: Omit<Credit, "contributors">[],
+  articleRows: Override[],
+  everywhere: Override[],
+): Credit[] {
+  const forRole = (rows: Override[], role: Role) =>
+    rows.filter((o) => o.role === null || o.role === role);
 
-  const result = [...credits];
-  const roles = [...new Set(overrides.map((override) => override.role))];
-
-  for (const role of roles) {
-    const realNames = overrides
-      .filter((override) => override.role === role)
-      .map((override) => override.realName);
-    const first = result.findIndex((credit) => credit.role === role);
-
-    if (first === -1) {
-      result.push({
-        role,
-        label: "Sheet",
-        printed: "",
-        names: realNames,
-        parsed: [],
-        overridden: true,
-      });
-      continue;
-    }
-
-    result.forEach((credit, index) => {
-      if (credit.role !== role) return;
-      result[index] = {
-        ...credit,
-        overridden: true,
-        names: index === first ? realNames : [],
-      };
+  const credits: Credit[] = lines.map((line) => {
+    const local = forRole(articleRows, line.role);
+    const global = forRole(everywhere, line.role);
+    const contributors = line.bylines.flatMap((byline): Contributor[] => {
+      const here = local.filter((o) => o.byline && same(o.byline, byline));
+      if (here.length > 0)
+        return here.map((o) => ({
+          name: o.realName,
+          byline,
+          source: "article",
+        }));
+      const anywhere = global.filter((o) => o.byline && same(o.byline, byline));
+      if (anywhere.length > 0)
+        return anywhere.map((o) => ({
+          name: o.realName,
+          byline,
+          source: "everywhere",
+        }));
+      return [{ name: byline, byline: null, source: "printed" }];
     });
+    return { ...line, contributors };
+  });
+
+  /* people the article does not print, added by a row for this article */
+  for (const o of articleRows.filter((o) => !o.byline && o.role)) {
+    const target = credits.find((c) => c.role === o.role);
+    const added: Contributor = {
+      name: o.realName,
+      byline: null,
+      source: "article",
+    };
+    if (target) target.contributors.push(added);
+    else
+      credits.push({
+        role: o.role!,
+        label: "",
+        printed: "",
+        bylines: [],
+        contributors: [added],
+      });
   }
 
-  return result;
+  return credits;
 }
 
 function problemsOf(
   section: string,
   credits: Credit[],
+  unrecognised: string[],
 ): ArchiveArticle["problems"] {
   const problems: ArchiveArticle["problems"] = [];
-  const has = (role: Role) => credits.some((credit) => credit.role === role);
+  const has = (role: Role) =>
+    credits.some((c) => c.role === role && c.contributors.length > 0);
 
+  for (const line of unrecognised)
+    problems.push({ kind: "unrecognised", detail: line });
   if (!has("writer"))
-    problems.push({
-      kind: "no-writer",
-      detail: "no paragraph starts with a writing label",
-    });
+    problems.push({ kind: "no-writer", detail: "no “Article by:” line" });
   if (!has("image"))
-    problems.push({
-      kind: "no-image",
-      detail: "no paragraph starts with an image label",
-    });
+    problems.push({ kind: "no-image", detail: "no “Image Credits:” line" });
 
   for (const credit of credits) {
-    if (credit.names.length === 0 && !credit.overridden)
+    if (credit.printed && credit.bylines.length === 0)
       problems.push({
         kind: "unparsed",
         detail: `${credit.label}: ${credit.printed}`,
       });
-
-    for (const name of credit.names) {
+    for (const byline of credit.bylines)
       if (
-        name.split(/\s+/).length > MAX_NAME_WORDS ||
-        name.length > MAX_NAME_LENGTH
+        byline.split(/\s+/).length > MAX_NAME_WORDS ||
+        byline.length > MAX_NAME_LENGTH
       )
-        problems.push({ kind: "odd-name", detail: name });
-    }
+        problems.push({ kind: "odd-name", detail: byline });
   }
 
   if (section === UNCATEGORIZED)
-    problems.push({ kind: "uncategorized", detail: "the post has no section" });
+    problems.push({ kind: "uncategorized", detail: "no category set" });
 
   return problems;
+}
+
+function penNames(everywhere: Override[], articles: ArchiveArticle[]) {
+  const grouped = new Map<string, PenName>();
+  for (const o of everywhere) {
+    const key = o.byline!.toLowerCase();
+    const entry = grouped.get(key) ?? {
+      byline: o.byline!,
+      realName: [],
+      articles: 0,
+    };
+    entry.realName.push(o.realName);
+    grouped.set(key, entry);
+  }
+  for (const entry of grouped.values())
+    entry.articles = articles.filter((a) =>
+      a.credits.some((c) => c.bylines.some((b) => same(b, entry.byline))),
+    ).length;
+  return [...grouped.values()].sort((a, b) => b.articles - a.articles);
+}
+
+/* ---- names that are probably the same person ------------------------------ */
+
+const fold = (name: string) =>
+  name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^\p{L}\p{N} ]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
+function distance(a: string, b: string, limit: number) {
+  if (Math.abs(a.length - b.length) > limit) return limit + 1;
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i];
+    let best = i;
+    for (let j = 1; j <= b.length; j++) {
+      current[j] = Math.min(
+        previous[j]! + 1,
+        current[j - 1]! + 1,
+        previous[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+      best = Math.min(best, current[j]!);
+    }
+    if (best > limit) return limit + 1;
+    previous = current;
+  }
+  return previous[b.length]!;
+}
+
+/**
+ * Pairs of counted names one or two letters apart ("Clare Dombroksy",
+ * "Clare Dombrosky"), or equal once accents and punctuation go ("Mat H." and
+ * "Mat H"). Spelling is fixed in WordPress, so these are only pointed at.
+ */
+function similarNames(
+  articles: ArchiveArticle[],
+  ignored: Ignored[],
+): SimilarNames[] {
+  const counts = new Map<string, number>();
+  for (const article of articles)
+    for (const credit of article.credits)
+      for (const c of credit.contributors)
+        counts.set(c.name, (counts.get(c.name) ?? 0) + 1);
+
+  const dismissed = new Map(
+    ignored
+      .filter((i) => i.names)
+      .map((i) => [i.names!, i.note || "different people"]),
+  );
+  const names = [...counts.keys()];
+  const folded = names.map(fold);
+  const pairs: SimilarNames[] = [];
+
+  for (let i = 0; i < names.length; i++)
+    for (let j = i + 1; j < names.length; j++) {
+      const a = folded[i]!;
+      const b = folded[j]!;
+      if (a.length < 6 || b.length < 6) continue;
+      if (
+        a !== b &&
+        distance(a, b, 2) > (Math.min(a.length, b.length) >= 10 ? 2 : 1)
+      )
+        continue;
+      const pair = [names[i]!, names[j]!].sort() as [string, string];
+      const note = dismissed.get(pairKey(pair));
+      pairs.push({
+        names: pair,
+        counts: [counts.get(pair[0])!, counts.get(pair[1])!],
+        ...(note ? { ignored: note } : {}),
+      });
+    }
+
+  return pairs.sort(
+    (x, y) => y.counts[0] + y.counts[1] - (x.counts[0] + x.counts[1]),
+  );
 }
 
 function summarize(sheet: SheetState): SheetSummary {
   if (sheet.status !== "read") return sheet;
   return {
     status: "read",
-    overrides: sheet.overrides.length,
+    missingTabs: Object.entries(sheet.tabs)
+      .filter(([, present]) => !present)
+      .map(([tab]) => tab[0]!.toUpperCase() + tab.slice(1)),
     customLabels: sheet.labels !== null,
   };
 }

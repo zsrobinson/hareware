@@ -15,6 +15,8 @@ before proposing that HareWare store articles or track anything unpublished.
 
 **What is in the Sheet is private.** It never goes into WordPress, the
 repository, logs, or any page or route reachable without `@Editorial Board`.
+HareWare writes it too, through `/api/sheet` only, so nobody needs to open it;
+tests use invented names, never a real byline paired with a real person.
 
 ## Where things are
 

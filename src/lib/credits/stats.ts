@@ -23,7 +23,12 @@ export const NO_FILTERS: Filters = { sections: [], roles: [] };
 
 export type Period = "month" | "semester" | "year";
 export type Dimension = Period | "section" | "role" | "person";
-export type Measure = "articles" | "credits";
+/**
+ * What a chart adds up. An article counts once. A contribution is one person
+ * in one role on one article, so someone who writes and illustrates an
+ * article has made two.
+ */
+export type Measure = "articles" | "contributions";
 
 const day = new Intl.DateTimeFormat("en-CA", {
   timeZone: "America/New_York",
@@ -37,11 +42,23 @@ export function easternDate(iso: string): string {
   return day.format(new Date(iso));
 }
 
+/** text as a search compares it: no case, accents or curly quotes */
+export function searchable(text: string) {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .toLowerCase();
+}
+
 export function applyFilters(
   articles: ArchiveArticle[],
   filters: Filters,
 ): ArchiveArticle[] {
-  const search = filters.search?.trim().toLowerCase();
+  const search = filters.search?.trim()
+    ? searchable(filters.search.trim())
+    : "";
 
   return articles.filter((article) => {
     const date = easternDate(article.publishedAt);
@@ -53,15 +70,15 @@ export function applyFilters(
     )
       return false;
     if (search) {
-      const haystack = [
-        article.title,
-        ...article.credits.flatMap((credit) => [
-          credit.printed,
-          ...credit.names,
-        ]),
-      ]
-        .join(" ")
-        .toLowerCase();
+      const haystack = searchable(
+        [
+          article.title,
+          ...article.credits.flatMap((credit) => [
+            credit.printed,
+            ...credit.contributors.map((c) => c.name),
+          ]),
+        ].join(" "),
+      );
       if (!haystack.includes(search)) return false;
     }
     return true;
@@ -168,61 +185,55 @@ function fillPeriods(
   return out;
 }
 
-/** one countable thing: an article, or one person credited in one role on it */
+/** one countable thing: an article, or one person in one role on it */
 type Unit = { article: ArchiveArticle; role?: Role; person?: string };
 
 function units(
   articles: ArchiveArticle[],
   measure: Measure,
   filters: Filters,
-  needsPeople: boolean,
 ): Unit[] {
   const roles = filters.roles;
-  if (measure === "articles" && !needsPeople) {
-    /* an article counts once, and only if it has a credit in a chosen role */
+  const inRole = (role: Role) => roles.length === 0 || roles.includes(role);
+
+  if (measure === "articles")
+    /* every article counts once; with a role picked, only those with a
+       contribution in it */
     return articles
       .filter(
         (article) =>
           roles.length === 0 ||
-          article.credits.some((credit) => roles.includes(credit.role)),
+          article.credits.some(
+            (credit) => inRole(credit.role) && credit.contributors.length > 0,
+          ),
       )
       .map((article) => ({ article }));
-  }
 
   const out: Unit[] = [];
   for (const article of articles) {
     const seen = new Set<string>();
     for (const credit of article.credits) {
-      if (roles.length > 0 && !roles.includes(credit.role)) continue;
-      for (const person of credit.names) {
-        /* one person, one role, one article: counted once */
-        const key = `${credit.role}\u0000${person}`;
+      if (!inRole(credit.role)) continue;
+      for (const { name } of credit.contributors) {
+        /* one person, one role, one article: one contribution */
+        const key = `${credit.role}\u0000${name}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        out.push({ article, role: credit.role, person });
+        out.push({ article, role: credit.role, person: name });
       }
     }
-  }
-
-  if (measure === "articles") {
-    /* grouped by person: each article once per person, whatever their roles */
-    const once = new Map<string, Unit>();
-    for (const unit of out)
-      once.set(`${unit.article.id}\u0000${unit.person}`, {
-        ...unit,
-        role: undefined,
-      });
-    return [...once.values()];
   }
   return out;
 }
 
 export type Grouped = {
+  /** what was counted, which grouping by person or role makes contributions */
+  measure: Measure;
   categories: { key: string; label: string }[];
   series: { key: string; label: string }[];
   /** value[categoryKey][seriesKey] */
   values: Record<string, Record<string, number>>;
-  /** units counted: articles, or one per person per role per article */
+  /** what was counted: articles, or contributions */
   total: number;
   /** distinct articles behind `total` */
   articles: number;
@@ -242,13 +253,14 @@ export function group(
     limit?: number;
   },
 ): Grouped {
-  const { measure, by, breakdown, filters } = options;
-  const needsPeople =
-    by === "person" ||
-    breakdown === "person" ||
-    by === "role" ||
-    breakdown === "role";
-  const list = units(articles, measure, filters, needsPeople);
+  const { by, breakdown, filters } = options;
+  /* a person or a role is only ever counted in contributions */
+  const measure: Measure = [by, breakdown].some(
+    (d) => d === "person" || d === "role",
+  )
+    ? "contributions"
+    : options.measure;
+  const list = units(articles, measure, filters);
 
   const keyOf = (
     unit: Unit,
@@ -305,6 +317,7 @@ export function group(
   );
 
   return {
+    measure,
     categories,
     series,
     values,
@@ -316,14 +329,13 @@ export function group(
 
 export type PersonRow = {
   name: string;
-  /** credits per role */
+  /** contributions per role */
   counts: Record<Role, number>;
-  /** distinct articles credited on, any role */
-  articles: number;
+  contributions: number;
   first: string;
   last: string;
-  /** printed bylines that resolved to this person through the Sheet */
-  aliases: string[];
+  /** printed bylines the Sheet counts as this person */
+  bylines: string[];
   articleIds: number[];
 };
 
@@ -338,35 +350,36 @@ export function people(
     for (const credit of article.credits) {
       if (filters.roles.length > 0 && !filters.roles.includes(credit.role))
         continue;
-      for (const name of credit.names) {
+      const counted = new Set<string>();
+      for (const contributor of credit.contributors) {
+        const { name } = contributor;
+        if (counted.has(name)) continue;
+        counted.add(name);
         const row =
           rows.get(name) ??
           ({
             name,
             counts: { writer: 0, image: 0, other: 0 },
-            articles: 0,
+            contributions: 0,
             first: date,
             last: date,
-            aliases: [],
+            bylines: [],
             articleIds: [],
           } satisfies PersonRow);
         row.counts[credit.role]++;
-        if (!row.articleIds.includes(article.id)) {
+        row.contributions++;
+        if (!row.articleIds.includes(article.id))
           row.articleIds.push(article.id);
-          row.articles++;
-        }
         if (date < row.first) row.first = date;
         if (date > row.last) row.last = date;
-        if (credit.overridden && credit.printed)
-          for (const printed of credit.parsed)
-            if (printed !== name && !row.aliases.includes(printed))
-              row.aliases.push(printed);
+        if (contributor.byline && !row.bylines.includes(contributor.byline))
+          row.bylines.push(contributor.byline);
         rows.set(name, row);
       }
     }
   }
 
   return [...rows.values()].sort(
-    (a, b) => b.articles - a.articles || a.name.localeCompare(b.name),
+    (a, b) => b.contributions - a.contributions || a.name.localeCompare(b.name),
   );
 }

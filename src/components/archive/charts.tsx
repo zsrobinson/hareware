@@ -37,7 +37,7 @@ type Config = {
 
 const MEASURES: { id: Measure; label: string }[] = [
   { id: "articles", label: "Articles" },
-  { id: "credits", label: "Credits" },
+  { id: "contributions", label: "Contributions" },
 ];
 const DIMENSIONS: { id: Dimension; label: string }[] = [
   { id: "semester", label: "Semester" },
@@ -48,6 +48,7 @@ const DIMENSIONS: { id: Dimension; label: string }[] = [
   { id: "role", label: "Role" },
 ];
 
+/* the questions the board actually asks, one click each */
 /* the questions the board actually asks, one click each */
 const QUICK: { label: string; config: Config }[] = [
   {
@@ -61,7 +62,7 @@ const QUICK: { label: string; config: Config }[] = [
     },
   },
   {
-    label: "Each section's share",
+    label: "Section mix",
     config: {
       measure: "articles",
       by: "semester",
@@ -71,19 +72,9 @@ const QUICK: { label: string; config: Config }[] = [
     },
   },
   {
-    label: "Who contributed",
+    label: "Contributors",
     config: {
-      measure: "articles",
-      by: "person",
-      breakdown: "none",
-      kind: "bars",
-      scale: "count",
-    },
-  },
-  {
-    label: "Writing vs images",
-    config: {
-      measure: "credits",
+      measure: "contributions",
       by: "person",
       breakdown: "role",
       kind: "bars",
@@ -91,7 +82,7 @@ const QUICK: { label: string; config: Config }[] = [
     },
   },
   {
-    label: "Articles by section",
+    label: "By section",
     config: {
       measure: "articles",
       by: "section",
@@ -113,30 +104,18 @@ const plural = (count: number, one: string, many: string) =>
   `${count.toLocaleString()} ${count === 1 ? one : many}`;
 
 /** what the caption says was added up, so a number is never read as the wrong unit */
-function unitLine(
-  grouped: Grouped,
-  measure: Measure,
-  by: Dimension,
-  inView: number,
-) {
+function unitLine(grouped: Grouped, by: Dimension, inView: number) {
   const missing =
-    inView > grouped.articles
-      ? ` ${plural(inView - grouped.articles, "article has", "articles have")} nobody credited.`
+    inView > grouped.articles && grouped.measure === "contributions"
+      ? ` ${plural(inView - grouped.articles, "article credits", "articles credit")} no one.`
       : "";
-  if (by === "person") {
-    const shown =
-      grouped.categories.length < grouped.available
-        ? `Top ${grouped.categories.length} of ${plural(grouped.available, "person", "people")}`
-        : plural(grouped.available, "person", "people");
-    return measure === "credits"
-      ? `${shown}. Each bar counts credits: writing and images on one article are two.${missing}`
-      : `${shown}. Each bar counts the articles that person is credited on.${missing}`;
-  }
-  if (measure === "credits")
-    return `${plural(grouped.total, "credit", "credits")} on ${plural(grouped.articles, "article", "articles")}. Writing and images on one article are two credits.${missing}`;
-  if (by === "role")
-    return `${plural(grouped.articles, "article", "articles")}, each counted once per role it has.`;
-  return `${plural(grouped.articles, "article", "articles")}.`;
+  const counted =
+    grouped.measure === "contributions"
+      ? `${plural(grouped.total, "contribution", "contributions")} on ${plural(grouped.articles, "article", "articles")}`
+      : plural(grouped.total, "article", "articles");
+  if (by === "person" && grouped.categories.length < grouped.available)
+    return `Top ${grouped.categories.length} of ${plural(grouped.available, "person", "people")}. ${counted}.${missing}`;
+  return `${counted}.${missing}`;
 }
 
 /** which periods the chart cannot show whole: still running, or cut by the filter */
@@ -168,11 +147,7 @@ function Charts({ archive, filters }: ViewProps) {
     () => applyFilters(archive.articles, filters),
     [archive, filters],
   );
-  /* a role split only means something when people are being counted */
-  const split: Breakdown =
-    (breakdown === "role" && measure === "articles") || breakdown === by
-      ? "none"
-      : breakdown;
+  const split: Breakdown = breakdown === by ? "none" : breakdown;
   const grouped = useMemo(() => {
     const raw = group(shown, {
       measure,
@@ -199,7 +174,7 @@ function Charts({ archive, filters }: ViewProps) {
     [grouped, by, filters],
   );
 
-  const title = `${MEASURES.find((m) => m.id === measure)!.label} by ${DIMENSIONS.find((d) => d.id === by)!.label.toLowerCase()}${
+  const title = `${MEASURES.find((m) => m.id === grouped.measure)!.label} by ${DIMENSIONS.find((d) => d.id === by)!.label.toLowerCase()}${
     split === "none" ? "" : `, split by ${split}`
   }${asShare ? ", as a share of each" : ""}`;
 
@@ -252,8 +227,14 @@ function Charts({ archive, filters }: ViewProps) {
           <div className="flex flex-wrap items-end gap-3 border-b px-4 py-3 sm:px-5">
             <Choice
               label="Count"
-              value={measure}
-              options={MEASURES}
+              value={grouped.measure}
+              options={MEASURES.map((m) => ({
+                ...m,
+                /* a person or a role is counted in contributions */
+                disabled:
+                  m.id === "articles" &&
+                  [by, split].some((d) => d === "person" || d === "role"),
+              }))}
               onChange={(measure) => set({ measure })}
             />
             <Choice
@@ -268,11 +249,7 @@ function Charts({ archive, filters }: ViewProps) {
               options={[
                 { id: "none", label: "Nothing" },
                 { id: "section", label: "Section", disabled: by === "section" },
-                {
-                  id: "role",
-                  label: "Role",
-                  disabled: measure === "articles" || by === "role",
-                },
+                { id: "role", label: "Role", disabled: by === "role" },
               ]}
               onChange={(breakdown) => {
                 set({ breakdown });
@@ -318,7 +295,7 @@ function Charts({ archive, filters }: ViewProps) {
           <figcaption className="space-y-1">
             <div className="font-medium">{title}</div>
             <div className="text-muted-foreground text-sm">
-              {unitLine(grouped, measure, by, shown.length)}
+              {unitLine(grouped, by, shown.length)}
               {partial.size > 0 && (
                 <>
                   {" "}

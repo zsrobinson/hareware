@@ -1,7 +1,7 @@
 /*
-  Which paragraph labels are credit lines, and what kind of credit each one
-  is. These are the defaults; the Sheet's Labels tab replaces them once it has
-  any rows (see ./sheet).
+  Which paragraph labels start a credit line, and the role each one credits.
+  These are the defaults; the Sheet's Labels tab replaces them once it has any
+  rows (see ./sheet).
 */
 
 export const ROLES = ["writer", "image", "other"] as const;
@@ -9,7 +9,7 @@ export type Role = (typeof ROLES)[number];
 
 export const ROLE_NAMES: Record<Role, string> = {
   writer: "Writing",
-  image: "Images",
+  image: "Image",
   other: "Other",
 };
 

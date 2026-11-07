@@ -26,7 +26,7 @@ export const AUTOMATIONS: Automation[] = [
     action: "social-ping",
     name: "Social reminder",
     description:
-      "Posts everything published since the previous morning's run and pings that day's poster role. Reads WordPress.",
+      "Announces every article published since the previous morning's run and pings that day's poster role.",
     channelId: SOCIAL_CHANNEL_ID,
     hour: REMINDER_HOUR,
     run: sendSocialPing,

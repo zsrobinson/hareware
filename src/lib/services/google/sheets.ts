@@ -77,20 +77,27 @@ export class Sheets {
     });
   }
 
-  /** writes `rows` starting at A1, leaving anything below them alone */
-  async write(title: string, rows: Rows): Promise<void> {
+  /**
+   * makes the tab hold exactly `rows`: written over the top first, then
+   * whatever is left below cleared, so a write cut off halfway leaves a stale
+   * row behind rather than an empty tab
+   */
+  async replace(title: string, rows: Rows): Promise<void> {
+    const width = Math.max(1, ...rows.map((row) => row.length));
+    const padded = rows.map((row) => [
+      ...row,
+      ...Array<string>(width - row.length).fill(""),
+    ]);
+    const range = encodeURIComponent(quote(title));
+
     await this.call(
-      `${API}/${this.spreadsheetId}/values/${encodeURIComponent(quote(title))}?valueInputOption=RAW`,
-      { range: quote(title), majorDimension: "ROWS", values: rows },
+      `${API}/${this.spreadsheetId}/values/${range}?valueInputOption=RAW`,
+      { range: quote(title), majorDimension: "ROWS", values: padded },
       "PUT",
     );
-  }
-
-  /** adds rows after the last row with anything in it */
-  async append(title: string, rows: Rows): Promise<void> {
     await this.call(
-      `${API}/${this.spreadsheetId}/values/${encodeURIComponent(quote(title))}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-      { majorDimension: "ROWS", values: rows },
+      `${API}/${this.spreadsheetId}/values/${encodeURIComponent(`${quote(title)}!A${rows.length + 1}:Z`)}:clear`,
+      {},
     );
   }
 

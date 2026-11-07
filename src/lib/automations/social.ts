@@ -18,8 +18,33 @@ import {
   SOCIAL_ROLE_IDS,
 } from "./config";
 
-/* three components per article, under Components V2's forty per message */
-const MAX_ARTICLES = 10;
+/*
+  Components V2 allows forty components in a message, counting the buttons
+  inside a row. An article is four (its text, a row, two buttons) and every
+  one after the first adds a separator: seven is 34, with room for "+N more".
+  Over the limit Discord refuses the whole message.
+*/
+const MAX_ARTICLES = 7;
+
+/** "Fri, Nov 6, 8:00 AM", Eastern: how a summary or the page names an instant */
+export function easternLabel(date: Date | string | number) {
+  return (
+    new Date(date)
+      .toLocaleString("en-US", {
+        timeZone: "America/New_York",
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+      /* newer ICU puts a narrow no-break space before AM */
+      .replace(/\u202f/g, " ")
+  );
+}
+
+const articles = (count: number) =>
+  `${count} ${count === 1 ? "article" : "articles"}`;
 
 /** what the reminder would post at `now`, without posting it */
 export type SocialPlan =
@@ -51,7 +76,7 @@ export async function planSocialPing(now: Date): Promise<SocialPlan> {
   if (!roleId)
     return {
       status: "misconfigured",
-      summary: `SOCIAL_ROLE_IDS.${weekday} is unset`,
+      summary: `Not set up: no poster role for ${weekday}`,
     };
 
   const since = windowStart(now);
@@ -61,7 +86,7 @@ export async function planSocialPing(now: Date): Promise<SocialPlan> {
   } catch (error) {
     return {
       status: "failed",
-      summary: `could not read wordpress: ${String(error)}`,
+      summary: `Could not read WordPress: ${String(error)}`,
     };
   }
 
@@ -83,18 +108,18 @@ export async function planSocialPing(now: Date): Promise<SocialPlan> {
 
 export async function sendSocialPing(env: Env, now: Date): Promise<Result> {
   if (!env.DISCORD_BOT_TOKEN)
-    return misconfigured("social ping unset: DISCORD_BOT_TOKEN");
+    return misconfigured("Not set up: DISCORD_BOT_TOKEN is unset");
 
   const plan = await planSocialPing(now);
-  if (plan.status === "misconfigured")
-    return misconfigured(`social ping unset: ${plan.summary}`);
+  if (plan.status === "misconfigured") return misconfigured(plan.summary);
   if (plan.status === "failed") return failed(plan.summary);
 
-  if (plan.articles.length === 0)
-    return skipped(`nothing published since ${plan.since}`);
+  const since = easternLabel(plan.since);
+  if (plan.articles.length === 0) return skipped(`Nothing new since ${since}`);
 
-  const posted = plan.articles.slice(0, MAX_ARTICLES);
-  const blocks: Block[] = posted.flatMap((article, index) => [
+  const listed = plan.articles.slice(0, MAX_ARTICLES);
+  const unlisted = plan.articles.length - listed.length;
+  const blocks: Block[] = listed.flatMap((article, index) => [
     // Discord pings once however often the mention appears
     ...(index > 0 ? [separator()] : []),
     text(`<@&${plan.roleId}> **${inert(article.title)}**`),
@@ -115,6 +140,8 @@ export async function sendSocialPing(env: Env, now: Date): Promise<Result> {
         : []),
     ),
   ]);
+  /* without it, the articles past the limit are announced nowhere */
+  if (unlisted > 0) blocks.push(text(`+${unlisted} more`));
 
   await postMessage(
     env.DISCORD_BOT_TOKEN,
@@ -127,12 +154,10 @@ export async function sendSocialPing(env: Env, now: Date): Promise<Result> {
     },
   );
 
-  const verb = env.REMINDERS_DRY_RUN ? "would post" : "posted";
+  const verb = env.REMINDERS_DRY_RUN ? "Would announce" : "Announced";
   const extra =
-    plan.articles.length > posted.length
-      ? ` (${plan.articles.length - posted.length} more left out)`
-      : "";
+    unlisted > 0 ? ` (${listed.length} listed, +${unlisted} more)` : "";
   return ok(
-    `${verb} ${posted.length} article(s) published since ${plan.since}${extra}`,
+    `${verb} ${articles(plan.articles.length)} published since ${since}${extra}`,
   );
 }

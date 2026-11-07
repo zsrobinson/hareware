@@ -1,6 +1,8 @@
 # 11. WordPress is the record; the Sheet holds only what it cannot
 
-**Status:** Accepted — 2026-11-07
+**Status:** Accepted — 2026-11-07. Revised the same day: HareWare writes the
+Sheet, pen names hold on every article, and people are counted in
+contributions; folded in below.
 
 Supersedes ADRs 0001, 0002, 0004, 0006, 0009 and 0010, which were deleted with
 the code they described; they are in the history before this commit.
@@ -32,11 +34,20 @@ parser handles co-authors, "as told to" and "translated by". Spelling drift is
 fixed in WordPress, not with an alias table.
 
 **A Google Sheet holds the one fact WordPress lacks**: who is really behind a
-pseudonymous byline. It is keyed by post id and holds overrides only. A post
-with no rows is credited as printed, so nobody edits the Sheet in normal use.
-It also holds the list of credit labels, so a new label ("Puzzle by") needs no
-deploy. The Sheet is owned by the club's account and read by a service
-account; the mapping never reaches WordPress, the repository or a public page.
+pen name. One row says a byline counts as a person on every article that
+prints it, including future ones, so a recurring pen name is entered once; a
+row with a post id corrects one article only. An article with no rows is
+credited as printed. The Sheet also holds the credit labels, so a new label
+("Puzzle by") needs no deploy, and the problems someone decided are fine.
+
+**HareWare writes the Sheet, and nobody needs to open it.** Every correction
+is made from the signed-in pages; a save rewrites only the rows it means to.
+The Sheet is owned by the club's account and reached by a service account; the
+mapping never reaches WordPress, the repository, the log or a public page.
+
+**People are counted in contributions**: one person in one role on one
+article. The editors settled that writing and illustrating an article is two
+contributions, and it is the only count of people the pages offer.
 
 **Notion is not a concept here.** The membership pages, `/article`, and the
 meeting reminder went with it. The club may keep using Notion by hand; nothing
@@ -54,6 +65,12 @@ domain data.
   public REST endpoint before.
 - **Recording every credit in the Sheet.** That is a copy of WordPress, and the
   thing that rotted in Notion. Overrides only.
+- **Pen names keyed by article alone.** A recurring pen name would need a row
+  per article, forever, which is upkeep. One row per pen name, with
+  per-article rows for the exceptions.
+- **Two counts of people**, credits and articles credited on. They disagreed
+  about whether writing and illustrating is one or two; the editors chose two,
+  and one count avoids explaining the difference.
 - **Flagging every name that appears once as a possible pseudonym.** Sixty-five
   names appear once, most of them real one-time contributors or deliberate
   jokes. A flag that fires sixty-five times is ignored. The People page can hide

@@ -58,6 +58,17 @@ which goes into a URL. `readPage()` treats a missing header as one page.
 returns `{ status: "failed" }`, and every archive page says so in a banner,
 because otherwise every pseudonym would quietly count as its own person.
 
+**A save rewrites the tab, so it must not lose what it did not mean to
+change.** `rewrite()` in `src/lib/credits/sheet.ts` reads the tab, changes only
+its own rows, keeps every other row — including ones it cannot parse — and
+writes back in the tab's own column order. `Sheets.replace()` writes over the
+top before clearing the tail, so a save cut off halfway leaves a stale row
+rather than an empty tab.
+
+**The log must never learn a real name.** A Sheet change is logged through
+`describeEdit()`, which names the kind of change and the post id only;
+`edits.test.ts` fails if a name gets into it.
+
 **A service account sees only what is shared with it.** Google answers `403`
 or `404` for a Sheet that exists but was not shared, and the setup button
 shows Google's own message, which names the cause.

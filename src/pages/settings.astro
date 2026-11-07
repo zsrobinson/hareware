@@ -1,0 +1,21 @@
+---
+import Dashboard from "~/layouts/dashboard.astro";
+import { SettingsPage } from "~/components/archive/settings";
+import { viewerState } from "~/lib/admin";
+import { admitted } from "~/lib/admin-guard";
+
+const who = admitted(Astro.locals);
+
+/* real names from the Sheet reach this page's data, so nothing may cache it */
+Astro.response.headers.set("cache-control", "private, no-store");
+---
+
+<Dashboard title="Settings" viewer={viewerState(who)} width="prose">
+  <div class="space-y-8">
+    <header>
+      <h1 class="text-2xl font-semibold tracking-tight">Settings</h1>
+    </header>
+
+    <SettingsPage client:load />
+  </div>
+</Dashboard>

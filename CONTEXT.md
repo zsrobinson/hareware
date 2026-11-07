@@ -17,58 +17,60 @@ represents it. "Post" is a WordPress word: it is fine in code that talks to the
 WordPress API, and never appears in language a club member reads, except in
 "post id", the number the Sheet is keyed by.
 
-## Instagram Post
-
-The image or images the club puts on Instagram for an Article, which the post
-generator draws. The interface always says **Instagram Post** in full where it
-could be mistaken for a WordPress Post.
-
-An Instagram Post is not a record anywhere. The **Social Reminder** is where
-the social team sees what needs posting, and its "Not posted" button is where
-they mark each one done.
-
 ## Section
 
 Which desk an Article belongs to: News, Features, Sports, Entertainment or
 Rabbithole. It is the post's WordPress category, and every Article has exactly
-one. A post left in the default category, Uncategorized, has no Section and is
-listed under **Problems**.
+one. An Article left in the default category, Uncategorized, has no Section and
+is listed under **Problems**.
 
-## Credit
+## Credit line
 
-A line in an Article's body that says who made it: "Article by: …", "Image
-Credits: …". Each label belongs to a **role**: writing, images or other.
-
-The credit is read from the post every time. It is the byline as printed, and
-the printed byline is often part of the joke.
+A short paragraph in an Article's body that says who made it: "Article by: …",
+"Image Credits: …". Its label sets the **role** it credits: writing, image or
+other. Which labels count is in the Sheet's Labels tab, editable in Settings.
 
 ## Byline
 
-The name printed in a credit, which is not necessarily the person behind it. A
-writer may publish under a pseudonym, and many bylines are one-off jokes
-written for a single Article.
+A name as a credit line prints it. Often it is the person; sometimes it is a
+**pen name** or a joke written for one Article, and the printed byline is part
+of the joke, so it is never rewritten.
 
-A byline counts as a person as it is printed, unless the **Sheet** says who is
-behind it.
+## Pen name
+
+A byline that stands for someone else. The Sheet says who, once, and from then
+on every Article printing that byline counts as them, including future ones. A
+pen name two people share counts as both.
+
+## Contribution
+
+One person in one role on one Article. Someone who writes an Article and also
+draws its image has made two contributions. It is the only unit people are
+counted in: never "credits", never "articles" for a person.
 
 ## The Sheet
 
 The club's Google Sheet, owned by the club's account, holding the only facts
 WordPress does not:
 
-- **Overrides**: who is really behind a byline, keyed by post id and role.
-- **Labels**: which paragraph labels count as credits, and their roles.
-- **Ignored**: posts whose problems are intended, such as an editor's note.
+- **Overrides**: who a byline really is, on every Article or one.
+- **Labels**: which credit line labels count, and their roles.
+- **Ignored**: Articles whose problems are intended, and similar names that are
+  different people.
 
-It holds overrides only, never a copy of WordPress, so nobody needs to edit it
-in normal use. What is in it is private: it never appears on WordPress, in the
-repository, or on a page anyone outside the Editorial Board can reach.
+HareWare reads it on every load and writes it from the signed-in pages, so
+nobody needs to open it in normal use. It holds corrections only, never a copy
+of WordPress. What is in it is private: it never appears on WordPress, in the
+repository, in the log, or on a page anyone outside the Editorial Board can
+reach.
 
 ## Problem
 
-Something about a published post that HareWare cannot read: no writing or image
-credit, a credit with no readable name, a "name" that reads like a sentence, or
-no Section. The fix is almost always in WordPress, where readers see it too.
+Something about a published Article that HareWare cannot read: no writing or
+image credit, a line shaped like a credit that no label matches, a credit line
+with no readable name, a "name" that reads like a sentence, or no Section. The
+fix is almost always in WordPress, where readers see it too. Two names a letter
+apart, like "Clare Dombroksy" and "Clare Dombrosky", are pointed out alongside.
 
 ## Duty Roster
 
@@ -78,9 +80,10 @@ role for the day rather than a person.
 
 ## Social Reminder
 
-The one **Automation**: every morning at 8 Eastern it posts each Article
-published since the previous morning's run to `#instagram-posting` and pings
-that day's poster role.
+The one **Automation**: every morning at 8 Eastern it **announces** each Article
+published since the previous morning's run in `#instagram-posting` and pings
+that day's poster role. "Posted" and "Not posted" belong to the Instagram button
+on each announced Article, never to the run itself.
 
 ## Automation
 
@@ -91,6 +94,7 @@ reminder did not run", never "the job failed".
 ## Invocation
 
 One thing HareWare did, as recorded in the log: a run of an automation, a manual
-trigger, a press of a "Not posted" button, or a change to the Sheet made from a
-page. Each records what happened and, where there was one, the Discord user
-behind it.
+trigger, a press of a "Not posted" button, or a change to the Sheet. Each
+records what happened and, where there was one, the Discord user behind it. A
+Sheet change is logged by kind and post id only: the log never carries a real
+name.

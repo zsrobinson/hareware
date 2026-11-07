@@ -5,6 +5,7 @@ import {
   ImageIcon,
   MailIcon,
   NewspaperIcon,
+  SettingsIcon,
   TriangleAlertIcon,
   TypeIcon,
   UsersIcon,
@@ -39,6 +40,7 @@ export const adminNav: (NavItem & { href: AdminRoute })[] = [
   { href: "/people", label: "People", icon: UsersIcon },
   { href: "/articles", label: "Articles", icon: NewspaperIcon },
   { href: "/problems", label: "Problems", icon: TriangleAlertIcon },
+  { href: "/settings", label: "Settings", icon: SettingsIcon },
   { href: "/reminder", label: "Social Reminder", icon: BellIcon },
 ];
 

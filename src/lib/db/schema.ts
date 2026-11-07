@@ -14,9 +14,10 @@ export const invocations = sqliteTable(
       enum: [
         "social-ping",
         "mark-posted",
+        "sheet-edit",
+        /* written by earlier versions; rows of them may still be read */
         "sheet-setup",
         "sheet-ignore",
-        /* written by earlier versions; rows of them may still be read */
         "meeting-reminder",
         "article-edit",
         "command-surface",

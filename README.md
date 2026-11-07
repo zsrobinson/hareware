@@ -72,23 +72,36 @@ A credit line is a short paragraph that starts with a known label and a colon:
 `Article by: …`, `Image Credits: …`. The names after it are split on commas,
 `and` and `&`. `X, as told to Y` and `X (Translated by Y)` credit Y. Any other
 parenthesis, and anything starting in lower case, is set aside rather than
-counted. Typos in a name are fixed in WordPress, not aliased here.
+counted. Typos in a name are fixed in WordPress, not aliased here; Problems
+points at names a letter or two apart, and at lines shaped like a credit that
+no label matches.
+
+People are counted in **contributions**: one person in one role on one
+article, so writing and illustrating an article is two.
 
 ### The Sheet
 
-Two tabs, which the **Set up missing tabs** button on `/problems` creates:
+HareWare reads the Sheet on every load and writes it from the signed-in pages:
+pen names from People and Settings, one article's contributors from Articles,
+ignored problems from Problems, credit labels from Settings. Nobody needs to
+open it in normal use, and HareWare adds any tab it is missing the first time
+it saves there. Each tab is read by its header row, so columns can be in any
+order.
 
-| Tab         | Columns                              | Meaning                                                                                                                                                          |
-| ----------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Overrides` | `post_id`, `role`, `real_name`, note | Rows for a post and role replace the names parsed from that role's credit line. Co-credits are several rows. A post with no rows is credited exactly as printed. |
-| `Labels`    | `label`, `role`                      | Which paragraph labels are credits, and whether each is `writer`, `image` or `other`. Empty, the defaults in `src/lib/credits/labels.ts` apply.                  |
+| Tab         | Columns                                          | Meaning                                                                                                                                                                                                                                   |
+| ----------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Overrides` | `post_id`, `role`, `byline`, `real_name`, `note` | A printed `byline` counts as `real_name`. With no `post_id` it holds on every article, so a pen name is one row; with one, on that article only. A row with a `post_id` and `role` but no byline adds someone the article does not print. |
+| `Labels`    | `label`, `role`                                  | Which paragraph labels start a credit line, and whether each credits `writer`, `image` or `other`. Empty, the defaults in `src/lib/credits/labels.ts` apply.                                                                              |
+| `Ignored`   | `post_id`, `names`, `note`                       | Articles whose problems are intended, or a pair of similar names that are different people.                                                                                                                                               |
 
-`post_id` is the number in the post's edit link, `post.php?post=1234`. The
-Problems page shows it beside every post.
+A save reads the tab, changes the rows it means to, and writes the tab back,
+keeping every other row as it was. Two people saving at once is
+last-writer-wins.
 
 **What is in the Sheet is private.** It never goes into WordPress, the
-repository or a public page. The archive pages and `/api/archive.json` refuse
-anybody without `@Editorial Board`.
+repository, the log or a public page. The archive pages, `/api/archive.json`
+and `/api/sheet` refuse anybody without `@Editorial Board`, and log lines for
+Sheet changes name the kind of change and the post id, never a person.
 
 Setting it up: a Google Cloud service account, with the Sheets API enabled on
 its project, shared on the Sheet as **Editor**. Its JSON key goes in

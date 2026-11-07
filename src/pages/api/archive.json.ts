@@ -18,7 +18,9 @@ export const GET: APIRoute = async ({ request }) => {
   try {
     const archive = await loadArchive({ fresh });
     return Response.json(archive, {
-      headers: { "cache-control": "private, max-age=120" },
+      /* no-store: a save must show on the next read, and real names must not
+         sit in a browser cache after signing out */
+      headers: { "cache-control": "private, no-store" },
     });
   } catch (error) {
     console.error("[archive] could not load", error);

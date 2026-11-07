@@ -3,6 +3,20 @@ import { DataTable, sortable } from "~/components/data-table";
 import { Badge } from "~/components/ui/badge";
 import type { Row } from "~/lib/log";
 
+/** what a run of the reminder did, in words: the page's "Last run" reads this too */
+export const OUTCOMES: Record<Row["outcome"], string> = {
+  ok: "Announced",
+  skipped: "Nothing new",
+  misconfigured: "Not set up",
+  failed: "Failed",
+};
+
+/* a button press is not a run, so it does not say "Announced" */
+const outcome = (row: Row) =>
+  row.action === "mark-posted" && row.outcome === "ok"
+    ? "Marked"
+    : OUTCOMES[row.outcome];
+
 /* `skipped` is a quiet morning, not a failure; `misconfigured` needs someone to set something */
 const BADGES: Record<string, "secondary" | "outline" | "destructive"> = {
   ok: "secondary",
@@ -21,6 +35,13 @@ const when = (at: number) =>
     minute: "2-digit",
   });
 
+const SOURCES: Record<Row["source"], string> = {
+  cron: "Schedule",
+  manual: "Manual",
+  button: "Someone",
+  command: "Someone",
+};
+
 export function ReminderLog({
   rows,
   names,
@@ -28,6 +49,9 @@ export function ReminderLog({
   rows: Row[];
   names: Record<string, string>;
 }) {
+  const by = (row: Row) =>
+    (row.actor && names[row.actor]) || SOURCES[row.source];
+
   const columns: ColumnDef<Row, unknown>[] = [
     {
       accessorKey: "at",
@@ -39,13 +63,14 @@ export function ReminderLog({
       ),
     },
     {
-      accessorKey: "outcome",
+      id: "outcome",
+      accessorFn: outcome,
       header: sortable("Outcome"),
       filterFn: (row, id, value: string[]) =>
         value.includes(row.getValue(id) as string),
       cell: ({ row }) => (
         <Badge variant={BADGES[row.original.outcome] ?? "destructive"}>
-          {row.original.outcome}
+          {outcome(row.original)}
         </Badge>
       ),
     },
@@ -58,16 +83,11 @@ export function ReminderLog({
     },
     {
       id: "who",
-      accessorFn: (row) =>
-        row.actor ? (names[row.actor] ?? row.actor) : row.source,
+      accessorFn: by,
       header: "By",
       cell: ({ row }) => (
         <span className="text-muted-foreground whitespace-nowrap">
-          {row.original.actor
-            ? (names[row.original.actor] ?? "someone")
-            : row.original.source === "cron"
-              ? "schedule"
-              : row.original.source}
+          {by(row.original)}
         </span>
       ),
     },

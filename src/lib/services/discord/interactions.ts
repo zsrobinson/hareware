@@ -24,7 +24,7 @@ type DiscordUser = {
   global_name?: string | null;
 };
 
-type Interaction = {
+export type Interaction = {
   type: number;
   data?: { custom_id?: string; name?: string };
   message?: { components?: Component[] };
@@ -75,6 +75,41 @@ export function handleInteraction(
     };
   }
 
+  return undefined;
+}
+
+/**
+ * The log's line for a press of the posted button — "Zachary marked some-slug
+ * posted" — reading the new state from the reply, which is what Discord shows.
+ */
+export function describePress(
+  interaction: Interaction,
+  reply: InteractionResponse,
+): string | undefined {
+  const id = interaction.data?.custom_id;
+  if (interaction.type !== MESSAGE_COMPONENT || !id?.startsWith(POSTED_PREFIX))
+    return undefined;
+
+  const slug = id.slice(POSTED_PREFIX.length);
+  const label = find(reply.data?.components ?? [], id)?.label;
+  const state =
+    label === "Not posted"
+      ? "not posted"
+      : typeof label === "string" && label.startsWith("Posted")
+        ? "posted"
+        : undefined;
+
+  return state
+    ? `${who(interaction)} marked ${slug} ${state}`
+    : `${who(interaction)} pressed the button for ${slug}`;
+}
+
+function find(components: Component[], id: string): Component | undefined {
+  for (const component of components) {
+    if (component.custom_id === id) return component;
+    const nested = find(component.components ?? [], id);
+    if (nested) return nested;
+  }
   return undefined;
 }
 

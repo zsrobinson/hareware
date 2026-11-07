@@ -8,6 +8,7 @@ export const ADMIN_ROUTES = [
   "/people",
   "/articles",
   "/problems",
+  "/settings",
   "/reminder",
 ] as const;
 

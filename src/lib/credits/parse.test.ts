@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { DEFAULT_LABELS } from "./labels";
-import { creditLines, names, paragraphs } from "./parse";
+import { creditLines, names, paragraphs, unrecognisedLines } from "./parse";
 
 const lines = (html: string) => creditLines(paragraphs(html), DEFAULT_LABELS);
 
@@ -72,5 +72,25 @@ test.each([
 test("keeps what it set aside, so a page can show it", () => {
   expect(names("Testudo, as told to Seth Buus").asides).toEqual([
     "Testudo, as told to",
+  ]);
+});
+
+test("finds lines shaped like credits that no label matched", () => {
+  expect(
+    unrecognisedLines(
+      [
+        "Article by: Somebody",
+        "Article by Amelia Nur",
+        "Squirrel Photos and Videos by: Mohit Bogineni",
+        "Article Image by Kenlynn Ingham Cocktail Illustrations by Will Pipkin",
+        "For those overtaken by Spiritus Christmassium before the dawn",
+        "Written by hand, and badly.",
+      ],
+      DEFAULT_LABELS,
+    ),
+  ).toEqual([
+    "Article by Amelia Nur",
+    "Squirrel Photos and Videos by: Mohit Bogineni",
+    "Article Image by Kenlynn Ingham Cocktail Illustrations by Will Pipkin",
   ]);
 });

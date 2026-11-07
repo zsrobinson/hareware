@@ -50,7 +50,9 @@ test("pings the day's role with what published since the last run", async () => 
   ]);
 
   const result = await sendSocialPing(env, eightAm);
-  expect(result.summary).toContain("posted 1 article");
+  expect(result.summary).toBe(
+    "Announced 1 article published since Wed, Sep 2, 8:00 AM",
+  );
 
   const body = discord.mock.calls[0]![0];
   expect(body.components[0].content).toContain(
@@ -139,6 +141,7 @@ test("a quiet day is skipped, not failed", async () => {
   const result = await sendSocialPing(env, eightAm);
 
   expect(result.outcome).toBe("skipped");
+  expect(result.summary).toBe("Nothing new since Wed, Sep 2, 8:00 AM");
   expect(discord).not.toHaveBeenCalled();
 });
 
@@ -149,7 +152,7 @@ test("a throttled WordPress is a failure, not a quiet day", async () => {
   const result = await sendSocialPing(env, eightAm);
 
   expect(result.outcome).toBe("failed");
-  expect(result.summary).toContain("wordpress");
+  expect(result.summary).toContain("Could not read WordPress");
 });
 
 test("says what is unset rather than throwing", async () => {
@@ -158,8 +161,70 @@ test("says what is unset rather than throwing", async () => {
 
   const result = await sendSocialPing({} as Env, eightAm);
 
-  expect(result.summary).toContain("DISCORD_BOT_TOKEN");
+  expect(result.outcome).toBe("misconfigured");
+  expect(result.summary).toBe("Not set up: DISCORD_BOT_TOKEN is unset");
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test("a day with no poster role is not set up, and posts nothing", async () => {
+  const { discord } = mockWordPress([
+    post("A headline", "2026-09-03T10:00:00", "a-headline"),
+  ]);
+  const thursday = SOCIAL_ROLE_IDS.Thursday;
+  SOCIAL_ROLE_IDS.Thursday = undefined;
+
+  const result = await sendSocialPing(env, eightAm).finally(() => {
+    SOCIAL_ROLE_IDS.Thursday = thursday;
+  });
+
+  expect(result.outcome).toBe("misconfigured");
+  expect(result.summary).toBe("Not set up: no poster role for Thursday");
+  expect(discord).not.toHaveBeenCalled();
+});
+
+test("articles past the limit are counted at the end of the message", async () => {
+  const { discord } = mockWordPress(
+    Array.from({ length: 12 }, (_, i) =>
+      post(`Article ${i}`, "2026-09-03T10:00:00", `article-${i}`, i),
+    ),
+  );
+
+  const result = await sendSocialPing(env, eightAm);
+
+  const components = discord.mock.calls[0]![0].components;
+  const buttons = components.filter((c: { type: number }) => c.type === 1);
+  expect(buttons).toHaveLength(7);
+  expect(components.at(-1)).toEqual({ type: 10, content: "+5 more" });
+  expect(result.summary).toBe(
+    "Announced 12 articles published since Wed, Sep 2, 8:00 AM (7 listed, +5 more)",
+  );
+});
+
+test("a busy morning stays inside Discord's forty components, buttons included", async () => {
+  const { discord } = mockWordPress(
+    Array.from({ length: 30 }, (_, i) =>
+      post(`Article ${i}`, "2026-09-03T10:00:00", `article-${i}`, i),
+    ),
+  );
+
+  await sendSocialPing(env, eightAm);
+
+  type Node = { components?: Node[] };
+  const count = (nodes: Node[]): number =>
+    nodes.reduce((n, node) => n + 1 + count(node.components ?? []), 0);
+  expect(count(discord.mock.calls[0]![0].components)).toBeLessThanOrEqual(40);
+});
+
+test("a full message has no count at the end", async () => {
+  const { discord } = mockWordPress(
+    Array.from({ length: 7 }, (_, i) =>
+      post(`Article ${i}`, "2026-09-03T10:00:00", `article-${i}`, i),
+    ),
+  );
+
+  await sendSocialPing(env, eightAm);
+
+  expect(JSON.stringify(discord.mock.calls[0]![0])).not.toContain("more");
 });
 
 /* `inert()` has its own tests; this checks the ping calls it */

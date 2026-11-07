@@ -31,7 +31,6 @@ import type { SheetPayload } from "~/lib/credits/load";
 import { paragraphs } from "~/lib/credits/parse";
 import { labelsIn } from "~/lib/credits/sheet";
 import { allPosts, categories } from "~/lib/services/wordpress/posts";
-import { breathe } from "~/lib/services/wordpress/request";
 
 /* younger than this, the read is used without asking WordPress */
 const FRESH_MS = 10 * 60_000;
@@ -75,9 +74,9 @@ export function useReadProgress(): Progress {
 
 async function readWordPress(): Promise<Snapshot> {
   report({ read: 0, total: 0 });
-  /* one after the other: together they are what gets throttled */
+  /* one after the other: sent to WordPress directly, together they are what
+     gets throttled */
   const posts = await allPosts((read, total) => report({ read, total }));
-  await breathe();
   const sections = await categories();
 
   const snapshot: Snapshot = {

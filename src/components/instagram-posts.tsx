@@ -123,7 +123,7 @@ function Landing({
      read every article */
   const hover = useRef<ReturnType<typeof setTimeout>>(undefined);
   const prefetch = (link: string) =>
-    void queryClient.prefetchQuery(articleQuery(toArticleSlug(link)));
+    void queryClient.query(articleQuery(toArticleSlug(link))).catch(() => {});
   const soon = (link: string) => {
     clearTimeout(hover.current);
     hover.current = setTimeout(() => prefetch(link), 120);

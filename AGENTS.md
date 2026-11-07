@@ -74,7 +74,9 @@ Sheet or the log is gated.
 browser (its REST API answers any origin), and the archive is built there too;
 the Worker hands out only what needs a secret. A new route under `/api` or
 `/auth` must stay well under 10 ms of CPU: no parsing article bodies, no
-building the archive, no linkedom (a dev dependency, for tests only). Anything
+building the archive, no linkedom (a dev dependency, for tests only).
+`/api/wordpress` passes WordPress's cached answers to the browser, and it can
+only because it streams the body without reading it; never parse there. Anything
 else under `src/pages` must be `export const prerender = true`. A test file
 under `src/pages` must start with `_`, or Astro routes it and bundles vitest.
 

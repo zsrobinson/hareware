@@ -18,7 +18,8 @@ function setUp(gate: Response, stored?: object) {
     vi.fn(async (url: string) => {
       asked.push(url);
       if (url === "/api/archive.json") return gate.clone();
-      /* WordPress: no posts, so a read behind the page finishes at once */
+      /* WordPress: no posts, after a moment, as a real read takes one */
+      await new Promise((wake) => setTimeout(wake, 100));
       return Response.json([], { headers: { "x-wp-totalpages": "1" } });
     }),
   );
@@ -90,5 +91,5 @@ test("an older copy is shown at once, and WordPress read behind it", async () =>
     },
     { timeout: 3000 },
   );
-  expect(asked.some((url) => url.includes("/wp-json/wp/v2/posts"))).toBe(true);
+  expect(asked.some((url) => url.includes("wp/v2/posts"))).toBe(true);
 });

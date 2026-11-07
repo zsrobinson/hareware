@@ -15,6 +15,7 @@ import {
   articleUrl,
   latestUrl,
   recentUrl,
+  viaHareWare,
 } from "~/lib/services/wordpress/urls";
 
 declare global {
@@ -49,16 +50,16 @@ const PAGE = "__PAGE__";
 export function earlyScript(early: Early): string {
   const article = `const a = q.get("article");
     const slug = a && /^[a-z0-9-]+$/i.test(a) ? a : null;
-    if (slug) go(${JSON.stringify(articleUrl(SLUG))}.replace(${JSON.stringify(SLUG)}, slug));`;
+    if (slug) go(${JSON.stringify(viaHareWare(articleUrl(SLUG)))}.replace(${JSON.stringify(SLUG)}, slug));`;
 
   const body =
     early === "article-or-recent"
       ? `${article}
-    if (!a) go(${JSON.stringify(recentUrl(PAGE))}.replace(${JSON.stringify(PAGE)}, String(Math.max(1, Number(q.get("page")) || 1))));`
+    if (!a) go(${JSON.stringify(viaHareWare(recentUrl(PAGE)))}.replace(${JSON.stringify(PAGE)}, String(Math.max(1, Number(q.get("page")) || 1))));`
       : early === "article"
         ? article
         : early === "latest"
-          ? `go(${JSON.stringify(latestUrl(10))});`
+          ? `go(${JSON.stringify(viaHareWare(latestUrl(10)))});`
           : `go(${JSON.stringify(early.api)}, { cache: "no-store" });`;
 
   /* an old browser without `??=`, or anything else going wrong, leaves the

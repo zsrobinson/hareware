@@ -47,6 +47,15 @@ edge cache cannot be relied on to keep the WordPress read rare.
    WordPress is busy and to try again in a minute, rather than calling the
    link bad. linkedom is a dev dependency now, for the tests only.
 
+   The requests themselves go through `/api/wordpress` first. A browser's
+   cross-origin request carries an `Origin` header, and WordPress.com answers
+   any request with one from its server rather than its cache: about 400 ms
+   for an article, against about 130 ms cached. The pass-through asks without
+   one and streams the answer back unread, which costs the Worker about what
+   a refusal does, and the browser reuses the connection it already has. It
+   passes two collections and the query keys the pages use; when it fails,
+   the browser asks WordPress itself.
+
 3. **The browser builds the archive.** `/api/archive.json` returns only what
    needs a secret: the Sheet, behind the gate. The archive page asks it first,
    so someone it refuses never downloads WordPress; it then reads WordPress,

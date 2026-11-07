@@ -7,7 +7,15 @@
 
 import { ORIGIN } from "./article-url";
 
-const POSTS = `${ORIGIN}/wp-json/wp/v2/posts`;
+const API = `${ORIGIN}/wp-json/`;
+const POSTS = `${API}wp/v2/posts`;
+
+/**
+ * the same request through HareWare's own /api/wordpress, which WordPress
+ * answers from its cache (see that route); anything else is left as it is
+ */
+export const viaHareWare = (url: string) =>
+  url.startsWith(API) ? `/api/wordpress/${url.slice(API.length)}` : url;
 
 /**
  * everything we need off a post, in one request. _links looks redundant next to

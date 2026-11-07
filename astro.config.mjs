@@ -5,6 +5,7 @@ import cloudflare from "@astrojs/cloudflare";
 
 import tailwindcss from "@tailwindcss/vite";
 import { version } from "./src/lib/build-version.mjs";
+import { preloadIslands } from "./src/lib/preload-islands.mjs";
 
 // https://astro.build/config
 export default defineConfig({
@@ -12,7 +13,7 @@ export default defineConfig({
   // HareWare signs its own stateless session cookie; ADR 0008 deliberately
   // has no server-side session store.
   session: false,
-  integrations: [react()],
+  integrations: [react(), preloadIslands()],
 
   // the old admin urls are in Discord messages the bot has already posted, and
   // one of them is what an alert tells somebody to go and read. the reminder,

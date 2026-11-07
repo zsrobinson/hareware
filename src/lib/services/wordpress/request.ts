@@ -1,12 +1,17 @@
 /*
-  One read from WordPress's REST API, patiently. WordPress.com throttles with
-  429 and sometimes a 5xx. Its 429 carries no CORS headers and no Retry-After
-  (checked 2026-11-07), so in a browser a throttled answer is only a failed
-  fetch, and that counts as the same thing. Each is retried briefly, and then the caller
-  gets a `Throttled` to explain in words rather than a page that just stops.
+  One read from WordPress's REST API, patiently. In a browser it goes through
+  HareWare's /api/wordpress first, which WordPress answers from its cache;
+  if that fails, or anywhere else, it goes to WordPress directly.
+
+  WordPress.com throttles with 429 and sometimes a 5xx. Its 429 carries no
+  CORS headers and no Retry-After (checked 2026-11-07), so in a browser a
+  throttled answer is only a failed fetch, and that counts as the same thing.
+  Each is retried briefly, and then the caller gets a `Throttled` to explain
+  in words rather than a page that just stops.
 */
 
 import { takeEarly } from "~/lib/early";
+import { viaHareWare } from "./urls";
 import { errorMessage } from "~/lib/utils";
 
 /** WordPress turned the request away for now; waiting a minute is the fix */
@@ -22,14 +27,24 @@ const MAX_WAIT_MS = 4000;
 const sleep = (ms: number) => new Promise((wake) => setTimeout(wake, ms));
 
 /**
- * the pause between reads in a run. With an `Origin` header WordPress.com
- * bypasses its cache, and its server refused about every other request sent
- * back to back; half a second between them drew none (checked 2026-11-07)
+ * the least time between two reads sent to WordPress directly. With an
+ * `Origin` header WordPress.com skips its cache, and its server refused about
+ * every other request sent back to back; half a second between them drew none
+ * (checked 2026-11-07). Reads through /api/wordpress come from the cache and
+ * need no gap
  */
-export const BETWEEN_READS_MS = 500;
-
-/** waits out the pause before the next read in a run */
-export const breathe = () => sleep(BETWEEN_READS_MS);
+const BETWEEN_DIRECT_MS = 500;
+let lastDirect = 0;
+async function spaced(url: string): Promise<Response> {
+  /* never more than the gap itself, whatever the clock did in between */
+  const wait = Math.min(
+    lastDirect + BETWEEN_DIRECT_MS - Date.now(),
+    BETWEEN_DIRECT_MS,
+  );
+  if (wait > 0) await sleep(wait);
+  lastDirect = Date.now();
+  return fetch(url);
+}
 
 /** `Retry-After` in seconds, as milliseconds; the date form is ignored */
 function told(header: string | null): number | undefined {
@@ -48,13 +63,26 @@ export async function readWordPress(
   url: string,
   describe: string,
 ): Promise<Response> {
+  /* in a browser, through HareWare first: WordPress's cache answers it. A
+     refusal or a failure there falls through to asking WordPress itself */
+  if (typeof document !== "undefined") {
+    const through = viaHareWare(url);
+    try {
+      /* the page may have sent it already: ~/lib/early */
+      const response = await (takeEarly(through) ?? fetch(through));
+      if (response.status !== 429 && response.status < 500) return response;
+    } catch (thrown) {
+      console.warn(`[wordpress] ${describe} through HareWare`, thrown);
+    }
+  }
+
   let failed = 0;
   for (let attempt = 0; ; attempt++) {
     let response: Response;
     try {
       /* the page may have sent the first one already: ~/lib/early */
       response = await ((attempt === 0 && failed === 0 && takeEarly(url)) ||
-        fetch(url));
+        spaced(url));
     } catch (thrown) {
       if (failed >= FAILED_RETRIES)
         throw new Throttled(`${describe}: ${errorMessage(thrown)}`);

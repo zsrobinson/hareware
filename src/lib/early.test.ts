@@ -1,6 +1,15 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { earlyScript, takeEarly, type Early } from "./early";
-import { articleUrl, latestUrl, recentUrl } from "./services/wordpress/urls";
+import {
+  articleUrl,
+  latestUrl,
+  recentUrl,
+  viaHareWare,
+} from "./services/wordpress/urls";
+
+/* the early requests go through HareWare's pass-through, as the islands' do */
+const article = (slug: string) => viaHareWare(articleUrl(slug));
+const recent = (page: number) => viaHareWare(recentUrl(page));
 
 afterEach(() => {
   globalThis.__early = undefined;
@@ -26,15 +35,16 @@ function run(early: Early, search: string): string[] {
    page would send every request twice */
 test("an article page starts exactly the request its island makes", () => {
   const slug = "testudo-learns-to-swim";
-  expect(run("article", `?article=${slug}`)).toEqual([articleUrl(slug)]);
-  expect(takeEarly(articleUrl(slug))).toBeDefined();
-  expect(takeEarly(articleUrl(slug))).toBeUndefined();
+  expect(run("article", `?article=${slug}`)).toEqual([article(slug)]);
+  expect(article(slug)).toMatch(/^\/api\/wordpress\/wp\/v2\/posts\?/);
+  expect(takeEarly(article(slug))).toBeDefined();
+  expect(takeEarly(article(slug))).toBeUndefined();
 });
 
 test("the landing starts the recent list for the page it is on", () => {
-  expect(run("article-or-recent", "")).toEqual([recentUrl(1)]);
+  expect(run("article-or-recent", "")).toEqual([recent(1)]);
   globalThis.__early = undefined;
-  expect(run("article-or-recent", "?page=3")).toEqual([recentUrl(3)]);
+  expect(run("article-or-recent", "?page=3")).toEqual([recent(3)]);
 });
 
 test("a pasted link is left to the island, which reads it more carefully", () => {
@@ -47,7 +57,7 @@ test("a pasted link is left to the island, which reads it more carefully", () =>
 });
 
 test("the newsletter and the gated pages start their one request", () => {
-  expect(run("latest", "")).toEqual([latestUrl(10)]);
+  expect(run("latest", "")).toEqual([viaHareWare(latestUrl(10))]);
   globalThis.__early = undefined;
   expect(run({ api: "/api/archive.json" }, "")).toEqual(["/api/archive.json"]);
 });

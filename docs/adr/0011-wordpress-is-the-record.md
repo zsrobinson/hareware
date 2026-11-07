@@ -36,7 +36,9 @@ fixed in WordPress, not with an alias table.
 **A Google Sheet holds the one fact WordPress lacks**: who is really behind a
 pen name. One row says a byline counts as a person on every article that
 prints it, including future ones, so a recurring pen name is entered once; a
-row with a post id corrects one article only. An article with no rows is
+row with a post id corrects one article only. A pen name that changes hands is
+both: the every-article row names whoever has it now, and the articles from
+before keep their own rows naming who wrote them. An article with no rows is
 credited as printed. The Sheet also holds the credit labels, so a new label
 ("Puzzle by") needs no deploy, and the problems someone decided are fine.
 

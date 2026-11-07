@@ -174,6 +174,18 @@ test("flags a line shaped like a credit that no label reads", () => {
   ]);
 });
 
+test("a credit line without its colon is fixed in WordPress, not with a label", () => {
+  const [article] = build([
+    post(1, ["Article by Cleo Drawer", "Image Credits: B"]),
+  ]).articles;
+
+  expect(article!.problems).toContainEqual({
+    kind: "no-colon",
+    detail: "Article by Cleo Drawer",
+  });
+  expect(article!.problems.some((p) => p.kind === "unrecognised")).toBe(false);
+});
+
 test("an article marked not a problem carries the note", () => {
   const archive = build(
     [post(1, ["Just a body."])],
@@ -235,4 +247,28 @@ test("a missing tab is named, so a renamed Overrides tab is never mistaken for a
     status: "read",
     missingTabs: ["Overrides"],
   });
+});
+
+test("a series under one pen name counts each part as whoever wrote it", () => {
+  const archive = build(
+    [
+      post(1, ["Article by: Penn Name"]),
+      post(2, ["Article by: Penn Name"]),
+      post(3, ["Article by: Penn Name"]),
+    ],
+    read([
+      /* the byline is Sam's now, and part 1 stays Riley's */
+      row({ byline: "Penn Name", realName: "Sam Second" }),
+      row({
+        postId: 1,
+        role: "writer",
+        byline: "Penn Name",
+        realName: "Riley Real",
+      }),
+    ]),
+  );
+
+  expect(names(archive, 0)).toEqual(["Riley Real"]);
+  expect(names(archive, 1)).toEqual(["Sam Second"]);
+  expect(names(archive, 2)).toEqual(["Sam Second"]);
 });

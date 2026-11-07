@@ -11,11 +11,13 @@ import {
   setDifferentPeople,
   setIgnored,
   setLabels,
+  setByline,
   setPenNames,
 } from "./sheet";
 
 type PenNameEntry = { byline: string; realName: string };
 type CreditEntry = { byline: string | null; realName: string };
+type BylineOn = { postId: number; role: Role | null; realNames: string[] };
 
 export type Edit =
   | { kind: "pen-names"; entries: PenNameEntry[] }
@@ -24,6 +26,12 @@ export type Edit =
       postId: number;
       role: Role;
       entries: CreditEntry[];
+    }
+  | {
+      kind: "byline";
+      byline: string;
+      everywhere?: string[];
+      articles: BylineOn[];
     }
   | { kind: "labels"; labels: Label[] }
   | { kind: "ignore"; postId: number; ignored: boolean }
@@ -58,6 +66,33 @@ export function parseEdit(body: unknown): Edit | { error: string } {
         realName: text(e?.realName) ?? "",
       }));
       return { kind: "article-credits", postId, role: b.role, entries };
+    }
+    case "byline": {
+      const byline = text(b.byline);
+      if (!byline) return { error: "byline must be the printed name" };
+      const names = (v: unknown) =>
+        Array.isArray(v) && v.every((n) => typeof n === "string")
+          ? (v as string[]).map((n) => n.trim()).filter(Boolean)
+          : undefined;
+      const everywhere =
+        b.everywhere === undefined ? undefined : names(b.everywhere);
+      if (b.everywhere !== undefined && !everywhere)
+        return { error: "everywhere must be a list of names" };
+      if (!Array.isArray(b.articles))
+        return { error: "articles must be a list" };
+      const articles: BylineOn[] = [];
+      for (const a of b.articles as Record<string, unknown>[]) {
+        const id = Number(a?.postId);
+        const role = a?.role ?? null;
+        const realNames = names(a?.realNames);
+        if (!Number.isInteger(id) || id <= 0)
+          return { error: "every article needs a WordPress post id" };
+        if (role !== null && (typeof role !== "string" || !isRole(role)))
+          return { error: "role must be writer, image, other or null" };
+        if (!realNames) return { error: "realNames must be a list of names" };
+        articles.push({ postId: id, role, realNames });
+      }
+      return { kind: "byline", byline, everywhere, articles };
     }
     case "labels": {
       if (!Array.isArray(b.labels)) return { error: "labels must be a list" };
@@ -115,6 +150,14 @@ export async function applyEdit(sheets: Sheets, edit: Edit, who: string) {
         edit.entries,
         note,
       );
+    case "byline":
+      return setByline(
+        sheets,
+        edit.byline,
+        edit.everywhere,
+        edit.articles,
+        note,
+      );
     case "labels":
       return setLabels(sheets, edit.labels);
     case "ignore":
@@ -131,6 +174,8 @@ export function describeEdit(edit: Edit): string {
       return `set ${edit.entries.length} pen name row(s)`;
     case "article-credits":
       return `edited the ${edit.role} contributors of post ${edit.postId}`;
+    case "byline":
+      return `set who a byline is${edit.everywhere ? " everywhere and" : ""} on ${edit.articles.length} article row(s)`;
     case "labels":
       return `saved ${edit.labels.length} credit labels`;
     case "ignore":

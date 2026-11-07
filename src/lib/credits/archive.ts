@@ -49,6 +49,7 @@ export const PROBLEM_KINDS = {
   "no-writer": "No writing credit",
   "no-image": "No image credit",
   unrecognised: "Unknown credit label",
+  "no-colon": "Credit line without a colon",
   unparsed: "Credit line with no name",
   "odd-name": "Name reads like a sentence",
   uncategorized: "No section",
@@ -261,8 +262,16 @@ function problemsOf(
   const has = (role: Role) =>
     credits.some((c) => c.role === role && c.contributors.length > 0);
 
-  for (const line of unrecognised)
-    problems.push({ kind: "unrecognised", detail: line, label: labelOf(line) });
+  /* a label only reads a line with a colon after it, so a line without one
+     is fixed in WordPress, not by adding its label */
+  for (const line of unrecognised) {
+    const label = labelOf(line);
+    problems.push(
+      label && line.slice(label.length).trimStart().startsWith(":")
+        ? { kind: "unrecognised", detail: line, label }
+        : { kind: "no-colon", detail: line },
+    );
+  }
   if (!has("writer"))
     problems.push({ kind: "no-writer", detail: "no “Article by:” line" });
   if (!has("image"))

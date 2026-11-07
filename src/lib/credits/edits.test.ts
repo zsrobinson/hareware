@@ -63,9 +63,45 @@ test("a log line never carries a real name", () => {
       names: ["Riley Real", "Riley Reel"],
       different: true,
     },
+    {
+      kind: "byline",
+      byline: "Penn Name",
+      everywhere: ["Sam Second"],
+      articles: [{ postId: 3, role: "writer", realNames: ["Riley Real"] }],
+    },
   ];
   for (const edit of edits) {
     expect(describeEdit(edit)).not.toContain("Riley");
     expect(describeEdit(edit)).not.toContain("Penn");
   }
+});
+
+test("a byline edit names the byline and says who on which articles", () => {
+  expect(
+    parseEdit({
+      kind: "byline",
+      byline: " Penn Name ",
+      everywhere: ["Sam Second"],
+      articles: [{ postId: 3, role: "writer", realNames: ["Riley Real", " "] }],
+    }),
+  ).toEqual({
+    kind: "byline",
+    byline: "Penn Name",
+    everywhere: ["Sam Second"],
+    articles: [{ postId: 3, role: "writer", realNames: ["Riley Real"] }],
+  });
+  expect(
+    parseEdit({ kind: "byline", byline: "Penn Name", articles: [] }),
+  ).toEqual({ kind: "byline", byline: "Penn Name", articles: [] });
+  for (const body of [
+    { kind: "byline", articles: [] },
+    { kind: "byline", byline: "P", articles: [{ postId: 0, realNames: [] }] },
+    {
+      kind: "byline",
+      byline: "P",
+      articles: [{ postId: 3, role: "x", realNames: [] }],
+    },
+    { kind: "byline", byline: "P", everywhere: "Sam", articles: [] },
+  ])
+    expect(parseEdit(body)).toHaveProperty("error");
 });

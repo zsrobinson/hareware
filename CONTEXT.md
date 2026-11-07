@@ -42,6 +42,12 @@ A byline that stands for someone else. The Sheet says who, once, and from then
 on every Article printing that byline counts as them, including future ones. A
 pen name two people share counts as both.
 
+A pen name can also change hands, as when one person writes part one of a
+series and someone else continues it under the same byline. Then each Article
+says who it was: the earlier ones keep the first person, and the pen name counts
+as the second from then on. Saying who a pen name is now never silently
+re-credits what was already published.
+
 ## Contribution
 
 One person in one role on one Article. Someone who writes an Article and also
@@ -67,7 +73,8 @@ reach.
 ## Problem
 
 Something about a published Article that HareWare cannot read: no writing or
-image credit, a line shaped like a credit that no label matches, a credit line
+image credit, a line shaped like a credit that no label matches or that lacks
+its colon, a credit line
 with no readable name, a "name" that reads like a sentence, or no Section. The
 fix is almost always in WordPress, where readers see it too. Two names a letter
 apart, like "Clare Dombroksy" and "Clare Dombrosky", are pointed out alongside.

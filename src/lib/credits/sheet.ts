@@ -314,6 +314,49 @@ export async function setArticleCredits(
   ]);
 }
 
+/**
+ * says who one byline is, on every article and on particular ones, in one
+ * write: the way a pen name passes from one person to another (the earlier
+ * articles keep the first, new ones count as the second). `everywhere` left
+ * out keeps the every-article rows as they are; an article entry replaces that
+ * byline's rows on that article and role (a null role is a row for any role),
+ * and an empty list of names returns it to `everywhere`
+ */
+export async function setByline(
+  sheets: Sheets,
+  byline: string,
+  everywhere: string[] | undefined,
+  articles: { postId: number; role: Role | null; realNames: string[] }[],
+  note = "",
+) {
+  const printedAs = byline.trim();
+  await rewrite(sheets, "overrides", (rows) => [
+    ...rows.filter(([postId = "", rowRole = "", printed = ""]) => {
+      if (!same(printed, printedAs)) return true;
+      const id = postId.trim();
+      const role = rowRole.trim().toLowerCase();
+      if (id === "") return everywhere === undefined;
+      return !articles.some(
+        (a) => String(a.postId) === id && (a.role ?? "") === role,
+      );
+    }),
+    ...(everywhere ?? [])
+      .filter((name) => name.trim())
+      .map((name) => ["", "", printedAs, name.trim(), note]),
+    ...articles.flatMap((a) =>
+      a.realNames
+        .filter((name) => name.trim())
+        .map((name) => [
+          String(a.postId),
+          a.role ?? "",
+          printedAs,
+          name.trim(),
+          note,
+        ]),
+    ),
+  ]);
+}
+
 /** the whole list of credit labels, as the Settings page edits it */
 export async function setLabels(sheets: Sheets, labels: Label[]) {
   await rewrite(sheets, "labels", () =>

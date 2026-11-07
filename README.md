@@ -82,17 +82,17 @@ article, so writing and illustrating an article is two.
 ### The Sheet
 
 HareWare reads the Sheet on every load and writes it from the signed-in pages:
-pen names from People and Settings, one article's contributors from Articles,
+pen names from People and Settings (including who a pen name was on each article), one article's contributors from Articles,
 ignored problems from Problems, credit labels from Settings. Nobody needs to
 open it in normal use, and HareWare adds any tab it is missing the first time
 it saves there. Each tab is read by its header row, so columns can be in any
 order.
 
-| Tab         | Columns                                          | Meaning                                                                                                                                                                                                                                   |
-| ----------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Overrides` | `post_id`, `role`, `byline`, `real_name`, `note` | A printed `byline` counts as `real_name`. With no `post_id` it holds on every article, so a pen name is one row; with one, on that article only. A row with a `post_id` and `role` but no byline adds someone the article does not print. |
-| `Labels`    | `label`, `role`                                  | Which paragraph labels start a credit line, and whether each credits `writer`, `image` or `other`. Empty, the defaults in `src/lib/credits/labels.ts` apply.                                                                              |
-| `Ignored`   | `post_id`, `names`, `note`                       | Articles whose problems are intended, or a pair of similar names that are different people.                                                                                                                                               |
+| Tab         | Columns                                          | Meaning                                                                                                                                                                                                                                                                                                                       |
+| ----------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Overrides` | `post_id`, `role`, `byline`, `real_name`, `note` | A printed `byline` counts as `real_name`. With no `post_id` it holds on every article, so a pen name is one row; with one, on that article only, and it wins, which is how a pen name that changed hands keeps its earlier articles. A row with a `post_id` and `role` but no byline adds someone the article does not print. |
+| `Labels`    | `label`, `role`                                  | Which paragraph labels start a credit line, and whether each credits `writer`, `image` or `other`. Empty, the defaults in `src/lib/credits/labels.ts` apply.                                                                                                                                                                  |
+| `Ignored`   | `post_id`, `names`, `note`                       | Articles whose problems are intended, or a pair of similar names that are different people.                                                                                                                                                                                                                                   |
 
 A save reads the tab, changes the rows it means to, and writes the tab back,
 keeping every other row as it was. Two people saving at once is

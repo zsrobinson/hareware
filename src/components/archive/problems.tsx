@@ -1,5 +1,5 @@
 import { ChevronRightIcon, ExternalLinkIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Button, buttonVariants } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import {
@@ -31,7 +31,19 @@ export function ProblemsPage() {
   );
 }
 
-function Problems({ archive, filters }: ViewProps) {
+function Problems({ archive, filters, refresh }: ViewProps) {
+  /* back from fixing something in WordPress, read it again so the fix shows */
+  const away = useRef(false);
+  useEffect(() => {
+    const back = () => {
+      if (!away.current) return;
+      away.current = false;
+      refresh();
+    };
+    window.addEventListener("focus", back);
+    return () => window.removeEventListener("focus", back);
+  }, [refresh]);
+
   const shown = useMemo(
     () => applyFilters(archive.articles, filters),
     [archive, filters],
@@ -63,7 +75,11 @@ function Problems({ archive, filters }: ViewProps) {
         {open.length > 0 && (
           <ul className="divide-y rounded-xl border">
             {open.map((article) => (
-              <ArticleProblems key={article.id} article={article} />
+              <ArticleProblems
+                key={article.id}
+                article={article}
+                onLeave={() => (away.current = true)}
+              />
             ))}
           </ul>
         )}
@@ -90,7 +106,13 @@ function Problems({ archive, filters }: ViewProps) {
   );
 }
 
-function ArticleProblems({ article }: { article: ArchiveArticle }) {
+function ArticleProblems({
+  article,
+  onLeave,
+}: {
+  article: ArchiveArticle;
+  onLeave: () => void;
+}) {
   const save = useEdit();
   const ignore = () =>
     save.mutate({
@@ -128,6 +150,7 @@ function ArticleProblems({ article }: { article: ArchiveArticle }) {
                 </a>
               )}
               {(problem.kind === "unrecognised" ||
+                problem.kind === "no-colon" ||
                 problem.kind === "unparsed" ||
                 problem.kind === "odd-name") && (
                 <span className="text-muted-foreground mt-1 block border-l-2 pl-2 text-[13px] break-words">
@@ -143,6 +166,7 @@ function ArticleProblems({ article }: { article: ArchiveArticle }) {
           href={EDIT_IN_WORDPRESS(article.id)}
           target="_blank"
           rel="noreferrer"
+          onClick={onLeave}
           className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
         >
           Edit in WordPress <ExternalLinkIcon />
@@ -195,6 +219,11 @@ function PairRow({ pair }: { pair: SimilarNames }) {
               different: true,
             },
             done: `Marked ${pair.names.join(" and ")} as different people`,
+            undo: {
+              kind: "different-people",
+              names: pair.names,
+              different: false,
+            },
           })
         }
       >

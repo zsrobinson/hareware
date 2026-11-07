@@ -5,6 +5,7 @@ import {
   labelsIn,
   readSheet,
   setArticleCredits,
+  setByline,
   setDifferentPeople,
   setIgnored,
   setLabels,
@@ -261,5 +262,49 @@ test("a pen name two people share keeps both, set in one write", async () => {
     ["Penn Name", "Riley Real"],
     ["Penn Name", "Sam Second"],
     ["Other Pen", "Cleo Drawer"],
+  ]);
+});
+
+test("a pen name passes to someone new while earlier articles keep the first", async () => {
+  const { sheets, tabs } = fakeSheet({
+    Overrides: [
+      ["post_id", "role", "byline", "real_name", "note"],
+      ["", "", "Penn Name", "Riley Real", ""],
+      ["9", "writer", "Other Byline", "Kept", ""],
+    ],
+  });
+
+  /* part 1 (post 3) stays Riley's; from now on the byline is Sam's */
+  await setByline(
+    sheets,
+    "penn name",
+    ["Sam Second"],
+    [{ postId: 3, role: "writer", realNames: ["Riley Real"] }],
+  );
+
+  expect(tabs.Overrides!.slice(1)).toEqual([
+    ["9", "writer", "Other Byline", "Kept", ""],
+    ["", "", "penn name", "Sam Second", ""],
+    ["3", "writer", "penn name", "Riley Real", ""],
+  ]);
+});
+
+test("a byline's article rows can be cleared, any-role rows included", async () => {
+  const { sheets, tabs } = fakeSheet({
+    Overrides: [
+      ["post_id", "role", "byline", "real_name", "note"],
+      ["", "", "Penn Name", "Riley Real", ""],
+      ["3", "", "Penn Name", "Sam Second", ""],
+      ["4", "writer", "Penn Name", "Sam Second", ""],
+    ],
+  });
+
+  await setByline(sheets, "Penn Name", undefined, [
+    { postId: 3, role: null, realNames: [] },
+  ]);
+
+  expect(tabs.Overrides!.slice(1)).toEqual([
+    ["", "", "Penn Name", "Riley Real", ""],
+    ["4", "writer", "Penn Name", "Sam Second", ""],
   ]);
 });

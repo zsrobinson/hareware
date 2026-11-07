@@ -22,6 +22,7 @@ import {
   type PersonRow,
 } from "~/lib/credits/stats";
 import { ArchiveShell, type ViewProps } from "./archive-shell";
+import { BylinePanel } from "./byline-panel";
 import { Choice } from "./choice";
 import { formatDate, formatMonth } from "./dates";
 import { useEdit } from "./use-edit";
@@ -210,6 +211,7 @@ function PersonPanel({
   onRenamed: () => void;
 }) {
   const [form, setForm] = useState<null | "own" | "of">(null);
+  const [byline, setByline] = useState<string | null>(null);
   const byId = new Map(archive.articles.map((a) => [a.id, a]));
   const articles = person.articleIds
     .map((id) => byId.get(id))
@@ -227,6 +229,17 @@ function PersonPanel({
   const summary = ROLES.filter((role) => person.counts[role] > 0)
     .map((role) => `${person.counts[role]} ${ROLE_NAMES[role].toLowerCase()}`)
     .join(" · ");
+
+  if (byline)
+    return (
+      <BylinePanel
+        byline={byline}
+        archive={archive}
+        everyone={everyone}
+        onBack={() => setByline(null)}
+        onDone={() => setByline(null)}
+      />
+    );
 
   return (
     <>
@@ -246,7 +259,7 @@ function PersonPanel({
       </SheetHeader>
 
       <div className="space-y-6 px-4 pb-6">
-        <PenNames person={person} archive={archive} />
+        <PenNames person={person} archive={archive} onOpen={setByline} />
         {form === null ? (
           <div className="-ml-2 flex flex-wrap gap-x-1 gap-y-2">
             <Button variant="ghost" size="xs" onClick={() => setForm("own")}>
@@ -271,6 +284,7 @@ function PersonPanel({
             everyone={everyone.filter((name) => name !== person.name)}
             onSaved={onRenamed}
             onClose={() => setForm(null)}
+            onEachArticle={() => setByline(person.name)}
           />
         )}
 
@@ -318,66 +332,89 @@ function PersonPanel({
 function PenNames({
   person,
   archive,
+  onOpen,
 }: {
   person: PersonRow;
   archive: Archive;
+  onOpen: (byline: string) => void;
 }) {
   const save = useEdit();
-  const mine = archive.penNames.filter((p) => p.realName.includes(person.name));
+  /* every byline they are credited through, on every article or on some */
+  const counts = new Map<string, { byline: string; articles: number }>();
+  for (const article of archive.articles) {
+    const seen = new Set<string>();
+    for (const p of article.credits.flatMap((c) => c.contributors))
+      if (p.name === person.name && p.byline && p.source !== "printed")
+        seen.add(p.byline);
+    for (const byline of seen) {
+      const entry = counts.get(byline.toLowerCase()) ?? { byline, articles: 0 };
+      entry.articles += 1;
+      counts.set(byline.toLowerCase(), entry);
+    }
+  }
+  const mine = [...counts.values()].sort((a, b) => b.articles - a.articles);
   if (mine.length === 0) return null;
 
   return (
     <section className="space-y-1">
       <h3 className="text-muted-foreground text-xs font-medium">Pen names</h3>
       <ul className="text-sm">
-        {mine.map((pen) => (
-          <li
-            key={pen.byline}
-            className="group flex items-center justify-between gap-2 py-1"
-          >
-            <span>
-              {pen.byline}{" "}
-              <span className="text-muted-foreground">
-                · {pen.articles} {pen.articles === 1 ? "article" : "articles"}
-              </span>
-            </span>
-            <Button
-              className="text-muted-foreground"
-              variant="ghost"
-              size="xs"
-              disabled={save.isPending}
-              onClick={() =>
-                save.mutate({
-                  edit: {
-                    kind: "pen-names",
-                    /* keep anyone else who shares the pen name */
-                    entries: (() => {
-                      const others = pen.realName.filter(
-                        (n) => n !== person.name,
-                      );
-                      return others.length > 0
-                        ? others.map((realName) => ({
-                            byline: pen.byline,
-                            realName,
-                          }))
-                        : [{ byline: pen.byline, realName: "" }];
-                    })(),
-                  },
-                  done: `${pen.byline} no longer counts as ${person.name}`,
-                  undo: {
-                    kind: "pen-names",
-                    entries: pen.realName.map((realName) => ({
-                      byline: pen.byline,
-                      realName,
-                    })),
-                  },
-                })
-              }
+        {mine.map(({ byline, articles }) => {
+          const pen = archive.penNames.find((p) => same(p.byline, byline));
+          const everywhere = pen?.realName.includes(person.name);
+          return (
+            <li
+              key={byline}
+              className="flex items-center justify-between gap-2 py-1"
             >
-              <XIcon /> Remove
-            </Button>
-          </li>
-        ))}
+              <span>
+                <button
+                  type="button"
+                  className="decoration-muted-foreground/40 hover:decoration-foreground underline underline-offset-4"
+                  onClick={() => onOpen(byline)}
+                >
+                  {byline}
+                </button>{" "}
+                <span className="text-muted-foreground">
+                  · {articles} {articles === 1 ? "article" : "articles"}
+                </span>
+              </span>
+              {pen && everywhere && (
+                <Button
+                  className="text-muted-foreground"
+                  variant="ghost"
+                  size="xs"
+                  disabled={save.isPending}
+                  onClick={() => {
+                    /* keep anyone else who shares the pen name */
+                    const others = pen.realName.filter(
+                      (n) => n !== person.name,
+                    );
+                    save.mutate({
+                      edit: {
+                        kind: "pen-names",
+                        entries:
+                          others.length > 0
+                            ? others.map((realName) => ({ byline, realName }))
+                            : [{ byline, realName: "" }],
+                      },
+                      done: `${byline} no longer counts as ${person.name}`,
+                      undo: {
+                        kind: "pen-names",
+                        entries: pen.realName.map((realName) => ({
+                          byline,
+                          realName,
+                        })),
+                      },
+                    });
+                  }}
+                >
+                  <XIcon /> Remove
+                </Button>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
@@ -494,12 +531,14 @@ function PenNameOf({
   byline,
   articles,
   everyone,
+  onEachArticle,
   onSaved,
   onClose,
 }: {
   byline: string;
   articles: number;
   everyone: string[];
+  onEachArticle: () => void;
   onSaved: () => void;
   onClose: () => void;
 }) {
@@ -547,6 +586,18 @@ function PenNameOf({
         {articles === 1 ? "1 article" : `${articles} articles`}, and any later
         ones.
         {realName.trim() && !known && " Not credited yet."}
+        {articles > 1 && (
+          <>
+            {" "}
+            <button
+              type="button"
+              className="hover:text-foreground underline underline-offset-4"
+              onClick={onEachArticle}
+            >
+              Different people on different articles?
+            </button>
+          </>
+        )}
       </p>
       <div className="flex gap-2">
         <Button

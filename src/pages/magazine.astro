@@ -12,6 +12,7 @@ import {
 } from "~/lib/services/wordpress/article-url";
 import {
   PREVIEW_IMAGE_WIDTH,
+  toOriginalImage,
   toSizedImage,
 } from "~/lib/services/wordpress/image-url";
 import { scrapeArticle } from "~/lib/services/wordpress/scrape-article";
@@ -103,7 +104,7 @@ const who = viewerState(await viewer(Astro.request));
           />
 
           <div class="space-y-1.5">
-            <span class="text-sm font-medium">Image</span>
+            <span class="block text-sm font-medium">Image</span>
             {image ? (
               <>
                 <img
@@ -111,7 +112,11 @@ const who = viewerState(await viewer(Astro.request));
                   alt=""
                   class="bg-secondary max-h-56 w-auto max-w-full rounded-md object-contain"
                 />
-                <Button id="image-download" data-src={image} variant="outline">
+                <Button
+                  id="image-download"
+                  data-src={toOriginalImage(image)}
+                  variant="outline"
+                >
                   <DownloadIcon />
                   Download image
                 </Button>
@@ -122,7 +127,7 @@ const who = viewerState(await viewer(Astro.request));
           </div>
 
           <div class="space-y-1.5">
-            <span class="text-sm font-medium">Text</span>
+            <span class="block text-sm font-medium">Text</span>
             <Button id="button" variant="outline">
               <DownloadIcon />
               Download text for InDesign
@@ -149,7 +154,7 @@ const who = viewerState(await viewer(Astro.request));
   </script>
 
   <script>
-    import download from "downloadjs";
+    import { saveFile } from "~/lib/save-file";
     import { slugify } from "~/lib/utils";
 
     // module scripts only evaluate once, so with view transitions in play the
@@ -160,7 +165,7 @@ const who = viewerState(await viewer(Astro.request));
 
       const { output, title } = (window as any).vars;
       button.addEventListener("click", () => {
-        download(output, slugify(title) + ".txt", "text/plain");
+        saveFile(output, slugify(title) + ".txt", "text/plain");
       });
 
       /* the image host allows a cross-origin fetch, so the file downloads
@@ -176,7 +181,7 @@ const who = viewerState(await viewer(Astro.request));
           .then((blob) => {
             const ext =
               blob.type.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
-            download(blob, `${slugify(title)}.${ext}`, blob.type);
+            saveFile(blob, `${slugify(title)}.${ext}`, blob.type);
           })
           .catch((error: unknown) => {
             console.error("could not download the image", error);

@@ -28,3 +28,16 @@ export function toSizedImage(
 
   return `${src.split("?")[0]}?w=${width}&quality=80`;
 }
+
+/**
+ * the file as it was uploaded, for the print issue: photon's copy, even at
+ * full size, is recompressed, so the cdn host comes off along with any resizing
+ */
+export function toOriginalImage(src: string): string {
+  if (src.startsWith("data:")) return src;
+  const url = new URL(src);
+  const viaPhoton = /^i\d\.wp\.com$/.test(url.hostname);
+  return viaPhoton
+    ? `https://${url.pathname.slice(1)}`
+    : `${url.origin}${url.pathname}`;
+}

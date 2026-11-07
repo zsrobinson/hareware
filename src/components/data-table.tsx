@@ -13,7 +13,7 @@ import {
   type SortingState,
   type VisibilityState,
 } from "@tanstack/react-table";
-import download from "downloadjs";
+import { saveFile } from "~/lib/save-file";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -175,7 +175,7 @@ export function DataTable<T>({
     );
 
     const day = new Date().toISOString().slice(0, 10);
-    download(
+    saveFile(
       /* the BOM makes excel read utf-8 */
       new Blob(["\uFEFF", toCsv(headers, body)], {
         type: "text/csv;charset=utf-8",

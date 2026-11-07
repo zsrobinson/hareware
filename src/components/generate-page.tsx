@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLayoutState } from "~/lib/layout-state";
 import { useDebouncedEffect } from "~/lib/use-debounced-effect";
 import { ContentSlide } from "./content-slide";
+import { FitWidth } from "./fit-width";
 import { LoaderCircle } from "./loader-circle";
 import { OptionsForm } from "./options-form";
 import { TitleSlide } from "./title-slide";
@@ -56,9 +57,17 @@ export function GeneratePage({
         const contentNode = contentSlideRef.current;
         if (!titleNode || !contentNode) return; // unmounted while importing
 
+        /* the slide's own size, not its size on screen: a phone shows it
+           scaled down, and the saved image must not shrink with it */
+        const render = (node: HTMLElement) =>
+          domToPng(node, {
+            scale: 4,
+            width: node.offsetWidth,
+            height: node.offsetHeight,
+          });
         const [titleURI, contentURI] = await Promise.all([
-          domToPng(titleNode, { scale: 4 }),
-          domToPng(contentNode, { scale: 4 }),
+          render(titleNode),
+          render(contentNode),
         ]);
         if (cancelled) return;
 
@@ -99,9 +108,9 @@ export function GeneratePage({
 
   return (
     <div className="flex flex-col items-start gap-8 md:flex-row">
-      <div className="flex flex-col gap-4">
+      <div id="options" className="flex scroll-mt-4 flex-col gap-4">
         <div className="flex items-baseline justify-between gap-4">
-          <h2 className="text-xl font-semibold">Layout options</h2>
+          <h2 className="text-xl font-semibold">Options</h2>
           {/* on a phone the slides sit below every option */}
           <a
             href="#slides"
@@ -110,11 +119,14 @@ export function GeneratePage({
             Skip to slides
           </a>
         </div>
-        <OptionsForm articleLink={articleLink} />
+        <OptionsForm articleLink={articleLink} titleOverflow={isOverflowing} />
       </div>
 
-      <div id="slides" className="flex scroll-mt-4 flex-wrap items-start gap-8">
-        <div className="mr-4 flex w-96 flex-col gap-4">
+      <div
+        id="slides"
+        className="flex w-full scroll-mt-4 flex-wrap items-start gap-8 md:w-auto"
+      >
+        <div className="flex w-full max-w-96 flex-col gap-4 md:mr-4">
           <div className="flex justify-between" ref={animate}>
             <h2 className="text-xl font-semibold">Title slide</h2>
             {isOverflowing && (
@@ -125,21 +137,23 @@ export function GeneratePage({
             )}
           </div>
 
-          <div className="relative">
-            <TitleSlide imageURI={imageURI} ref={titleSlideRef} />
-            {state.renderImages && (
-              <>
-                <div className="absolute top-0 left-0 z-10 flex h-full w-full items-center justify-center gap-2 bg-black/50 text-white">
-                  <LoaderCircle className="animate-spin" />
-                  Rendering
-                </div>
-                <img
-                  className="absolute top-0 left-0 z-20 w-full"
-                  ref={titleSlideImgRef}
-                />
-              </>
-            )}
-          </div>
+          <FitWidth>
+            <div className="relative">
+              <TitleSlide imageURI={imageURI} ref={titleSlideRef} />
+              {state.renderImages && (
+                <>
+                  <div className="absolute top-0 left-0 z-10 flex h-full w-full items-center justify-center gap-2 bg-black/50 text-white">
+                    <LoaderCircle className="animate-spin" />
+                    Rendering
+                  </div>
+                  <img
+                    className="absolute top-0 left-0 z-20 w-full"
+                    ref={titleSlideImgRef}
+                  />
+                </>
+              )}
+            </div>
+          </FitWidth>
 
           <div className="text-muted-foreground flex items-center justify-center gap-2 text-sm leading-[1.1]">
             <InfoIcon className="size-5 min-w-max" />
@@ -151,24 +165,32 @@ export function GeneratePage({
           </div>
         </div>
 
-        <div className="flex w-96 flex-col gap-4">
+        <div className="flex w-full max-w-96 flex-col gap-4">
           <h2 className="text-xl font-semibold">Content slide</h2>
 
-          <div className="relative">
-            <ContentSlide ref={contentSlideRef}>{children}</ContentSlide>
-            {state.renderImages && (
-              <>
-                <div className="absolute top-0 left-0 z-10 flex h-full w-full items-center justify-center gap-2 bg-black/50 text-white">
-                  <LoaderCircle className="animate-spin" />
-                  Rendering
-                </div>
-                <img
-                  className="absolute top-0 left-0 z-20 w-full"
-                  ref={contentSlideImgRef}
-                />
-              </>
-            )}
-          </div>
+          <FitWidth>
+            <div className="relative">
+              <ContentSlide ref={contentSlideRef}>{children}</ContentSlide>
+              {state.renderImages && (
+                <>
+                  <div className="absolute top-0 left-0 z-10 flex h-full w-full items-center justify-center gap-2 bg-black/50 text-white">
+                    <LoaderCircle className="animate-spin" />
+                    Rendering
+                  </div>
+                  <img
+                    className="absolute top-0 left-0 z-20 w-full"
+                    ref={contentSlideImgRef}
+                  />
+                </>
+              )}
+            </div>
+          </FitWidth>
+          <a
+            href="#options"
+            className="text-muted-foreground hover:text-foreground text-center text-sm underline-offset-4 hover:underline md:hidden"
+          >
+            Back to options
+          </a>
         </div>
       </div>
     </div>

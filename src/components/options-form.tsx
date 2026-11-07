@@ -53,7 +53,14 @@ export function FormLabel({ children }: { children: ReactNode }) {
   return <Label className="min-w-36">{children}</Label>;
 }
 
-export function OptionsForm({ articleLink }: { articleLink?: string }) {
+export function OptionsForm({
+  articleLink,
+  titleOverflow = false,
+}: {
+  articleLink?: string;
+  /** the title runs past its slide, said here too since the slide may be off-screen */
+  titleOverflow?: boolean;
+}) {
   const state = useLayoutState();
   const [currentPreset] = Object.entries(presets).find(
     ([_, preset]) =>
@@ -165,6 +172,11 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
           />
           <p className="font-mono text-sm">{state.titleSize}px</p>
         </FormItem>
+        {titleOverflow && (
+          <p className="text-destructive pl-7 text-sm">
+            The title may not fit; try a smaller size or a shorter title.
+          </p>
+        )}
       </div>
 
       <hr className="my-4" />
@@ -209,7 +221,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
       <div className="flex flex-col gap-2">
         <div className="grid grid-cols-2 gap-2">
           <Button
-            variant="secondary"
+            variant="outline"
             className="w-full"
             onClick={() => state.reset()}
           >
@@ -218,7 +230,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
           </Button>
 
           <Button
-            variant="secondary"
+            variant="outline"
             className="w-full"
             onClick={() => state.incParagraphShift()}
           >
@@ -230,7 +242,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
         {articleLink && (
           <div className="flex gap-2">
             <Button
-              variant="secondary"
+              variant="outline"
               className="w-full"
               render={<a href={articleLink} target="_blank" />}
             >
@@ -250,7 +262,7 @@ export function OptionsForm({ articleLink }: { articleLink?: string }) {
 
       <FormItem>
         <ImageIcon className="size-5 min-w-max" />
-        <FormLabel>Render images</FormLabel>
+        <FormLabel>Save as images</FormLabel>
         <Switch
           checked={state.renderImages}
           onCheckedChange={(checked) => state.setRenderImages(checked)}

@@ -1,5 +1,5 @@
 ---
-import { ChevronRightIcon, DownloadIcon } from "lucide-react";
+import { DownloadIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import Field from "~/components/copy-field.astro";
@@ -18,7 +18,8 @@ import { scrapeArticle } from "~/lib/services/wordpress/scrape-article";
 import { getTaggedText } from "../lib/get-tagged-text";
 
 const param = Astro.url.searchParams.get("article") || "";
-const invalid = Astro.url.searchParams.get("error") !== null;
+const errorKind = Astro.url.searchParams.get("error");
+const invalid = errorKind !== null;
 const typed = Astro.url.searchParams.get("link") ?? "";
 
 Astro.response.headers.set("cache-control", "private, no-store");
@@ -38,7 +39,9 @@ if (param) {
   try {
     post = await scrapeArticle(link);
   } catch {
-    return Astro.redirect(`/magazine?error&link=${encodeURIComponent(param)}`);
+    return Astro.redirect(
+      `/magazine?error=unread&link=${encodeURIComponent(param)}`,
+    );
   }
 }
 
@@ -65,17 +68,15 @@ const who = viewerState(await viewer(Astro.request));
         defaultValue={link ?? typed}
         aria-invalid={invalid || undefined}
       />
-      <Button type="submit" variant={post ? "secondary" : "default"}>
-        Export
-        <ChevronRightIcon />
-      </Button>
+      <Button type="submit">Open article</Button>
     </form>
 
     {
       invalid && (
         <p class="text-destructive -mt-4 text-sm">
-          That isn't a link to a Hare article. It should start with
-          theumdhare.com.
+          {errorKind === "unread"
+            ? "That article couldn't be read. Check the link, and that it's published."
+            : "That isn't a link to a Hare article. It should start with theumdhare.com."}
         </p>
       )
     }
@@ -102,25 +103,24 @@ const who = viewerState(await viewer(Astro.request));
           />
 
           <div class="space-y-1.5">
-            <div class="flex items-baseline justify-between gap-4">
-              <span class="text-sm font-medium">Image</span>
-              {image && (
-                <a
-                  href={image}
-                  target="_blank"
-                  rel="noreferrer"
-                  class="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline"
-                >
-                  Open full size
-                </a>
-              )}
-            </div>
+            <span class="text-sm font-medium">Image</span>
             {image ? (
-              <img
-                src={toSizedImage(image, PREVIEW_IMAGE_WIDTH)}
-                alt=""
-                class="bg-secondary w-full rounded-md object-contain"
-              />
+              <>
+                <img
+                  src={toSizedImage(image, PREVIEW_IMAGE_WIDTH)}
+                  alt=""
+                  class="bg-secondary w-full rounded-md object-contain"
+                />
+                <Button
+                  id="image-download"
+                  data-src={image}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <DownloadIcon />
+                  Download image
+                </Button>
+              </>
             ) : (
               <p class="text-muted-foreground text-sm">No featured image.</p>
             )}
@@ -166,6 +166,27 @@ const who = viewerState(await viewer(Astro.request));
       const { output, title } = (window as any).vars;
       button.addEventListener("click", () => {
         download(output, slugify(title) + ".txt", "text/plain");
+      });
+
+      /* the image host allows a cross-origin fetch, so the file downloads
+         under the article's name; if it does not, it opens to save by hand */
+      const image = document.getElementById("image-download");
+      image?.addEventListener("click", () => {
+        const src = image.dataset.src!;
+        fetch(src)
+          .then((response) => {
+            if (!response.ok) throw new Error(`answered ${response.status}`);
+            return response.blob();
+          })
+          .then((blob) => {
+            const ext =
+              blob.type.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
+            download(blob, `${slugify(title)}.${ext}`, blob.type);
+          })
+          .catch((error: unknown) => {
+            console.error("could not download the image", error);
+            window.open(src, "_blank", "noreferrer");
+          });
       });
     });
   </script>

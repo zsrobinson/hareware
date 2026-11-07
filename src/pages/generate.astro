@@ -20,7 +20,8 @@ import { getRecentArticles } from "~/lib/services/wordpress/get-recent-articles"
 import { scrapeArticle } from "~/lib/services/wordpress/scrape-article";
 
 const param = Astro.url.searchParams.get("article") || "";
-const invalid = Astro.url.searchParams.get("error") !== null;
+const errorKind = Astro.url.searchParams.get("error");
+const invalid = errorKind !== null;
 const typed = Astro.url.searchParams.get("link") ?? "";
 
 let link: string | undefined;
@@ -38,7 +39,9 @@ if (param) {
   try {
     post = await scrapeArticle(link);
   } catch {
-    return Astro.redirect(`/generate?error&link=${encodeURIComponent(param)}`);
+    return Astro.redirect(
+      `/generate?error=unread&link=${encodeURIComponent(param)}`,
+    );
   }
 }
 
@@ -94,22 +97,18 @@ const who = post ? viewerState(await viewer(Astro.request)) : undefined;
             aria-label="Article link"
             aria-invalid={invalid || undefined}
           />
-          <Button type="submit">
-            Make slides
-            <ChevronRightIcon />
-          </Button>
+          <Button type="submit">Make slides</Button>
         </form>
 
         {invalid && (
           <p class="text-destructive pt-2 text-sm">
-            That isn't a link to a Hare article. It should start with
-            theumdhare.com.
+            {errorKind === "unread"
+              ? "That article couldn't be read. Check the link, and that it's published."
+              : "That isn't a link to a Hare article. It should start with theumdhare.com."}
           </p>
         )}
 
-        <h2 class="pt-8 pb-2 text-sm font-medium">
-          Or start from a recent article
-        </h2>
+        <h2 class="pt-8 pb-2 font-semibold">Or start from a recent article</h2>
 
         {articles ? (
           <>
@@ -129,7 +128,7 @@ const who = post ? viewerState(await viewer(Astro.request)) : undefined;
               ))}
             </ul>
 
-            <div class="text-muted-foreground flex max-w-fit gap-4 border-t pt-2 text-sm">
+            <div class="text-muted-foreground flex max-w-fit gap-4 pt-1 text-sm">
               {page > 1 && (
                 <a href={`/generate?page=${page - 1}`} data-keep-scroll>
                   <ChevronLeftIcon className="inline mb-0.5" />
@@ -149,13 +148,12 @@ const who = post ? viewerState(await viewer(Astro.request)) : undefined;
           </p>
         )}
 
-        <h2 class="pt-8 pb-2 text-sm font-medium">
-          Or make a custom post for an article that isn't published
+        <h2 class="pt-8 pb-2 font-semibold">
+          Or make a custom post for an article that isn't published yet
         </h2>
 
-        <Link variant="secondary" href="/custom" data-astro-prefetch>
+        <Link variant="outline" href="/custom" data-astro-prefetch>
           Custom post
-          <ChevronRightIcon />
         </Link>
       </>
     )

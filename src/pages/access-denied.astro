@@ -6,6 +6,7 @@
 import Dashboard from "~/layouts/dashboard.astro";
 import AccessDenied from "~/components/access-denied.astro";
 import { viewerState } from "~/lib/admin";
+import { DENIALS } from "~/lib/denial";
 
 const admission = Astro.locals.admission;
 
@@ -19,7 +20,10 @@ const { access, returnTo } = admission;
 Astro.response.headers.set("cache-control", "private, no-store");
 ---
 
-<Dashboard title="No access" viewer={viewerState(access.who)}>
+<Dashboard
+  title={DENIALS[access.denial].title}
+  viewer={viewerState(access.who)}
+>
   <AccessDenied
     denial={access.denial}
     profile={access.who?.profile ?? null}

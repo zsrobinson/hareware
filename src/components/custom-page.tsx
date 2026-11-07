@@ -1,15 +1,10 @@
 import { useState } from "react";
-import { FormItem, FormLabel } from "./options-form";
-import {
-  AlignCenterIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  FileIcon,
-} from "lucide-react";
+import { ChevronLeftIcon, ImageIcon } from "lucide-react";
+import { cn } from "~/lib/utils";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { GeneratePage } from "./generate-page";
-import { Button } from "./ui/button";
+import { Button, buttonVariants } from "./ui/button";
 
 function fileToBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -43,7 +38,7 @@ export function CustomPage() {
           className="text-muted-foreground -ml-2 w-fit"
           onClick={() => setHasSubmitted(false)}
         >
-          <ChevronLeftIcon /> Edit the text
+          <ChevronLeftIcon /> Back to the form
         </Button>
         <GeneratePage
           defaultTitle={title}
@@ -60,91 +55,89 @@ export function CustomPage() {
     );
   }
 
+  const field = (
+    label: string,
+    value: string,
+    set: (value: string) => void,
+    placeholder: string,
+  ) => (
+    <label className="block space-y-1.5">
+      <span className="text-sm font-medium">{label}</span>
+      <Input
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => set(e.target.value)}
+      />
+    </label>
+  );
+
   return (
     <form
-      className="flex max-w-[416px] grow flex-col gap-2"
+      className="max-w-xl space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
         setHasSubmitted(true);
       }}
     >
-      <FormItem>
-        <AlignCenterIcon className="size-5 min-w-max" />
-        <FormLabel>Title</FormLabel>
-        <Input
-          type="text"
-          value={title}
-          placeholder="The article's title"
-          onChange={(e) => setTitle(e.target.value)}
-        />
-      </FormItem>
+      {field("Title", title, setTitle, "The article's title")}
+      {field("Article byline", articleByline, setArticleByline, "Who wrote it")}
+      {field("Image byline", imageByline, setImageByline, "Who made the image")}
 
-      <FormItem>
-        <AlignCenterIcon className="size-5 min-w-max" />
-        <FormLabel>Article byline</FormLabel>
-        <Input
-          type="text"
-          value={articleByline}
-          placeholder="Who wrote it"
-          onChange={(e) => setArticleByline(e.target.value)}
-        />
-      </FormItem>
+      <div className="space-y-1.5">
+        <span className="text-sm font-medium">Image</span>
+        <div className="flex items-center gap-3">
+          {/* the native chooser crowds a phone, so a button stands in for it */}
+          <label
+            className={cn(
+              buttonVariants({ variant: "outline" }),
+              "cursor-pointer has-[:focus-visible]:ring-2",
+            )}
+          >
+            <ImageIcon />
+            {imageURI ? "Change image" : "Choose image"}
+            <input
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={(e) => {
+                setImageError(false);
+                if (e.target.files?.length !== 1) return;
+                fileToBase64(e.target.files[0])
+                  .then(setImageURI)
+                  .catch((error: unknown) => {
+                    console.error("could not read the image", error);
+                    setImageURI(undefined);
+                    setImageError(true);
+                  });
+              }}
+            />
+          </label>
+          {imageURI && (
+            <img
+              src={imageURI}
+              alt=""
+              className="h-12 w-auto rounded-md border object-contain"
+            />
+          )}
+        </div>
+        {imageError && (
+          <p className="text-destructive text-sm">
+            That file couldn't be read as an image.
+          </p>
+        )}
+      </div>
 
-      <FormItem>
-        <AlignCenterIcon className="size-5 min-w-max" />
-        <FormLabel>Image byline</FormLabel>
-        <Input
-          type="text"
-          value={imageByline}
-          placeholder="Who made the image"
-          onChange={(e) => setImageByline(e.target.value)}
+      <label className="block space-y-1.5">
+        <span className="text-sm font-medium">Text</span>
+        <Textarea
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder="The article's text. Leave a blank line between paragraphs."
+          className="h-64 w-full"
         />
-      </FormItem>
+      </label>
 
-      <FormItem>
-        <FileIcon className="size-5 min-w-max" />
-        <FormLabel>Image</FormLabel>
-        <Input
-          type="file"
-          accept="image/*"
-          className="text-muted-foreground"
-          onChange={(e) => {
-            setImageError(false);
-            if (e.target.files?.length !== 1) return;
-            fileToBase64(e.target.files[0])
-              .then(setImageURI)
-              .catch((error: unknown) => {
-                console.error("could not read the image", error);
-                setImageURI(undefined);
-                setImageError(true);
-              });
-          }}
-        />
-      </FormItem>
-      {imageError && (
-        <p className="text-destructive pl-7 text-sm">
-          That file couldn't be read as an image.
-        </p>
-      )}
-      {imageURI && (
-        <img
-          src={imageURI}
-          alt=""
-          className="ml-auto max-h-32 w-fit rounded-md border object-contain"
-        />
-      )}
-
-      <Textarea
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        placeholder="The article's text. Leave a blank line between paragraphs."
-        className="h-64 w-full"
-      />
-
-      <Button type="submit">
-        Make the slides
-        <ChevronRightIcon />
-      </Button>
+      <Button type="submit">Make slides</Button>
     </form>
   );
 }

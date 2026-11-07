@@ -1,5 +1,5 @@
 import { CheckIcon, CopyIcon } from "lucide-react";
-import { useState } from "react";
+import { useDeferredValue, useEffect, useState } from "react";
 import { newsletterHtml, type NewsletterArticle } from "~/lib/newsletter";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -21,6 +21,16 @@ export function NewsletterPage({
   const [height, setHeight] = useState(600);
 
   const html = newsletterHtml({ meeting, note, articles });
+  /* the preview reloads as a whole, so it waits for a pause in the typing */
+  const [shown, setShown] = useState(html);
+  const settled = useDeferredValue(html);
+  useEffect(() => {
+    const timer = setTimeout(() => setShown(settled), 300);
+    return () => clearTimeout(timer);
+  }, [settled]);
+  const blank = [!meeting.trim() && "meeting", !note.trim() && "note"].filter(
+    Boolean,
+  );
 
   const copy = async () => {
     try {
@@ -68,7 +78,9 @@ export function NewsletterPage({
           <p className="text-muted-foreground text-sm">
             {copied === "failed"
               ? "Couldn't copy. Select the preview and copy it instead."
-              : "Then paste it into a new email."}
+              : blank.length > 0
+                ? `The ${blank.join(" and ")} ${blank.length > 1 ? "are" : "is"} still in brackets; fill ${blank.length > 1 ? "them" : "it"} in here or in Gmail.`
+                : "Then paste it into a new email."}
           </p>
         </div>
       </div>
@@ -77,7 +89,7 @@ export function NewsletterPage({
         <span className="text-sm font-medium">Preview</span>
         <iframe
           title="The newsletter as it will be pasted"
-          srcDoc={frame(html)}
+          srcDoc={frame(shown)}
           className="w-full rounded-xl border bg-white"
           style={{ height }}
           onLoad={(event) => {

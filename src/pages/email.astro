@@ -18,10 +18,11 @@ Astro.response.headers.set(
 );
 
 const articles = await getRecentArticles();
-if (!articles) throw Error("cannot fetch recent articles");
 
 /* the feed's urls go through the host allow-list before anything fetches them */
-const ours = articles.filter(({ link }) => toArticleLink(link) !== undefined);
+const ours = (articles ?? []).filter(
+  ({ link }) => toArticleLink(link) !== undefined,
+);
 
 /* more at once trips wordpress.com's rate limit */
 const scraped = (
@@ -49,6 +50,14 @@ const newsletter = scraped.map((post) => ({
       title="Newsletter"
       description="This week's club email, with the latest articles, to paste into Gmail."
     />
-    <NewsletterPage articles={newsletter} client:load />
+    {
+      articles ? (
+        <NewsletterPage articles={newsletter} client:load />
+      ) : (
+        <p class="text-muted-foreground text-sm">
+          The latest articles couldn't be read just now. Try again in a minute.
+        </p>
+      )
+    }
   </div>
 </Dashboard>

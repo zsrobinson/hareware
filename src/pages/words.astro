@@ -3,7 +3,6 @@ import { Textarea } from "~/components/ui/textarea";
 import { Button } from "~/components/ui/button";
 import Dashboard from "~/layouts/dashboard.astro";
 import { viewer, viewerState } from "~/lib/admin";
-import { ChevronRightIcon } from "lucide-react";
 import PageHeader from "~/components/page-header.astro";
 import { toArticleLink } from "~/lib/services/wordpress/article-url";
 import { getWordCount } from "~/lib/get-word-count";
@@ -20,14 +19,18 @@ const error = Astro.url.searchParams.get("error");
 const ERRORS: Record<string, string> = {
   "too-many": "Ten links at most.",
   "too-few": "Paste at least one article link.",
-  "invalid-url":
-    "One of those isn't a link to a Hare article. Each should start with theumdhare.com.",
 };
 
 const articlesStr = Astro.url.searchParams.get("articles");
 /* one row per link, in the order pasted; a link that could not be read keeps
    its row so the rest still line up */
-type Row = { link: string; title: string | null; words: number | null };
+type Row = {
+  link: string;
+  title: string | null;
+  words: number | null;
+  /** pasted text that is not a Hare link, kept as typed */
+  foreign?: boolean;
+};
 let counts: Row[] = [];
 if (articlesStr && !error) {
   /* CRLF or LF: `URL` strips newlines, so an unsplit blob would parse as one
@@ -40,12 +43,10 @@ if (articlesStr && !error) {
   if (articles.length > 10) return redirectError("too-many");
   if (articles.length < 1) return redirectError("too-few");
 
-  const links = articles.map(toArticleLink);
-  if (links.some((link) => link === undefined))
-    return redirectError("invalid-url");
-
   /* ten at once draws 429s */
-  counts = await mapLimit(links as string[], 3, async (link) => {
+  counts = await mapLimit(articles, 3, async (pasted): Promise<Row> => {
+    const link = toArticleLink(pasted);
+    if (!link) return { link: pasted, title: null, words: null, foreign: true };
     try {
       const { body, title } = await scrapeArticle(link);
       return { link, title, words: getWordCount(body) };
@@ -82,54 +83,75 @@ const who = viewerState(await viewer(Astro.request));
           </p>
         )
       }
-      <Button type="submit">Count words <ChevronRightIcon /></Button>
+      <Button type="submit" id="count">Count words</Button>
     </form>
 
     {
       counts.length > 0 && (
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-muted-foreground border-b text-left">
-              <th class="py-2 font-medium">Article</th>
-              <th class="py-2 text-right font-medium">Words</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y">
-            {counts.map((row) => (
-              <tr>
-                <td class="py-2 pr-4">
-                  <a
-                    href={row.link}
-                    target="_blank"
-                    rel="noreferrer"
-                    class="decoration-muted-foreground/40 hover:decoration-foreground underline underline-offset-4"
-                    set:html={row.title ?? row.link}
-                  />
-                </td>
-                <td class="py-2 text-right tabular-nums">
-                  {row.words === null ? (
-                    <span class="text-muted-foreground">Couldn't read it</span>
-                  ) : (
-                    row.words.toLocaleString("en-US")
-                  )}
-                </td>
+        <div class="overflow-hidden rounded-xl border">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-muted-foreground bg-muted/40 border-b text-left">
+                <th class="px-4 py-2 font-medium">Article</th>
+                <th class="px-4 py-2 text-right font-medium">Words</th>
               </tr>
-            ))}
-          </tbody>
-          {counts.length > 1 && (
-            <tfoot>
-              <tr class="border-t font-medium">
-                <td class="py-2">Total</td>
-                <td class="py-2 text-right tabular-nums">
-                  {counts
-                    .reduce((sum, row) => sum + (row.words ?? 0), 0)
-                    .toLocaleString("en-US")}
-                </td>
-              </tr>
-            </tfoot>
-          )}
-        </table>
+            </thead>
+            <tbody class="divide-y">
+              {counts.map((row) => (
+                <tr>
+                  <td class="px-4 py-2 break-all">
+                    {row.foreign ? (
+                      <span class="text-muted-foreground">{row.link}</span>
+                    ) : (
+                      <a
+                        href={row.link}
+                        target="_blank"
+                        rel="noreferrer"
+                        class="decoration-muted-foreground/40 hover:decoration-foreground break-normal underline underline-offset-4"
+                        set:html={row.title ?? row.link}
+                      />
+                    )}
+                  </td>
+                  <td class="text-muted-foreground px-4 py-2 text-right whitespace-nowrap tabular-nums">
+                    {row.foreign ? (
+                      "Not a Hare link"
+                    ) : row.words === null ? (
+                      "Couldn't read it"
+                    ) : (
+                      <span class="text-foreground">
+                        {row.words.toLocaleString("en-US")}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            {counts.length > 1 && (
+              <tfoot>
+                <tr class="border-t font-medium">
+                  <td class="px-4 py-2">Total</td>
+                  <td class="px-4 py-2 text-right tabular-nums">
+                    {counts
+                      .reduce((sum, row) => sum + (row.words ?? 0), 0)
+                      .toLocaleString("en-US")}
+                  </td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
       )
     }
   </div>
 </Dashboard>
+
+<script>
+  /* reading ten articles takes a moment; say so rather than look stuck */
+  document.addEventListener("astro:page-load", () => {
+    const button = document.getElementById("count") as HTMLButtonElement;
+    button?.form?.addEventListener("submit", () => {
+      button.disabled = true;
+      button.textContent = "Counting…";
+    });
+  });
+</script>

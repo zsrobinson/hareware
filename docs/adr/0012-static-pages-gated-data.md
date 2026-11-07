@@ -50,7 +50,7 @@ edge cache cannot be relied on to keep the WordPress read rare.
 3. **The browser builds the archive.** `/api/archive.json` returns only what
    needs a secret: the Sheet, behind the gate. The archive page asks it first,
    so someone it refuses never downloads WordPress; it then reads WordPress,
-   keeps the parsed read in the browser's Cache Storage for ten minutes, and
+   keeps the parsed read in the browser's Cache Storage, and
    builds the archive. The label pattern is compiled once per build rather
    than twice per post, and the pairwise similar-names check, nearly half the
    build, runs only on Problems and compares only names close in length.
@@ -85,7 +85,9 @@ back.
   prefetched like any static file.
 - Pages appear immediately and fill in; a reader's browser does the parsing.
   The archive's first load reads five pages of WordPress; after that the
-  stored read makes every admin page open without it for ten minutes.
+  stored read opens every admin page without it. Under ten minutes old it is
+  used as it is; up to a day old it is shown at once and replaced by a fresh
+  read made behind it.
 - A page can no longer redirect on the server. Instagram Posts and InDesign
   Export rewrite their own address to the short `?article=slug` form.
 - The old admin URLs (`/automations`, `/log`, `/commands` and their `/admin/`

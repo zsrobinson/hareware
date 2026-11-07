@@ -6,7 +6,7 @@
 */
 
 import { ORIGIN } from "./article-url";
-import { readWordPress } from "./request";
+import { breathe, readWordPress } from "./request";
 
 const API = `${ORIGIN}/wp-json/wp/v2`;
 const PER_PAGE = 100;
@@ -40,6 +40,7 @@ export async function allPosts(): Promise<Post[]> {
   const posts: Post[] = [];
 
   for (let page = 1; ; page++) {
+    if (page > 1) await breathe();
     const { rows, totalPages } = await readPage(
       {
         page: String(page),

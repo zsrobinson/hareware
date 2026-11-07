@@ -101,7 +101,10 @@ function Shell({
   const [refreshing, setRefreshing] = useState(false);
   const query = useQuery({
     queryKey: ["archive"],
-    queryFn: () => loadArchive(false),
+    queryFn: () =>
+      loadArchive(false, (fresher) =>
+        queryClient.setQueryData(["archive"], fresher),
+      ),
   });
 
   /* the bar renders only once the archive has loaded, which the server never

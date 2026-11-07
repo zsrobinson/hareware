@@ -21,6 +21,16 @@ const MAX_WAIT_MS = 4000;
 
 const sleep = (ms: number) => new Promise((wake) => setTimeout(wake, ms));
 
+/**
+ * the pause between reads in a run. With an `Origin` header WordPress.com
+ * bypasses its cache, and its server refused about every other request sent
+ * back to back; half a second between them drew none (checked 2026-11-07)
+ */
+export const BETWEEN_READS_MS = 500;
+
+/** waits out the pause before the next read in a run */
+export const breathe = () => sleep(BETWEEN_READS_MS);
+
 /** `Retry-After` in seconds, as milliseconds; the date form is ignored */
 function told(header: string | null): number | undefined {
   const seconds = Number(header?.trim());

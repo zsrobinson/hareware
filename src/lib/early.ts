@@ -18,7 +18,6 @@ import {
 } from "~/lib/services/wordpress/urls";
 
 declare global {
-  // eslint-disable-next-line no-var -- a global the inline script shares
   var __early: Map<string, Promise<Response>> | undefined;
 }
 

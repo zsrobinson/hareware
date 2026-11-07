@@ -121,10 +121,10 @@ function ArticleProblems({ article }: { article: ArchiveArticle }) {
               {PROBLEM_KINDS[problem.kind]}
               {problem.kind === "unrecognised" && (
                 <a
-                  href="/settings#labels"
-                  className="text-muted-foreground ml-2 text-xs underline underline-offset-2"
+                  href={`/settings${problem.label ? `?label=${encodeURIComponent(problem.label)}` : ""}#labels`}
+                  className="text-muted-foreground hover:text-foreground ml-2 underline underline-offset-4"
                 >
-                  Add the label
+                  {problem.label ? `Add “${problem.label}:”` : "Add the label"}
                 </a>
               )}
               {(problem.kind === "unrecognised" ||

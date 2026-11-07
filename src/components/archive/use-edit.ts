@@ -47,6 +47,8 @@ export function useEdit() {
       toast.success(
         done,
         undo && {
+          /* long enough to reach for on a phone */
+          duration: 8000,
           action: {
             label: "Undo",
             onClick: () => void undoWith(queryClient, undo),

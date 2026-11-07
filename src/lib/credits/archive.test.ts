@@ -166,7 +166,11 @@ test("flags a line shaped like a credit that no label reads", () => {
   ]).articles;
 
   expect(article!.problems).toEqual([
-    { kind: "unrecognised", detail: "Squirrel Photos by: Cleo Drawer" },
+    {
+      kind: "unrecognised",
+      detail: "Squirrel Photos by: Cleo Drawer",
+      label: "Squirrel Photos by",
+    },
   ]);
 });
 

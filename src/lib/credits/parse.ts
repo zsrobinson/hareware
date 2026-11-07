@@ -48,7 +48,13 @@ export function creditLines(texts: string[], labels: Label[]): CreditLine[] {
    then a capitalised name. "Article Image by Kenlynn Ingham" and "Squirrel
    Photos and Videos by: …" match; a body sentence with "by" in it does not */
 const LOOKS_LIKE_CREDIT =
-  /^((?:[A-Z][\w’'-]*|and|&|of|the)(?:\s+(?:[A-Z][\w’'-]*|and|&|of|the)){0,5})\s+(?:by|credits?)\b\s*:?\s*[A-Z0-9“"]/;
+  /^((?:[A-Z][\w’'-]*|and|&|of|the)(?:\s+(?:[A-Z][\w’'-]*|and|&|of|the)){0,5})\s+(by|credits?)\b\s*:?\s*[A-Z0-9“"]/;
+
+/** the label an unrecognised line starts with, to offer as a new one */
+export function labelOf(line: string): string | undefined {
+  const match = LOOKS_LIKE_CREDIT.exec(line);
+  return match ? `${match[1]} ${match[2]}` : undefined;
+}
 
 /**
  * paragraphs shaped like a credit line that no label in force matched: an

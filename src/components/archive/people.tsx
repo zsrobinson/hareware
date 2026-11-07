@@ -16,6 +16,7 @@ import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import { same } from "~/lib/credits/sheet";
 import {
   applyFilters,
+  NO_FILTERS,
   people,
   searchable,
   type PersonRow,
@@ -97,7 +98,7 @@ function People({ archive, filters }: ViewProps) {
         cell: ({ row }) => (
           <button
             type="button"
-            className="decoration-muted-foreground/40 text-left underline-offset-4 hover:underline"
+            className="decoration-muted-foreground/40 hover:decoration-foreground text-left underline underline-offset-4"
             onClick={() => setOpen(row.original.name)}
           >
             <span className="font-medium">{row.original.name}</span>
@@ -139,7 +140,16 @@ function People({ archive, filters }: ViewProps) {
     [],
   );
 
-  const selected = open ? all.find((row) => row.name === open) : undefined;
+  /* names to suggest and check against ignore the filters: a person is
+     still credited when this semester or section leaves them out */
+  const everybody = useMemo(
+    () => people(archive.articles, NO_FILTERS),
+    [archive],
+  );
+  const selected = open
+    ? (all.find((row) => row.name === open) ??
+      everybody.find((row) => row.name === open))
+    : undefined;
 
   return (
     <>
@@ -178,7 +188,7 @@ function People({ archive, filters }: ViewProps) {
             <PersonPanel
               person={selected}
               archive={archive}
-              everyone={all.map((row) => row.name)}
+              everyone={everybody.map((row) => row.name)}
               onRenamed={() => setOpen(null)}
             />
           )}
@@ -244,7 +254,7 @@ function PersonPanel({
             </Button>
             {printedOn > 0 && (
               <Button variant="ghost" size="xs" onClick={() => setForm("of")}>
-                <UserRoundIcon /> Someone else is behind this name
+                <UserRoundIcon /> This is someone else's pen name
               </Button>
             )}
           </div>
@@ -332,7 +342,7 @@ function PenNames({
               </span>
             </span>
             <Button
-              className="reveal-on-hover"
+              className="text-muted-foreground"
               variant="ghost"
               size="xs"
               disabled={save.isPending}

@@ -1,6 +1,12 @@
 import { expect, test } from "vitest";
 import { DEFAULT_LABELS } from "./labels";
-import { creditLines, names, paragraphs, unrecognisedLines } from "./parse";
+import {
+  creditLines,
+  labelOf,
+  names,
+  paragraphs,
+  unrecognisedLines,
+} from "./parse";
 
 const lines = (html: string) => creditLines(paragraphs(html), DEFAULT_LABELS);
 
@@ -93,4 +99,13 @@ test("finds lines shaped like credits that no label matched", () => {
     "Squirrel Photos and Videos by: Mohit Bogineni",
     "Article Image by Kenlynn Ingham Cocktail Illustrations by Will Pipkin",
   ]);
+});
+
+test("labelOf offers the words before the name as the label", () => {
+  expect(labelOf("Squirrel Photos and Videos by: Ida Imager")).toBe(
+    "Squirrel Photos and Videos by",
+  );
+  expect(labelOf("Article Image by Cleo Drawer")).toBe("Article Image by");
+  expect(labelOf("Puzzle credits: Sam Second")).toBe("Puzzle credits");
+  expect(labelOf("The quad was paved by students.")).toBeUndefined();
 });

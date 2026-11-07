@@ -1,5 +1,5 @@
 import { ChevronRightIcon, ExternalLinkIcon, PlusIcon } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import {
   Collapsible,
@@ -133,7 +133,7 @@ function PenNameRow({ pen, list }: { pen: PenName; list: string }) {
   const [names, setNames] = useState(pen.realName.join(", "));
 
   return (
-    <li className="group flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 text-sm">
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 text-sm">
       <span className="w-44 shrink-0 font-medium">{pen.byline}</span>
       {editing ? (
         <form
@@ -201,7 +201,7 @@ function PenNameRow({ pen, list }: { pen: PenName; list: string }) {
           <span className="text-muted-foreground tabular-nums">
             {pen.articles} {pen.articles === 1 ? "article" : "articles"}
           </span>
-          <span className="reveal-on-hover flex gap-1">
+          <span className="text-muted-foreground flex gap-1">
             <Button variant="ghost" size="xs" onClick={() => setEditing(true)}>
               Edit
             </Button>
@@ -442,7 +442,6 @@ function PasteSeveral({
 /** rows that hold for one article, set from that article's edit panel */
 function ArticleRows({ archive }: { archive: Archive }) {
   const save = useEdit();
-  if (archive.articleOverrides.length === 0) return null;
 
   /* the rows for one article and role, which is what a save replaces */
   const others = (
@@ -459,62 +458,66 @@ function ArticleRows({ archive }: { archive: Archive }) {
       title="Counted differently on one article"
       description="Set from an article's panel in Articles."
     >
-      <ul className="divide-y rounded-xl border text-sm">
-        {archive.articleOverrides.map((o, index) => (
-          <li
-            key={index}
-            className="group flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5"
-          >
-            <span className="min-w-0 flex-1">
-              <span className="text-muted-foreground">
-                {o.title ?? `article ${o.postId}`} ·{" "}
-                {o.role ? ROLE_NAMES[o.role] : "any role"} ·{" "}
+      {archive.articleOverrides.length === 0 ? (
+        <p className="text-muted-foreground text-sm">None yet.</p>
+      ) : (
+        <ul className="divide-y rounded-xl border text-sm">
+          {archive.articleOverrides.map((o, index) => (
+            <li
+              key={index}
+              className="group flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="text-muted-foreground">
+                  {o.title ?? `article ${o.postId}`} ·{" "}
+                  {o.role ? ROLE_NAMES[o.role] : "any role"} ·{" "}
+                </span>
+                {o.byline ? (
+                  <>
+                    {o.byline}
+                    <span className="text-muted-foreground"> counts as </span>
+                    {o.realName}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-muted-foreground">adds </span>
+                    {o.realName}
+                  </>
+                )}
               </span>
-              {o.byline ? (
-                <>
-                  {o.byline}
-                  <span className="text-muted-foreground"> counts as </span>
-                  {o.realName}
-                </>
-              ) : (
-                <>
-                  <span className="text-muted-foreground">adds </span>
-                  {o.realName}
-                </>
+              {o.role && (
+                <Button
+                  className="text-muted-foreground"
+                  variant="ghost"
+                  size="xs"
+                  disabled={save.isPending}
+                  onClick={() =>
+                    save.mutate({
+                      edit: {
+                        kind: "article-credits",
+                        postId: o.postId!,
+                        role: o.role!,
+                        entries: others(o.postId!, o.role, o),
+                      },
+                      done: o.byline
+                        ? `${o.byline} counts as printed again on “${o.title ?? `article ${o.postId}`}”`
+                        : `${o.realName} is no longer added to “${o.title ?? `article ${o.postId}`}”`,
+                      undo: {
+                        kind: "article-credits",
+                        postId: o.postId!,
+                        role: o.role!,
+                        entries: others(o.postId!, o.role, undefined),
+                      },
+                    })
+                  }
+                >
+                  Remove
+                </Button>
               )}
-            </span>
-            {o.role && (
-              <Button
-                className="reveal-on-hover"
-                variant="ghost"
-                size="xs"
-                disabled={save.isPending}
-                onClick={() =>
-                  save.mutate({
-                    edit: {
-                      kind: "article-credits",
-                      postId: o.postId!,
-                      role: o.role!,
-                      entries: others(o.postId!, o.role, o),
-                    },
-                    done: o.byline
-                      ? `${o.byline} counts as printed again on “${o.title ?? `article ${o.postId}`}”`
-                      : `${o.realName} is no longer added to “${o.title ?? `article ${o.postId}`}”`,
-                    undo: {
-                      kind: "article-credits",
-                      postId: o.postId!,
-                      role: o.role!,
-                      entries: others(o.postId!, o.role, undefined),
-                    },
-                  })
-                }
-              >
-                Remove
-              </Button>
-            )}
-          </li>
-        ))}
-      </ul>
+            </li>
+          ))}
+        </ul>
+      )}
     </Section>
   );
 }
@@ -662,7 +665,7 @@ function LabelRow({
     );
 
   return (
-    <li className="group flex items-center gap-4 px-4 py-2.5 text-sm">
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-sm">
       <span className="w-44 font-medium">{label.label}:</span>
       <span className="text-muted-foreground flex-1">
         {ROLE_NAMES[label.role]}
@@ -672,7 +675,7 @@ function LabelRow({
           ? "Unused"
           : `${uses} ${uses === 1 ? "article" : "articles"}`}
       </span>
-      <span className="reveal-on-hover flex gap-1">
+      <span className="text-muted-foreground flex gap-1">
         <Button variant="ghost" size="xs" onClick={() => setEditing(true)}>
           Edit
         </Button>
@@ -691,8 +694,18 @@ function AddLabel({
   busy: boolean;
   onAdd: (label: Label, done: () => void) => void;
 }) {
-  const [label, setLabel] = useState("");
+  /* Problems links here with the unknown line's label to add */
+  const [label, setLabel] = useState(() => {
+    if (typeof window === "undefined") return "";
+    const offered = new URLSearchParams(window.location.search).get("label");
+    return offered ? `${offered}:` : "";
+  });
   const [role, setRole] = useState<Role>("image");
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (label) input.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- on arrival only
+  }, []);
 
   return (
     <form
@@ -706,6 +719,7 @@ function AddLabel({
       }}
     >
       <Input
+        ref={input}
         className="bg-background h-8 w-56"
         placeholder="New label, like Photos by:"
         value={label}

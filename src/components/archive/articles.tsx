@@ -108,7 +108,7 @@ function Articles({ archive, filters }: ViewProps) {
             <div className="max-w-md min-w-56 whitespace-normal">
               <button
                 type="button"
-                className="decoration-muted-foreground/40 text-left font-medium underline-offset-4 hover:underline"
+                className="decoration-muted-foreground/40 hover:decoration-foreground text-left font-medium underline underline-offset-4"
                 onClick={() => setEditing(row.original.id)}
               >
                 {row.original.title}
@@ -421,7 +421,7 @@ function RoleEditor({
                 })
               }
             >
-              Reset to bylines
+              Reset to printed
             </Button>
           )}
         {changed && (

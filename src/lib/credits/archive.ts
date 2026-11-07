@@ -5,7 +5,7 @@
 */
 
 import type { Label, Role } from "./labels";
-import { creditLines, unrecognisedLines } from "./parse";
+import { creditLines, labelOf, unrecognisedLines } from "./parse";
 import {
   pairKey,
   same,
@@ -62,7 +62,8 @@ export type ArchiveArticle = {
   publishedAt: string;
   section: string;
   credits: Credit[];
-  problems: { kind: ProblemKind; detail: string }[];
+  /* `label` is what an unknown credit line starts with, to add as a label */
+  problems: { kind: ProblemKind; detail: string; label?: string }[];
   /** the Sheet's note when someone marked this article fine as it is */
   ignored?: string;
 };
@@ -261,7 +262,7 @@ function problemsOf(
     credits.some((c) => c.role === role && c.contributors.length > 0);
 
   for (const line of unrecognised)
-    problems.push({ kind: "unrecognised", detail: line });
+    problems.push({ kind: "unrecognised", detail: line, label: labelOf(line) });
   if (!has("writer"))
     problems.push({ kind: "no-writer", detail: "no “Article by:” line" });
   if (!has("image"))

@@ -9,13 +9,15 @@
 import { scrub, scrubFragment } from "./scrub-html";
 import { parseDocument } from "./parse-document";
 import { toArticleSlug } from "./article-url";
-import { articleUrl, latestUrl } from "./urls";
+import { articlesUrl, articleUrl, latestUrl } from "./urls";
 import { readWordPress } from "./request";
 
 type Term = { name: string; taxonomy: string };
 
 /** a post as the wordpress rest api returns it */
 export type WordPressPost = {
+  /** asked for only when reading several at once */
+  slug?: string;
   title: { rendered: string };
   content: { rendered: string };
   date: string;
@@ -152,4 +154,20 @@ export async function recentArticles(count: number) {
 
   const posts = (await res.json()) as WordPressPost[];
   return posts.map(fromPost);
+}
+
+/**
+ * several articles, keyed by slug, in one request: a slug that matches no
+ * published post is simply absent
+ */
+export async function scrapeArticles(slugs: string[]) {
+  const found = new Map<string, ReturnType<typeof fromPost>>();
+  if (slugs.length === 0) return found;
+
+  const res = await readWordPress(articlesUrl(slugs), "the articles");
+  if (!res.ok) throw new Error(`wordpress returned ${res.status}`);
+
+  for (const post of (await res.json()) as WordPressPost[])
+    if (post.slug) found.set(post.slug, fromPost(post));
+  return found;
 }

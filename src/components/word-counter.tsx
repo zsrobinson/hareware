@@ -6,10 +6,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getWordCount } from "~/lib/get-word-count";
-import { mapLimit } from "~/lib/map-limit";
-import { toArticleLink } from "~/lib/services/wordpress/article-url";
+import {
+  toArticleLink,
+  toArticleSlug,
+} from "~/lib/services/wordpress/article-url";
 import { Throttled } from "~/lib/services/wordpress/request";
-import { scrapeArticle } from "~/lib/services/wordpress/scrape-article";
+import { scrapeArticles } from "~/lib/services/wordpress/scrape-article";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 
@@ -60,24 +62,34 @@ export function WordCounter() {
     url.searchParams.set("articles", pasted);
     window.history.replaceState(window.history.state, "", url);
 
-    /* two at a time: from one reader's address, more draws 429s */
-    const counted = await mapLimit(lines, 2, async (line): Promise<Row> => {
+    /* every link in one request: one each drew 429s from WordPress, which
+       refuses quick runs of requests from one address */
+    const slugs = [
+      ...new Set(
+        lines
+          .map(toArticleLink)
+          .filter((link) => link !== undefined)
+          .map(toArticleSlug),
+      ),
+    ];
+    let found: Awaited<ReturnType<typeof scrapeArticles>> | undefined;
+    let busy = false;
+    try {
+      found = await scrapeArticles(slugs);
+    } catch (thrown) {
+      console.error("could not count", thrown);
+      busy = thrown instanceof Throttled;
+    }
+
+    const counted = lines.map((line): Row => {
       if (line === "")
         return { link: "", title: null, words: null, blank: true };
       const link = toArticleLink(line);
       if (!link) return { link: line, title: null, words: null, foreign: true };
-      try {
-        const { body, title } = await scrapeArticle(link);
-        return { link, title, words: getWordCount(body) };
-      } catch (thrown) {
-        console.error("could not count", link, thrown);
-        return {
-          link,
-          title: null,
-          words: null,
-          busy: thrown instanceof Throttled,
-        };
-      }
+      const article = found?.get(toArticleSlug(link));
+      return article
+        ? { link, title: article.title, words: getWordCount(article.body) }
+        : { link, title: null, words: null, busy };
     });
     setRows(counted);
     setCounting(false);

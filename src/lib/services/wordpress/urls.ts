@@ -45,3 +45,13 @@ export const latestUrl = (count: number) =>
     _embed: "wp:term",
     _fields: FIELDS,
   })}`;
+
+/** several articles at once, by slug: the Word Counter's whole column in one
+    request, where one each drew 429s */
+export const articlesUrl = (slugs: string[]) =>
+  `${POSTS}?${new URLSearchParams({
+    slug: slugs.join(","),
+    per_page: String(Math.max(1, slugs.length)),
+    _embed: "wp:term",
+    _fields: `${FIELDS},slug`,
+  })}`;

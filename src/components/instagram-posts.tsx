@@ -6,7 +6,15 @@
 */
 
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
-import { createElement, useEffect, useState, type ReactNode } from "react";
+import {
+  createElement,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { startEarly } from "~/lib/early";
+import { articleUrl } from "~/lib/services/wordpress/urls";
 import {
   getRecentArticles,
   type RecentArticle,
@@ -119,6 +127,15 @@ function Landing({
   error: string | null;
   page: number;
 }) {
+  /* a short dwell, so sweeping across the list does not read every article */
+  const hover = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const soon = (link: string) => {
+    clearTimeout(hover.current);
+    hover.current = setTimeout(
+      () => startEarly(articleUrl(toArticleSlug(link))),
+      120,
+    );
+  };
   const [recent, setRecent] = useState<
     { articles: RecentArticle[]; pages: number } | "failed" | null
   >(null);
@@ -186,6 +203,14 @@ function Landing({
                 <a
                   className="decoration-muted-foreground/40 hover:decoration-foreground underline underline-offset-4"
                   href={`/generate?article=${toArticleSlug(article.link)}`}
+                  /* a pointer resting on it, or a finger on it, is a click on
+                     its way: the article is read in the meantime */
+                  onPointerEnter={() => soon(article.link)}
+                  onPointerLeave={() => clearTimeout(hover.current)}
+                  onTouchStart={() =>
+                    startEarly(articleUrl(toArticleSlug(article.link)))
+                  }
+                  onFocus={() => soon(article.link)}
                   dangerouslySetInnerHTML={{ __html: article.title }}
                 />
               </li>

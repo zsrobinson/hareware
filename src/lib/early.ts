@@ -32,6 +32,21 @@ export function takeEarly(url: string): Promise<Response> | undefined {
   return early;
 }
 
+/**
+ * starts a request a page is about to make, as a link is pointed at: moving
+ * between pages keeps this window (Astro's client router), so the page it
+ * opens finds the request under the same address
+ */
+export function startEarly(url: string) {
+  const early = (globalThis.__early ??= new Map());
+  if (!early.has(url)) {
+    const request = fetch(url);
+    /* a request nobody takes must not surface as an unhandled rejection */
+    request.catch(() => early.delete(url));
+    early.set(url, request);
+  }
+}
+
 /** what a page starts early */
 export type Early =
   /** `?article=slug`, or the recent list when there is none */

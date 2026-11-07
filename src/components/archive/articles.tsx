@@ -249,6 +249,22 @@ function ArticlePanel({
  * as, and anyone added who is not printed. Saving writes this article's rows
  * for the role and nothing else.
  */
+/* the article's own rows for one role, as a form describes them */
+const entriesOf = ({
+  renamed,
+  added,
+}: {
+  renamed: Record<string, string>;
+  added: string[];
+}) => [
+  ...Object.entries(renamed)
+    .filter(([, name]) => name.trim())
+    .map(([byline, realName]) => ({ byline, realName })),
+  ...added
+    .filter((name) => name.trim())
+    .map((realName) => ({ byline: null, realName })),
+];
+
 function RoleEditor({
   article,
   role,
@@ -396,6 +412,12 @@ function RoleEditor({
                     entries: [],
                   },
                   done: `“${article.title}” is back to its printed bylines`,
+                  undo: {
+                    kind: "article-credits",
+                    postId: article.id,
+                    role,
+                    entries: entriesOf(initial),
+                  },
                 })
               }
             >
@@ -423,14 +445,7 @@ function RoleEditor({
                     kind: "article-credits",
                     postId: article.id,
                     role,
-                    entries: [
-                      ...Object.entries(renamed)
-                        .filter(([, name]) => name.trim())
-                        .map(([byline, realName]) => ({ byline, realName })),
-                      ...added
-                        .filter((name) => name.trim())
-                        .map((realName) => ({ byline: null, realName })),
-                    ],
+                    entries: entriesOf({ renamed, added }),
                   },
                   done: SAVED[role](article.title),
                 })

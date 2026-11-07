@@ -397,6 +397,26 @@ function PasteSeveral({
                     })),
                   },
                   done: `Saved ${valid.length} pen ${valid.length === 1 ? "name" : "names"}`,
+                  /* what those bylines counted as before, or nobody */
+                  undo: {
+                    kind: "pen-names",
+                    entries: [
+                      ...new Set(valid.map((v) => v.byline.toLowerCase())),
+                    ].flatMap((key) => {
+                      const byline = valid.find(
+                        (v) => v.byline.toLowerCase() === key,
+                      )!.byline;
+                      const before = penNames.find((p) =>
+                        same(p.byline, byline),
+                      );
+                      return before
+                        ? before.realName.map((realName) => ({
+                            byline,
+                            realName,
+                          }))
+                        : [{ byline, realName: "" }];
+                    }),
+                  },
                 },
                 { onSuccess: () => setText("") },
               )
@@ -436,7 +456,7 @@ function ArticleRows({ archive }: { archive: Archive }) {
         {archive.articleOverrides.map((o, index) => (
           <li
             key={index}
-            className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2"
+            className="group flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5"
           >
             <span className="min-w-0 flex-1">
               <span className="text-muted-foreground">
@@ -458,6 +478,7 @@ function ArticleRows({ archive }: { archive: Archive }) {
             </span>
             {o.role && (
               <Button
+                className="reveal-on-hover"
                 variant="ghost"
                 size="xs"
                 disabled={save.isPending}

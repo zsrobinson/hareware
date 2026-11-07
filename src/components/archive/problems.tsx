@@ -183,6 +183,7 @@ function PairRow({ pair }: { pair: SimilarNames }) {
         ))}
       </span>
       <Button
+        className="text-muted-foreground"
         variant="ghost"
         size="sm"
         disabled={save.isPending}

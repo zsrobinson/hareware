@@ -82,3 +82,17 @@ test("a refusal from WordPress is not kept at the edge", async () => {
   expect(response.status).toBe(429);
   expect(response.headers.get("cache-control")).toBe("no-store");
 });
+
+/* WordPress's cache ignores no-cache headers; a key it has never seen is what
+   makes it answer from its server */
+test("a fresh read reaches WordPress past its cache, and is kept nowhere", async () => {
+  const asked = wordpress();
+  const response = await passThrough(
+    at("/api/wordpress/wp/v2/posts?slug=a&fresh=1"),
+  );
+
+  expect(asked[0]?.url).toMatch(
+    /^https:\/\/theumdhare\.com\/wp-json\/wp\/v2\/posts\?slug=a&_fresh=\d+$/,
+  );
+  expect(response.headers.get("cache-control")).toBe("no-store");
+});

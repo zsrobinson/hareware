@@ -94,7 +94,7 @@ test("an older copy is shown at once, and WordPress read behind it", async () =>
   expect(asked.some((url) => url.includes("wp/v2/posts"))).toBe(true);
 });
 
-test("Refresh reads WordPress itself, so a fix made there shows", async () => {
+test("Refresh reads past every cache, so a fix made in WordPress shows", async () => {
   const { asked, wrapper } = setUp(Response.json(SHEET), {
     posts: [],
     categories: [],
@@ -110,6 +110,5 @@ test("Refresh reads WordPress itself, so a fix made there shows", async () => {
 
   const reads = asked.filter((url) => url.includes("wp/v2/"));
   expect(reads.length).toBeGreaterThan(0);
-  for (const url of reads)
-    expect(url).toMatch(/^https:\/\/theumdhare\.com\/wp-json\//);
+  for (const url of reads) expect(url).toMatch(/[?&]fresh=1$/);
 });

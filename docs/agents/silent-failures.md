@@ -35,24 +35,30 @@ read. `togglePosted()` keeps the id for this reason.
 
 ## WordPress
 
-**WordPress.com answers a quick burst with 429, sometimes as a `200` HTML page.**
-Five pages of posts fetched back to back were enough. Every read goes through
-`readWordPress()`, and `readPage()` refuses any body that is not a JSON list,
-so a throttle page can never parse as "no posts".
+**WordPress.com throttles what its cache cannot answer, per address, and says
+nothing about it.** No limit is documented. A dozen uncached requests at once
+from one address drew 429s; the same through the Worker, which leaves from
+Cloudflare's many addresses, drew none; cached answers are never refused
+(2026-11-08). The 429 is a small HTML page from its edge with no
+`Retry-After`, no rate-limit headers and no CORS headers, and a throttled
+WordPress has also answered `200` with an HTML page. So every read goes through
+`readWordPress()`, retries on waits of our own choosing, and `jsonOf()` turns a
+body that is not JSON into `Throttled`, never "no posts".
 
-**In a browser, its 429 is a failed fetch.** The refusal carries no CORS
-headers, so the page sees `TypeError: Failed to fetch`, not a status, and no
-`Retry-After` either. `readWordPress()` counts a failed fetch as a refusal and
-ends in `Throttled`, which the pages word as "WordPress is busy", never as a
-bad link.
+**In a browser, its 429 is a failed fetch.** With no CORS headers the page sees
+`TypeError: Failed to fetch`, not a status. `readWordPress()` counts a failed
+fetch as a refusal and ends in `Throttled`, which the pages word as "WordPress
+is busy", never as a bad link.
 
-**Any `Origin` header skips WordPress.com's cache.** A browser's cross-origin
-request always sends one, so it reaches WordPress's server: about 400 ms for an
-article against about 130 ms cached, and back-to-back pages get refused there.
-Nothing documents this; `x-ac: BYPASS` in the response shows it. Browser reads
-go through `/api/wordpress`, which asks without one, and fall back to WordPress
-directly. A read that must be current, such as Refresh after a fix in
-WordPress, goes direct on purpose (`{ fresh: true }`).
+**Any `Origin` header skips WordPress.com's cache; no-cache headers do not.** A
+browser's cross-origin request always sends one, so it reaches WordPress's
+server: about 400 ms for an article against about 130 ms cached, and it counts
+against that address's allowance. `x-ac: BYPASS` in the response shows it.
+`Cache-Control: no-cache` and `Pragma: no-cache` are ignored (`x-ac: HIT`). So
+browser reads go through `/api/wordpress`, which asks without an Origin, and a
+read that must be current (`{ fresh: true }`, Refresh after a fix in
+WordPress) goes the same way with `fresh=1`, which the pass-through turns into
+a query key WordPress has never seen.
 
 **`after` compares against the site's local date, whatever offset you give
 it.** The reminder asks for a day earlier than it needs and compares

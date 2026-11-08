@@ -1,4 +1,4 @@
-import { PASS_THROUGH, WORDPRESS_API } from "./urls";
+import { FRESH, PASS_THROUGH, WORDPRESS_API } from "./urls";
 
 /*
   WordPress's REST API, passed through from HareWare's own origin, for the
@@ -39,21 +39,30 @@ const PASSED = [
   "x-wp-totalpages",
 ];
 
-/** WordPress's answer to a GET of `/api/wordpress/<collection>?<query>` */
+/**
+ * WordPress's answer to a GET of `/api/wordpress/<collection>?<query>`.
+ * `fresh=1` asks past every cache, for Refresh: WordPress's cache ignores a
+ * request's no-cache headers, so a key it has never seen makes it answer from
+ * its server, and the answer is kept nowhere (checked 2026-11-08)
+ */
 export async function passThrough(url: URL): Promise<Response> {
   const collection = url.pathname.slice(PASS_THROUGH.length);
   if (!COLLECTIONS.has(collection))
     return new Response("not a collection HareWare reads", { status: 404 });
 
-  for (const [key, value] of url.searchParams)
+  const query = new URLSearchParams(url.searchParams);
+  const fresh = query.get(FRESH) === "1";
+  query.delete(FRESH);
+  for (const [key, value] of query)
     if (!KEYS.has(key) || value.length > 2000)
       return new Response(`not a query HareWare passes: ${key}`, {
         status: 400,
       });
+  if (fresh) query.set("_fresh", String(Date.now()));
 
   let upstream: Response;
   try {
-    upstream = await fetch(`${WORDPRESS_API}${collection}${url.search}`, {
+    upstream = await fetch(`${WORDPRESS_API}${collection}?${query}`, {
       headers: { accept: "application/json", "accept-encoding": "br, gzip" },
     });
   } catch (error) {
@@ -66,7 +75,7 @@ export async function passThrough(url: URL): Promise<Response> {
      Worker; none in the browser, whose own query cache already keeps a read
      between pages, so a reload after a fix asks again. Only for an answer:
      a refusal or a failure is asked again at once */
-  if (upstream.ok)
+  if (upstream.ok && !fresh)
     headers.set("cache-control", "public, max-age=0, s-maxage=60");
   else headers.set("cache-control", "no-store");
   for (const name of PASSED) {

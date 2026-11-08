@@ -15,14 +15,20 @@ export const CATEGORIES = `${WORDPRESS_API}wp/v2/categories`;
 /** where HareWare passes the same requests through: ./pass-through */
 export const PASS_THROUGH = "/api/wordpress/";
 
+/** the pass-through's own key: ask past every cache (./pass-through) */
+export const FRESH = "fresh";
+
 /**
- * the same request through HareWare, which WordPress answers from its cache;
- * anything else is left as it is
+ * the same request through HareWare, which WordPress answers from its cache,
+ * or with `fresh`, from its server; anything else is left as it is
  */
-export const viaHareWare = (url: string) =>
-  url.startsWith(WORDPRESS_API)
-    ? `${PASS_THROUGH}${url.slice(WORDPRESS_API.length)}`
-    : url;
+export const viaHareWare = (url: string, { fresh = false } = {}) => {
+  if (!url.startsWith(WORDPRESS_API)) return url;
+  const through = `${PASS_THROUGH}${url.slice(WORDPRESS_API.length)}`;
+  return fresh
+    ? `${through}${through.includes("?") ? "&" : "?"}${FRESH}=1`
+    : through;
+};
 
 /** how many articles the newsletter lists */
 export const NEWSLETTER_COUNT = 10;

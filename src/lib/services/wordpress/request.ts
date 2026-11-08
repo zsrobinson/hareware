@@ -10,16 +10,16 @@
   in words rather than a page that just stops.
 */
 
-import { takeEarly } from "~/lib/early";
-import { viaHareWare } from "./urls";
+import { takeEarly } from "~/lib/early-requests";
+import { retryAfterMs } from "~/lib/rate-limit";
 import { errorMessage } from "~/lib/utils";
+import { viaHareWare } from "./urls";
 
 /** WordPress turned the request away for now; waiting a minute is the fix */
 export class Throttled extends Error {}
 
-/** retries after a refusal, and after a fetch that failed outright */
-const REFUSED_RETRIES = 2;
-const FAILED_RETRIES = 2;
+/** tries sent to WordPress directly, the first included */
+const ATTEMPTS = 3;
 
 /** the longest one wait: retry-after is a request, and a silent page reads as broken */
 const MAX_WAIT_MS = 4000;
@@ -34,27 +34,20 @@ const sleep = (ms: number) => new Promise((wake) => setTimeout(wake, ms));
  * need no gap
  */
 const BETWEEN_DIRECT_MS = 500;
-let lastDirect = 0;
+let nextDirect = 0;
 async function spaced(url: string): Promise<Response> {
-  /* never more than the gap itself, whatever the clock did in between */
-  const wait = Math.min(
-    lastDirect + BETWEEN_DIRECT_MS - Date.now(),
-    BETWEEN_DIRECT_MS,
-  );
-  if (wait > 0) await sleep(wait);
-  lastDirect = Date.now();
+  const now = Date.now();
+  /* a clock that went backwards must not leave reads waiting on it */
+  if (nextDirect - now > 10 * BETWEEN_DIRECT_MS) nextDirect = now;
+  /* the slot is taken before waiting, so reads that start together queue a
+     gap apart rather than all waking at once */
+  const at = Math.max(now, nextDirect);
+  nextDirect = at + BETWEEN_DIRECT_MS;
+  if (at > now) await sleep(at - now);
   return fetch(url);
 }
 
-/** `Retry-After` in seconds, as milliseconds; the date form is ignored */
-function told(header: string | null): number | undefined {
-  const seconds = Number(header?.trim());
-  return header && Number.isFinite(seconds) && seconds >= 0
-    ? seconds * 1000
-    : undefined;
-}
-
-export type Fresh = {
+export type ReadOptions = {
   /**
    * past every cache, for a read someone asked for, such as Refresh after a
    * fix in WordPress: WordPress answers a request with an Origin from its
@@ -71,7 +64,7 @@ export type Fresh = {
 export async function readWordPress(
   url: string,
   describe: string,
-  { fresh = false }: Fresh = {},
+  { fresh = false }: ReadOptions = {},
 ): Promise<Response> {
   /* in a browser, through HareWare first: WordPress's cache answers it. A
      refusal or a failure there falls through to asking WordPress itself */
@@ -86,29 +79,48 @@ export async function readWordPress(
     }
   }
 
-  let failed = 0;
-  for (let attempt = 0; ; attempt++) {
-    let response: Response;
+  for (let attempt = 1; ; attempt++) {
+    let response: Response | undefined;
+    let failure: unknown;
     try {
-      /* the page may have sent the first one already: ~/lib/early */
-      response = await ((attempt === 0 && failed === 0 && takeEarly(url)) ||
-        spaced(url));
+      response = await spaced(url);
     } catch (thrown) {
-      if (failed >= FAILED_RETRIES)
-        throw new Throttled(`${describe}: ${errorMessage(thrown)}`);
-      /* about 1.2 s, then 2.5 s: a throttle here lifts within a few seconds */
-      await sleep(1200 * 2 ** failed++ + Math.random() * 400);
-      continue;
+      failure = thrown;
     }
+    if (response && response.status !== 429 && response.status < 500)
+      return response;
+    if (attempt >= ATTEMPTS)
+      throw new Throttled(
+        response
+          ? `${describe} answered ${response.status}`
+          : `${describe}: ${errorMessage(failure)}`,
+      );
 
-    if (response.status !== 429 && response.status < 500) return response;
-    if (attempt >= REFUSED_RETRIES)
-      throw new Throttled(`${describe} answered ${response.status}`);
+    /* a refusal waits what it was told, or half a second doubling; a failed
+       fetch, a refusal that lost its headers, about 1.2 s then 2.5 s, as a
+       throttle there lifts within a few seconds. Jittered, so reads refused
+       together do not retry in step */
+    const wait = response
+      ? (retryAfterMs(response.headers.get("retry-after")) ??
+        500 * 2 ** (attempt - 1))
+      : 1200 * 2 ** (attempt - 1);
+    await sleep(Math.min(wait + Math.random() * 400, MAX_WAIT_MS));
+  }
+}
 
-    /* jittered, so several reads refused together do not retry in step */
-    const wait =
-      told(response.headers.get("retry-after")) ??
-      500 * 2 ** attempt + Math.random() * 400;
-    await sleep(Math.min(wait, MAX_WAIT_MS));
+/**
+ * the JSON in WordPress's answer, or a throw that says what went wrong. A
+ * throttled WordPress.com sometimes answers 200 with an HTML page, which is a
+ * refusal too, not a bad article
+ */
+export async function jsonOf<T>(
+  response: Response,
+  describe: string,
+): Promise<T> {
+  if (!response.ok) throw new Error(`${describe} answered ${response.status}`);
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new Throttled(`${describe} answered something other than JSON`);
   }
 }

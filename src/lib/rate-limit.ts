@@ -20,7 +20,7 @@ const sleep = (ms: number) => new Promise((wake) => setTimeout(wake, ms));
  * `Retry-After` in milliseconds, or undefined. Only the seconds form is read:
  * the date form needs clocks that agree, and `NaN` in a timer fires at once
  */
-function retryAfterMs(header: string | null): number | undefined {
+export function retryAfterMs(header: string | null): number | undefined {
   if (!header) return undefined;
 
   const seconds = Number(header.trim());

@@ -1,11 +1,10 @@
 /*
-  The newest articles, ten to a page, for the Instagram Posts landing. Read from
-  the REST API in the browser: the RSS feed it used to read sends no CORS
-  headers, and the API also says how many pages there are.
+  The newest articles, ten to a page, for the Instagram Posts landing: titles
+  and dates only, and how many pages there are.
 */
 
 import { recentUrl } from "./urls";
-import { readWordPress } from "./request";
+import { jsonOf, readWordPress } from "./request";
 import { scrubFragment } from "./scrub-html";
 
 export type RecentArticle = {
@@ -22,13 +21,9 @@ export async function getRecentArticles(
   const res = await readWordPress(recentUrl(page), "the recent articles");
   /* past the last page, WordPress answers 400 rather than an empty list */
   if (res.status === 400) return { articles: [], pages: 0 };
-  if (!res.ok) throw new Error(`wordpress answered ${res.status}`);
-
-  const rows = (await res.json()) as {
-    title: { rendered: string };
-    link: string;
-    date: string;
-  }[];
+  const rows = await jsonOf<
+    { title: { rendered: string }; link: string; date: string }[]
+  >(res, "the recent articles");
   const pages = Number(res.headers.get("x-wp-totalpages"));
 
   return {

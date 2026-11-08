@@ -1,4 +1,4 @@
-import { ORIGIN } from "./article-url";
+import { PASS_THROUGH, WORDPRESS_API } from "./urls";
 
 /*
   WordPress's REST API, passed through from HareWare's own origin, for the
@@ -10,11 +10,11 @@ import { ORIGIN } from "./article-url";
 
   src/worker.ts calls this before Astro sees the request, so it costs the
   Worker only the fetch, and the body is streamed through unread. It passes
-  only what the pages ask for: two collections and the query keys they use.
-  When it fails, the browser asks WordPress itself (./request).
+  only what the pages ask for: two collections and the query keys they use,
+  and refuses anything else rather than dropping it, since WordPress answers
+  a request missing its filter with the wrong posts and a 200. When it fails,
+  the browser asks WordPress itself (./request).
 */
-
-export const PREFIX = "/api/wordpress/";
 
 const COLLECTIONS = new Set(["wp/v2/posts", "wp/v2/categories"]);
 const KEYS = new Set([
@@ -23,8 +23,6 @@ const KEYS = new Set([
   "page",
   "offset",
   "status",
-  "after",
-  "order",
   "_embed",
   "_fields",
 ]);
@@ -43,17 +41,19 @@ const PASSED = [
 
 /** WordPress's answer to a GET of `/api/wordpress/<collection>?<query>` */
 export async function passThrough(url: URL): Promise<Response> {
-  const collection = url.pathname.slice(PREFIX.length);
+  const collection = url.pathname.slice(PASS_THROUGH.length);
   if (!COLLECTIONS.has(collection))
     return new Response("not a collection HareWare reads", { status: 404 });
 
-  const query = new URLSearchParams();
   for (const [key, value] of url.searchParams)
-    if (KEYS.has(key) && value.length <= 2000) query.set(key, value);
+    if (!KEYS.has(key) || value.length > 2000)
+      return new Response(`not a query HareWare passes: ${key}`, {
+        status: 400,
+      });
 
   let upstream: Response;
   try {
-    upstream = await fetch(`${ORIGIN}/wp-json/${collection}?${query}`, {
+    upstream = await fetch(`${WORDPRESS_API}${collection}${url.search}`, {
       headers: { accept: "application/json", "accept-encoding": "br, gzip" },
     });
   } catch (error) {
@@ -61,13 +61,14 @@ export async function passThrough(url: URL): Promise<Response> {
     return new Response("WordPress did not answer", { status: 502 });
   }
 
-  const headers = new Headers({
-    "x-content-type-options": "nosniff",
-    /* a minute at Cloudflare's edge, so a repeat from nearby never reaches
-       the Worker; none in the browser, whose own query cache already keeps
-       a read between pages, so a reload after a fix asks again */
-    "cache-control": "public, max-age=0, s-maxage=60",
-  });
+  const headers = new Headers({ "x-content-type-options": "nosniff" });
+  /* a minute at Cloudflare's edge, so a repeat from nearby never reaches the
+     Worker; none in the browser, whose own query cache already keeps a read
+     between pages, so a reload after a fix asks again. Only for an answer:
+     a refusal or a failure is asked again at once */
+  if (upstream.ok)
+    headers.set("cache-control", "public, max-age=0, s-maxage=60");
+  else headers.set("cache-control", "no-store");
   for (const name of PASSED) {
     const value = upstream.headers.get(name);
     if (value) headers.set(name, value);

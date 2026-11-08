@@ -1,8 +1,11 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { earlyScript, takeEarly, type Early } from "./early";
+import { earlyScript, type Early } from "./early";
+import { EARLY_FOR_MS, takeEarly } from "./early-requests";
 import {
   articleUrl,
   latestUrl,
+  NEWSLETTER_COUNT,
+  pageOf,
   recentUrl,
   viaHareWare,
 } from "./services/wordpress/urls";
@@ -14,6 +17,7 @@ const recent = (page: number) => viaHareWare(recentUrl(page));
 afterEach(() => {
   globalThis.__early = undefined;
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 /* runs a page's inline script against an address, and says what it fetched */
@@ -41,10 +45,15 @@ test("an article page starts exactly the request its island makes", () => {
   expect(takeEarly(article(slug))).toBeUndefined();
 });
 
-test("the landing starts the recent list for the page it is on", () => {
-  expect(run("article-or-recent", "")).toEqual([recent(1)]);
-  globalThis.__early = undefined;
-  expect(run("article-or-recent", "?page=3")).toEqual([recent(3)]);
+/* the script reads `?page=` in its own source; the island reads it with pageOf,
+   and a page they disagreed on would be read twice */
+test("the landing starts the recent list for the page the island shows", () => {
+  for (const search of ["", "?page=3", "?page=0", "?page=-2", "?page=x"]) {
+    globalThis.__early = undefined;
+    expect(run("article-or-recent", search)).toEqual([
+      recent(pageOf(new URLSearchParams(search))),
+    ]);
+  }
 });
 
 test("a pasted link is left to the island, which reads it more carefully", () => {
@@ -57,7 +66,16 @@ test("a pasted link is left to the island, which reads it more carefully", () =>
 });
 
 test("the newsletter and the gated pages start their one request", () => {
-  expect(run("latest", "")).toEqual([viaHareWare(latestUrl(10))]);
+  expect(run("latest", "")).toEqual([viaHareWare(latestUrl(NEWSLETTER_COUNT))]);
   globalThis.__early = undefined;
   expect(run({ api: "/api/archive.json" }, "")).toEqual(["/api/archive.json"]);
+});
+
+/* the router runs a page's script once per window, so a request the island
+   never took (it already had the answer) must not be served as new later */
+test("a request sent early is not taken once it is old", () => {
+  vi.useFakeTimers();
+  run("article", "?article=testudo-learns-to-swim");
+  vi.advanceTimersByTime(EARLY_FOR_MS);
+  expect(takeEarly(article("testudo-learns-to-swim"))).toBeUndefined();
 });

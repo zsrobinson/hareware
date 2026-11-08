@@ -119,3 +119,47 @@ test("a fresh read goes to WordPress itself, past every cache", async () => {
 
   expect(fetch.mock.calls.map(([url]) => url)).toEqual([ARTICLE]);
 });
+
+test("a read takes the request the page already sent, rather than its own", async () => {
+  vi.stubGlobal("document", {});
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  globalThis.__early = new Map([
+    [
+      THROUGH,
+      { at: Date.now(), response: Promise.resolve(Response.json([1])) },
+    ],
+  ]);
+
+  const result = await settle(() => readWordPress(ARTICLE, "a read"));
+
+  expect(fetch).not.toHaveBeenCalled();
+  expect("value" in result && result.value.status).toBe(200);
+  globalThis.__early = undefined;
+});
+
+/* reads that start together must still reach WordPress half a second apart,
+   or they are the burst it refuses */
+test("direct reads started together are sent half a second apart", async () => {
+  vi.useFakeTimers();
+  const sent: number[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      sent.push(Date.now());
+      return Response.json([]);
+    }),
+  );
+
+  const reads = Promise.all(
+    ["a", "b", "c"].map((name) =>
+      readWordPress(`https://x.test/${name}`, name),
+    ),
+  );
+  await vi.runAllTimersAsync();
+  await reads;
+
+  expect(sent).toHaveLength(3);
+  expect(sent[1]! - sent[0]!).toBeGreaterThanOrEqual(500);
+  expect(sent[2]! - sent[1]!).toBeGreaterThanOrEqual(500);
+});

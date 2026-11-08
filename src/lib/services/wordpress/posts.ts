@@ -5,10 +5,9 @@
   are read one at a time and every read goes through `readWordPress`.
 */
 
-import { ORIGIN } from "./article-url";
-import { readWordPress, type Fresh } from "./request";
+import { jsonOf, readWordPress, type ReadOptions } from "./request";
+import { CATEGORIES, POSTS } from "./urls";
 
-const API = `${ORIGIN}/wp-json/wp/v2`;
 const PER_PAGE = 100;
 
 /** a published post, as much of it as anything here reads */
@@ -41,7 +40,7 @@ type ApiPost = {
  */
 export async function allPosts(
   onPage?: (read: number, total: number) => void,
-  read: Fresh = {},
+  read: ReadOptions = {},
 ): Promise<Post[]> {
   const posts: Post[] = [];
 
@@ -83,23 +82,22 @@ export async function postsPublishedAfter(instant: Date): Promise<Post[]> {
   );
 }
 
-export async function categories(read: Fresh = {}): Promise<Category[]> {
-  const response = await readWordPress(
-    `${API}/categories?per_page=100&_fields=id,name`,
+export async function categories(read: ReadOptions = {}): Promise<Category[]> {
+  const rows = await jsonOf<{ id: number; name: string }[]>(
+    await readWordPress(
+      `${CATEGORIES}?per_page=100&_fields=id,name`,
+      "wordpress categories",
+      read,
+    ),
     "wordpress categories",
-    read,
   );
-  if (!response.ok)
-    throw new Error(`wordpress categories answered ${response.status}`);
-
-  const rows = (await response.json()) as { id: number; name: string }[];
   return rows.map((row) => ({ id: row.id, name: decodeEntities(row.name) }));
 }
 
 async function readPage(
   query: Record<string, string>,
   describe: string,
-  read: Fresh = {},
+  read: ReadOptions = {},
 ): Promise<{ rows: Post[]; totalPages: number }> {
   const params = new URLSearchParams({
     per_page: String(PER_PAGE),
@@ -108,16 +106,13 @@ async function readPage(
   });
 
   const response = await readWordPress(
-    `${API}/posts?${params}`,
+    `${POSTS}?${params}`,
     `wordpress ${describe}`,
     read,
   );
-  if (!response.ok)
-    throw new Error(`wordpress ${describe} answered ${response.status}`);
-
   /* a throttled wordpress.com answers html with a 200 often enough that the
      body has to prove it is a list */
-  const body: unknown = await response.json().catch(() => undefined);
+  const body = await jsonOf<unknown>(response, `wordpress ${describe}`);
   if (!Array.isArray(body))
     throw new Error(`wordpress ${describe} did not answer a list`);
 

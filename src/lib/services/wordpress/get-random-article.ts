@@ -1,5 +1,5 @@
-import { ORIGIN } from "./article-url";
-import { readWordPress } from "./request";
+import { jsonOf, readWordPress } from "./request";
+import { POSTS } from "./urls";
 
 /*
   a link to some published article, for /random. Two reads: how many posts
@@ -7,11 +7,9 @@ import { readWordPress } from "./request";
   and going through readWordPress, so they come from WordPress's cache and
   wait out its refusals like every other read.
 
-  answers "value or nothing": no status check once made `total` NaN and threw
-  on an empty array, so any WordPress hiccup broke a page whose whole job is
-  to redirect.
+  answers "value or nothing": the page's whole job is to redirect, and it
+  goes to the landing when there is nothing to go to.
 */
-const POSTS = `${ORIGIN}/wp-json/wp/v2/posts`;
 
 export async function getRandomArticle(): Promise<string | undefined> {
   try {
@@ -27,13 +25,13 @@ export async function getRandomArticle(): Promise<string | undefined> {
     if (!Number.isFinite(total) || total < 1) return undefined;
 
     const offset = Math.floor(Math.random() * total);
-    const page = await readWordPress(
-      `${POSTS}?per_page=1&offset=${offset}&_fields=link`,
+    const data = await jsonOf<{ link?: unknown }[]>(
+      await readWordPress(
+        `${POSTS}?per_page=1&offset=${offset}&_fields=link`,
+        "a random post",
+      ),
       "a random post",
     );
-    if (!page.ok) return undefined;
-
-    const data = (await page.json()) as { link?: unknown }[];
     const link = data[0]?.link;
 
     return typeof link === "string" ? link : undefined;

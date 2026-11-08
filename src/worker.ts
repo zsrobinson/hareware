@@ -1,6 +1,7 @@
 import { handle } from "@astrojs/cloudflare/handler";
 import { runScheduled } from "~/lib/automations/run";
-import { passThrough, PREFIX } from "~/lib/services/wordpress/pass-through";
+import { passThrough } from "~/lib/services/wordpress/pass-through";
+import { PASS_THROUGH } from "~/lib/services/wordpress/urls";
 import "./middleware";
 
 /*
@@ -33,7 +34,7 @@ export default {
        pipeline is not needed to forward a GET, and every request here is
        held to 10 ms of CPU (ADR 0012) */
     const url = new URL(request.url);
-    if (request.method === "GET" && url.pathname.startsWith(PREFIX))
+    if (request.method === "GET" && url.pathname.startsWith(PASS_THROUGH))
       return passThrough(url);
     return handle(request, env, ctx);
   },

@@ -8,29 +8,16 @@
 
   The script's addresses come from the same builders the islands use, with
   placeholders for what the page's own address supplies, so the two cannot ask
-  for different things.
+  for different things. ~/lib/early-requests is where the islands take them.
 */
 
 import {
   articleUrl,
   latestUrl,
+  NEWSLETTER_COUNT,
   recentUrl,
   viaHareWare,
 } from "~/lib/services/wordpress/urls";
-
-declare global {
-  var __early: Map<string, Promise<Response>> | undefined;
-}
-
-/**
- * the request already sent for `url`, if the page started one; each is taken
- * once, so a retry or a refresh asks afresh
- */
-export function takeEarly(url: string): Promise<Response> | undefined {
-  const early = globalThis.__early?.get(url);
-  globalThis.__early?.delete(url);
-  return early;
-}
 
 /** what a page starts early */
 export type Early =
@@ -59,7 +46,7 @@ export function earlyScript(early: Early): string {
       : early === "article"
         ? article
         : early === "latest"
-          ? `go(${JSON.stringify(viaHareWare(latestUrl(10)))});`
+          ? `go(${JSON.stringify(viaHareWare(latestUrl(NEWSLETTER_COUNT)))});`
           : `go(${JSON.stringify(early.api)}, { cache: "no-store" });`;
 
   /* an old browser without `??=`, or anything else going wrong, leaves the
@@ -70,9 +57,9 @@ export function earlyScript(early: Early): string {
     const m = (window.__early ??= new Map());
     const go = (url, init) => {
       if (m.has(url)) return;
-      const r = fetch(url, init);
-      r.catch(() => {});
-      m.set(url, r);
+      const response = fetch(url, init);
+      response.catch(() => {});
+      m.set(url, { at: Date.now(), response });
     };
     const q = new URLSearchParams(location.search);
     ${body}

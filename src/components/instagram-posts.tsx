@@ -24,6 +24,7 @@ import {
   toSizedImage,
 } from "~/lib/services/wordpress/image-url";
 import { Throttled } from "~/lib/services/wordpress/request";
+import { pageOf } from "~/lib/services/wordpress/urls";
 import { GeneratePage } from "./generate-page";
 import { articleQuery, recentQuery } from "./queries";
 import { LoaderCircle } from "./loader-circle";
@@ -104,7 +105,7 @@ export function InstagramPosts() {
       </GeneratePage>
     );
 
-  const page = Math.max(1, Number(params.get("page")) || 1);
+  const page = pageOf(params);
   return <Landing typed={typed} error={error} page={page} />;
 }
 

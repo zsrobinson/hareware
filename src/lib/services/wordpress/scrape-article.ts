@@ -10,7 +10,7 @@ import { scrub, scrubFragment } from "./scrub-html";
 import { parseDocument } from "./parse-document";
 import { toArticleSlug } from "./article-url";
 import { articlesUrl, articleUrl, latestUrl } from "./urls";
-import { readWordPress } from "./request";
+import { jsonOf, readWordPress } from "./request";
 
 type Term = { name: string; taxonomy: string };
 
@@ -34,7 +34,7 @@ export async function scrapeArticle(link: string) {
 /** the fields we need, off a rest api response */
 export function fromPost(post: WordPressPost) {
   // content.rendered is the markup that lands inside .entry-content on the
-  // page, so wrapping it lets one set of selectors serve both sources
+  // page; wrapped the same way, the selectors below read it as they would there
   /* wordpress decides this markup, so it is scrubbed before anything reads it
      — see ~/lib/services/wordpress/scrub-html for what that is defending against */
   const document = scrub(
@@ -63,7 +63,7 @@ function hasCreditsLabel(el: Element): boolean {
   );
 }
 
-/** the pieces that live inside .entry-content, whichever way we got there */
+/** the pieces that live inside .entry-content */
 function readEntryContent(document: Document) {
   // linkedom splits text at entity boundaries (`a&nbsp;b` becomes three text
   // nodes), which makes getTaggedText emit redundant typeface tags
@@ -122,10 +122,11 @@ function readEntryContent(document: Document) {
  * bare slug permalink 301s to its dated form on the way in, which the api skips
  */
 async function fetchPost(slug: string): Promise<WordPressPost> {
-  const res = await readWordPress(articleUrl(slug), `the article ${slug}`);
-  if (!res.ok) throw new Error(`wordpress returned ${res.status} for ${slug}`);
-
-  const [post] = (await res.json()) as WordPressPost[];
+  const describe = `the article ${slug}`;
+  const [post] = await jsonOf<WordPressPost[]>(
+    await readWordPress(articleUrl(slug), describe),
+    describe,
+  );
   if (!post) throw new Error(`no published post matches ${slug}`);
 
   return post;
@@ -148,11 +149,11 @@ function formatDate(date: string): string {
  * the latest articles, each read as `scrapeArticle` reads one, in a single
  * request rather than one per article: the newsletter needs ten of them
  */
-export async function recentArticles(count: number) {
-  const res = await readWordPress(latestUrl(count), "the latest articles");
-  if (!res.ok) throw new Error(`wordpress returned ${res.status}`);
-
-  const posts = (await res.json()) as WordPressPost[];
+export async function latestArticles(count: number) {
+  const posts = await jsonOf<WordPressPost[]>(
+    await readWordPress(latestUrl(count), "the latest articles"),
+    "the latest articles",
+  );
   return posts.map(fromPost);
 }
 
@@ -164,10 +165,10 @@ export async function scrapeArticles(slugs: string[]) {
   const found = new Map<string, ReturnType<typeof fromPost>>();
   if (slugs.length === 0) return found;
 
-  const res = await readWordPress(articlesUrl(slugs), "the articles");
-  if (!res.ok) throw new Error(`wordpress returned ${res.status}`);
-
-  for (const post of (await res.json()) as WordPressPost[])
-    if (post.slug) found.set(post.slug, fromPost(post));
+  const posts = await jsonOf<WordPressPost[]>(
+    await readWordPress(articlesUrl(slugs), "the articles"),
+    "the articles",
+  );
+  for (const post of posts) if (post.slug) found.set(post.slug, fromPost(post));
   return found;
 }

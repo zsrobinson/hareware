@@ -62,11 +62,23 @@ test("passes only the collections and query keys the pages use", async () => {
   expect(
     (await passThrough(at("/api/wordpress/wp/v2/posts/../settings"))).status,
   ).toBe(404);
-  await passThrough(
-    at("/api/wordpress/wp/v2/posts?slug=a&context=edit&password=x"),
-  );
+  /* refused rather than dropped: without its filter WordPress would answer
+     the wrong posts, with a 200 */
+  expect(
+    (await passThrough(at("/api/wordpress/wp/v2/posts?slug=a&context=edit")))
+      .status,
+  ).toBe(400);
 
-  expect(asked.map(({ url }) => url)).toEqual([
-    "https://theumdhare.com/wp-json/wp/v2/posts?slug=a",
-  ]);
+  expect(asked).toEqual([]);
+});
+
+test("a refusal from WordPress is not kept at the edge", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(null, { status: 429 })),
+  );
+  const response = await passThrough(at("/api/wordpress/wp/v2/posts?page=1"));
+
+  expect(response.status).toBe(429);
+  expect(response.headers.get("cache-control")).toBe("no-store");
 });

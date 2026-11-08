@@ -7,7 +7,7 @@
 import { buttonVariants } from "~/components/ui/button";
 import type { RefusalBody } from "~/lib/admin-api";
 import { DENIALS, type Action } from "~/lib/denial";
-import { takeEarly } from "~/lib/early";
+import { takeEarly } from "~/lib/early-requests";
 
 /** a gated API's refusal, carried as an error so a query can hold it */
 export class Refused extends Error {

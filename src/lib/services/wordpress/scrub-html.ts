@@ -172,13 +172,6 @@ type Elementish = {
   replaceWith: (...nodes: unknown[]) => void;
 };
 
-/**
- * strips anything executable out of a parsed document, in place.
- *
- * takes the document rather than a string so it runs on the tree both scraping
- * paths already build, and so there is one place to correct if wordpress starts
- * emitting something new
- */
 /** the DOM's number for a comment node */
 const COMMENT_NODE = 8;
 
@@ -205,6 +198,13 @@ function removeComments(node: { childNodes?: unknown[] }) {
   }
 }
 
+/**
+ * strips anything executable out of a parsed document, in place.
+ *
+ * takes the document rather than a string so it runs on the tree the reader
+ * already built, and so there is one place to correct if wordpress starts
+ * emitting something new
+ */
 export function scrub<T>(root: T): T {
   /*
     linkedom's Document and Element both satisfy this, but neither exposes a

@@ -10,9 +10,10 @@ import { queryOptions } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
 import type { ReminderView } from "~/lib/reminder-view";
 import { toArticleLink } from "~/lib/services/wordpress/article-url";
+import { NEWSLETTER_COUNT } from "~/lib/services/wordpress/urls";
 import { getRecentArticles } from "~/lib/services/wordpress/get-recent-articles";
 import {
-  recentArticles,
+  latestArticles,
   scrapeArticle,
 } from "~/lib/services/wordpress/scrape-article";
 import { fetchGated } from "./gated";
@@ -40,8 +41,8 @@ export const articleQuery = (slug: string) =>
 
 /** the newsletter's latest articles */
 export const latestQuery = queryOptions({
-  queryKey: ["latest", 10],
-  queryFn: () => recentArticles(10),
+  queryKey: ["latest", NEWSLETTER_COUNT],
+  queryFn: () => latestArticles(NEWSLETTER_COUNT),
   staleTime: ARTICLES_FRESH_MS,
 });
 

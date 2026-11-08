@@ -7,15 +7,33 @@
 
 import { ORIGIN } from "./article-url";
 
-const API = `${ORIGIN}/wp-json/`;
-const POSTS = `${API}wp/v2/posts`;
+/** WordPress's REST API, which every read here addresses */
+export const WORDPRESS_API = `${ORIGIN}/wp-json/`;
+export const POSTS = `${WORDPRESS_API}wp/v2/posts`;
+export const CATEGORIES = `${WORDPRESS_API}wp/v2/categories`;
+
+/** where HareWare passes the same requests through: ./pass-through */
+export const PASS_THROUGH = "/api/wordpress/";
 
 /**
- * the same request through HareWare's own /api/wordpress, which WordPress
- * answers from its cache (see that route); anything else is left as it is
+ * the same request through HareWare, which WordPress answers from its cache;
+ * anything else is left as it is
  */
 export const viaHareWare = (url: string) =>
-  url.startsWith(API) ? `/api/wordpress/${url.slice(API.length)}` : url;
+  url.startsWith(WORDPRESS_API)
+    ? `${PASS_THROUGH}${url.slice(WORDPRESS_API.length)}`
+    : url;
+
+/** how many articles the newsletter lists */
+export const NEWSLETTER_COUNT = 10;
+
+/**
+ * the page of the recent list an address asks for, 1 when it names none or
+ * nonsense. The inline script reads `?page=` the same way in its own source,
+ * and ~/lib/early.test holds the two together
+ */
+export const pageOf = (search: URLSearchParams) =>
+  Math.max(1, Number(search.get("page")) || 1);
 
 /**
  * everything we need off a post, in one request. _links looks redundant next to

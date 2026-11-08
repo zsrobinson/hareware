@@ -1,4 +1,9 @@
-import { CheckIcon, CopyIcon } from "lucide-react";
+import {
+  CalendarClockIcon,
+  CheckIcon,
+  CopyIcon,
+  StickyNoteIcon,
+} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useState } from "react";
 import { queryClient } from "~/lib/query-client";
@@ -9,6 +14,7 @@ import {
   toSizedImage,
 } from "~/lib/services/wordpress/image-url";
 import { latestQuery } from "./queries";
+import { FieldActions, FieldNote, FieldRow, FieldRows } from "./field-row";
 import { couldNotRead, ReadFailed, Reading } from "./read-state";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -85,58 +91,72 @@ function Newsletter({ articles }: { articles: NewsletterArticle[] }) {
         }),
       ]);
       setCopied("yes");
+      setTimeout(() => setCopied(null), 1600);
     } catch (error) {
       console.error("could not copy the newsletter", error);
+      /* stays until the next try: it says what to do instead */
       setCopied("failed");
     }
-    setTimeout(() => setCopied(null), 2000);
   };
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
-      <div className="space-y-4">
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">Next meeting</span>
-          <Input
-            value={meeting}
-            onChange={(event) => setMeeting(event.target.value)}
-            placeholder="Optional: Thursday at 7 pm in Tawes 1100"
-          />
-        </label>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">Note</span>
-          <Textarea
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder="Optional. Leave a blank line between paragraphs."
-            className="h-40"
-          />
-        </label>
-        <div className="space-y-1.5">
-          <Button onClick={() => void copy()}>
-            {copied === "yes" ? <CheckIcon /> : <CopyIcon />}
-            {copied === "yes" ? "Copied" : "Copy for Gmail"}
-          </Button>
-          <p className="text-muted-foreground text-sm">
-            {copied === "failed"
-              ? "Couldn't copy. Select the preview and copy it instead."
-              : "Paste it into a new email. Anything left blank stays in brackets to fill in there."}
-          </p>
-        </div>
-      </div>
+    <div className="@container">
+      <div className="grid grid-cols-1 items-start gap-8 @4xl:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] @4xl:gap-x-10">
+        <FieldRows>
+          <FieldRow
+            icon={CalendarClockIcon}
+            label="Next meeting"
+            htmlFor="meeting"
+          >
+            <Input
+              id="meeting"
+              value={meeting}
+              onChange={(event) => setMeeting(event.target.value)}
+              placeholder="Optional: Thursday at 7 pm in Tawes 1100"
+            />
+          </FieldRow>
+          <FieldRow icon={StickyNoteIcon} label="Note" htmlFor="note" top>
+            <Textarea
+              id="note"
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="Optional. Leave a blank line between paragraphs."
+              className="h-40"
+            />
+          </FieldRow>
+          <FieldActions>
+            <Button className="min-w-36" onClick={() => void copy()}>
+              {copied === "yes" ? <CheckIcon /> : <CopyIcon />}
+              {copied === "yes" ? "Copied" : "Copy for Gmail"}
+            </Button>
+            <span className="sr-only" role="status">
+              {copied === "yes" ? "Copied the newsletter" : ""}
+            </span>
+          </FieldActions>
+          {copied === "failed" && (
+            <FieldNote>
+              <span className="text-destructive" role="alert">
+                Couldn't copy. Select the preview and copy it instead.
+              </span>
+            </FieldNote>
+          )}
+        </FieldRows>
 
-      <div className="space-y-1.5">
-        <span className="text-sm font-medium">Preview</span>
-        <iframe
-          title="The newsletter as it will be pasted"
-          srcDoc={frame(shown)}
-          className="w-full rounded-xl border bg-white"
-          style={{ height }}
-          onLoad={(event) => {
-            const body = event.currentTarget.contentDocument?.body;
-            if (body) setHeight(body.scrollHeight + 24);
-          }}
-        />
+        <section className="space-y-2" aria-labelledby="preview">
+          <h2 id="preview" className="text-sm font-medium">
+            Preview
+          </h2>
+          <iframe
+            title="The newsletter as it will be pasted"
+            srcDoc={frame(shown)}
+            className="w-full rounded-lg border bg-white"
+            style={{ height }}
+            onLoad={(event) => {
+              const body = event.currentTarget.contentDocument?.body;
+              if (body) setHeight(body.scrollHeight + 24);
+            }}
+          />
+        </section>
       </div>
     </div>
   );

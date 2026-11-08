@@ -72,13 +72,14 @@ export function sortable(label: string, align: "left" | "right" = "left") {
       <Button
         variant="ghost"
         size="sm"
-        /* the label lines up with its cells': out by the button's padding and
-           border. A number column's header ends where its digits do, arrow
-           first */
+        /* the label lines up with its cells': out by the cell's padding, with
+           the button's own padding and border on that side making it up, so
+           the button stays inside the cell. A number column's header ends
+           where its digits do, arrow first */
         className={
           align === "right"
-            ? "-mr-[calc(--spacing(2.5)+1px)] ml-auto flex h-8"
-            : "-ml-[calc(--spacing(2.5)+1px)] h-8"
+            ? "-mr-2 ml-auto flex h-8 pr-[calc(--spacing(2)-1px)]"
+            : "-ml-2 h-8 pl-[calc(--spacing(2)-1px)]"
         }
         onClick={() => column.toggleSorting(sorted === "asc")}
       >

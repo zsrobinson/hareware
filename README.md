@@ -45,8 +45,8 @@ npx wrangler@4.149.0 preview   # builds a Preview of this branch, prints its url
 
 A push does the same: every non-`main` branch is built as a Worker Preview at
 `<branch>.hareware.zsrobinson.com`, with the Preview settings rather than
-production's (see AGENTS.md). `beta.hareware.zsrobinson.com` is the `beta`
-branch: `git push --force origin <branch>:beta` points it at another.
+production's (see AGENTS.md). `beta.hareware.zsrobinson.com` follows one
+chosen branch; AGENTS.md says how to choose another.
 
 ## Worker types
 

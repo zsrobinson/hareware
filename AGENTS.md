@@ -113,14 +113,20 @@ answers 404. A Preview copies the settings when it is first created, and
 rebuilding does not refresh them: after changing the Preview settings, delete
 the Previews in the dashboard and push again.
 
-**`beta.hareware.zsrobinson.com` shows whatever is on the `beta` branch.** Point
-it at any commit with `git push --force origin <branch>:beta`, when the person
-you are working for asks: it is shared, and the push replaces whatever beta
-showed. It does not follow the branch afterwards; push again after new commits.
-The Preview rebuilds in about two minutes, and `git ls-remote origin beta` says
-which commit it is on. To send beta to production instead, turn on the zone's
-redirect rule "HareWare beta off: send beta to production" (zsrobinson.com →
-Rules → Redirect Rules), and off again to bring it back.
+**`beta.hareware.zsrobinson.com` follows one branch, the beta branch.** It is
+the Preview named `beta`, and the beta branch is whichever branch's Preview
+deploys it too: its build settings run
+`npx wrangler@4.149.0 preview && npx wrangler@4.149.0 preview --name beta`, so
+every push to that branch updates its own Preview and beta together. Change the
+beta branch only when the person you are working for asks: it is shared. Move
+the `&& npx wrangler@4.149.0 preview --name beta` from the old branch's deploy
+command to the new one's (Worker → Settings → Builds → Previews, or the Builds
+API's `previews/{id}` with `settings.deploy_command`), then build the new branch
+once. A branch has a Preview only after its first push, and two branches must
+not both carry it, or beta shows whichever pushed last. The `beta` git branch is
+no longer used. To send beta to production instead, turn on the zone's redirect
+rule "HareWare beta off: send beta to production" (zsrobinson.com → Rules →
+Redirect Rules), and off again to bring it back.
 
 **Dashboard variables do not survive a deploy.** Wrangler replaces them with
 `wrangler.jsonc`'s, so every value the code reads is a secret.

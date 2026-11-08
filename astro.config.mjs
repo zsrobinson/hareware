@@ -17,8 +17,8 @@ export default defineConfig({
 
   // the old admin urls are in Discord messages the bot has already posted, and
   // one of them is what an alert tells somebody to go and read. the reminder,
-  // its log and its commands are all one page now. prerendered, these are
-  // static redirect pages, served without the Worker
+  // its log and its commands are all one page now. these become _redirects
+  // rules, which the asset server answers without the Worker
   redirects: {
     "/admin": "/reminder",
     "/admin/automations": "/reminder",
@@ -41,14 +41,15 @@ export default defineConfig({
     imageService: "passthrough",
 
     // workerd needs a 48-bit virtual address space and the raspberry pi's
-    // 39-bit kernel cannot give it one, so prerendering /custom in workerd
-    // aborts before it starts. node renders the one prerendered route we have
-    // identically — it is static markup with no runtime-specific code in it
+    // 39-bit kernel cannot give it one, so prerendering in workerd aborts
+    // before it starts. node renders every page identically: they are static
+    // shells with no runtime-specific code in them (ADR 0012)
     prerenderEnvironment: "node",
   }),
 
-  // opt-in rather than prefetchAll: /generate and /magazine must always read
-  // the article live, so only links that don't hit wordpress get prefetched
+  // opt-in rather than prefetchAll: a link marked data-astro-prefetch has its
+  // page fetched on hover. the pages are static shells, so that reads nothing
+  // from WordPress; Instagram Posts reads the article itself on hover
   prefetch: { prefetchAll: false, defaultStrategy: "hover" },
 
   vite: {
@@ -59,23 +60,13 @@ export default defineConfig({
     define: { __APP_VERSION__: JSON.stringify(version()) },
 
     /*
-      both of these are pulled in by astro at request time rather than at boot,
-      so vite's ssr optimizer discovers them once the first request arrives,
-      re-bundles, and reloads the program underneath the running workerd — which
-      then reaches for a chunk hash that no longer exists and the dev server
-      dies before it ever serves a page. naming them up front means the optimizer
-      finishes before the worker starts and never has to reload
-
-      `noop` is the image service `imageService: "passthrough"` selects. drop
-      these only after checking a cold `rm -rf node_modules/.vite && astro dev`
-      still logs no "dependency optimized" line
-    */
-    /*
       the browser's code in a few chunks rather than sixty. every page is a
       static shell whose island asks WordPress itself (ADR 0012), and each
       chunk an island imports is another round trip before it can draw: split
       finely, the slides waited about a second behind the chain of imports.
-      the Worker's own bundle is left as it is
+      ~/lib/preload-islands now asks for them all with the HTML, and this
+      keeps that to about a dozen files. the Worker's own bundle is left as
+      it is
     */
     environments: {
       client: {
@@ -108,6 +99,18 @@ export default defineConfig({
       },
     },
 
+    /*
+      both of these are pulled in by astro at request time rather than at boot,
+      so vite's ssr optimizer discovers them once the first request arrives,
+      re-bundles, and reloads the program underneath the running workerd — which
+      then reaches for a chunk hash that no longer exists and the dev server
+      dies before it ever serves a page. naming them up front means the optimizer
+      finishes before the worker starts and never has to reload
+
+      `noop` is the image service `imageService: "passthrough"` selects. drop
+      these only after checking a cold `rm -rf node_modules/.vite && astro dev`
+      still logs no "dependency optimized" line
+    */
     ssr: {
       optimizeDeps: {
         include: ["astro/assets/services/noop", "astro/app/manifest"],

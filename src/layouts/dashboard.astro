@@ -5,16 +5,11 @@ import AppSidebar from "~/components/app-sidebar.astro";
 import NavProgress from "~/components/nav-progress.astro";
 import { SidebarSheet } from "~/components/sidebar-sheet";
 import { Toaster } from "~/components/ui/sonner";
-import type { ViewerState } from "~/lib/admin";
-import { assertAnonymous } from "~/lib/anonymous";
 import "~/styles/globals.css";
 import "~/styles/fonts.css";
 
 type Props = {
   title: string;
-  /** who is looking, on a page the cdn does not cache. A cached page passes
-      nothing and the account panel asks /api/session.json; see AGENTS.md */
-  viewer?: ViewerState | null;
   /** how wide the content may get */
   width?: keyof typeof WIDTHS;
 };
@@ -26,21 +21,11 @@ const WIDTHS = {
   full: "max-w-none",
 } as const;
 
-const { title, viewer, width = "wide" } = Astro.props;
+const { title, width = "wide" } = Astro.props;
 
-/* checked on every request, not only in dev; see ~/lib/anonymous */
-assertAnonymous({
-  pathname: Astro.url.pathname,
-  headers: Astro.response.headers,
-  viewer: viewer ?? null,
-  dev: import.meta.env.DEV,
-});
-
-/* shadcn's cookie, read server-side so the first paint has the right width.
-   A prerendered page has no request to read; the script below fixes it up */
-const collapsed = Astro.isPrerendered
-  ? false
-  : Astro.cookies.get("sidebar_state")?.value === "false";
+/* every page is prerendered (ADR 0012), so the sidebar is drawn open and the
+   script below applies shadcn's sidebar_state cookie */
+const collapsed = false;
 ---
 
 <html lang="en">
@@ -66,7 +51,6 @@ const collapsed = Astro.isPrerendered
       style="--sidebar-width: 15rem; --sidebar-width-icon: 3.25rem"
     >
       <AppSidebar
-        viewer={viewer}
         pathname={Astro.url.pathname}
         returnTo={`${Astro.url.pathname}${Astro.url.search}`}
       />
@@ -107,7 +91,6 @@ const collapsed = Astro.isPrerendered
             pathname={Astro.url.pathname}
             returnTo={`${Astro.url.pathname}${Astro.url.search}`}
             title={title}
-            viewer={viewer}
           />
 
           <button

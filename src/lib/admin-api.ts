@@ -8,7 +8,7 @@ import type { Denial } from "./denial";
 import { DENIALS } from "./denial";
 import type { Profile } from "./member";
 
-/** the body of a refusal, which `~/components/denial-message` draws */
+/** the body of a refusal, which `DenialMessage` in ~/components/gated draws */
 export type RefusalBody = { denial: Denial; you: string | null };
 
 export function refusal(denial: Denial, profile?: Profile | null): Response {

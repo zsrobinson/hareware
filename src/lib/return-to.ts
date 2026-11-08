@@ -10,6 +10,9 @@ export function safeReturnTo(value: string) {
     const url = new URL(value, base);
     if (url.origin !== base) return "/generate";
 
+    /* the path that will go into the Location header is what is checked, not
+       the input: `/..//evil.com` normalises to `//evil.com`, which a browser
+       follows off-site */
     const path = `${url.pathname}${url.search}${url.hash}`;
 
     return path.startsWith("/") && !path.startsWith("//") ? path : "/generate";

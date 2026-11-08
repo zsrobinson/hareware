@@ -9,7 +9,6 @@ import {
   SheetTrigger,
 } from "~/components/ui/sheet";
 import { adminNav, toolsNav } from "~/lib/nav";
-import type { ViewerState } from "~/lib/admin";
 
 /* the sidebar's drawer below `md`, mounted with `client:media` so a desktop
    never downloads it */
@@ -17,13 +16,11 @@ export function SidebarSheet({
   pathname,
   returnTo,
   title,
-  viewer,
 }: {
   pathname: string;
   returnTo: string;
   /** the current page, which labels the trigger */
   title: string;
-  viewer?: ViewerState | null;
 }) {
   return (
     <Sheet>
@@ -56,7 +53,7 @@ export function SidebarSheet({
           <NavGroup items={adminNav} pathname={pathname} label="Admin tools" />
         </nav>
 
-        <SidebarAccount viewer={viewer} returnTo={returnTo} inSheet />
+        <SidebarAccount returnTo={returnTo} inSheet />
       </SheetContent>
     </Sheet>
   );

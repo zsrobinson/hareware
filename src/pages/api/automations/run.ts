@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 import { adminAccess } from "~/lib/admin";
-import { DENIALS } from "~/lib/denial";
+import { refusal } from "~/lib/admin-api";
 import { ALL, runAutomations, type Which } from "~/lib/automations/run";
 import { automation } from "~/lib/automations/registry";
 
@@ -21,8 +21,8 @@ function matches(given: string, expected: string) {
 
 /*
   Fires the automations by hand: a bearer secret from a terminal, or an
-  @Editorial Board session from the panel. The secret goes in the header
-  because Cloudflare logs urls.
+  @Editorial Board session. The secret goes in the header because Cloudflare
+  logs urls.
 */
 export const POST: APIRoute = async ({ request }) => {
   const expected = env.REMINDERS_TRIGGER_SECRET;
@@ -36,11 +36,8 @@ export const POST: APIRoute = async ({ request }) => {
 
   if (!(given && matches(given, expected))) {
     const access = await adminAccess(request);
-    /* the admin pages' statuses, so an outage is a 503 and not a refusal */
-    if (!access.allowed) {
-      const { status, title } = DENIALS[access.denial];
-      return new Response(title, { status });
-    }
+    /* the same refusals as every gated API, so an outage is a 503 */
+    if (!access.allowed) return refusal(access.denial, access.who?.profile);
     actor = access.who.session.discordUserId;
   }
 

@@ -5,7 +5,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
-import type { ViewerState } from "~/lib/admin";
 import { useViewer } from "~/lib/use-session";
 import { cn } from "~/lib/utils";
 
@@ -109,17 +108,15 @@ function AccountMenu({
   );
 }
 
-/* private pages pass the viewer; cached ones leave it to the client hook */
+/* every page is static, so who is looking is asked from the browser */
 export function SidebarAccount({
-  viewer: knownByServer,
   returnTo,
   inSheet = false,
 }: {
-  viewer?: ViewerState | null;
   returnTo: string;
   inSheet?: boolean;
 }) {
-  const { session, profile } = useViewer(knownByServer);
+  const { session, profile } = useViewer();
 
   /* the sheet is only ever open at full width, so it never collapses. the rail
      has no room for a row, so the menu sits under what it belongs to */

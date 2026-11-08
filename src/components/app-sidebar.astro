@@ -2,14 +2,12 @@
 import { SidebarAccount } from "~/components/sidebar-account";
 import { NavGroup } from "~/components/nav-group";
 import { adminNav, toolsNav } from "~/lib/nav";
-import type { ViewerState } from "~/lib/admin";
 
 type Props = {
-  viewer?: ViewerState | null;
   pathname: string;
   returnTo: string;
 };
-const { viewer, pathname, returnTo } = Astro.props;
+const { pathname, returnTo } = Astro.props;
 ---
 
 {/* no client: directive, so the sidebar ships as html */}
@@ -42,5 +40,5 @@ const { viewer, pathname, returnTo } = Astro.props;
     <NavGroup items={adminNav} pathname={pathname} label="Admin tools" />
   </nav>
 
-  <SidebarAccount client:idle viewer={viewer} returnTo={returnTo} />
+  <SidebarAccount client:idle returnTo={returnTo} />
 </aside>

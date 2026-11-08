@@ -102,6 +102,12 @@ is live before concluding anything about it.
 **`locals.runtime.env` was removed in Astro v6.** Its getter now exists only to
 throw. Read `import { env } from "cloudflare:workers"` instead.
 
+**A page that is not prerendered is the 404 page in production.** Only `/api/*`
+and `/auth/*` reach the Worker (`run_worker_first`); anything else the asset
+server answers from files, and a page with no file gets `404.html`. Under
+`astro dev` the same page renders fine. `nav.test.ts` checks every page sets
+`export const prerender = true`.
+
 **A route in `src/pages` pays for Astro's pipeline.** `/api/wordpress` as an
 Astro route cost 6 ms of CPU at p50 and 12 ms at p90 to forward a response
 unread; answered in `src/worker.ts` before Astro it costs 1 ms. And a test file

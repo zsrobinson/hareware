@@ -1,4 +1,4 @@
-/* The four refusals, in one table. Imports nothing: the guard reads it. */
+/* The four refusals, in one table. Imports nothing: the browser bundles it. */
 
 /**
  * Why somebody may not see the admin tools. Separate because a member acts on

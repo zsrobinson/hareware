@@ -3,8 +3,6 @@ import { requestCookie } from "./request-cookie";
 import { seal, unseal } from "./sealed-value";
 import { returnToOf, safeReturnTo } from "./return-to";
 
-export { returnToOf };
-
 export type AuthConfig = {
   clientId: string;
   clientSecret: string;
@@ -102,11 +100,6 @@ function clearOAuthStateCookie() {
   return `${AUTH_STATE_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 }
 
-/*
-  Where a sign-in may send somebody afterwards. Checks the string that goes into
-  the Location header, not the input: `/..//evil.com` normalises to
-  `//evil.com`, which a browser follows off-site.
-*/
 function redirect(location: string, cookies: string[] = []) {
   const headers = new Headers({
     location,

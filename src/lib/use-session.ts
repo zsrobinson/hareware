@@ -76,31 +76,22 @@ function subscribe(onChange: () => void) {
 }
 
 /**
- * everything the account panel knows about whoever is looking.
- *
- * a page the cdn does not cache resolves this server-side and passes it in —
- * that answer is used directly and nothing is fetched. a cached page passes
- * nothing and gets it from /api/session.json, which makes the same lookup
- * `viewer()` makes. either way there is one answer, so the sidebar and the
- * drawer cannot disagree
+ * everything the account panel knows about whoever is looking, from
+ * /api/session.json, which makes the same lookup `viewer()` makes. Every page
+ * is static (ADR 0012), so there is one answer, asked once per window, and
+ * the sidebar and the drawer cannot disagree
  */
-export function useViewer(knownByServer?: ViewerState | null): ViewerState {
+export function useViewer(): ViewerState {
   const value = useSyncExternalStore(
     subscribe,
     () => (snapshot.status === "resolved" ? snapshot.viewer : SIGNED_OUT),
-    /* the server has no store to read, and renders signed-out either way */
+    /* the build has no store to read, and renders signed-out */
     () => SIGNED_OUT,
   );
 
   useEffect(() => {
-    /*
-      only a page that passed nothing asks. a seeded page does NOT mark the
-      store resolved — its answer belongs to that page, and writing it into a
-      module that survives navigation is how a stale one followed the member
-      around
-    */
-    if (knownByServer === undefined) requestViewer();
-  }, [knownByServer]);
+    requestViewer();
+  }, []);
 
-  return knownByServer ?? value;
+  return value;
 }

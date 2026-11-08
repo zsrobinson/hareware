@@ -50,11 +50,11 @@ live from the same Discord lookup that decides admission — one request answers
 "may they" and "what are they called" together, so the two cannot disagree.
 [ADR 0008](docs/adr/0008-sessions-with-nothing-stored.md) has the reasoning.
 
-`viewer(request)` in `~/lib/admin` is the one entry point. A page the CDN does
-not cache resolves it and passes the whole thing down as `viewer`; a cached page
-passes nothing and the island asks `/api/session.json`, which makes the same
-lookup. Passing part of it is what put a raw Discord id in the sidebar for a
-week — see below.
+`viewer(request)` in `~/lib/admin` is the one entry point on the server, and
+`adminAccess` and `/api/session.json` both go through it. Every page is static,
+so nothing renders who is looking on the server: the account panel asks
+`/api/session.json` through `useViewer()`, once per window, and the sidebar and
+the drawer read the same answer.
 
 **The gate is on the data, not the pages.** Every page is a static file served
 without waking the Worker ([ADR 0012](docs/adr/0012-static-pages-gated-data.md)):

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test, vi } from "vitest";
-import { completeDiscordSignOut, returnToOf } from "./auth";
+import { completeDiscordSignOut } from "./auth";
+import { returnToOf } from "./return-to";
 
 /* `safeReturnTo`, through the sign-out route's Location header */
 async function redirectedTo(returnTo: string) {

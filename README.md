@@ -65,8 +65,9 @@ a terminal when you need it.
 
 `/charts`, `/people`, `/articles` and `/problems` read every published post from
 the public REST API, parse the credit lines out of each one, and apply the
-Sheet. Nothing is stored: WordPress is read on demand and held for ten minutes,
-the Sheet on every load.
+Sheet, all in the browser (ADR 0012). The server keeps nothing: the browser
+keeps its read of WordPress for up to a day and checks it for new articles
+after ten minutes, and asks for the Sheet on every load and never keeps it.
 
 A credit line is a short paragraph that starts with a known label and a colon:
 `Article by: …`, `Image Credits: …`. The names after it are split on commas,
@@ -99,8 +100,10 @@ keeping every other row as it was. Two people saving at once is
 last-writer-wins.
 
 **What is in the Sheet is private.** It never goes into WordPress, the
-repository, the log or a public page. The archive pages, `/api/archive.json`
-and `/api/sheet` refuse anybody without `@Editorial Board`, and log lines for
+repository, the log or a public page. The archive pages are empty shells; the
+APIs that hold the data (`/api/archive.json`, `/api/sheet`,
+`/api/reminder.json`, `/api/access.json`, `/api/automations/run`) refuse
+anybody without `@Editorial Board`, and log lines for
 Sheet changes name the kind of change and the post id, never a person.
 
 Setting it up: a Google Cloud service account, with the Sheets API enabled on

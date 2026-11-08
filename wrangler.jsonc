@@ -3,11 +3,13 @@
   "name": "hareware",
   "compatibility_date": "2026-09-02",
 
-  // linkedom and fast-xml-parser both reach for node builtins
+  // nothing of ours imports a node builtin any more, and every route answered
+  // without this flag under wrangler dev (2026-11-08), but Astro's own runtime
+  // still calls Buffer for base64, so dropping it could fail only in production
   "compatibility_flags": ["nodejs_compat"],
 
-  // without this Cloudflare ignores the pages' own cache-control headers; the
-  // cache is also what keeps the feed pages under wordpress.com's rate limit
+  // without this Cloudflare ignores the Worker's own cache-control headers:
+  // /api/wordpress's answers are kept at the edge for a minute through it
   "cache": { "enabled": true },
 
   "observability": { "enabled": true },

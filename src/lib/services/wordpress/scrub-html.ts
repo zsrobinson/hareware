@@ -137,7 +137,7 @@ function safeUrl(value: string) {
 
   /*
     `//evil.example/x` reads as relative to this pattern and as a different
-    origin to a browser — the same confusion `safeReturnTo` closes in auth.ts,
+    origin to a browser — the same confusion `safeReturnTo` closes in ~/lib/return-to,
     and the two halves of this codebase should not disagree about what
     "relative" means
   */

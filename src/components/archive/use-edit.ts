@@ -3,7 +3,9 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
+import { createElement } from "react";
 import { toast } from "sonner";
+import { Button } from "~/components/ui/button";
 import type { Edit } from "~/lib/credits/edits";
 import { failureOf, Refused } from "~/lib/gated";
 import { SHEET_KEY } from "./archive-data";
@@ -53,17 +55,25 @@ export function useEdit() {
     onSuccess: async (_, { done, undo }) => {
       await queryClient.invalidateQueries({ queryKey: SHEET_KEY });
       if (!done) return;
-      toast.success(
-        done,
-        undo && {
-          /* long enough to reach for on a phone */
-          duration: 8000,
-          action: {
-            label: "Undo",
-            onClick: () => void undoWith(queryClient, undo),
+      if (!undo) return void toast.success(done);
+      const id = toast.success(done, {
+        /* long enough to reach for on a phone */
+        duration: 8000,
+        /* the outline Undo a removed row offers, not sonner's filled one */
+        action: createElement(
+          Button,
+          {
+            variant: "outline",
+            size: "sm",
+            className: "ml-auto",
+            onClick: () => {
+              toast.dismiss(id);
+              void undoWith(queryClient, undo);
+            },
           },
-        },
-      );
+          "Undo",
+        ),
+      });
     },
     onError: (error) => {
       toast.error(`Not saved: ${error.message}`);

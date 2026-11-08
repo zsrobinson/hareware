@@ -53,6 +53,7 @@ function setUp(labels: Label[]) {
                   removals.remove(item, {
                     done: `Removed “${item.label}”`,
                     restored: `Restored “${item.label}”`,
+                    undoLabel: `Undo removing ${item.label}`,
                     edit: (rest) => ({ kind: "labels", labels: rest }),
                     undo: (rest) => ({
                       kind: "labels",
@@ -104,9 +105,11 @@ test("a removal is written at once and undone in its own row", async () => {
   expect(
     screen.getByText("Removed “Photos by”", { selector: "li span" }),
   ).toBeTruthy();
-  expect(document.activeElement?.textContent).toBe("Undo");
+  /* named for what it puts back, as several can be on screen at once */
+  const undo = screen.getByRole("button", { name: "Undo removing Photos by" });
+  expect(document.activeElement).toBe(undo);
 
-  await user.click(screen.getByText("Undo"));
+  await user.click(undo);
   await waitFor(() =>
     expect(names(sheet.labels)).toEqual(["Article by", "Photos by"]),
   );

@@ -181,10 +181,7 @@ export function BylinePanel({
               onChange={(event) => setEverywhere(event.target.value)}
             />
           </FieldRow>
-          <FieldNote width="panel">
-            On every article below unless it says otherwise, and on later ones.
-            Separate two people with a comma.
-          </FieldNote>
+          <FieldNote width="panel">Separate two people with a comma.</FieldNote>
         </FieldRows>
 
         {asking && (

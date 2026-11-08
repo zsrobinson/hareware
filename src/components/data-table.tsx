@@ -1,5 +1,6 @@
 import {
   flexRender,
+  functionalUpdate,
   getCoreRowModel,
   getFacetedRowModel,
   getFacetedUniqueValues,
@@ -134,6 +135,12 @@ type Props<T> = {
   controls?: (controls: TableControls) => ReactNode;
   /** the row whose details are open beside the table */
   selected?: (row: T) => boolean;
+  /**
+   * columns hidden until someone shows them from the Columns menu, as where
+   * the table is narrow (a phone, a panel open beside it) and would otherwise
+   * cut a value off at its edge
+   */
+  hidden?: string[];
 };
 
 /* a header is often a component: `meta.csvHeader`, else the id. The Columns
@@ -157,10 +164,17 @@ export function DataTable<T>({
   csv,
   controls,
   selected,
+  hidden = [],
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  /* only what someone chose in the Columns menu: `hidden` is a default that
+     moves with the width, so it is laid under the choices rather than kept */
+  const [picked, setPicked] = useState<VisibilityState>({});
+  const columnVisibility: VisibilityState = {
+    ...Object.fromEntries(hidden.map((id) => [id, false])),
+    ...picked,
+  };
   const [search, setSearch] = useState("");
 
   /* the react compiler cannot follow tanstack table's functions and skips this */
@@ -171,7 +185,15 @@ export function DataTable<T>({
     state: { sorting, columnFilters, columnVisibility, globalFilter: search },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
-    onColumnVisibilityChange: setColumnVisibility,
+    onColumnVisibilityChange: (updater) => {
+      const next = functionalUpdate(updater, columnVisibility);
+      setPicked((before) => {
+        const after = { ...before };
+        for (const [id, visible] of Object.entries(next))
+          if (visible !== (columnVisibility[id] ?? true)) after[id] = visible;
+        return after;
+      });
+    },
     onGlobalFilterChange: setSearch,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),

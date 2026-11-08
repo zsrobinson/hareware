@@ -14,7 +14,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useEffect,
   useEffectEvent,
-  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -33,6 +32,8 @@ type Removal<T> = {
   done: string;
   /** announced when Undo has put it back */
   restored: string;
+  /** names Undo for what it puts back: "Undo removing By:" */
+  undoLabel: string;
   /** the edit, from the rest of the list as it stands when it is sent */
   edit: (rest: T[]) => Edit;
   /** the edit that puts it back, likewise */
@@ -178,6 +179,7 @@ export function useRemovals<T>(items: T[], keyOf: (item: T) => string) {
           <RemovedRow
             key={`removed-${key}`}
             done={p.done}
+            undoLabel={p.undoLabel}
             undoing={p.undoing}
             onUndo={() => undo(p)}
             onExpire={() => expire(p)}
@@ -209,18 +211,19 @@ export function useRemovals<T>(items: T[], keyOf: (item: T) => string) {
  */
 function RemovedRow({
   done,
+  undoLabel,
   undoing,
   onUndo,
   onExpire,
   className,
 }: {
   done: string;
+  undoLabel: string;
   undoing: boolean;
   onUndo: () => void;
   onExpire: () => void;
   className?: string;
 }) {
-  const id = useId();
   const button = useRef<HTMLButtonElement>(null);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -256,13 +259,11 @@ function RemovedRow({
           setFocused(false);
       }}
     >
-      <span id={id} className="text-muted-foreground min-w-0">
-        {done}
-      </span>
+      <span className="text-muted-foreground min-w-0">{done}</span>
       <Button
         ref={button}
         variant="outline"
-        aria-describedby={id}
+        aria-label={undoLabel}
         /* not disabled, which would drop focus while it writes */
         aria-disabled={undoing}
         onClick={() => !undoing && onUndo()}

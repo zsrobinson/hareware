@@ -94,6 +94,7 @@ function Fields({ article }: { article: Article }) {
         ]
           .filter(Boolean)
           .join(" | ")}
+        long
       />
       <Copyable
         icon={CameraIcon}
@@ -166,7 +167,7 @@ function Copyable({
   value: string;
   /** said in the field when there is nothing to copy */
   empty?: string;
-  /** wraps rather than scrolling sideways, as a title does */
+  /** wraps rather than scrolling sideways or cutting off on a phone */
   long?: boolean;
 }) {
   return (

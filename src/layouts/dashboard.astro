@@ -98,8 +98,10 @@ const collapsed = false;
             }
             <div class:list={["w-full", WIDTHS[width]]}>
               {
+                /* on a phone the row folds away when it holds only the
+                   hidden h1 and actions a phone hides */
                 heading && (
-                  <div class="mb-6 flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2 max-md:mb-4 max-md:min-h-0 max-md:has-[#page-actions:empty]:mb-0">
+                  <div class="mb-6 flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2 max-md:mb-4 max-md:min-h-0 max-md:not-has-[#page-actions>:not(.max-md\:hidden)]:mb-0">
                     {/* the bar above names the page on a phone */}
                     <h1 class="text-2xl font-semibold tracking-tight max-md:sr-only">
                       {title}

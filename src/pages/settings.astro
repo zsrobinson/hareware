@@ -8,7 +8,7 @@ import { SettingsPage } from "~/components/archive/settings";
 export const prerender = true;
 ---
 
-<Dashboard title="Settings">
+<Dashboard title="Settings" width="form">
   <EarlyFetch slot="head" early={{ api: "/api/archive.json" }} />
   <div class="space-y-6">
     <SettingsPage client:load />

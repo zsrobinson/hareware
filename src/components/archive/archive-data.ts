@@ -168,6 +168,8 @@ export type ArchiveState =
   | {
       status: "ready";
       archive: Archive;
+      /** when the Sheet shown was read, which is not when WordPress was */
+      sheetReadAt: string;
       /** WordPress is being read behind what is shown */
       checking: boolean;
       /** the last read behind failed, so what is shown is older */
@@ -261,6 +263,7 @@ export function useArchive(): ArchiveState {
   return {
     status: "ready",
     archive: build(wordpress.data, sheet.data),
+    sheetReadAt: new Date(sheet.dataUpdatedAt).toISOString(),
     checking: wordpress.isFetching,
     checkFailed: wordpress.isRefetchError ? wordpress.error : null,
     refresh,

@@ -1,21 +1,23 @@
 import {
-  ProportionsIcon,
-  ExternalLinkIcon,
-  ImageIcon,
-  InfoIcon,
-  BlendIcon,
-  RefreshCwIcon,
-  ScalingIcon,
-  LayersIcon,
-  AlignCenterIcon,
-  SkipForwardIcon,
+  ALargeSmallIcon,
+  BaselineIcon,
+  CameraIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  HeadingIcon,
+  ImagesIcon,
+  ListStartIcon,
+  PaintBucketIcon,
+  PaletteIcon,
+  PenLineIcon,
+  RatioIcon,
+  SwatchBookIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
 import { presets } from "~/lib/color-presets";
 import { useLayoutState } from "~/lib/layout-state";
+import { FieldActions, FieldNote, FieldRow, FieldRows } from "./field-row";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { Label } from "./ui/label";
 import {
   Select,
   SelectContent,
@@ -26,6 +28,7 @@ import {
 } from "./ui/select";
 import { Slider } from "./ui/slider";
 import { Switch } from "./ui/switch";
+import { Textarea } from "./ui/textarea";
 
 /* base ui's slider may answer a tuple; every slider here has one thumb */
 function toSingle(value: number | readonly number[]) {
@@ -45,19 +48,12 @@ const RATIOS = ["1/1", "4/5", "3/4", "9/16"].map((value) => ({
   label: value.replace("/", ":"),
 }));
 
-export function FormItem({ children }: { children: ReactNode }) {
-  return <div className="flex h-9 items-center gap-2">{children}</div>;
-}
-
-export function FormLabel({ children }: { children: ReactNode }) {
-  return <Label className="min-w-36">{children}</Label>;
-}
-
 export function OptionsForm({
-  articleLink,
+  paragraphs,
   titleOverflow = false,
 }: {
-  articleLink?: string;
+  /** how many blocks the content slide has to start from */
+  paragraphs: number;
   /** the title runs past its slide, said here too since the slide may be off-screen */
   titleOverflow?: boolean;
 }) {
@@ -66,13 +62,12 @@ export function OptionsForm({
     ([_, preset]) =>
       state.textColor === preset.textColor && state.bgColor === preset.bgColor,
   ) ?? ["custom"];
+  const start = state.paragraphShift + 1;
 
   return (
-    <div className="max-w-[416px] grow">
-      <div className="flex grow flex-col gap-2">
-        <FormItem>
-          <LayersIcon className="size-5 min-w-max" />
-          <FormLabel>Preset</FormLabel>
+    <div className="flex flex-col gap-6">
+      <FieldRows>
+        <FieldRow icon={SwatchBookIcon} label="Preset" inline>
           <Select
             value={currentPreset}
             items={PRESETS}
@@ -87,7 +82,7 @@ export function OptionsForm({
               }
             }}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger className="w-full" aria-label="Preset">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -102,37 +97,41 @@ export function OptionsForm({
               </SelectGroup>
             </SelectContent>
           </Select>
-        </FormItem>
+        </FieldRow>
 
-        <FormItem>
-          <BlendIcon className="size-5 min-w-max" />
-          <FormLabel>Text color</FormLabel>
-          <Input
-            type="color"
+        <FieldRow
+          icon={PaletteIcon}
+          label="Text color"
+          htmlFor="text-color"
+          inline
+        >
+          <ColorField
+            id="text-color"
             value={state.textColor}
-            onChange={(e) => state.setTextColor(e.target.value)}
+            onChange={state.setTextColor}
           />
-        </FormItem>
+        </FieldRow>
 
-        <FormItem>
-          <BlendIcon className="size-5 min-w-max" />
-          <FormLabel>Background color</FormLabel>
-          <Input
-            type="color"
+        <FieldRow
+          icon={PaintBucketIcon}
+          label="Background"
+          htmlFor="background-color"
+          inline
+        >
+          <ColorField
+            id="background-color"
             value={state.bgColor}
-            onChange={(e) => state.setBgColor(e.target.value)}
+            onChange={state.setBgColor}
           />
-        </FormItem>
+        </FieldRow>
 
-        <FormItem>
-          <ProportionsIcon className="size-5 min-w-max" />
-          <FormLabel>Aspect ratio</FormLabel>
+        <FieldRow icon={RatioIcon} label="Aspect ratio" inline>
           <Select
             value={state.ratio}
             items={RATIOS}
             onValueChange={(value) => value && state.setRatio(value)}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger className="w-full" aria-label="Aspect ratio">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -144,135 +143,194 @@ export function OptionsForm({
               </SelectGroup>
             </SelectContent>
           </Select>
-        </FormItem>
-      </div>
+        </FieldRow>
 
-      <hr className="my-4" />
+        <FieldRow icon={ALargeSmallIcon} label="Title size" inline>
+          <SizeSlider
+            label="Title size"
+            value={state.titleSize}
+            onChange={state.setTitleSize}
+            min={16}
+            max={48}
+          />
+        </FieldRow>
+        {titleOverflow && (
+          <FieldNote>
+            <span className="text-destructive">
+              The title may not fit; try a smaller size or a shorter title.
+            </span>
+          </FieldNote>
+        )}
 
-      <div className="flex flex-col gap-2">
-        <FormItem>
-          <AlignCenterIcon className="size-5 min-w-max" />
-          <FormLabel>Title</FormLabel>
-          <Input
-            type="text"
+        <FieldRow icon={BaselineIcon} label="Byline size" inline>
+          <SizeSlider
+            label="Byline size"
+            value={state.bylineSize}
+            onChange={state.setBylineSize}
+            min={12}
+            max={24}
+          />
+        </FieldRow>
+      </FieldRows>
+
+      <hr />
+
+      <FieldRows>
+        <FieldRow icon={HeadingIcon} label="Title" htmlFor="title" top>
+          <Textarea
+            id="title"
+            rows={2}
+            className="min-h-0 resize-none"
             value={state.title}
             onChange={(e) => state.setTitle(e.target.value)}
           />
-        </FormItem>
+        </FieldRow>
 
-        <FormItem>
-          <ScalingIcon className="size-5 min-w-max" />
-          <FormLabel>Title size</FormLabel>
-          <Slider
-            value={[state.titleSize]}
-            onValueChange={(value) => state.setTitleSize(toSingle(value))}
-            min={16}
-            max={48}
-            step={1}
-          />
-          <p className="font-mono text-sm">{state.titleSize}px</p>
-        </FormItem>
-        {titleOverflow && (
-          <p className="text-destructive pl-7 text-sm">
-            The title may not fit; try a smaller size or a shorter title.
-          </p>
-        )}
-      </div>
-
-      <hr className="my-4" />
-
-      <div className="flex flex-col gap-2">
-        <FormItem>
-          <AlignCenterIcon className="size-5 min-w-max" />
-          <FormLabel>Article byline</FormLabel>
+        <FieldRow
+          icon={PenLineIcon}
+          label="Article byline"
+          htmlFor="article-byline"
+        >
           <Input
+            id="article-byline"
             type="text"
             value={state.articleByline}
             onChange={(e) => state.setArticleByline(e.target.value)}
           />
-        </FormItem>
+        </FieldRow>
 
-        <FormItem>
-          <AlignCenterIcon className="size-5 min-w-max" />
-          <FormLabel>Image byline</FormLabel>
+        <FieldRow icon={CameraIcon} label="Image byline" htmlFor="image-byline">
           <Input
+            id="image-byline"
             type="text"
             value={state.imageByline}
             onChange={(e) => state.setImageByline(e.target.value)}
           />
-        </FormItem>
+        </FieldRow>
+        <FieldNote>
+          <code>&lt;br&gt;</code> breaks a line in the title or bylines.
+        </FieldNote>
+      </FieldRows>
 
-        <FormItem>
-          <ScalingIcon className="size-5 min-w-max" />
-          <FormLabel>Byline size</FormLabel>
-          <Slider
-            value={[state.bylineSize]}
-            onValueChange={(value) => state.setBylineSize(toSingle(value))}
-            min={12}
-            max={24}
-            step={1}
-          />
-          <p className="font-mono text-sm">{state.bylineSize}px</p>
-        </FormItem>
-      </div>
+      <hr />
 
-      <hr className="my-4" />
-
-      <div className="flex flex-col gap-2">
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => state.reset()}
+      <FieldRows>
+        <FieldRow icon={ListStartIcon} label="Start at paragraph" inline>
+          <div
+            className="flex items-center gap-1 max-sm:justify-end"
+            role="group"
+            aria-label="Start at paragraph"
           >
-            <RefreshCwIcon className="mr-2" />
-            Reset options
-          </Button>
-
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => state.incParagraphShift()}
-          >
-            <SkipForwardIcon className="mr-2" />
-            Shift paragraph
-          </Button>
-        </div>
-
-        {articleLink && (
-          <div className="flex gap-2">
             <Button
               variant="outline"
-              className="w-full"
-              nativeButton={false}
-              render={<a href={articleLink} target="_blank" />}
+              size="icon"
+              aria-label="Earlier paragraph"
+              disabled={start <= 1}
+              onClick={() => state.setParagraphShift(state.paragraphShift - 1)}
             >
-              <ExternalLinkIcon className="mr-2" />
-              View original article
+              <ChevronLeftIcon />
+            </Button>
+            <output
+              aria-live="polite"
+              className="min-w-8 text-center text-sm tabular-nums"
+            >
+              {start}
+            </output>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Later paragraph"
+              disabled={start >= paragraphs}
+              onClick={() => state.setParagraphShift(state.paragraphShift + 1)}
+            >
+              <ChevronRightIcon />
             </Button>
           </div>
-        )}
-      </div>
+        </FieldRow>
 
-      <div className="text-muted-foreground my-4 flex items-center gap-2 text-sm leading-[1.1]">
-        <InfoIcon className="size-5 min-w-max" />
-        <p>The title and bylines take HTML: &lt;br&gt; breaks a line.</p>
-      </div>
+        <FieldRow
+          icon={ImagesIcon}
+          label="Slides as images"
+          htmlFor="slides-as-images"
+          inline
+        >
+          <div className="flex max-sm:justify-end">
+            <Switch
+              id="slides-as-images"
+              checked={state.renderImages}
+              onCheckedChange={(checked) => state.setRenderImages(checked)}
+            />
+          </div>
+        </FieldRow>
 
-      <hr className="my-4" />
+        <FieldActions>
+          <Button variant="outline" onClick={() => state.reset()}>
+            Reset style
+          </Button>
+        </FieldActions>
+      </FieldRows>
+    </div>
+  );
+}
 
-      <FormItem>
-        <ImageIcon className="size-5 min-w-max" />
-        <FormLabel>Save as images</FormLabel>
-        <Switch
-          checked={state.renderImages}
-          onCheckedChange={(checked) => state.setRenderImages(checked)}
-        />
-      </FormItem>
+/** a swatch that opens the picker, with the colour written beside it */
+function ColorField({
+  id,
+  value,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="border-input focus-within:border-ring focus-within:ring-ring/50 relative flex h-8 w-full items-center gap-2 rounded-lg border px-2.5 text-sm focus-within:ring-3">
+      <input
+        id={id}
+        type="color"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        /* the whole field opens the picker; the swatch is what shows */
+        className="absolute inset-0 size-full cursor-pointer opacity-0"
+      />
+      <span
+        className="size-4 shrink-0 rounded border"
+        style={{ backgroundColor: value }}
+        aria-hidden="true"
+      />
+      <span className="font-mono text-[13px] uppercase" aria-hidden="true">
+        {value}
+      </span>
+    </div>
+  );
+}
 
-      <div className="text-muted-foreground flex items-center gap-2 pl-7 text-sm leading-[1.1]">
-        <p>Turn off only if the slides look wrong; then take a screenshot.</p>
-      </div>
+function SizeSlider({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  min: number;
+  max: number;
+}) {
+  return (
+    <div className="flex h-8 items-center gap-3">
+      <Slider
+        aria-label={label}
+        value={[value]}
+        onValueChange={(next) => onChange(toSingle(next))}
+        min={min}
+        max={max}
+        step={1}
+      />
+      <span className="text-muted-foreground w-9 shrink-0 text-right text-sm tabular-nums">
+        {value}px
+      </span>
     </div>
   );
 }

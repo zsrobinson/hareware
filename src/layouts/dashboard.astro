@@ -53,9 +53,17 @@ const collapsed = false;
     >
     <NavProgress />
 
+    {
+      /* the shell is the screen and never scrolls: <main> does, and the side
+        panel beside it on its own. So the sidebar and the panel stay put, and
+        a menu or sheet that locks the document's scroll moves nothing. It and
+        <main> are positioned so an sr-only status or anything else absolute
+        is placed inside them; left to the document, one far down the page
+        made the document a second scroller */
+    }
     <div
       id="shell"
-      class="group/shell flex h-svh w-full overflow-hidden"
+      class="group/shell relative flex h-svh w-full overflow-hidden"
       data-state={collapsed ? "collapsed" : "expanded"}
       style="--sidebar-width: 15rem; --sidebar-width-icon: 3.25rem"
     >
@@ -97,10 +105,15 @@ const collapsed = false;
             narrows it rather than covering it; islands portal into it */
         }
         <div class="flex min-h-0 flex-1">
+          {
+            /* the page's one scroller. The gutter is kept when nothing
+              overflows, so where scrollbars always show (Windows) a page
+              does not shift sideways as it loads or grows */
+          }
           <main
             id="content"
             tabindex="-1"
-            class="min-w-0 flex-1 overflow-y-auto p-4 outline-none md:px-10 md:py-7"
+            class="relative min-w-0 flex-1 [scrollbar-gutter:stable] overflow-y-auto p-4 outline-none md:px-10 md:py-7"
           >
             {
               /* every page starts from the same left edge, however wide it runs */

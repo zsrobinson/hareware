@@ -488,7 +488,11 @@ function ViewTabs({
       ref={list}
       role="tablist"
       aria-label="Chart views"
-      className="flex gap-x-1 overflow-x-auto border-b"
+      /* a mouse wraps the views onto another row, so none is out of reach
+         without a scrollbar; a touch screen swipes them, with no bar under
+         them. The rule under each row is a background, not a border: tabs
+         pulled over a border made the strip scroll down by a pixel */
+      className="flex [scrollbar-width:none] flex-wrap gap-x-1 overflow-x-auto bg-[repeating-linear-gradient(to_bottom,transparent_0_39px,var(--color-border)_39px_40px)] pointer-coarse:flex-nowrap"
       onKeyDown={(event) => {
         /* the tabs pattern: arrows move between the views, and choose */
         const step =
@@ -521,7 +525,7 @@ function ViewTabs({
             }}
             className={cn(
               /* the chosen view is underlined, so a hovered tab never looks chosen */
-              "-mb-px flex h-10 shrink-0 items-center gap-1.5 border-b-2 px-2 text-sm whitespace-nowrap transition-colors sm:px-3 [&_svg]:size-4 [&_svg]:shrink-0",
+              "flex h-10 shrink-0 items-center gap-1.5 border-b-2 px-2 text-sm whitespace-nowrap transition-colors sm:px-3 [&_svg]:size-4 [&_svg]:shrink-0",
               selected
                 ? "border-foreground text-foreground font-medium"
                 : "text-muted-foreground hover:text-foreground border-transparent",

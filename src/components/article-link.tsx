@@ -6,6 +6,7 @@
 
 import { ExternalLinkIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
+import { useIsPhone } from "./panel";
 import { Button, buttonVariants } from "./ui/button";
 import { Input } from "./ui/input";
 
@@ -27,22 +28,30 @@ export function ArticleLink({
   error: string | null;
   className?: string;
 }) {
+  /* a phone has no room for the scheme; the link reads without it */
+  const phone = useIsPhone();
+  const shown = link && phone ? link.replace(/^https?:\/\//, "") : link;
+
   return (
     <div className={cn("space-y-1.5", className)}>
       <form action={action} className="flex gap-2">
         <div className="relative min-w-0 flex-1">
           <Input
             /* remounted once the article is read, to show its full link */
-            key={link ?? "typed"}
+            key={shown ?? "typed"}
             type="text"
             name="article"
-            defaultValue={link ?? typed}
+            defaultValue={shown ?? typed}
             placeholder="Paste an article link"
             aria-label="Article link"
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? "article-link-error" : undefined}
             spellCheck={false}
-            className={cn("font-mono md:text-[13px]", link && "pr-8")}
+            className={cn(
+              /* below 16px a phone zooms in on focus, so 13px is a laptop's */
+              "font-mono placeholder:font-sans md:text-[13px]",
+              link && "pr-8",
+            )}
           />
           {link && (
             <a

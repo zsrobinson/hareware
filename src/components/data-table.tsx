@@ -21,6 +21,7 @@ import {
   ArrowUpIcon,
   ArrowUpDownIcon,
   ChevronDownIcon,
+  Columns3Icon,
   DownloadIcon,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -234,8 +235,10 @@ export function DataTable<T>({
         <DropdownMenuTrigger
           render={<Button variant="outline" className="bg-background" />}
         >
-          Columns
-          <ChevronDownIcon className="text-muted-foreground" />
+          {/* an icon in a toolbar too narrow for its name (beside a panel) */}
+          <Columns3Icon className="hidden @max-2xl:block" />
+          <span className="@max-2xl:sr-only">Columns</span>
+          <ChevronDownIcon className="text-muted-foreground @max-2xl:hidden" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-44">
           {table

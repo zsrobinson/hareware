@@ -584,7 +584,7 @@ function FilterBar({
   const search = (
     /* narrow enough that search, filters and Columns share one line in the
        600px a side panel leaves */
-    <label className="relative min-w-0 flex-1 sm:min-w-36">
+    <label className="relative min-w-0 flex-1 sm:min-w-24 @2xl:min-w-36">
       <span className="sr-only">Search</span>
       <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
       <Input
@@ -723,24 +723,31 @@ function FilterBar({
   }
 
   return (
-    <section aria-label="Filters" className="flex flex-wrap items-center gap-2">
-      {search}
-      {time}
-      {range}
-      {sections}
-      {roles}
-      {changed && (
-        <Button variant="ghost" onClick={() => setState(DEFAULT_STATE)}>
-          <XIcon /> Clear
-        </Button>
-      )}
-      <div ref={filtersSlot} className="contents" />
-      {/* the view's own controls, set apart from the filters */}
-      <div
-        ref={toolbarSlot}
-        className="flex items-center gap-2 border-l pl-2 empty:hidden"
-      />
-    </section>
+    /* a container, so its controls can shorten beside a side panel and the
+     toolbar stays one line */
+    <div className="@container">
+      <section
+        aria-label="Filters"
+        className="flex flex-wrap items-center gap-2 @max-2xl:gap-1.5"
+      >
+        {search}
+        {time}
+        {range}
+        {sections}
+        {roles}
+        {changed && (
+          <Button variant="ghost" onClick={() => setState(DEFAULT_STATE)}>
+            <XIcon /> Clear
+          </Button>
+        )}
+        <div ref={filtersSlot} className="contents" />
+        {/* the view's own controls, set apart from the filters */}
+        <div
+          ref={toolbarSlot}
+          className="flex items-center gap-2 border-l pl-2 empty:hidden @max-2xl:pl-1.5"
+        />
+      </section>
+    </div>
   );
 }
 

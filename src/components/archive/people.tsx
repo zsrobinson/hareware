@@ -39,7 +39,7 @@ import { useEdit } from "./use-edit";
 
 export function PeoplePage() {
   return (
-    <ArchiveShell searchPlaceholder="Search people">
+    <ArchiveShell searchPlaceholder="Search">
       {(props) => <People {...props} />}
     </ArchiveShell>
   );

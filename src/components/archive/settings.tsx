@@ -379,7 +379,19 @@ function pastedEdits(rows: Row[], archive: Archive) {
             postId: row.postId,
             role: c.role,
             byline: row.byline,
-            realNames: anyRole.map((o) => o.realName),
+            /* with whoever that role already names on its own */
+            realNames: [
+              ...archive.overrides
+                .filter(
+                  (o) =>
+                    o.postId === row.postId &&
+                    o.role === c.role &&
+                    o.byline &&
+                    same(o.byline, row.byline),
+                )
+                .map((o) => o.realName),
+              ...anyRole.map((o) => o.realName),
+            ].filter((n, i, all) => all.findIndex((m) => same(m, n)) === i),
           });
     }
   }
@@ -399,19 +411,22 @@ function pastedEdits(rows: Row[], archive: Archive) {
     }
 
   const edit = [...entries.values()];
-  const undo = edit.map((e) => ({
-    ...e,
-    note: undefined,
-    realNames: archive.overrides
-      .filter(
-        (o) =>
-          o.postId === e.postId &&
-          o.role === e.role &&
-          o.byline &&
-          same(o.byline, e.byline),
-      )
-      .map((o) => o.realName),
-  }));
+  const undo = edit.map((e) => {
+    const before = archive.overrides.filter(
+      (o) =>
+        o.postId === e.postId &&
+        o.role === e.role &&
+        o.byline &&
+        same(o.byline, e.byline),
+    );
+    /* the rows' own note comes back with them, when they shared one */
+    const notes = [...new Set(before.map((o) => o.note))];
+    return {
+      ...e,
+      realNames: before.map((o) => o.realName),
+      note: notes.length === 1 ? notes[0] : undefined,
+    };
+  });
   return { edit, undo, rows: pasted.size };
 }
 
@@ -575,7 +590,7 @@ function Unscoped({ archive }: { archive: Archive }) {
                         edit: {
                           kind: "bylines",
                           entries: [],
-                          retire: [u.byline],
+                          retire: u.rows,
                         },
                         done: `Removed “${u.byline}”`,
                         undo: restore,
@@ -601,12 +616,15 @@ function Unscoped({ archive }: { archive: Archive }) {
                       variant="outline"
                       disabled={save.isPending}
                       onClick={() => {
+                        /* each role takes the names of the rows meant for it */
                         const entries = u.targets.flatMap((t) =>
                           t.roles.map((role) => ({
                             postId: t.postId,
                             role,
                             byline: u.byline,
-                            realNames: u.realNames,
+                            realNames: u.rows
+                              .filter((r) => r.role === null || r.role === role)
+                              .map((r) => r.realName),
                           })),
                         );
                         save.mutate(
@@ -614,7 +632,7 @@ function Unscoped({ archive }: { archive: Archive }) {
                             edit: {
                               kind: "bylines",
                               entries,
-                              retire: [u.byline],
+                              retire: u.rows,
                             },
                             done: `Set “${u.byline}” on ${count} ${count === 1 ? "article" : "articles"}`,
                             undo: {

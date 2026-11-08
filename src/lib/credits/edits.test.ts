@@ -59,7 +59,9 @@ test("a log line never carries a real name", () => {
           realNames: ["Riley Real"],
         },
       ],
-      retire: ["Penn Name"],
+      retire: [
+        { byline: "Penn Name", role: null, realName: "Riley Real", note: "" },
+      ],
     },
   ];
   for (const edit of edits) {

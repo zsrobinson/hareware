@@ -199,7 +199,7 @@ test("an old every-article row is read apart, and converting it retires it", asy
       realNames: ["Riley Real"],
     },
   ];
-  await setBylines(sheets, set, ["Penn Name"]);
+  await setBylines(sheets, set, [penn]);
   expect(tabs.Overrides!.slice(1)).toEqual([
     ["", "", "Other Pen", "Sam Second", ""],
     ["3", "writer", "Penn Name", "Riley Real", ""],
@@ -240,6 +240,49 @@ test("saving one role splits a row for any role, so it neither stays nor vanishe
     ["7", "image", "Penn Name", "Riley Real", "kept"],
     ["8", "", "Penn Name", "Riley Real", "other article"],
     ["7", "writer", "Penn Name", "Sam Second", ""],
+  ]);
+});
+
+test("saving one role leaves an any-role row alone when that role does not print its byline", async () => {
+  const { sheets, tabs } = fakeSheet({
+    Overrides: [
+      ["post_id", "role", "byline", "real_name", "note"],
+      ["7", "", "Image Pen", "Riley Real", "kept"],
+    ],
+  });
+
+  /* the writers print only Alex Author; the image is Image Pen's */
+  await setArticleCredits(
+    sheets,
+    7,
+    "writer",
+    [{ byline: "Alex Author", realName: "Sam Second" }],
+    [{ byline: "Alex Author", roles: [] }],
+  );
+
+  expect(tabs.Overrides!.slice(1)).toEqual([
+    ["7", "", "Image Pen", "Riley Real", "kept"],
+    ["7", "writer", "Alex Author", "Sam Second", ""],
+  ]);
+});
+
+test("retiring a row with no post id removes that row only, not a mistyped one beside it", async () => {
+  const { sheets, tabs } = fakeSheet({
+    Overrides: [
+      ["post_id", "role", "byline", "real_name", "note"],
+      ["", "", "Penn Name", "Riley Real", ""],
+      ["", "Writr", "Penn Name", "Sam Second", ""],
+    ],
+  });
+
+  await setBylines(
+    sheets,
+    [],
+    [{ byline: "Penn Name", role: null, realName: "Riley Real", note: "" }],
+  );
+
+  expect(tabs.Overrides!.slice(1)).toEqual([
+    ["", "Writr", "Penn Name", "Sam Second", ""],
   ]);
 });
 

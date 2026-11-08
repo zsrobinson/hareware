@@ -233,7 +233,70 @@ test("an old every-article row shows where it would go, and leaves answered arti
           realNames: ["Riley Real"],
         },
       ],
-      retire: ["Penn Name"],
+      retire: [
+        { byline: "Penn Name", role: null, realName: "Riley Real", note: "" },
+      ],
+    },
+  ]);
+});
+
+test("old rows for different roles are set role by role, each with its own name", async () => {
+  const both = (id: number): SourcePost => ({
+    ...post(id, "Penn Name"),
+    paragraphs: ["Article by: Penn Name", "Image Credits: Penn Name"],
+  });
+  const writer = {
+    byline: "Penn Name",
+    role: "writer" as const,
+    realName: "Riley Real",
+    note: "",
+  };
+  const image = {
+    byline: "Penn Name",
+    role: "image" as const,
+    realName: "Sam Second",
+    note: "",
+  };
+  const archive = buildArchive({
+    posts: [both(1)],
+    categories: new Map([[103, "News"]]),
+    labels: DEFAULT_LABELS,
+    fetchedAt: "2026-10-05T00:00:00Z",
+    sheet: {
+      status: "read",
+      overrides: [],
+      unscoped: [writer, image],
+      ignored: [],
+      labels: null,
+      problems: [],
+      tabs: { overrides: true, labels: true, ignored: true },
+    },
+  });
+  const sent = renderWith(<PenNames archive={archive} reloadButton={null} />);
+
+  await userEvent.click(
+    screen.getByRole("button", { name: "Set on 1 article" }),
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Set on these" }));
+
+  expect(sent).toEqual([
+    {
+      kind: "bylines",
+      entries: [
+        {
+          postId: 1,
+          role: "writer",
+          byline: "Penn Name",
+          realNames: ["Riley Real"],
+        },
+        {
+          postId: 1,
+          role: "image",
+          byline: "Penn Name",
+          realNames: ["Sam Second"],
+        },
+      ],
+      retire: [writer, image],
     },
   ]);
 });

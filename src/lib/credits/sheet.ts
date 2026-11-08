@@ -283,7 +283,8 @@ const blank = (cells: string[]) => cells.every((cell) => !cell.trim());
 const isPost = (cell: string, postId: number) =>
   cell.trim() !== "" && Number(cell.trim()) === postId;
 
-/** the roles besides the one being saved that an article prints a byline in */
+/** a byline the role being saved prints, and the article's other roles that
+    print it too */
 export type PrintedElsewhere = { byline: string; roles: Role[] };
 
 /**
@@ -293,8 +294,9 @@ export type PrintedElsewhere = { byline: string; roles: Role[] };
  * to its printed credit line.
  *
  * A row for any role covers this role too, so saving one would leave it
- * standing beside the new rows. It is split instead: kept, as explicit rows,
- * for the other roles `elsewhere` says the article prints its byline in.
+ * standing beside the new rows. For each byline `elsewhere` names, such a row
+ * is split instead: kept, as explicit rows, for the other roles that print
+ * it. Any-role rows for bylines it does not name are left as they are.
  */
 export async function setArticleCredits(
   sheets: Sheets,
@@ -311,8 +313,9 @@ export async function setArticleCredits(
       const r = rowRole.trim().toLowerCase();
       if (r === role) return [];
       if (r !== "" || !printed.trim()) return [cells];
-      const roles = elsewhere.find((e) => same(e.byline, printed))?.roles ?? [];
-      return roles.map((other) => {
+      const here = elsewhere.find((e) => same(e.byline, printed));
+      if (!here) return [cells];
+      return here.roles.map((other) => {
         const split = [...cells];
         split[1] = other;
         return split;
@@ -343,21 +346,27 @@ export type BylineOn = {
 
 /**
  * says who bylines are on particular articles, in one write: each entry
- * replaces that byline's rows on that article and role. `retire` removes rows
- * with no post id for these bylines, and `restore` writes such rows back, so
+ * replaces that byline's rows on that article and role. `retire` removes
+ * exactly these rows with no post id, and `restore` writes such rows back, so
  * removing or converting them can be undone
  */
 export async function setBylines(
   sheets: Sheets,
   entries: BylineOn[],
-  retire: string[] = [],
+  retire: Unscoped[] = [],
   restore: Unscoped[] = [],
   note = "",
 ) {
   await rewrite(sheets, "overrides", (rows) => [
-    ...rows.filter(([postId = "", rowRole = "", printed = ""]) => {
-      if (postId.trim() === "") return !retire.some((b) => same(printed, b));
+    ...rows.filter(([postId = "", rowRole = "", printed = "", name = ""]) => {
       const role = rowRole.trim().toLowerCase();
+      if (postId.trim() === "")
+        return !retire.some(
+          (u) =>
+            same(printed, u.byline) &&
+            role === (u.role ?? "") &&
+            same(name, u.realName),
+        );
       return !entries.some(
         (e) =>
           isPost(postId, e.postId) &&

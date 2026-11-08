@@ -31,8 +31,8 @@ export type Edit =
   | {
       kind: "bylines";
       entries: BylineOn[];
-      /** bylines whose rows for no article to remove */
-      retire?: string[];
+      /** rows for no article to remove */
+      retire?: Unscoped[];
       /** rows for no article to write back, undoing a retire */
       restore?: Unscoped[];
     }
@@ -83,8 +83,6 @@ export function parseEdit(body: unknown): Edit | { error: string } {
     }
     case "bylines": {
       if (!Array.isArray(b.entries)) return { error: "entries must be a list" };
-      const retire = b.retire === undefined ? [] : names(b.retire);
-      if (!retire) return { error: "retire must be a list of bylines" };
       const entries: BylineOn[] = [];
       for (const e of b.entries as Record<string, unknown>[]) {
         const id = Number(e?.postId);
@@ -106,19 +104,26 @@ export function parseEdit(body: unknown): Edit | { error: string } {
           ...(note ? { note } : {}),
         });
       }
-      const restore: Unscoped[] = [];
-      for (const r of (b.restore ?? []) as Record<string, unknown>[]) {
-        const byline = text(r?.byline);
-        const realName = text(r?.realName);
-        const role = r?.role ?? null;
-        if (
-          !byline ||
-          !realName ||
-          (role !== null && (typeof role !== "string" || !isRole(role)))
-        )
-          return { error: "restore needs bylines, names and roles" };
-        restore.push({ byline, role, realName, note: text(r?.note) ?? "" });
-      }
+      const unscoped = (list: unknown) => {
+        const rows: Unscoped[] = [];
+        for (const r of (list ?? []) as Record<string, unknown>[]) {
+          const byline = text(r?.byline);
+          const realName = text(r?.realName);
+          const role = r?.role ?? null;
+          if (
+            !byline ||
+            !realName ||
+            (role !== null && (typeof role !== "string" || !isRole(role)))
+          )
+            return undefined;
+          rows.push({ byline, role, realName, note: text(r?.note) ?? "" });
+        }
+        return rows;
+      };
+      const retire = unscoped(b.retire);
+      const restore = unscoped(b.restore);
+      if (!retire || !restore)
+        return { error: "retire and restore need bylines, names and roles" };
       if (entries.length === 0 && retire.length === 0 && restore.length === 0)
         return { error: "nothing to change" };
       return { kind: "bylines", entries, retire, restore };

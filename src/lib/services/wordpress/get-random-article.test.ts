@@ -22,7 +22,18 @@ function mockWordPress(
   );
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+
+/* a refusal is retried after a wait, as every read is: skip the waits */
+async function settled<T>(read: () => Promise<T>): Promise<T> {
+  vi.useFakeTimers();
+  const result = read();
+  await vi.runAllTimersAsync();
+  return result;
+}
 
 test("returns a link", async () => {
   mockWordPress("40");
@@ -48,7 +59,7 @@ test("is nothing when the second call returns an empty array", async () => {
 
 test("is nothing when wordpress refuses", async () => {
   mockWordPress("40", [{ link: LINK }], false);
-  expect(await getRandomArticle()).toBeUndefined();
+  expect(await settled(getRandomArticle)).toBeUndefined();
 });
 
 test("is nothing when wordpress is unreachable", async () => {
@@ -58,5 +69,15 @@ test("is nothing when wordpress is unreachable", async () => {
       throw new Error("down");
     }),
   );
-  expect(await getRandomArticle()).toBeUndefined();
+  expect(await settled(getRandomArticle)).toBeUndefined();
+});
+
+test("asks only for the link, never a whole post", async () => {
+  mockWordPress("40");
+  await getRandomArticle();
+  const asked = vi
+    .mocked(fetch)
+    .mock.calls.map(([url]) => (url instanceof Request ? url.url : `${url}`));
+  expect(asked).toHaveLength(2);
+  for (const url of asked) expect(url).toContain("_fields=link");
 });

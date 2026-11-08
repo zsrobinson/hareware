@@ -72,12 +72,16 @@ export function useReadProgress(): Progress {
   );
 }
 
-async function readWordPress(): Promise<Snapshot> {
+/* `fresh` goes past every cache, for Refresh: back from fixing an article in
+   WordPress, a cached read could still show it unfixed */
+async function readSnapshot(fresh = false): Promise<Snapshot> {
   report({ read: 0, total: 0 });
   /* one after the other: sent to WordPress directly, together they are what
      gets throttled */
-  const posts = await allPosts((read, total) => report({ read, total }));
-  const sections = await categories();
+  const posts = await allPosts((read, total) => report({ read, total }), {
+    fresh,
+  });
+  const sections = await categories({ fresh });
 
   const snapshot: Snapshot = {
     posts: posts.map((post) => ({
@@ -189,11 +193,11 @@ export function useArchive(): ArchiveState {
   });
   const wordpress = useQuery({
     queryKey: WORDPRESS_KEY,
-    queryFn: readWordPress,
+    queryFn: () => readSnapshot(),
     enabled: restored.isSuccess,
     staleTime: FRESH_MS,
     gcTime: Infinity,
-    /* readWordPress already waits out WordPress's refusals */
+    /* readSnapshot already waits out WordPress's refusals */
     retry: false,
     /* the posts are large and never compared piece by piece */
     structuralSharing: false,
@@ -245,10 +249,11 @@ export function useArchive(): ArchiveState {
           { queryKey: SHEET_KEY, exact: true },
           { throwOnError: true },
         ),
-        queryClient.refetchQueries(
-          { queryKey: WORDPRESS_KEY, exact: true },
-          { throwOnError: true },
-        ),
+        queryClient.query({
+          queryKey: WORDPRESS_KEY,
+          queryFn: () => readSnapshot(true),
+          staleTime: 0,
+        }),
       ]);
     },
   };

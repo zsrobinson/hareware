@@ -47,6 +47,10 @@ test("keeps the compression and the page count, and nothing else of WordPress's"
   expect(response.headers.get("content-encoding")).toBe("gzip");
   expect(response.headers.get("x-wp-totalpages")).toBe("42");
   expect(response.headers.has("set-cookie")).toBe(false);
+  /* kept at the edge for a minute, never in the browser */
+  expect(response.headers.get("cache-control")).toBe(
+    "public, max-age=0, s-maxage=60",
+  );
 });
 
 test("passes only the collections and query keys the pages use", async () => {

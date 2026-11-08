@@ -109,3 +109,13 @@ test("an answer through HareWare is the caller's to read, as one from WordPress 
   expect(fetch).toHaveBeenCalledTimes(1);
   expect("value" in result && result.value.status).toBe(400);
 });
+
+test("a fresh read goes to WordPress itself, past every cache", async () => {
+  vi.stubGlobal("document", {});
+  const fetch = vi.fn().mockResolvedValue(Response.json([1]));
+  vi.stubGlobal("fetch", fetch);
+
+  await settle(() => readWordPress(ARTICLE, "a read", { fresh: true }));
+
+  expect(fetch.mock.calls.map(([url]) => url)).toEqual([ARTICLE]);
+});

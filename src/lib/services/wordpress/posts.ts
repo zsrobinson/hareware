@@ -6,7 +6,7 @@
 */
 
 import { ORIGIN } from "./article-url";
-import { readWordPress } from "./request";
+import { readWordPress, type Fresh } from "./request";
 
 const API = `${ORIGIN}/wp-json/wp/v2`;
 const PER_PAGE = 100;
@@ -41,6 +41,7 @@ type ApiPost = {
  */
 export async function allPosts(
   onPage?: (read: number, total: number) => void,
+  read: Fresh = {},
 ): Promise<Post[]> {
   const posts: Post[] = [];
 
@@ -51,6 +52,7 @@ export async function allPosts(
         _fields: "id,date_gmt,link,title,categories,content",
       },
       `posts page ${page}`,
+      read,
     );
     posts.push(...rows);
     onPage?.(page, totalPages);
@@ -81,10 +83,11 @@ export async function postsPublishedAfter(instant: Date): Promise<Post[]> {
   );
 }
 
-export async function categories(): Promise<Category[]> {
+export async function categories(read: Fresh = {}): Promise<Category[]> {
   const response = await readWordPress(
     `${API}/categories?per_page=100&_fields=id,name`,
     "wordpress categories",
+    read,
   );
   if (!response.ok)
     throw new Error(`wordpress categories answered ${response.status}`);
@@ -96,6 +99,7 @@ export async function categories(): Promise<Category[]> {
 async function readPage(
   query: Record<string, string>,
   describe: string,
+  read: Fresh = {},
 ): Promise<{ rows: Post[]; totalPages: number }> {
   const params = new URLSearchParams({
     per_page: String(PER_PAGE),
@@ -106,6 +110,7 @@ async function readPage(
   const response = await readWordPress(
     `${API}/posts?${params}`,
     `wordpress ${describe}`,
+    read,
   );
   if (!response.ok)
     throw new Error(`wordpress ${describe} answered ${response.status}`);

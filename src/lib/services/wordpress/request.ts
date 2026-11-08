@@ -54,6 +54,15 @@ function told(header: string | null): number | undefined {
     : undefined;
 }
 
+export type Fresh = {
+  /**
+   * past every cache, for a read someone asked for, such as Refresh after a
+   * fix in WordPress: WordPress answers a request with an Origin from its
+   * server, so in a browser this goes to it directly
+   */
+  fresh?: boolean;
+};
+
 /**
  * the response to `url`, whatever its status other than a refusal; throws
  * `Throttled` once WordPress has refused, or not answered, a few times running.
@@ -62,10 +71,11 @@ function told(header: string | null): number | undefined {
 export async function readWordPress(
   url: string,
   describe: string,
+  { fresh = false }: Fresh = {},
 ): Promise<Response> {
   /* in a browser, through HareWare first: WordPress's cache answers it. A
      refusal or a failure there falls through to asking WordPress itself */
-  if (typeof document !== "undefined") {
+  if (typeof document !== "undefined" && !fresh) {
     const through = viaHareWare(url);
     try {
       /* the page may have sent it already: ~/lib/early */

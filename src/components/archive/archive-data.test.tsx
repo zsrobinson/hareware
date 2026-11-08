@@ -93,3 +93,23 @@ test("an older copy is shown at once, and WordPress read behind it", async () =>
   );
   expect(asked.some((url) => url.includes("wp/v2/posts"))).toBe(true);
 });
+
+test("Refresh reads WordPress itself, so a fix made there shows", async () => {
+  const { asked, wrapper } = setUp(Response.json(SHEET), {
+    posts: [],
+    categories: [],
+    fetchedAt: minutesAgo(2),
+  });
+  const { result } = renderHook(() => useArchive(), { wrapper });
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  const ready = result.current;
+  if (ready.status !== "ready") throw new Error("not ready");
+
+  asked.length = 0;
+  await ready.refresh();
+
+  const reads = asked.filter((url) => url.includes("wp/v2/"));
+  expect(reads.length).toBeGreaterThan(0);
+  for (const url of reads)
+    expect(url).toMatch(/^https:\/\/theumdhare\.com\/wp-json\//);
+});

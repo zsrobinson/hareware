@@ -63,9 +63,10 @@ export async function passThrough(url: URL): Promise<Response> {
 
   const headers = new Headers({
     "x-content-type-options": "nosniff",
-    /* the cache WordPress answers from is minutes behind at most; a minute
-       more in the browser saves going back and forth between pages */
-    "cache-control": "public, max-age=60",
+    /* a minute at Cloudflare's edge, so a repeat from nearby never reaches
+       the Worker; none in the browser, whose own query cache already keeps
+       a read between pages, so a reload after a fix asks again */
+    "cache-control": "public, max-age=0, s-maxage=60",
   });
   for (const name of PASSED) {
     const value = upstream.headers.get(name);

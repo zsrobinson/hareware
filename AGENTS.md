@@ -114,10 +114,13 @@ rebuilding does not refresh them: after changing the Preview settings, delete
 the Previews in the dashboard and push again.
 
 **`beta.hareware.zsrobinson.com` shows whatever is on the `beta` branch.** Point
-it at any commit with `git push --force origin <branch>:beta`. To send beta to
-production instead, turn on the zone's redirect rule "HareWare beta off: send
-beta to production" (zsrobinson.com → Rules → Redirect Rules), and off again to
-bring it back.
+it at any commit with `git push --force origin <branch>:beta`, when the person
+you are working for asks: it is shared, and the push replaces whatever beta
+showed. It does not follow the branch afterwards; push again after new commits.
+The Preview rebuilds in about two minutes, and `git ls-remote origin beta` says
+which commit it is on. To send beta to production instead, turn on the zone's
+redirect rule "HareWare beta off: send beta to production" (zsrobinson.com →
+Rules → Redirect Rules), and off again to bring it back.
 
 **Dashboard variables do not survive a deploy.** Wrangler replaces them with
 `wrangler.jsonc`'s, so every value the code reads is a secret.

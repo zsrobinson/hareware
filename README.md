@@ -50,25 +50,24 @@ chosen branch; AGENTS.md says how to choose another.
 
 ## Worker types
 
-`worker-configuration.d.ts` is 590KB of runtime declarations generated from
+`worker-configuration.d.ts` is the runtime declarations generated from
 `wrangler.jsonc`. It is gitignored and written by the `postinstall` hook, so
 `npm ci` is all a clone needs.
 
 Run `npm run types` after changing a binding, or whenever the type checker
 claims `D1Database` and `cloudflare:workers` do not exist.
 
-**It reads `.dev.vars` too**, adding whatever it finds there to `Env`, so a
-secret you have locally can type check here and nowhere else. Every variable the
-code reads belongs in `HareWareEnv` in `src/env.d.ts`.
+Every variable the code reads belongs in `HareWareEnv` in `src/env.d.ts`
+(`docs/agents/silent-failures.md` says why).
 
 ## Deployment
 
-Pushes deploy through Cloudflare Workers Builds. `npm run deploy` publishes from
+Pushes to `main` deploy through Cloudflare Workers Builds. `npm run deploy` publishes from
 a terminal when you need it.
 
 ## The archive
 
-`/charts`, `/people`, `/articles` and `/problems` read every published post from
+`/charts`, `/people`, `/articles`, `/problems` and `/settings` read every published post from
 the public REST API, parse the credit lines out of each one, and apply the
 Sheet, all in the browser (ADR 0012). The server keeps nothing: the browser
 keeps its read of WordPress for up to a day and checks it for new articles
@@ -106,9 +105,8 @@ last-writer-wins.
 
 **What is in the Sheet is private.** It never goes into WordPress, the
 repository, the log or a public page. The archive pages are empty shells; the
-APIs that hold the data (`/api/archive.json`, `/api/sheet`,
-`/api/reminder.json`, `/api/access.json`, `/api/automations/run`) refuse
-anybody without `@Editorial Board`, and log lines for
+APIs that hold the data refuse anybody without `@Editorial Board`, and log
+lines for
 Sheet changes name the kind of change and the post id, never a person.
 
 Setting it up: a Google Cloud service account, with the Sheets API enabled on
@@ -143,7 +141,7 @@ deployed one, which it usually is not.
 
 | Secret                       | What it is                                                              |
 | ---------------------------- | ----------------------------------------------------------------------- |
-| `DISCORD_BOT_TOKEN`          | Sends the reminder, and reads the roles the admin pages gate on         |
+| `DISCORD_BOT_TOKEN`          | Sends the reminder, and reads the roles the gated APIs check            |
 | `SESSION_SECRET`             | Signs the session and OAuth-state cookies. `openssl rand -hex 32`       |
 | `DISCORD_CLIENT_SECRET`      | The OAuth client secret, exchanged once per sign-in                     |
 | `GOOGLE_SERVICE_ACCOUNT_KEY` | The service account's whole JSON key file                               |
@@ -197,7 +195,7 @@ them than a store nobody remembers.
 
 ### Setup outside the repo
 
-1. **Discord roles.** One poster role per weekday, ids in `SOCIAL_ROLE_IDS`.
+1. **Discord roles.** One poster role per weekday and one for the weekend, ids in `SOCIAL_ROLE_IDS`.
 2. **Discord bot.** **View Channel** and **Send Messages** in
    `#instagram-posting` and `#carl-bot`, and **Mention @everyone, @here, and All
    Roles** — without it the reminder posts and pings nobody, silently. See

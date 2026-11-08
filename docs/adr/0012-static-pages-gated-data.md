@@ -1,8 +1,7 @@
 # 12. Static pages, gated data, and the Worker's 10 ms
 
-**Status:** Accepted — 2026-11-07. Amends ADR 0007's "the guard runs in
-middleware": the gate moves from the admin pages to the APIs that hold their
-data.
+**Status:** Accepted — 2026-11-07. Amends ADR 0007: the gate moves from the
+admin pages to the APIs that hold their data. Supersedes ADR 0005 (deleted).
 
 ## Context
 
@@ -22,8 +21,9 @@ branch against the real 418 posts:
   `paragraphs()`) 49–68 ms; any dashboard render 8–14 ms warm, more cold;
   linkedom on the rendered-page fallback about 45 ms.
 
-The site is served from workers.dev, where the Cache API does nothing, so the
-edge cache cannot be relied on to keep the WordPress read rare.
+The site was then served from workers.dev, where the Cache API does nothing, so
+the edge cache could not be relied on to keep the WordPress read rare (it has
+since moved to a custom domain with the cache on).
 
 ## Decision
 

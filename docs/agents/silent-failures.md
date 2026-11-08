@@ -15,11 +15,9 @@ looking. When you find yourself reasoning about what an API did, go and ask it.
 
 **A role mention renders whether or not it notified anyone.** Discord draws
 `<@&id>` as a pill regardless, and only highlights it for people it actually
-reached. A reminder mentioning `@Editorial Board` in grey has been posted,
+reached. A reminder with a poster-role mention in grey has been posted,
 rendered, and dropped on the way to everyone in it. The bot needs **Mention
-@everyone, @here, and All Roles**, or the role must be Mentionable. Webhooks are
-exempt from this, which is why the pings worked before the switch to posting as
-the bot and stopped after it, with no code change to blame.
+@everyone, @here, and All Roles**, or the role must be Mentionable.
 
 **`allowed_mentions` does not gate a mention inside a Components V2 text
 display.** An empty `roles` array notifies the role exactly as though the field
@@ -90,7 +88,7 @@ rather than an empty tab.
 `edits.test.ts` fails if a name gets into it.
 
 **A service account sees only what is shared with it.** Google answers `403`
-or `404` for a Sheet that exists but was not shared, and the setup button
+or `404` for a Sheet that exists but was not shared, and the archive's banner
 shows Google's own message, which names the cause.
 
 ## Cloudflare and Astro
@@ -114,12 +112,6 @@ server answers from files, and a page with no file gets `404.html`. Under
 `astro dev` the same page renders fine. `nav.test.ts` checks every page sets
 `export const prerender = true`.
 
-**A route in `src/pages` pays for Astro's pipeline.** `/api/wordpress` as an
-Astro route cost 6 ms of CPU at p50 and 12 ms at p90 to forward a response
-unread; answered in `src/worker.ts` before Astro it costs 1 ms. And a test file
-under `src/pages` without a leading `_` is a route: one put vitest in the
-Worker bundle.
-
 **A Preview's settings are copied when it is first created.** Changing the
 Worker's Preview settings reaches only Previews created afterwards; an existing
 one keeps what it had, even through a rebuild, and reads exactly like the change
@@ -128,17 +120,13 @@ also shown nothing while the API and every new Preview had the settings, so
 check a Preview's latest deployment, not that tab.
 
 **Measure what one run costs with uncached requests.** Answers Cloudflare's
-edge serves from cache never reach the Worker, so a short measurement through
-`/api/wordpress` undercounts unless each request is new. Branch builds used to
-be versions of production, measured in the GraphQL Analytics API filtered by
-`scriptVersion`; Worker Previews are not versions, and preview requests did not
-show in Workers Logs when looked for (2026-11-08), so measure CPU on
-production after a deploy.
+edge serves from cache never reach the Worker, so a measurement undercounts
+unless each request is new. Measure CPU on production after a deploy: Preview
+requests don't show in Workers Logs.
 
 **`wrangler types` reads `.dev.vars`.** Whatever is in that untracked file is
 added to the generated `Env`, so a variable can type check on one machine and
-nowhere else. `SESSION_SECRET` and `DISCORD_CLIENT_SECRET` were typed this way
-for weeks. Every variable the code reads belongs in `HareWareEnv` in
+nowhere else. Every variable the code reads belongs in `HareWareEnv` in
 `src/env.d.ts`.
 
 ## Testing against the real thing
@@ -206,7 +194,7 @@ costs three lines. `ok | skipped | misconfigured | failed` costs a type.
 # The test that catches them
 
 A helper can be perfectly tested while nothing checks that anything calls it.
-Deleting `inert()` from the social ping left all 126 tests passing — the fix was
+Deleting `inert()` from the social ping left every test passing — the fix was
 covered, the wiring was not.
 
 > **A fix is not tested until deleting the fix fails a test.**

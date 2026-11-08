@@ -19,7 +19,7 @@ WordPress API, and never appears in language a club member reads, except in
 
 ## Section
 
-Which desk an Article belongs to: News, Features, Sports, Entertainment or
+Which desk an Article belongs to: News, Features, Entertainment, Sports or
 Rabbithole. It is the post's WordPress category, and every Article has exactly
 one. An Article left in the default category, Uncategorized, has no Section and
 is listed under **Problems**.
@@ -74,13 +74,13 @@ its colon, a credit line
 with no readable name, a "name" that reads like a sentence, or no Section. The
 fix for those is almost always in WordPress, where readers see it too. The one
 answered in HareWare instead is a pen name printed again with nobody said for it
-on this Article. Two names a letter apart, like "Clare Dombroksy" and "Clare
+on this Article. Two names a letter apart, like "Cleo Dombroksy" and "Cleo
 Dombrosky", are pointed out alongside, and so are names first credited in the
 last 30 days, in case one is a pen name.
 
 ## Duty Roster
 
-Who posts to Instagram on a given day of the week: seven Discord roles, set once
+Who posts to Instagram on a given day of the week: six Discord roles, one per weekday and one for the weekend, set once
 a semester. Anyone with Manage Roles can change it, and the reminder pings the
 role for the day rather than a person.
 

@@ -28,7 +28,7 @@ src/lib/
                                         Sheet's tabs, and slicing for the pages
   db/ log.ts                            the invocation record
   session · auth · admin · member       who is asking, and whether they may
-  admin-routes · admin-api · denial     which tools need the role, and the gate
+  admin-api · denial                    the gate, and the four ways it refuses
 src/components/archive/                 the archive pages' islands
 src/pages/api/                          the routes those answer
 ```
@@ -65,20 +65,21 @@ calls `adminAccess(request)` first and refuses with `refusal()` from
 `~/lib/admin-api`. The island draws that refusal with `DenialMessage` from
 `~/components/gated`: which of four things is wrong, rather than claiming the
 page does not exist (ADR 0007), and `~/lib/denial` is the one table those four
-live in. `ADMIN_ROUTES` in `~/lib/admin-routes` still says which tools are the
-board's, for the nav. `nav.test.ts` holds it together: every admin page is
+live in. `adminNav` in `~/lib/nav` is the list of the board's tools.
+`nav.test.ts` holds it together: every admin page is
 prerendered and reads nothing on the server, and every API that touches the
-Sheet or the log is gated.
+Sheet or the log is gated, except Discord's signed interactions endpoint, which
+hands nothing back.
 
 **Nothing heavy runs in the Worker.** WordPress is read and parsed in the
 browser (its REST API answers any origin), and the archive is built there too;
 the Worker hands out only what needs a secret. A new route under `/api` or
 `/auth` must stay well under 10 ms of CPU: no parsing article bodies, no
 building the archive, no linkedom (a dev dependency, for tests only).
-`/api/wordpress` passes WordPress's cached answers to the browser, from
-`src/worker.ts` ahead of Astro: as an Astro route the same forwarding cost
-6 ms of CPU at p50 and 12 ms at p90, and answered first it costs 1 ms. Keep it
-out of `src/pages`, and never read or parse the body there. Anything
+`/api/wordpress` passes WordPress's cached answers to the browser, answered in
+`src/worker.ts` ahead of Astro, whose pipeline alone would cost several times
+as much (ADR 0012). Keep it out of `src/pages`, and never read or parse the
+body there. Anything
 else under `src/pages` must be `export const prerender = true`. A test file
 under `src/pages` must start with `_`, or Astro routes it and bundles vitest.
 
@@ -109,9 +110,8 @@ change. Previews take the Worker's Preview settings, not production's: their
 own `SESSION_SECRET`, and the same Discord and Google secrets and D1 log as
 production, so a preview reads and writes the club's real Sheet and log. They
 run no crons and have no `REMINDERS_TRIGGER_SECRET`, so a manual trigger on one
-answers 404. A Preview copies the settings when it is first created, and
-rebuilding does not refresh them: after changing the Preview settings, delete
-the Previews in the dashboard and push again.
+answers 404. A Preview keeps the settings it was created with through
+rebuilds: after changing them, delete it and push again.
 
 **`beta.hareware.zsrobinson.com` follows one branch, the beta branch.** It is
 the Preview named `beta`, and the beta branch is whichever branch's Preview
@@ -134,7 +134,7 @@ Redirect Rules), and off again to bring it back.
 ### Silent failures
 
 Everything expensive here has failed the same way: it reported success. A ping
-that rendered and notified nobody. A Notion filter that matched nothing. A
+that rendered and notified nobody. A WordPress throttle that read as no posts. A
 scrubber that approved markup it never examined. A curl served by the previous
 deploy. **Read `docs/agents/silent-failures.md`** before changing anything that
 talks to Discord, WordPress, Google or the deployed Worker, and before reviewing a fix —

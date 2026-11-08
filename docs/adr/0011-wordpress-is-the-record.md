@@ -25,8 +25,9 @@ date, section, and the printed byline and image credit as text in the body.
 ## Decision
 
 **WordPress is the record of what the club published.** HareWare reads it live
-from the public REST API and keeps no copy beyond a ten-minute cache. There is
-no sync and no database of articles.
+from the public REST API and keeps no copy on the server; a reader's browser
+keeps its read up to a day (ADR 0012). There is no sync and no database of
+articles.
 
 **Credits are read from the post itself.** The byline and image credit are
 paragraphs with a label and a colon. 417 of 418 posts follow that, and the

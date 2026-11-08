@@ -36,9 +36,23 @@ read. `togglePosted()` keeps the id for this reason.
 ## WordPress
 
 **WordPress.com answers a quick burst with 429, sometimes as a `200` HTML page.**
-Five pages of posts fetched back to back were enough. `allPosts()` reads pages
-one at a time through `sendPatiently`, and `readPage()` refuses any body that
-is not a JSON list, so a throttle page can never parse as "no posts".
+Five pages of posts fetched back to back were enough. Every read goes through
+`readWordPress()`, and `readPage()` refuses any body that is not a JSON list,
+so a throttle page can never parse as "no posts".
+
+**In a browser, its 429 is a failed fetch.** The refusal carries no CORS
+headers, so the page sees `TypeError: Failed to fetch`, not a status, and no
+`Retry-After` either. `readWordPress()` counts a failed fetch as a refusal and
+ends in `Throttled`, which the pages word as "WordPress is busy", never as a
+bad link.
+
+**Any `Origin` header skips WordPress.com's cache.** A browser's cross-origin
+request always sends one, so it reaches WordPress's server: about 400 ms for an
+article against about 130 ms cached, and back-to-back pages get refused there.
+Nothing documents this; `x-ac: BYPASS` in the response shows it. Browser reads
+go through `/api/wordpress`, which asks without one, and fall back to WordPress
+directly. A read that must be current, such as Refresh after a fix in
+WordPress, goes direct on purpose (`{ fresh: true }`).
 
 **`after` compares against the site's local date, whatever offset you give
 it.** The reminder asks for a day earlier than it needs and compares
@@ -87,6 +101,18 @@ is live before concluding anything about it.
 
 **`locals.runtime.env` was removed in Astro v6.** Its getter now exists only to
 throw. Read `import { env } from "cloudflare:workers"` instead.
+
+**A route in `src/pages` pays for Astro's pipeline.** `/api/wordpress` as an
+Astro route cost 6 ms of CPU at p50 and 12 ms at p90 to forward a response
+unread; answered in `src/worker.ts` before Astro it costs 1 ms. And a test file
+under `src/pages` without a leading `_` is a route: one put vitest in the
+Worker bundle.
+
+**Previews are not in Workers Logs.** Traffic to a preview version is counted
+only by the GraphQL Analytics API (`workersInvocationsAdaptive`, filtered by
+`scriptVersion`). A short measurement there can also undercount: answers
+Cloudflare's edge serves from cache never reach the Worker, so send uncached
+requests when the question is what one run costs.
 
 **`wrangler types` reads `.dev.vars`.** Whatever is in that untracked file is
 added to the generated `Env`, so a variable can type check on one machine and

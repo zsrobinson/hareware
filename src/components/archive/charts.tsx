@@ -247,7 +247,13 @@ function Charts({ archive, filters, filterNote }: ViewProps) {
         </SidePanel>
       )}
       {phone && (
-        <SheetGroup>
+        <SheetGroup
+          onReset={
+            state.view === "custom"
+              ? () => show({ view: state.base, custom: null, base: state.base })
+              : undefined
+          }
+        >
           <PanelGroup label="Chart">{builder}</PanelGroup>
         </SheetGroup>
       )}

@@ -176,6 +176,7 @@ function People({ archive, filters, filterNote }: ViewProps) {
     <Choice
       label="Show"
       hideLabel
+      width={phone ? "w-full justify-between" : "w-fit"}
       value={minimum}
       options={MINIMUMS}
       onChange={setMinimum}
@@ -185,16 +186,8 @@ function People({ archive, filters, filterNote }: ViewProps) {
   return (
     <OpenRowProvider value={openRow}>
       {/* a filter like the shell's, so it sits among them */}
-      <ToolbarFilters>
-        {phone ? (
-          <div className="w-full">
-            <FieldRow icon={UsersRoundIcon} label="Show" inline>
-              {show}
-            </FieldRow>
-          </div>
-        ) : (
-          show
-        )}
+      <ToolbarFilters label="Show" icon={UsersRoundIcon}>
+        {show}
       </ToolbarFilters>
       <DataTable
         columns={COLUMNS}

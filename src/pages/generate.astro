@@ -40,11 +40,18 @@ export const prerender = true;
     keepScroll = null;
     if (place === null) return;
     const until = performance.now() + 2000;
+    /* someone scrolling in the meantime has a place of their own */
+    let moved = false;
+    const stop = () => (moved = true);
+    const inputs = ["wheel", "touchstart", "keydown"] as const;
+    for (const type of inputs)
+      addEventListener(type, stop, { once: true, passive: true });
     const restore = () => {
       const scroller = pageScroller().element;
-      scroller.scrollTop = place;
-      if (scroller.scrollTop < place - 1 && performance.now() < until)
+      if (!moved) scroller.scrollTop = place;
+      if (!moved && scroller.scrollTop < place - 1 && performance.now() < until)
         requestAnimationFrame(restore);
+      else for (const type of inputs) removeEventListener(type, stop);
     };
     restore();
   });

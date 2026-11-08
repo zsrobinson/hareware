@@ -17,6 +17,7 @@ import { applyFilters, NO_FILTERS } from "~/lib/credits/stats";
 import { ArchiveShell, type ViewProps } from "./archive-shell";
 import { formatDate } from "./dates";
 import { useRemovals } from "./removals";
+import { SectionName } from "./section-name";
 import { useEdit } from "./use-edit";
 
 const EDIT_IN_WORDPRESS = (id: number) =>
@@ -181,7 +182,8 @@ function ArticleProblems({
             {article.title}
           </a>
           <p className="text-muted-foreground text-sm">
-            {formatDate(article.publishedAt)} · {article.section}
+            {formatDate(article.publishedAt)} ·{" "}
+            <SectionName section={article.section} />
           </p>
         </div>
         <ul className="space-y-1.5 text-sm">

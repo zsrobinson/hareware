@@ -19,6 +19,7 @@ import { applyFilters, easternDate } from "~/lib/credits/stats";
 import { ArchiveShell, type ViewProps } from "./archive-shell";
 import { formatDate } from "./dates";
 import { OpenRowProvider, RowDetails, RowOpener, useOpenRow } from "./open-row";
+import { SectionName } from "./section-name";
 import { ShellTableControls } from "./table-controls";
 import { useEdit } from "./use-edit";
 
@@ -136,6 +137,7 @@ function Articles({ archive, filters, filterNote }: ViewProps) {
         accessorKey: "section",
         header: sortable("Section"),
         meta: { csvHeader: "Section" },
+        cell: ({ row }) => <SectionName section={row.original.section} />,
       },
       ...ROLES.filter((role) => role !== "other" || anyOther).map(
         (role): ColumnDef<ArchiveArticle, unknown> => ({
@@ -221,7 +223,8 @@ function ArticlePanel({
     <SidePanel title={article.title} back="All articles" onClose={onClose}>
       <div className="-mt-3 space-y-3">
         <p className="text-muted-foreground text-xs">
-          {formatDate(article.publishedAt)} · {article.section}
+          {formatDate(article.publishedAt)} ·{" "}
+          <SectionName section={article.section} />
         </p>
         <div className="flex flex-wrap gap-2">
           <a

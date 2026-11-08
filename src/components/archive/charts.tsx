@@ -19,6 +19,7 @@ import {
   useState,
   type FocusEvent,
   type KeyboardEvent,
+  type MouseEvent,
   type PointerEvent,
   type RefObject,
 } from "react";
@@ -43,12 +44,12 @@ import { ROLE_NAMES, type Role } from "~/lib/credits/labels";
 import {
   applyFilters,
   easternDate,
-  group,
   isPeriod,
   periodBounds,
   type Filters,
   type Grouped,
   type Measure,
+  type Member,
 } from "~/lib/credits/stats";
 import { toCsv } from "~/lib/csv";
 import { saveFile } from "~/lib/save-file";
@@ -65,6 +66,7 @@ import {
   configOf,
   COUNTS,
   GROUPINGS,
+  groupOf,
   rangeOfView,
   readChart,
   SPLITS,
@@ -74,7 +76,20 @@ import {
   type ChartState,
   type ViewId,
 } from "./chart-config";
+import {
+  columnSeries,
+  counted,
+  percentText,
+  readSlice,
+  sliceCount,
+  sliceKey,
+  sliceMembers,
+  unitOf,
+  type Slice,
+} from "./chart-slice";
 import { seriesColor } from "./colors";
+import { RowDetails, useOpenRow } from "./open-row";
+import { SlicePanel } from "./slice-panel";
 
 /* the shell's Time filter starts from the view's range, so the view is kept
    here, over the shell, rather than in the chart */
@@ -104,18 +119,6 @@ const TABS: { id: ViewId; label: string }[] = [
   ...VIEWS,
   { id: "custom", label: "Custom" },
 ];
-
-const UNITS: Record<Measure, [string, string]> = {
-  articles: ["article", "articles"],
-  contributions: ["contribution", "contributions"],
-  people: ["person", "people"],
-  newcomers: ["new person", "new people"],
-};
-
-const counted = (n: number, one: string, many: string) =>
-  `${n.toLocaleString()} ${n === 1 ? one : many}`;
-
-const unitOf = (n: number, measure: Measure) => counted(n, ...UNITS[measure]);
 
 /**
  * what the caption says was added up, so a number is never read as the wrong
@@ -209,6 +212,8 @@ function Charts({
   const [hidden, setHidden] = useState<string[]>([]);
   const [customizing, setCustomizing] = useState(false);
   const phone = useIsPhone();
+  /* the slice open beside the chart, kept in the address as `?slice=` */
+  const opened = useOpenRow("slice");
 
   const show = (next: ChartState) => {
     setState(next);
@@ -225,6 +230,8 @@ function Charts({
      a view brings its own time range; changing Time after is only a filter */
   const choose = (view: ViewId) => {
     if (view === state.view) return;
+    /* another view's marks count other things, whatever their keys */
+    opened.close();
     const next: ChartState =
       view === "custom" && !state.custom && state.view !== "custom"
         ? { view, custom: config, base: state.view }
@@ -238,20 +245,35 @@ function Charts({
     [archive, filters],
   );
   const { grouped, partial } = useMemo(() => {
-    const { count, by, split, order, top, values } = configOf(state);
-    const grouped = group(shown, {
-      measure: count,
-      by,
-      breakdown: split,
-      filters,
-      order,
-      limit: by === "person" ? top || undefined : undefined,
-      running: values === "running",
-      history: archive.articles,
-    });
-    return { grouped, partial: partialKeys(grouped, by, filters) };
+    const config = configOf(state);
+    const grouped = groupOf(config, shown, filters, archive.articles);
+    return { grouped, partial: partialKeys(grouped, config.by, filters) };
   }, [shown, state, filters, archive]);
-  const plot = plotOf(grouped, config, hidden, partial);
+  const plot = useMemo(
+    () => plotOf(grouped, config, hidden, partial),
+    [grouped, config, hidden, partial],
+  );
+
+  const slice = opened.open === null ? null : readSlice(opened.open, grouped);
+  /* a link to a mark this chart does not have, or a filter that took it away */
+  const missing = opened.open !== null && slice === null;
+  useEffect(() => {
+    if (missing) opened.close();
+  });
+  /* one side panel at a time */
+  const openSlice = (next: Slice, from: "chart" | "table") => {
+    /* the table has every series, so the chart shows them all to match it */
+    const drawn = from === "table" ? [] : hidden;
+    /* an empty period has nothing to list */
+    if (sliceMembers(grouped, next, drawn).length === 0) return;
+    setHidden(drawn);
+    setCustomizing(false);
+    opened.show(sliceKey(next));
+  };
+  const customize = (open: boolean) => {
+    if (open) opened.close();
+    setCustomizing(open);
+  };
 
   const builder = <ChartBuilder config={config} onChange={change} />;
   const panelId = useId();
@@ -278,7 +300,7 @@ function Charts({
             variant="outline"
             aria-expanded={customizing}
             className={cn(customizing && "bg-muted")}
-            onClick={() => setCustomizing(!customizing)}
+            onClick={() => customize(!customizing)}
           >
             Customize
           </Button>
@@ -326,7 +348,7 @@ function Charts({
           view={state.view}
           panelId={panelId}
           onChoose={choose}
-          onClickCustom={() => !phone && setCustomizing(true)}
+          onClickCustom={() => !phone && customize(true)}
         />
       </AboveToolbar>
 
@@ -359,14 +381,84 @@ function Charts({
                 )
               }
             />
-            {plot.time ? <TimeChart plot={plot} /> : <BarChart plot={plot} />}
+            {plot.time ? (
+              <TimeChart
+                plot={plot}
+                selected={slice}
+                onOpen={(next) => openSlice(next, "chart")}
+              />
+            ) : (
+              <BarChart
+                plot={plot}
+                selected={slice}
+                onOpen={(next) => openSlice(next, "chart")}
+              />
+            )}
           </>
         )}
       </figure>
 
-      <NumbersTable grouped={grouped} config={config} partial={partial} />
+      <NumbersTable
+        grouped={grouped}
+        config={config}
+        partial={partial}
+        selected={slice}
+        onOpen={(next) => openSlice(next, "table")}
+      />
+
+      {slice && (
+        <RowDetails>
+          <SlicePanel
+            key={sliceKey(slice)}
+            {...sliceText(plot, slice, filterNote)}
+            measure={grouped.measure}
+            members={plot.members(slice)}
+            roles={filters.roles}
+            onClose={opened.close}
+            restoreFocus={() =>
+              document.querySelector<HTMLElement>(
+                `[data-category="${CSS.escape(slice.category)}"]`,
+              )
+            }
+          />
+        </RowDetails>
+      )}
     </div>
   );
+}
+
+/** a slice's title ("News · Fall 2026") and caption: its count, and the filters */
+function sliceText(plot: Plot, slice: Slice, filterNote: string) {
+  const category = plot.categories.find((c) => c.key === slice.category)!;
+  const partly = plot.partial.get(category.key);
+  const where = [
+    plot.config.values === "running" && "through",
+    category.label,
+    partly,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  /* a column the legend has cut names the series it still has */
+  const keys =
+    slice.series !== null
+      ? [slice.series]
+      : plot.columnSeries.length < plot.all.length
+        ? plot.columnSeries
+        : [];
+  const series = plot.all.filter((s) => keys.includes(s.key));
+  const title = series.length
+    ? `${series.map((s) => s.label).join(", ")} · ${where}`
+    : where.charAt(0).toUpperCase() + where.slice(1);
+  const whole = plot.share ? plot.whole(slice.category) : undefined;
+  return {
+    title,
+    caption: [
+      sliceCount(plot.grouped.measure, plot.members(slice), whole),
+      filterNote,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+  };
 }
 
 function ViewTabs({
@@ -464,8 +556,14 @@ type Plot = {
   share: boolean;
   /** the count behind a mark: as counted, or so far for a running total */
   count: (category: string, series: string) => number;
-  /** the category's total, over the series drawn */
+  /** the series a category's total covers (see chart-slice) */
+  columnSeries: string[];
+  /** the category's total: how many members its whole column has */
   total: (category: string) => number;
+  /** what a share in the category is taken of */
+  whole: (category: string) => number;
+  /** what a mark, or a whole category, counts */
+  members: (slice: Slice) => Member[];
   /** what a mark shows: its count, or its share */
   value: (category: string, series: string) => number;
   percent: (category: string, series: string) => number;
@@ -493,17 +591,24 @@ function plotOf(
   const allKeys = all.map((s) => s.key);
   const count = (category: string, key: string) =>
     grouped.values[category]?.[key] ?? 0;
-  /* people overlap across series, so only their own total is true */
-  const additive = grouped.measure !== "people";
-  const total = (category: string) =>
-    additive
-      ? series.reduce((sum, s) => sum + count(category, s.key), 0)
-      : (grouped.totals[category] ?? 0);
+  const columns = columnSeries(grouped, hidden);
+  const members = (slice: Slice) => sliceMembers(grouped, slice, hidden);
+  /* a total is the length of the list its column opens, worked out once */
+  const totals = new Map<string, number>();
+  const total = (category: string) => {
+    const known = totals.get(category);
+    if (known !== undefined) return known;
+    const n = members({ category, series: null }).length;
+    totals.set(category, n);
+    return n;
+  };
   const share = config.values === "share";
   /* a split shares out each category; one series shares out everything */
+  const whole = (category: string) =>
+    split === "none" ? grouped.total : total(category);
   const percent = (category: string, key: string) => {
-    const whole = split === "none" ? grouped.total : total(category);
-    return whole ? (count(category, key) / whole) * 100 : 0;
+    const of = whole(category);
+    return of ? (count(category, key) / of) * 100 : 0;
   };
   return {
     config,
@@ -518,7 +623,10 @@ function plotOf(
     partial,
     share,
     count,
+    columnSeries: columns,
     total,
+    whole,
+    members,
     value: share ? percent : count,
     percent,
     /* one series by section or role takes each bar's own colour */
@@ -662,9 +770,6 @@ function useWidth() {
   return { ref, width };
 }
 
-const percentText = (value: number) =>
-  value > 0 && value < 1 ? "<1%" : `${Math.round(value)}%`;
-
 /** one category in words: what its mark says to a screen reader */
 function reading(plot: Plot, category: Series) {
   const total = plot.total(category.key);
@@ -683,16 +788,38 @@ function reading(plot: Plot, category: Series) {
   }`;
 }
 
+/** a place in the chart's svg, in its own pixels */
+type Point = { x: number; y: number };
+
+const pointIn = (event: PointerEvent | MouseEvent): Point => {
+  const box = (
+    event.currentTarget as SVGElement
+  ).ownerSVGElement!.getBoundingClientRect();
+  return { x: event.clientX - box.left, y: event.clientY - box.top };
+};
+
 /**
- * Which category is being read: the one under the pointer, the one the
- * keyboard is on, or the one tapped or clicked, which stays until another is
- * or something outside the chart is. One tab stop for the chart; arrows move.
+ * Which category is being read, and what opening it does. A mouse reads a
+ * category by hovering and opens the segment it clicks (or, off the
+ * segments, the whole category). A touch has no hover, so a tap pins the
+ * card, which stays until another is tapped or something outside the chart
+ * is, and the card's own buttons open. The keyboard reads the category it is
+ * on and opens all of it with Enter. One tab stop for the chart; arrows move.
  */
-function useInspect(count: number, container: RefObject<HTMLElement | null>) {
+function useInspect(
+  count: number,
+  container: RefObject<HTMLElement | null>,
+  /** the series a point in a category's mark falls on, or null for none */
+  hit: (index: number, at: Point) => string | null,
+  open: (index: number, series: string | null) => void,
+) {
   const [hovered, setHovered] = useState<number | null>(null);
+  const [segment, setSegment] = useState<string | null>(null);
   const [focused, setFocused] = useState<number | null>(null);
   const [pinned, setPinned] = useState<number | null>(null);
   const [stop, setStop] = useState(0);
+  /* what the click under way began as: a click event cannot say */
+  const touch = useRef(false);
 
   useEffect(() => {
     if (pinned === null) return;
@@ -711,14 +838,20 @@ function useInspect(count: number, container: RefObject<HTMLElement | null>) {
     "data-mark": index,
     role: "button",
     tabIndex: index === Math.min(stop, count - 1) ? 0 : -1,
-    className: "outline-none",
+    className: "cursor-pointer outline-none",
+    onPointerDown: (event: PointerEvent) => {
+      touch.current = event.pointerType === "touch";
+    },
     onPointerEnter: (event: PointerEvent) => {
-      /* a touch has no hover: a tap pins instead */
       if (event.pointerType === "mouse") setHovered(index);
     },
-    onClick: () => {
+    onPointerMove: (event: PointerEvent) => {
+      if (event.pointerType === "mouse") setSegment(hit(index, pointIn(event)));
+    },
+    onClick: (event: MouseEvent) => {
       setStop(index);
-      setPinned((now) => (now === index ? null : index));
+      if (touch.current) setPinned((now) => (now === index ? null : index));
+      else open(index, hit(index, pointIn(event)));
     },
     onFocus: (event: FocusEvent<SVGElement>) => {
       setStop(index);
@@ -734,7 +867,7 @@ function useInspect(count: number, container: RefObject<HTMLElement | null>) {
       }
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        setPinned((now) => (now === index ? null : index));
+        open(index, null);
         return;
       }
       const next =
@@ -757,7 +890,19 @@ function useInspect(count: number, container: RefObject<HTMLElement | null>) {
     },
   });
 
-  return { active, keyboard, mark, leave: () => setHovered(null) };
+  return {
+    active,
+    keyboard,
+    /** what the mouse would open: a series, null for the whole category, or undefined when no mouse is over the chart */
+    segment: hovered !== null ? segment : undefined,
+    /** a tapped card, whose rows open what they read */
+    tapped: pinned !== null && active === pinned,
+    mark,
+    leave: () => {
+      setHovered(null);
+      setSegment(null);
+    },
+  };
 }
 
 const CARD_WIDTH = 216;
@@ -803,10 +948,18 @@ function Card({
   plot,
   index,
   place,
+  pointing,
+  tapped,
+  onOpen,
 }: {
   plot: Plot;
   index: number;
   place: (height: number) => { left: number; top: number };
+  /** what a click would open: a series, or (null) the whole category */
+  pointing: string | null | undefined;
+  /** tapped, so its rows are what a touch opens */
+  tapped: boolean;
+  onOpen: (series: string | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
@@ -824,12 +977,21 @@ function Card({
   const total = plot.total(category.key);
   const many = plot.series.length > 1;
   const { left, top } = place(height);
+  const row = (on: boolean) =>
+    cn(
+      "-mx-1.5 flex w-[calc(100%+0.75rem)] items-center gap-2 rounded-md px-1.5 text-left",
+      on && "bg-muted",
+      tapped && "hover:bg-muted py-1",
+    );
 
   return (
     <div
       ref={ref}
-      aria-hidden
-      className="bg-popover text-popover-foreground pointer-events-none absolute z-10 rounded-lg border px-3 py-2 text-xs shadow-md"
+      aria-hidden={!tapped}
+      className={cn(
+        "bg-popover text-popover-foreground absolute z-10 rounded-lg border px-3 py-2 text-xs shadow-md",
+        !tapped && "pointer-events-none",
+      )}
       style={{ left, top, width: CARD_WIDTH }}
     >
       <div className="mb-1 font-medium">
@@ -844,11 +1006,8 @@ function Card({
       {(many || plot.share) &&
         plot.series.map((s) => {
           const n = plot.count(category.key, s.key);
-          return (
-            <div
-              key={s.key}
-              className={cn("flex items-center gap-2", !n && "opacity-50")}
-            >
+          const content = (
+            <>
               <span
                 aria-hidden
                 className="h-0.5 w-3 shrink-0 rounded-full"
@@ -865,11 +1024,37 @@ function Card({
                   {percentText(plot.percent(category.key, s.key))}
                 </span>
               )}
+            </>
+          );
+          /* one series is the whole category, which the button below opens */
+          return tapped && many ? (
+            <button
+              key={s.key}
+              type="button"
+              disabled={!n}
+              aria-label={`${s.label}: see ${unitOf(n, plot.grouped.measure)}`}
+              className={cn(row(false), !n && "opacity-50")}
+              onClick={() => onOpen(s.key)}
+            >
+              {content}
+            </button>
+          ) : (
+            <div
+              key={s.key}
+              className={cn(row(pointing === s.key), !n && "opacity-50")}
+            >
+              {content}
             </div>
           );
         })}
       {(many || !plot.share) && (
-        <div className={cn("flex gap-2", many && "mt-1 border-t pt-1")}>
+        <div
+          className={cn(
+            "flex gap-2",
+            many && "mt-1 border-t pt-1",
+            many && !tapped && row(pointing === null),
+          )}
+        >
           <span className="text-muted-foreground flex-1">
             {plot.config.values === "running" ? "Total so far" : "Total"}
           </span>
@@ -878,6 +1063,17 @@ function Card({
           </span>
           {plot.share && <span className="w-9" />}
         </div>
+      )}
+      {tapped && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-2 w-full"
+          disabled={!total}
+          onClick={() => onOpen(null)}
+        >
+          See {unitOf(total, plot.grouped.measure)}
+        </Button>
       )}
     </div>
   );
@@ -941,10 +1137,92 @@ function scaleOf(plot: Plot) {
   return axis(peak);
 }
 
-function TimeChart({ plot }: { plot: Plot }) {
+/** a drawn segment, and the box a click on it falls in */
+type Segment = {
+  key: string;
+  d: string;
+  box: { x0: number; x1: number; y0: number; y1: number };
+};
+
+/** the series of the segment under a point, with a pixel to spare round thin ones */
+function segmentAt(segments: Segment[], at: Point): string | null {
+  return (
+    segments.find(
+      ({ box }) =>
+        at.x >= box.x0 - 1 &&
+        at.x <= box.x1 + 1 &&
+        at.y >= box.y0 - 1 &&
+        at.y <= box.y1 + 1,
+    )?.key ?? null
+  );
+}
+
+/** what a category's mark opens: one series in it, or (null) all of it */
+function sliceAt(plot: Plot, index: number, series: string | null): Slice {
+  return {
+    category: plot.categories[index]!.key,
+    /* with nothing split, the one series is the whole category */
+    series: plot.config.split === "none" ? null : series,
+  };
+}
+
+const selectedIndex = (plot: Plot, selected: Slice | null) => {
+  const index = selected
+    ? plot.categories.findIndex((c) => c.key === selected.category)
+    : -1;
+  return index === -1 ? null : index;
+};
+
+/** the segment a slice is open on, outlined; fainter, the one a click would open */
+function Outline({ d, as }: { d: string; as: "selected" | "pointed" | null }) {
+  if (!as) return null;
+  return (
+    <path
+      d={d}
+      fill="none"
+      className="stroke-foreground"
+      strokeOpacity={as === "pointed" ? 0.35 : 1}
+      strokeWidth={1.5}
+    />
+  );
+}
+
+/** the same for a line's point */
+function Ring({
+  x,
+  y,
+  as,
+}: {
+  x: number;
+  y: number;
+  as: "selected" | "pointed" | null;
+}) {
+  if (!as) return null;
+  return (
+    <circle
+      cx={x}
+      cy={y}
+      r={7}
+      fill="none"
+      className="stroke-foreground"
+      strokeOpacity={as === "pointed" ? 0.35 : 1}
+      strokeWidth={1.5}
+    />
+  );
+}
+
+function TimeChart({
+  plot,
+  selected,
+  onOpen,
+}: {
+  plot: Plot;
+  /** the slice open beside the chart, which its marks show */
+  selected: Slice | null;
+  onOpen: (slice: Slice) => void;
+}) {
   const { ref, width } = useWidth();
   const { categories, series, partial, config } = plot;
-  const inspect = useInspect(categories.length, ref);
   const lines = config.draw === "lines";
   const sideBySide = config.draw === "grouped" && series.length > 1;
   const stackedShare =
@@ -993,7 +1271,81 @@ function TimeChart({ plot }: { plot: Plot }) {
     );
   }
 
+  /* each column's segments: where they are drawn, and where a click finds them */
+  const columns: Segment[][] = categories.map((category, index) => {
+    if (lines) return [];
+    if (sideBySide) {
+      const w = Math.min(14, (band * 0.8) / series.length);
+      const start = cx(index) - (w * series.length) / 2;
+      return series.flatMap((s, i) => {
+        const v = plot.value(category.key, s.key);
+        if (v <= 0) return [];
+        const top = y(v);
+        const box = { x0: start + i * w, x1: start + (i + 1) * w };
+        /* a 2px surface gap between neighbours */
+        return [
+          {
+            key: s.key,
+            d: topRounded(
+              box.x0 + 1,
+              top,
+              Math.max(1, w - 2),
+              Math.max(1, y(0) - top),
+              3,
+            ),
+            box: { ...box, y0: top, y1: y(0) },
+          },
+        ];
+      });
+    }
+    let base = 0;
+    const present = series.filter((s) => plot.value(category.key, s.key) > 0);
+    return present.map((s, i) => {
+      const v = plot.value(category.key, s.key);
+      const top = y(base + v);
+      const bottom = y(base);
+      base += v;
+      /* a 2px surface gap between stacked segments */
+      const h = Math.max(1, bottom - top - (i > 0 ? 2 : 0));
+      const left = cx(index) - barW / 2;
+      const d =
+        i === present.length - 1
+          ? topRounded(left, top, barW, h, 4)
+          : `M${left},${top}h${barW}v${h}h${-barW}Z`;
+      return {
+        key: s.key,
+        d,
+        box: { x0: left, x1: left + barW, y0: top, y1: bottom },
+      };
+    });
+  });
+
+  const inspect = useInspect(
+    categories.length,
+    ref,
+    (index, at) => {
+      if (!lines) return segmentAt(columns[index] ?? [], at);
+      /* the point nearest the pointer, if it is near */
+      const key = categories[index]!.key;
+      const near = series
+        .map((s) => ({
+          key: s.key,
+          off: Math.abs(y(plot.value(key, s.key)) - at.y),
+        }))
+        .sort((a, b) => a.off - b.off)[0];
+      return near && near.off <= 10 ? near.key : null;
+    },
+    (index, at) => onOpen(sliceAt(plot, index, at)),
+  );
   const { active, keyboard } = inspect;
+  const chosen = selectedIndex(plot, selected);
+  /* the segment a slice is open on, and the one the mouse would open */
+  const outlined = (key: string, index: number) =>
+    chosen === index && selected?.series === key
+      ? "selected"
+      : active === index && inspect.segment === key
+        ? "pointed"
+        : null;
   /* each column's total on its cap, where there is room for it */
   const totals = !lines && !sideBySide && !plot.share && band >= 28;
   const capOf = (key: string) =>
@@ -1005,18 +1357,22 @@ function TimeChart({ plot }: { plot: Plot }) {
         width={width}
         height={height}
         role="group"
-        aria-label={`${titleOf(config, plot.grouped.measure)}. Arrow keys move between periods; the table below has every number.`}
+        aria-label={`${titleOf(config, plot.grouped.measure)}. Arrow keys move between periods, and Enter lists what a period counts; the table below has every number.`}
         className="block overflow-visible"
       >
-        {active !== null && (
-          <rect
-            x={margin.left + band * active}
-            y={margin.top}
-            width={band}
-            height={plotH}
-            className="fill-muted"
-            pointerEvents="none"
-          />
+        {[...new Set([active, chosen])].map(
+          (index) =>
+            index !== null && (
+              <rect
+                key={index}
+                x={margin.left + band * index}
+                y={margin.top}
+                width={band}
+                height={plotH}
+                className="fill-muted"
+                pointerEvents="none"
+              />
+            ),
         )}
 
         {ticks.map((tick) => (
@@ -1053,47 +1409,7 @@ function TimeChart({ plot }: { plot: Plot }) {
 
         {!lines &&
           categories.map((category, index) => {
-            let segments: { key: string; d: string }[];
-            if (sideBySide) {
-              const w = Math.min(14, (band * 0.8) / series.length);
-              const start = cx(index) - (w * series.length) / 2;
-              segments = series.flatMap((s, i) => {
-                const v = plot.value(category.key, s.key);
-                if (v <= 0) return [];
-                const top = y(v);
-                /* a 2px surface gap between neighbours */
-                return [
-                  {
-                    key: s.key,
-                    d: topRounded(
-                      start + i * w + 1,
-                      top,
-                      Math.max(1, w - 2),
-                      Math.max(1, y(0) - top),
-                      3,
-                    ),
-                  },
-                ];
-              });
-            } else {
-              let base = 0;
-              const present = series.filter(
-                (s) => plot.value(category.key, s.key) > 0,
-              );
-              segments = present.map((s, i) => {
-                const v = plot.value(category.key, s.key);
-                const top = y(base + v);
-                const bottom = y(base);
-                base += v;
-                /* a 2px surface gap between stacked segments */
-                const h = Math.max(1, bottom - top - (i > 0 ? 2 : 0));
-                const d =
-                  i === present.length - 1
-                    ? topRounded(cx(index) - barW / 2, top, barW, h, 4)
-                    : `M${cx(index) - barW / 2},${top}h${barW}v${h}h${-barW}Z`;
-                return { key: s.key, d };
-              });
-            }
+            const segments = columns[index]!;
             const total = plot.total(category.key);
             return (
               <g key={category.key} pointerEvents="none">
@@ -1104,6 +1420,13 @@ function TimeChart({ plot }: { plot: Plot }) {
                     d={segment.d}
                     fillOpacity={partial.has(category.key) ? 0.45 : undefined}
                     style={{ fill: plot.color(category.key, segment.key) }}
+                  />
+                ))}
+                {segments.map((segment) => (
+                  <Outline
+                    key={segment.key}
+                    d={segment.d}
+                    as={outlined(segment.key, index)}
                   />
                 ))}
                 {totals && total > 0 && (
@@ -1129,7 +1452,7 @@ function TimeChart({ plot }: { plot: Plot }) {
                 textAnchor="middle"
                 className={cn(
                   "text-xs",
-                  active === index
+                  active === index || chosen === index
                     ? "fill-foreground font-medium"
                     : "fill-muted-foreground",
                 )}
@@ -1180,6 +1503,14 @@ function TimeChart({ plot }: { plot: Plot }) {
                         ? "4 4"
                         : undefined
                     }
+                  />
+                ))}
+                {points.map((point, i) => (
+                  <Ring
+                    key={point.key}
+                    x={point.x}
+                    y={point.y}
+                    as={outlined(s.key, i)}
                   />
                 ))}
                 {points.map((point, i) =>
@@ -1249,6 +1580,7 @@ function TimeChart({ plot }: { plot: Plot }) {
             width={band}
             height={plotH + 24}
             fill="transparent"
+            data-category={category.key}
             aria-label={reading(plot, category)}
             {...inspect.mark(index)}
           />
@@ -1271,6 +1603,9 @@ function TimeChart({ plot }: { plot: Plot }) {
         <Card
           plot={plot}
           index={active}
+          pointing={inspect.segment}
+          tapped={inspect.tapped}
+          onOpen={(series) => onOpen(sliceAt(plot, active, series))}
           place={(card) => {
             /* beside the column, clear of the neighbours' totals */
             const right = cx(active) + band / 2 + 8;
@@ -1327,10 +1662,18 @@ function TimeChart({ plot }: { plot: Plot }) {
   );
 }
 
-function BarChart({ plot }: { plot: Plot }) {
+function BarChart({
+  plot,
+  selected,
+  onOpen,
+}: {
+  plot: Plot;
+  /** the slice open beside the chart, which its marks show */
+  selected: Slice | null;
+  onOpen: (slice: Slice) => void;
+}) {
   const { ref, width } = useWidth();
   const { categories, series, config } = plot;
-  const inspect = useInspect(categories.length, ref);
   const sideBySide = config.draw === "grouped" && series.length > 1;
   const { max, ticks } = scaleOf(plot);
   const row = sideBySide ? Math.max(26, series.length * 8 + 12) : 26;
@@ -1343,7 +1686,65 @@ function BarChart({ plot }: { plot: Plot }) {
   const x = (v: number) => labelW + (v / max) * plotW;
   const endText = (key: string, sum: number) =>
     plot.share ? percentText(sum) : plot.total(key).toLocaleString();
+
+  /* each row's segments: where they are drawn, and where a click finds them */
+  const rows: Segment[][] = categories.map((category, index) => {
+    const values = series.map((s) => plot.value(category.key, s.key));
+    if (sideBySide) {
+      const barH = (row - 10) / series.length;
+      return series.flatMap((s, i) => {
+        if (values[i]! <= 0) return [];
+        const top = index * row + 5 + i * barH;
+        const end = labelW + Math.max(1, x(values[i]!) - labelW);
+        return [
+          {
+            key: s.key,
+            d: rightRounded(
+              labelW,
+              top + 1,
+              end - labelW,
+              Math.max(1, barH - 2),
+              3,
+            ),
+            box: { x0: labelW, x1: end, y0: top, y1: top + barH },
+          },
+        ];
+      });
+    }
+    const top = index * row + 5;
+    const present = series.filter((_, i) => values[i]! > 0);
+    let base = 0;
+    return present.map((s, i) => {
+      const v = plot.value(category.key, s.key);
+      /* a 2px surface gap between stacked segments */
+      const start = x(base) + (i > 0 ? 2 : 0);
+      const w = Math.max(1, x(base + v) - x(base) - (i > 0 ? 2 : 0));
+      base += v;
+      return {
+        key: s.key,
+        d:
+          i === present.length - 1
+            ? rightRounded(start, top, w, 16, 4)
+            : `M${start},${top}h${w}v16h${-w}Z`,
+        box: { x0: start, x1: start + w, y0: top, y1: top + 16 },
+      };
+    });
+  });
+
+  const inspect = useInspect(
+    categories.length,
+    ref,
+    (index, at) => segmentAt(rows[index] ?? [], at),
+    (index, at) => onOpen(sliceAt(plot, index, at)),
+  );
   const { active, keyboard } = inspect;
+  const chosen = selectedIndex(plot, selected);
+  const outlined = (key: string, index: number) =>
+    chosen === index && selected?.series === key
+      ? "selected"
+      : active === index && inspect.segment === key
+        ? "pointed"
+        : null;
 
   return (
     <div ref={ref} className="relative" onPointerLeave={inspect.leave}>
@@ -1351,19 +1752,23 @@ function BarChart({ plot }: { plot: Plot }) {
         width={width}
         height={height}
         role="group"
-        aria-label={`${titleOf(config, plot.grouped.measure)}. Arrow keys move between rows; the table below has every number.`}
+        aria-label={`${titleOf(config, plot.grouped.measure)}. Arrow keys move between rows, and Enter lists what a row counts; the table below has every number.`}
         className="block"
       >
-        {active !== null && (
-          <rect
-            x={0}
-            y={active * row}
-            width={width}
-            height={row}
-            rx={4}
-            className="fill-muted"
-            pointerEvents="none"
-          />
+        {[...new Set([active, chosen])].map(
+          (index) =>
+            index !== null && (
+              <rect
+                key={index}
+                x={0}
+                y={index * row}
+                width={width}
+                height={row}
+                rx={4}
+                className="fill-muted"
+                pointerEvents="none"
+              />
+            ),
         )}
         {ticks.map((tick) => (
           <g key={tick} pointerEvents="none">
@@ -1396,49 +1801,11 @@ function BarChart({ plot }: { plot: Plot }) {
           </g>
         ))}
         {categories.map((category, index) => {
-          const values = series.map((s) => plot.value(category.key, s.key));
-          const sum = values.reduce((a, b) => a + b, 0);
-          let marks;
-          if (sideBySide) {
-            const barH = (row - 10) / series.length;
-            marks = series.map((s, i) =>
-              values[i]! > 0 ? (
-                <path
-                  key={s.key}
-                  d={rightRounded(
-                    labelW,
-                    index * row + 5 + i * barH + 1,
-                    Math.max(1, x(values[i]!) - labelW),
-                    Math.max(1, barH - 2),
-                    3,
-                  )}
-                  style={{ fill: plot.color(category.key, s.key) }}
-                />
-              ) : null,
-            );
-          } else {
-            const top = index * row + 5;
-            const present = series.filter((_, i) => values[i]! > 0);
-            let base = 0;
-            marks = present.map((s, i) => {
-              const v = plot.value(category.key, s.key);
-              /* a 2px surface gap between stacked segments */
-              const start = x(base) + (i > 0 ? 2 : 0);
-              const w = Math.max(1, x(base + v) - x(base) - (i > 0 ? 2 : 0));
-              base += v;
-              return (
-                <path
-                  key={s.key}
-                  d={
-                    i === present.length - 1
-                      ? rightRounded(start, top, w, 16, 4)
-                      : `M${start},${top}h${w}v16h${-w}Z`
-                  }
-                  style={{ fill: plot.color(category.key, s.key) }}
-                />
-              );
-            });
-          }
+          const sum = series.reduce(
+            (total, s) => total + plot.value(category.key, s.key),
+            0,
+          );
+          const segments = rows[index]!;
           return (
             <g key={category.key} pointerEvents="none">
               <text
@@ -1448,14 +1815,27 @@ function BarChart({ plot }: { plot: Plot }) {
                 textAnchor="end"
                 className={cn(
                   "fill-foreground text-sm",
-                  active === index && "font-medium",
+                  (active === index || chosen === index) && "font-medium",
                 )}
               >
                 {category.label.length > 24
                   ? `${category.label.slice(0, 23)}…`
                   : category.label}
               </text>
-              {marks}
+              {segments.map((segment) => (
+                <path
+                  key={segment.key}
+                  d={segment.d}
+                  style={{ fill: plot.color(category.key, segment.key) }}
+                />
+              ))}
+              {segments.map((segment) => (
+                <Outline
+                  key={segment.key}
+                  d={segment.d}
+                  as={outlined(segment.key, index)}
+                />
+              ))}
               {ends && (
                 <text
                   x={x(sum) + 6}
@@ -1486,6 +1866,7 @@ function BarChart({ plot }: { plot: Plot }) {
             width={width}
             height={row}
             fill="transparent"
+            data-category={category.key}
             aria-label={reading(plot, category)}
             {...inspect.mark(index)}
           />
@@ -1508,6 +1889,9 @@ function BarChart({ plot }: { plot: Plot }) {
         <Card
           plot={plot}
           index={active}
+          pointing={inspect.segment}
+          tapped={inspect.tapped}
+          onOpen={(series) => onOpen(sliceAt(plot, active, series))}
           place={(card) => {
             /* under the row (over it near the end), clear of the others' numbers */
             const numbers = ends
@@ -1552,19 +1936,30 @@ function NumbersTable({
   grouped,
   config,
   partial,
+  selected,
+  onOpen,
 }: {
   grouped: Grouped;
   config: ChartConfig;
   partial: Map<string, Incomplete>;
+  /** the slice open beside the chart */
+  selected: Slice | null;
+  /** each count opens what it counts, as the chart's marks do */
+  onOpen: (slice: Slice) => void;
 }) {
   const [open, setOpen] = useState(false);
   /* the full record: every series, whatever the legend has off */
-  const plot = plotOf(grouped, config, [], partial);
+  const plot = useMemo(
+    () => plotOf(grouped, config, [], partial),
+    [grouped, config, partial],
+  );
   const split = plot.all.length > 1;
   const totalLabel = config.values === "running" ? "Total so far" : "Total";
 
   const columns: {
     label: string;
+    /** what a count in the column opens: one series, or (null) the category */
+    series: string | null;
     count: (category: string) => number;
     /** the share shown beside the count, when the chart is of shares */
     share?: (category: string) => number;
@@ -1572,6 +1967,7 @@ function NumbersTable({
     ...(split
       ? plot.all.map((s) => ({
           label: s.label,
+          series: s.key,
           count: (category: string) => plot.count(category, s.key),
           share: plot.share
             ? (category: string) => plot.percent(category, s.key)
@@ -1580,6 +1976,7 @@ function NumbersTable({
       : []),
     {
       label: totalLabel,
+      series: null,
       count: plot.total,
       share:
         plot.share && !split
@@ -1656,7 +2053,14 @@ function NumbersTable({
                     key={column.label}
                     className="pr-3 text-right tabular-nums"
                   >
-                    {column.count(category.key).toLocaleString()}
+                    <CountButton
+                      plot={plot}
+                      slice={{ category: category.key, series: column.series }}
+                      label={column.label}
+                      n={column.count(category.key)}
+                      selected={selected}
+                      onOpen={onOpen}
+                    />
                     {column.share && (
                       <span className="text-muted-foreground ml-1.5 inline-block w-9">
                         {percentText(column.share(category.key))}
@@ -1670,5 +2074,42 @@ function NumbersTable({
         </Table>
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+/** a count in the table, which lists what it counts */
+function CountButton({
+  plot,
+  slice,
+  label,
+  n,
+  selected,
+  onOpen,
+}: {
+  plot: Plot;
+  slice: Slice;
+  label: string;
+  n: number;
+  selected: Slice | null;
+  onOpen: (slice: Slice) => void;
+}) {
+  if (n === 0) return <span className="text-muted-foreground">0</span>;
+  const key = sliceKey(slice);
+  const category = plot.categories.find((c) => c.key === slice.category)!;
+  const open = selected !== null && sliceKey(selected) === key;
+  return (
+    <button
+      type="button"
+      data-slice={key}
+      aria-label={`${slice.series === null ? category.label : `${label}, ${category.label}`}: see ${unitOf(n, plot.grouped.measure)}`}
+      aria-current={open ? "true" : undefined}
+      className={cn(
+        "focus-visible:ring-ring/50 -mx-1 rounded-sm px-1 tabular-nums underline-offset-4 outline-none hover:underline focus-visible:ring-3",
+        open && "bg-muted font-medium",
+      )}
+      onClick={() => onOpen(slice)}
+    >
+      {n.toLocaleString()}
+    </button>
   );
 }

@@ -52,7 +52,7 @@ export function SignIn() {
       {configured && (
         <a
           href={`/auth/discord?${new URLSearchParams({ returnTo })}`}
-          className={`${buttonVariants()} mt-6`}
+          className={`${buttonVariants()} mt-4`}
         >
           {signedIn ? "Sign in again" : "Sign in with Discord"}
         </a>

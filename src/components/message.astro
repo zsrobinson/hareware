@@ -22,14 +22,14 @@ const { title, action } = Astro.props;
     action &&
       (action.method === "post" ? (
         /* signing out is a POST, like the account menu's */
-        <form method="post" action="/auth/logout" class="mt-6">
+        <form method="post" action="/auth/logout" class="mt-4">
           <input type="hidden" name="returnTo" value={action.href} />
           <button type="submit" class={buttonVariants()}>
             {action.label}
           </button>
         </form>
       ) : (
-        <a href={action.href} class={`${buttonVariants()} mt-6`}>
+        <a href={action.href} class={`${buttonVariants()} mt-4`}>
           {action.label}
         </a>
       ))

@@ -28,19 +28,38 @@ function actionFor(action: Action, returnTo: string) {
   }
 }
 
-/** the page a refused member sees: which refusal, and the one thing to do */
-export function DenialMessage({ refusal }: { refusal: RefusalBody }) {
+/**
+ * Which refusal, in a line, and the one thing to do about it. Under a tool's
+ * own title it is a section of that page; on /access-denied, which has no
+ * title of its own, it is the page's heading.
+ */
+export function DenialMessage({
+  refusal,
+  level = "section",
+}: {
+  refusal: RefusalBody;
+  level?: "page" | "section";
+}) {
   const { title, body, action } = DENIALS[refusal.denial];
   const returnTo =
     typeof window === "undefined"
       ? "/"
       : `${window.location.pathname}${window.location.search}`;
   const next = actionFor(action, returnTo);
+  const Heading = level === "page" ? "h1" : "h2";
 
   return (
-    <section className="max-w-md space-y-6">
+    <section className="max-w-md space-y-4">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+        <Heading
+          className={
+            level === "page"
+              ? "text-2xl font-semibold tracking-tight"
+              : "text-base font-semibold"
+          }
+        >
+          {title}
+        </Heading>
         <p className="text-muted-foreground text-sm">
           {body(refusal.you ?? "This account")}
         </p>

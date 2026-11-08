@@ -20,25 +20,30 @@ export function AccessCheck() {
   if (answer === undefined) return null;
   if (answer === "allowed")
     return (
-      <section className="max-w-md space-y-6">
+      <section className="max-w-md space-y-4">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">
             You have access
           </h1>
           <p className="text-muted-foreground text-sm">
-            This account can use the admin tools.
+            This account can use the Editorial Board's tools.
           </p>
         </div>
         <a href="/charts" className={buttonVariants()}>
-          Open the admin tools
+          Open Charts
         </a>
       </section>
     );
   if (answer === "unknown")
     return (
-      <p className="text-muted-foreground text-sm">
-        HareWare couldn't check your access just now. Try again in a minute.
-      </p>
+      <section className="max-w-md space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Could not check your access
+        </h1>
+        <p className="text-muted-foreground text-sm">
+          HareWare couldn't check your access just now. Try again in a minute.
+        </p>
+      </section>
     );
-  return <DenialMessage refusal={answer} />;
+  return <DenialMessage refusal={answer} level="page" />;
 }

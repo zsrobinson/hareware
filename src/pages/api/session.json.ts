@@ -9,17 +9,12 @@ import { viewer } from "~/lib/admin";
 export const GET: APIRoute = async ({ request }) => {
   const who = await viewer(request);
 
-  return new Response(
-    JSON.stringify({
+  return Response.json(
+    {
       signedIn: who !== null,
       discordUserId: who?.session.discordUserId ?? null,
       profile: who?.profile ?? null,
-    }),
-    {
-      headers: {
-        "content-type": "application/json",
-        "cache-control": "private, no-store",
-      },
     },
+    { headers: { "cache-control": "private, no-store" } },
   );
 };

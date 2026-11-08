@@ -42,10 +42,7 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  return new Response(JSON.stringify(reply), {
-    headers: {
-      "content-type": "application/json",
-      "cache-control": "private, no-store",
-    },
+  return Response.json(reply, {
+    headers: { "cache-control": "private, no-store" },
   });
 };

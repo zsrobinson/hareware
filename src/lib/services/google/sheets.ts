@@ -13,15 +13,6 @@ type ServiceAccount = { client_email: string; private_key: string };
 /** a cell as the API returns it with the default render: always a string */
 export type Rows = string[][];
 
-/** the service account's email, for telling somebody whom to share with */
-export function serviceAccountEmail(keyJson: string): string | undefined {
-  try {
-    return parseKey(keyJson).client_email;
-  } catch {
-    return undefined;
-  }
-}
-
 export class Sheets {
   private token?: { value: string; expires: number };
   private readonly key: ServiceAccount;

@@ -7,7 +7,6 @@ import {
   type RefObject,
 } from "react";
 import { useLayoutState } from "~/lib/layout-state";
-import { useDebouncedEffect } from "~/lib/use-debounced-effect";
 import { ContentSlide } from "./content-slide";
 import { FitWidth } from "./fit-width";
 import { LoaderCircle } from "./loader-circle";
@@ -53,13 +52,13 @@ export function GeneratePage({
     }
   }, [state]);
 
-  // on layout change, generate new images. the renderer is imported here so
-  // it does not delay hydration
-  useDebouncedEffect(
-    () => {
-      if (!state.renderImages) return;
+  // on layout change, generate new images, once the edits pause. the renderer
+  // is imported here so it does not delay hydration
+  useEffect(() => {
+    if (!state.renderImages) return;
 
-      let cancelled = false;
+    let cancelled = false;
+    const timer = setTimeout(() => {
       setRenderFailed(false);
 
       void (async () => {
@@ -92,15 +91,14 @@ export function GeneratePage({
         console.error("could not render the slides", error);
         if (!cancelled) setRenderFailed(true);
       });
+    }, 300);
 
-      // a newer layout supersedes whatever this run was about to paint
-      return () => {
-        cancelled = true;
-      };
-    },
-    300,
-    [state],
-  );
+    // a newer layout, or leaving the page, supersedes this run
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [state]);
 
   // set the title and bylines on mount and clear them on unmount: the store
   // outlives this island across client-side navigation

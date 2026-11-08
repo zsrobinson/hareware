@@ -11,7 +11,6 @@ import {
   UsersIcon,
   type LucideIcon,
 } from "lucide-react";
-import type { AdminRoute } from "./admin-routes";
 
 export type NavItem = {
   href: string;
@@ -34,8 +33,9 @@ export const toolsNav: NavItem[] = [
   { href: "/email", label: "Newsletter", icon: MailIcon },
 ];
 
-/* The admin tools, shown to everybody: the guard refuses in person (ADR 0007). */
-export const adminNav: (NavItem & { href: AdminRoute })[] = [
+/* The board's tools, shown to everybody: what they show is gated by the APIs
+   they ask, which say why when they refuse (ADR 0007, ADR 0012). */
+export const adminNav: NavItem[] = [
   { href: "/charts", label: "Charts", icon: ChartColumnIcon },
   { href: "/people", label: "People", icon: UsersIcon },
   { href: "/articles", label: "Articles", icon: NewspaperIcon },

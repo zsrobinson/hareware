@@ -1,19 +1,9 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { expect, test } from "vitest";
-import { ADMIN_ROUTES } from "./admin-routes";
 import { adminNav, isActive, pagePath, toolsNav } from "./nav";
 
-/*
-  Nothing about a url says which tools need the role, so `ADMIN_ROUTES` says it
-  and the nav a member clicks and the pages on disk have to agree with it.
-*/
-
-test("the sidebar's admin tools are exactly the board's routes", () => {
-  /* a route on the list but not in the sidebar is one nobody can find */
-  expect([...ADMIN_ROUTES].sort()).toEqual(
-    adminNav.map((item) => item.href).sort(),
-  );
-});
+/* the board's tools are the sidebar's admin group: one list, nothing to sync */
+const ADMIN_ROUTES = adminNav.map((item) => item.href);
 
 test("every one of the board's routes has a page", () => {
   const pages = readdirSync(new URL("../pages", import.meta.url))
@@ -109,8 +99,7 @@ test("every API that hands out board data asks the gate first", () => {
 });
 
 test("no public tool is listed among the board's", () => {
-  for (const item of toolsNav)
-    expect(ADMIN_ROUTES as readonly string[]).not.toContain(item.href);
+  for (const item of toolsNav) expect(ADMIN_ROUTES).not.toContain(item.href);
 });
 
 test("lights the nav item for the page being looked at", () => {

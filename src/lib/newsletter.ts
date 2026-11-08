@@ -17,7 +17,7 @@ const LOGO =
   "https://i0.wp.com/theumdhare.com/wp-content/uploads/2026/02/combination-mark.png?h=90";
 
 /** what someone typed, safe to place in html */
-export function escapeHtml(text: string) {
+function escapeHtml(text: string) {
   return text
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")

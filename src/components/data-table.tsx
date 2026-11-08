@@ -406,7 +406,7 @@ export function DataTable<T>({
             {table.getRowModel().rows.length === 0 ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell
-                  colSpan={columns.length}
+                  colSpan={table.getVisibleLeafColumns().length}
                   className="text-muted-foreground h-24 text-center"
                 >
                   {empty}

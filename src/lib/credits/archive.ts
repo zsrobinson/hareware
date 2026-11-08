@@ -130,7 +130,7 @@ export type Archive = {
   fetchedAt: string;
 };
 
-export const UNCATEGORIZED = "Uncategorized";
+const UNCATEGORIZED = "Uncategorized";
 
 /* past these a "name" is more likely a sentence the parser swallowed */
 const MAX_NAME_WORDS = 5;
@@ -387,7 +387,7 @@ function countUses(uses: Use[]): PastUse[] {
 }
 
 /** "Riley Real on 2 articles, Sam Second on 1" */
-export function usesInWords(uses: PastUse[]) {
+function usesInWords(uses: PastUse[]) {
   return uses
     .map(
       (u, i) =>
@@ -505,12 +505,9 @@ function distance(a: string, b: string, limit: number) {
 }
 
 /**
- * Pairs of counted names one or two letters apart ("Clare Dombroksy",
- * "Clare Dombrosky"), or equal once accents and punctuation go ("Mat H." and
- * "Mat H"). Spelling is fixed in WordPress, so these are only pointed at.
- */
-/**
- * Pairs of names a letter or two apart, which may be one person. Every name is
+ * Pairs of names a letter or two apart, or equal once accents and punctuation
+ * go, which may be one person; spelling is fixed in WordPress, so these are
+ * only pointed at. Every name is
  * compared with every other, which is most of the cost of reading the archive,
  * so only the page that shows them asks; names are compared only with those
  * close enough in length to be within the distance at all.

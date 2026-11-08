@@ -46,7 +46,7 @@ export const pageOf = (search: URLSearchParams) =>
  * _embed but isn't — _embed builds itself out of the links, and asking for
  * fields without it silently returns no _embedded at all
  */
-export const FIELDS = [
+const FIELDS = [
   "title",
   "content",
   "date",

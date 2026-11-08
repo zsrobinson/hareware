@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { returnToOf } from "~/lib/return-to";
+import { useViewer, useViewerKnown } from "~/lib/use-session";
 import { DiscordMark } from "./discord-mark";
 import { buttonVariants } from "./ui/button";
 
@@ -28,17 +29,14 @@ export function SignIn() {
     };
   });
   const error = ERRORS[code] ?? null;
-  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  /* the same answer the sidebar's account panel reads */
+  const known = useViewerKnown();
+  const viewer = useViewer();
+  const signedIn = known ? viewer.session !== null : null;
 
   useEffect(() => {
-    fetch("/api/session.json", { cache: "no-store" })
-      .then((response) => response.json() as Promise<{ signedIn: boolean }>)
-      .then(({ signedIn }) => {
-        if (signedIn && !error) window.location.replace(returnTo);
-        else setSignedIn(signedIn);
-      })
-      .catch(() => setSignedIn(false));
-  }, [error, returnTo]);
+    if (signedIn && !error) window.location.replace(returnTo);
+  }, [signedIn, error, returnTo]);
 
   /* signed in already and back with an error: the error is what happened */
   const title = signedIn ? "Sign in again" : "Sign in to HareWare";

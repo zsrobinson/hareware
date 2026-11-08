@@ -13,7 +13,7 @@
 import { ROLES } from "~/lib/credits/labels";
 import { SECTION_ORDER } from "~/lib/credits/sections";
 
-export const SLOTS = 5;
+const SLOTS = 5;
 
 /** a chart with one series, which names no entity by its colour */
 export const NEUTRAL = "var(--series-neutral)";

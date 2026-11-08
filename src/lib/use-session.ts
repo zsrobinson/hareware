@@ -1,36 +1,20 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import type { ViewerState } from "./admin";
+import { queryClient } from "./query-client";
+import { useHydrated } from "./use-hydrated";
 
 /*
-  who is looking, shared by the islands that care: the account panel, and the
-  mobile drawer that contains one. they would otherwise each ask
-  /api/session.json and could disagree.
+  Who is looking, from /api/session.json, which makes the same lookup
+  `viewer()` makes. Every page is static (ADR 0012), so there is one answer per
+  window, kept in the shared query client: the account panel, the drawer that
+  holds one, and the sign-in page all read it and cannot disagree. Signing out
+  reloads the page, which empties it.
 
-  the nav is not in that list: every tool is shown to everybody and the admin
-  pages refuse in person, so nothing about which links to draw depends on this.
-
-  one snapshot rather than separate module variables, because a partial one
-  published from a page outlives that page under client-side routing.
-
-  "not asked yet" has to be a state of its own: it is what tells the fetch to
-  run, and conflating it with "asked, and the answer was nobody" silently
-  cancels the request that would have filled in the rest.
+  The nav does not depend on it: every tool is shown to everybody, and the
+  APIs say why when they refuse.
 */
 
 const SIGNED_OUT: ViewerState = { session: null, profile: null };
-
-type Snapshot =
-  { status: "unknown" } | { status: "resolved"; viewer: ViewerState };
-
-let snapshot: Snapshot = { status: "unknown" };
-let inFlight = false;
-
-const listeners = new Set<() => void>();
-
-function publish(viewer: ViewerState) {
-  snapshot = { status: "resolved", viewer };
-  for (const listener of listeners) listener();
-}
 
 /** a nullable string off the wire, kept only when it is a non-empty one */
 const str = (value: unknown) =>
@@ -48,60 +32,43 @@ function readProfile(value: unknown): ViewerState["profile"] {
     : null;
 }
 
-function requestViewer() {
-  if (inFlight || snapshot.status === "resolved") return;
-  inFlight = true;
-
-  fetch("/api/session.json")
-    // json() is typed unknown under the workers types, so narrow it here
-    .then((r) => (r.ok ? r.json() : {}))
-    .then((body) => body as Record<string, unknown>)
-    .then((data) =>
-      publish(
-        data.signedIn === true && str(data.discordUserId)
-          ? {
-              session: { discordUserId: data.discordUserId as string },
-              profile: readProfile(data.profile),
-            }
-          : SIGNED_OUT,
-      ),
-    )
-    .catch(() => publish(SIGNED_OUT));
+/** a lookup that cannot be made reads as signed out, as the APIs treat it */
+async function readViewer(): Promise<ViewerState> {
+  try {
+    const response = await fetch("/api/session.json");
+    const data = (response.ok ? await response.json() : {}) as Record<
+      string,
+      unknown
+    >;
+    return data.signedIn === true && str(data.discordUserId)
+      ? {
+          session: { discordUserId: data.discordUserId as string },
+          profile: readProfile(data.profile),
+        }
+      : SIGNED_OUT;
+  } catch {
+    return SIGNED_OUT;
+  }
 }
 
-/** react's contract for the store above: subscribe, and read */
-function subscribe(onChange: () => void) {
-  listeners.add(onChange);
-  return () => listeners.delete(onChange);
-}
+export const viewerQuery = queryOptions({
+  queryKey: ["viewer"],
+  queryFn: readViewer,
+  staleTime: Infinity,
+  retry: false,
+});
 
-/**
- * everything the account panel knows about whoever is looking, from
- * /api/session.json, which makes the same lookup `viewer()` makes. Every page
- * is static (ADR 0012), so there is one answer, asked once per window, and
- * the sidebar and the drawer cannot disagree
- */
+/** whoever is looking; signed out until the lookup answers, and in the build */
 export function useViewer(): ViewerState {
-  const value = useSyncExternalStore(
-    subscribe,
-    () => (snapshot.status === "resolved" ? snapshot.viewer : SIGNED_OUT),
-    /* the build has no store to read, and renders signed-out */
-    () => SIGNED_OUT,
-  );
-
-  useEffect(() => {
-    requestViewer();
-  }, []);
-
-  return value;
+  const hydrated = useHydrated();
+  const { data } = useQuery(viewerQuery, queryClient);
+  return hydrated ? (data ?? SIGNED_OUT) : SIGNED_OUT;
 }
 
-/** whether the session lookup has answered, so "signed out" can be told
-    apart from "not asked yet" (the sidebar's lock must not flash) */
+/** whether the lookup has answered, so "signed out" can be told apart from
+    "not asked yet" (the sidebar's lock must not flash) */
 export function useViewerKnown(): boolean {
-  return useSyncExternalStore(
-    subscribe,
-    () => snapshot.status === "resolved",
-    () => false,
-  );
+  const hydrated = useHydrated();
+  const { isSuccess } = useQuery(viewerQuery, queryClient);
+  return hydrated && isSuccess;
 }

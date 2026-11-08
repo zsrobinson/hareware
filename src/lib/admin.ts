@@ -24,14 +24,6 @@ export type ViewerState = {
   profile: Profile | null;
 };
 
-/** `viewer()` in the shape the layout wants, so a page can always pass it */
-export function viewerState(who: Viewer | null): ViewerState {
-  return {
-    session: who?.session ?? null,
-    profile: who?.profile ?? null,
-  };
-}
-
 /** everything a page needs to know about whoever is asking, in one lookup */
 export async function viewer(request: Request): Promise<Viewer | null> {
   const session = await getSession(request, getSessionSecret());

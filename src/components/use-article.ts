@@ -16,7 +16,7 @@ import {
 import { Throttled } from "~/lib/services/wordpress/request";
 import { articleQuery } from "./queries";
 
-export const NOT_OURS =
+const NOT_OURS =
   "That isn't a link to a Hare article. It should start with theumdhare.com.";
 
 /** why an article couldn't be shown, in the words the pages use */

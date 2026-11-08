@@ -38,15 +38,11 @@ of the joke, so it is never rewritten.
 
 ## Pen name
 
-A byline that stands for someone else. The Sheet says who, once, and from then
-on every Article printing that byline counts as them, including future ones. A
-pen name two people share counts as both.
-
-A pen name can also change hands, as when one person writes part one of a
-series and someone else continues it under the same byline. Then each Article
-says who it was: the earlier ones keep the first person, and the pen name counts
-as the second from then on. Saying who a pen name is now never silently
-re-credits what was already published.
+A byline that stands for someone else, said article by article: the Sheet
+says who it is on that Article, and nowhere else. Most pen names are used once;
+when one is printed again, the Article's panel offers whoever it was before and
+Problems lists the Article until someone says. A series that changes hands is
+just each part saying who wrote it.
 
 ## Contribution
 
@@ -59,7 +55,7 @@ counted in: never "credits", never "articles" for a person.
 The club's Google Sheet, owned by the club's account, holding the only facts
 WordPress does not:
 
-- **Overrides**: who a byline really is, on every Article or one.
+- **Overrides**: who a byline really is, on one Article per row.
 - **Labels**: which credit line labels count, and their roles.
 - **Ignored**: Articles whose problems are intended, and similar names that are
   different people.

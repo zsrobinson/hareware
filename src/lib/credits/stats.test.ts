@@ -22,7 +22,7 @@ const credit = (
   contributors: names.map((name, i) => ({
     name,
     byline: bylines[i] ?? null,
-    source: bylines[i] ? "everywhere" : "printed",
+    source: bylines[i] ? "article" : "printed",
   })),
 });
 

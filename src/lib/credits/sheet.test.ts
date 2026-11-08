@@ -5,11 +5,10 @@ import {
   labelsIn,
   readSheet,
   setArticleCredits,
-  setByline,
+  setBylines,
   setDifferentPeople,
   setIgnored,
   setLabels,
-  setPenNames,
 } from "./sheet";
 
 /* invented names only: what the Sheet maps is private */
@@ -34,7 +33,7 @@ test("reads overrides by their header, whatever order the columns are in", async
   const { sheets } = fakeSheet({
     Overrides: [
       ["real_name", "byline", "post_id", "role"],
-      ["Riley Real", "Penn Name", "", ""],
+      ["Riley Real", "Penn Name", "3", ""],
       ["Cleo Drawer", "", "12", "Image"],
     ],
   });
@@ -43,7 +42,7 @@ test("reads overrides by their header, whatever order the columns are in", async
 
   expect(state.status === "read" && state.overrides).toEqual([
     {
-      postId: null,
+      postId: 3,
       role: null,
       byline: "Penn Name",
       realName: "Riley Real",
@@ -61,7 +60,7 @@ test("reads overrides by their header, whatever order the columns are in", async
 
 test("a tab typed in without a header is read in HareWare's column order", async () => {
   const { sheets } = fakeSheet({
-    Overrides: [["", "", "Penn Name", "Riley Real"]],
+    Overrides: [["3", "", "Penn Name", "Riley Real"]],
   });
 
   const state = await readSheet(sheets);
@@ -136,44 +135,69 @@ test("which tabs exist is reported, so a renamed one is not read as empty", asyn
   });
 });
 
-test("setting a pen name replaces its everywhere row and leaves every other row as it was", async () => {
+test("setting a byline on articles replaces only its rows there, and keeps the tab's column order", async () => {
+  const { sheets, tabs } = fakeSheet({
+    Overrides: [
+      ["real_name", "byline", "post_id", "role"],
+      ["Old Guess", "penn name", "7", "writer"],
+      ["Kept", "Penn Name", "8", "writer"],
+      ["Typed By Hand", "Other Pen", "7", "writer"],
+      ["", "", "not a number", ""],
+    ],
+  });
+
+  await setBylines(sheets, [
+    {
+      postId: 7,
+      role: "writer",
+      byline: "Penn Name",
+      realNames: ["Riley Real"],
+    },
+  ]);
+
+  expect(tabs.Overrides).toEqual([
+    ["real_name", "byline", "post_id", "role"],
+    ["Kept", "Penn Name", "8", "writer"],
+    ["Typed By Hand", "Other Pen", "7", "writer"],
+    ["", "", "not a number", ""],
+    ["Riley Real", "Penn Name", "7", "writer"],
+  ]);
+
+  await setBylines(sheets, [
+    { postId: 7, role: "writer", byline: "Penn Name", realNames: [] },
+  ]);
+  expect(tabs.Overrides).toHaveLength(4);
+});
+
+test("an old every-article row is read apart, and converting it retires it", async () => {
   const { sheets, tabs } = fakeSheet({
     Overrides: [
       ["post_id", "role", "byline", "real_name", "note"],
-      ["", "", "penn name", "Old Guess", ""],
-      ["7", "writer", "Penn Name", "Someone Else", "kept"],
-      ["", "", "Other Pen", "Sam Second", "typed by hand"],
-      ["not a number", "", "", "", ""],
+      ["", "", "Penn Name", "Riley Real", ""],
+      ["", "", "Other Pen", "Sam Second", ""],
     ],
   });
 
-  await setPenNames(sheets, [{ byline: "Penn Name", realName: "Riley Real" }]);
-
-  expect(tabs.Overrides).toEqual([
-    ["post_id", "role", "byline", "real_name", "note"],
-    ["7", "writer", "Penn Name", "Someone Else", "kept"],
-    ["", "", "Other Pen", "Sam Second", "typed by hand"],
-    ["not a number", "", "", "", ""],
-    ["", "", "Penn Name", "Riley Real", ""],
+  const state = await readSheet(sheets);
+  expect(state.status === "read" && state.overrides).toEqual([]);
+  expect(state.status === "read" && state.unscoped).toEqual([
+    { byline: "Penn Name", realName: "Riley Real" },
+    { byline: "Other Pen", realName: "Sam Second" },
   ]);
-});
 
-test("clearing a pen name removes it, and a write keeps the tab's own column order", async () => {
-  const { sheets, tabs } = fakeSheet({
-    Overrides: [
-      ["real_name", "byline"],
-      ["Riley Real", "Penn Name"],
+  await setBylines(
+    sheets,
+    [
+      { postId: 3, role: null, byline: "Penn Name", realNames: ["Riley Real"] },
+      { postId: 4, role: null, byline: "Penn Name", realNames: ["Riley Real"] },
     ],
-  });
-
-  await setPenNames(sheets, [{ byline: "Penn Name", realName: "Riley Real" }]);
-  expect(tabs.Overrides).toEqual([
-    ["real_name", "byline"],
-    ["Riley Real", "Penn Name"],
+    ["Penn Name"],
+  );
+  expect(tabs.Overrides!.slice(1)).toEqual([
+    ["", "", "Other Pen", "Sam Second", ""],
+    ["3", "", "Penn Name", "Riley Real", ""],
+    ["4", "", "Penn Name", "Riley Real", ""],
   ]);
-
-  await setPenNames(sheets, [{ byline: "Penn Name", realName: "" }]);
-  expect(tabs.Overrides).toEqual([["real_name", "byline"]]);
 });
 
 test("editing one article's credits touches only that article and role", async () => {
@@ -182,7 +206,7 @@ test("editing one article's credits touches only that article and role", async (
       ["post_id", "role", "byline", "real_name", "note"],
       ["7", "writer", "Penn Name", "Old", ""],
       ["7", "image", "Pic", "Kept", ""],
-      ["", "", "Penn Name", "Riley Real", ""],
+      ["8", "writer", "Penn Name", "Riley Real", ""],
     ],
   });
 
@@ -193,7 +217,7 @@ test("editing one article's credits touches only that article and role", async (
 
   expect(tabs.Overrides!.slice(1)).toEqual([
     ["7", "image", "Pic", "Kept", ""],
-    ["", "", "Penn Name", "Riley Real", ""],
+    ["8", "writer", "Penn Name", "Riley Real", ""],
     ["7", "writer", "Penn Name", "Sam Second", ""],
     ["7", "writer", "", "Cleo Drawer", ""],
   ]);
@@ -246,65 +270,5 @@ test("labels are written whole, as the settings page edits them", async () => {
   expect(tabs.Labels).toEqual([
     ["label", "role"],
     ["Puzzle by", "writer"],
-  ]);
-});
-
-test("a pen name two people share keeps both, set in one write", async () => {
-  const { sheets, tabs } = fakeSheet({});
-
-  await setPenNames(sheets, [
-    { byline: "Penn Name", realName: "Riley Real" },
-    { byline: "Penn Name", realName: "Sam Second" },
-    { byline: "Other Pen", realName: "Cleo Drawer" },
-  ]);
-
-  expect(tabs.Overrides!.slice(1).map((row) => [row[2], row[3]])).toEqual([
-    ["Penn Name", "Riley Real"],
-    ["Penn Name", "Sam Second"],
-    ["Other Pen", "Cleo Drawer"],
-  ]);
-});
-
-test("a pen name passes to someone new while earlier articles keep the first", async () => {
-  const { sheets, tabs } = fakeSheet({
-    Overrides: [
-      ["post_id", "role", "byline", "real_name", "note"],
-      ["", "", "Penn Name", "Riley Real", ""],
-      ["9", "writer", "Other Byline", "Kept", ""],
-    ],
-  });
-
-  /* part 1 (post 3) stays Riley's; from now on the byline is Sam's */
-  await setByline(
-    sheets,
-    "penn name",
-    ["Sam Second"],
-    [{ postId: 3, role: "writer", realNames: ["Riley Real"] }],
-  );
-
-  expect(tabs.Overrides!.slice(1)).toEqual([
-    ["9", "writer", "Other Byline", "Kept", ""],
-    ["", "", "penn name", "Sam Second", ""],
-    ["3", "writer", "penn name", "Riley Real", ""],
-  ]);
-});
-
-test("a byline's article rows can be cleared, any-role rows included", async () => {
-  const { sheets, tabs } = fakeSheet({
-    Overrides: [
-      ["post_id", "role", "byline", "real_name", "note"],
-      ["", "", "Penn Name", "Riley Real", ""],
-      ["3", "", "Penn Name", "Sam Second", ""],
-      ["4", "writer", "Penn Name", "Sam Second", ""],
-    ],
-  });
-
-  await setByline(sheets, "Penn Name", undefined, [
-    { postId: 3, role: null, realNames: [] },
-  ]);
-
-  expect(tabs.Overrides!.slice(1)).toEqual([
-    ["", "", "Penn Name", "Riley Real", ""],
-    ["4", "writer", "Penn Name", "Sam Second", ""],
   ]);
 });

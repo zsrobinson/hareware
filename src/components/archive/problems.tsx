@@ -154,8 +154,71 @@ function Problems({ archive, filters, refresh, filterNote }: ViewProps) {
         </section>
       )}
 
+      <NewNames archive={archive} />
+
       <Ignored articles={ignored} pairs={different} />
     </div>
+  );
+}
+
+const NEW_FOR_DAYS = 30;
+
+/**
+ * Names first credited in the last month, printed as themselves. A new pen
+ * name looks exactly like a new person, so only someone who knows can tell:
+ * this is where they look. It needs no answer, and a name leaves on its own.
+ */
+function NewNames({ archive }: { archive: ViewProps["archive"] }) {
+  const names = useMemo(() => {
+    /* counted from the read, so the list holds still while the page is open */
+    const since =
+      Date.parse(archive.fetchedAt) - NEW_FOR_DAYS * 24 * 60 * 60 * 1000;
+    const first = new Map<string, ArchiveArticle>();
+    const answered = new Set<string>();
+    const oldest = [...archive.articles].sort((a, b) =>
+      a.publishedAt.localeCompare(b.publishedAt),
+    );
+    for (const article of oldest)
+      for (const c of article.credits.flatMap((credit) => credit.contributors))
+        if (c.source === "printed") {
+          if (!first.has(c.name)) first.set(c.name, article);
+        } else if (c.byline) answered.add(c.byline.toLowerCase());
+    return [...first]
+      .filter(
+        ([name, article]) =>
+          Date.parse(article.publishedAt) >= since &&
+          !answered.has(name.toLowerCase()),
+      )
+      .sort(([, a], [, b]) => b.publishedAt.localeCompare(a.publishedAt));
+  }, [archive]);
+
+  if (names.length === 0) return null;
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-base font-semibold">New names</h2>
+        <p className="text-muted-foreground text-sm">
+          First credited in the last {NEW_FOR_DAYS} days. If one is a pen name,
+          say who on its article.
+        </p>
+      </div>
+      <ul className="divide-y rounded-lg border text-sm">
+        {names.map(([name, article]) => (
+          <li
+            key={name}
+            className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 px-4 py-2"
+          >
+            <span className="font-medium">{name}</span>
+            <a
+              href={`/articles?article=${article.id}`}
+              className="text-muted-foreground hover:text-foreground min-w-0 truncate underline-offset-4 hover:underline"
+            >
+              {article.title} · {formatDate(article.publishedAt)}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -199,10 +262,19 @@ function ArticleProblems({
                   {problem.label ? `Add “${problem.label}:”` : "Add the label"}
                 </a>
               )}
+              {problem.kind === "pen-name-again" && (
+                <a
+                  href={`/articles?article=${article.id}`}
+                  className="text-muted-foreground hover:text-foreground ml-2 underline underline-offset-4"
+                >
+                  Say who
+                </a>
+              )}
               {(problem.kind === "unrecognised" ||
                 problem.kind === "no-colon" ||
                 problem.kind === "unparsed" ||
-                problem.kind === "odd-name") && (
+                problem.kind === "odd-name" ||
+                problem.kind === "pen-name-again") && (
                 <span className="text-muted-foreground mt-1 block border-l-2 pl-2 text-[13px] break-words">
                   {problem.detail}
                 </span>

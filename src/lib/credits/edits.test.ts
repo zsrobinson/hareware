@@ -2,15 +2,6 @@ import { expect, test } from "vitest";
 import { describeEdit, parseEdit, type Edit } from "./edits";
 
 test("accepts each kind of edit the pages send", () => {
-  expect(
-    parseEdit({
-      kind: "pen-names",
-      entries: [{ byline: " Penn Name ", realName: "Riley Real" }],
-    }),
-  ).toEqual({
-    kind: "pen-names",
-    entries: [{ byline: "Penn Name", realName: "Riley Real" }],
-  });
   expect(parseEdit({ kind: "ignore", postId: "42" })).toEqual({
     kind: "ignore",
     postId: 42,
@@ -35,8 +26,8 @@ test("refuses what would write nonsense to the Sheet", () => {
   for (const body of [
     undefined,
     { kind: "drop-table" },
-    { kind: "pen-names", entries: [] },
-    { kind: "pen-names", entries: [{ realName: "X" }] },
+    /* every-article rows are gone: a pen name is said on its article */
+    { kind: "pen-names", entries: [{ byline: "P", realName: "X" }] },
     { kind: "article-credits", postId: -1, role: "writer", entries: [] },
     { kind: "article-credits", postId: 7, role: "author", entries: [] },
     { kind: "labels", labels: [] },
@@ -49,10 +40,6 @@ test("refuses what would write nonsense to the Sheet", () => {
 test("a log line never carries a real name", () => {
   const edits: Edit[] = [
     {
-      kind: "pen-names",
-      entries: [{ byline: "Penn Name", realName: "Riley Real" }],
-    },
-    {
       kind: "article-credits",
       postId: 7,
       role: "writer",
@@ -64,10 +51,16 @@ test("a log line never carries a real name", () => {
       different: true,
     },
     {
-      kind: "byline",
-      byline: "Penn Name",
-      everywhere: ["Sam Second"],
-      articles: [{ postId: 3, role: "writer", realNames: ["Riley Real"] }],
+      kind: "bylines",
+      entries: [
+        {
+          postId: 3,
+          role: "writer",
+          byline: "Penn Name",
+          realNames: ["Riley Real"],
+        },
+      ],
+      retire: ["Penn Name"],
     },
   ];
   for (const edit of edits) {
@@ -76,32 +69,43 @@ test("a log line never carries a real name", () => {
   }
 });
 
-test("a byline edit names the byline and says who on which articles", () => {
+test("a bylines edit says who a byline is on which articles", () => {
   expect(
     parseEdit({
-      kind: "byline",
-      byline: " Penn Name ",
-      everywhere: ["Sam Second"],
-      articles: [{ postId: 3, role: "writer", realNames: ["Riley Real", " "] }],
+      kind: "bylines",
+      entries: [
+        {
+          postId: "3",
+          role: "writer",
+          byline: " Penn Name ",
+          realNames: ["Riley Real", " "],
+        },
+      ],
     }),
   ).toEqual({
-    kind: "byline",
-    byline: "Penn Name",
-    everywhere: ["Sam Second"],
-    articles: [{ postId: 3, role: "writer", realNames: ["Riley Real"] }],
+    kind: "bylines",
+    entries: [
+      {
+        postId: 3,
+        role: "writer",
+        byline: "Penn Name",
+        realNames: ["Riley Real"],
+      },
+    ],
+    retire: [],
   });
-  expect(
-    parseEdit({ kind: "byline", byline: "Penn Name", articles: [] }),
-  ).toEqual({ kind: "byline", byline: "Penn Name", articles: [] });
   for (const body of [
-    { kind: "byline", articles: [] },
-    { kind: "byline", byline: "P", articles: [{ postId: 0, realNames: [] }] },
+    { kind: "bylines", entries: [] },
     {
-      kind: "byline",
-      byline: "P",
-      articles: [{ postId: 3, role: "x", realNames: [] }],
+      kind: "bylines",
+      entries: [{ postId: 0, byline: "P", realNames: [] }],
     },
-    { kind: "byline", byline: "P", everywhere: "Sam", articles: [] },
+    {
+      kind: "bylines",
+      entries: [{ postId: 3, role: "x", byline: "P", realNames: [] }],
+    },
+    { kind: "bylines", entries: [{ postId: 3, realNames: ["X"] }] },
+    { kind: "bylines", entries: [], retire: "Penn Name" },
   ])
     expect(parseEdit(body)).toHaveProperty("error");
 });

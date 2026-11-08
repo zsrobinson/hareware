@@ -14,6 +14,7 @@ import {
   type Override,
   type SheetProblem,
   type SheetState,
+  type Unscoped,
 } from "./sheet";
 
 /** a post as the archive keeps it between reads: its body cut to the paragraphs a credit could be */
@@ -31,8 +32,8 @@ export type Contributor = {
   name: string;
   /** the name as printed, when the Sheet says it is someone else */
   byline: string | null;
-  /** where the name came from: the article, a Sheet row for every article, or one for this article */
-  source: "printed" | "everywhere" | "article";
+  /** where the name came from: the article as printed, or a Sheet row for it */
+  source: "printed" | "article";
 };
 
 export type Credit = {
@@ -53,6 +54,7 @@ export const PROBLEM_KINDS = {
   "no-colon": "Credit line without a colon",
   unparsed: "Credit line with no name",
   "odd-name": "Name reads like a sentence",
+  "pen-name-again": "A pen name used before",
   uncategorized: "No section",
 } as const;
 export type ProblemKind = keyof typeof PROBLEM_KINDS;
@@ -78,11 +80,21 @@ export type SimilarNames = {
   ignored?: string;
 };
 
-/** a pen name the Sheet resolves on every article */
-export type PenName = { byline: string; realName: string[]; articles: number };
-
-/** a Sheet row that holds for one article only */
+/** a Sheet row, with the title of the article it is for */
 export type ArticleOverride = Override & { title: string | null };
+
+/** who a byline has been on other articles, most often first */
+export type PastUse = { name: string; articles: number };
+
+/**
+ * an old every-article row, which no longer counts: the byline, who it named,
+ * and the articles printing it, so Settings can set it on each
+ */
+export type UnscopedPenName = {
+  byline: string;
+  realNames: string[];
+  articleIds: number[];
+};
 
 export type SheetSummary =
   | { status: "unconfigured"; missing: string[] }
@@ -100,8 +112,10 @@ export type Archive = {
   articles: ArchiveArticle[];
   sections: string[];
   labels: Label[];
-  penNames: PenName[];
-  articleOverrides: ArticleOverride[];
+  overrides: ArticleOverride[];
+  /** by `bylineKey`: who each byline has been on the articles with a row */
+  pastUses: Record<string, PastUse[]>;
+  unscoped: UnscopedPenName[];
   /** pair keys of similar names marked different people, with their notes;
       `similarNames()` reads it, on the one page that shows the pairs */
   differentPeople: Record<string, string>;
@@ -129,11 +143,10 @@ export function buildArchive(input: {
   const ignoredRows = sheet.status === "read" ? sheet.ignored : [];
   const sheetProblems = sheet.status === "read" ? [...sheet.problems] : [];
 
-  const everywhere = overrides.filter((o) => o.postId === null);
   const byPost = new Map<number, Override[]>();
   for (const o of overrides)
-    if (o.postId !== null)
-      byPost.set(o.postId, [...(byPost.get(o.postId) ?? []), o]);
+    byPost.set(o.postId, [...(byPost.get(o.postId) ?? []), o]);
+  const pastUses = pastUsesOf(overrides);
 
   const ignoredPosts = new Map(
     ignoredRows
@@ -143,7 +156,7 @@ export function buildArchive(input: {
 
   const titles = new Map(posts.map((post) => [post.id, post.title]));
   for (const o of overrides)
-    if (o.postId !== null && !titles.has(o.postId))
+    if (!titles.has(o.postId))
       sheetProblems.push({
         tab: "Overrides",
         row: 0,
@@ -162,7 +175,6 @@ export function buildArchive(input: {
         bylines: line.names,
       })),
       byPost.get(post.id) ?? [],
-      everywhere,
     );
 
     return {
@@ -173,9 +185,11 @@ export function buildArchive(input: {
       section,
       credits,
       problems: problemsOf(
+        post.id,
         section,
         credits,
         unrecognisedLines(post.paragraphs, labels),
+        pastUses,
       ),
       ...(ignoredPosts.has(post.id)
         ? { ignored: ignoredPosts.get(post.id) }
@@ -187,10 +201,17 @@ export function buildArchive(input: {
     articles,
     sections: sortSections(new Set(articles.map((a) => a.section))),
     labels,
-    penNames: penNames(everywhere, articles),
-    articleOverrides: overrides
-      .filter((o) => o.postId !== null)
-      .map((o) => ({ ...o, title: titles.get(o.postId!) ?? null })),
+    overrides: overrides.map((o) => ({
+      ...o,
+      title: titles.get(o.postId) ?? null,
+    })),
+    pastUses: Object.fromEntries(
+      [...pastUses].map(([key, uses]) => [key, countUses(uses)]),
+    ),
+    unscoped: unscopedOf(
+      sheet.status === "read" ? sheet.unscoped : [],
+      articles,
+    ),
     differentPeople: Object.fromEntries(
       ignoredRows
         .filter((i) => i.names)
@@ -202,22 +223,23 @@ export function buildArchive(input: {
   };
 }
 
+/** a byline as the archive compares them: case and spacing do not count */
+export const bylineKey = (byline: string) =>
+  byline.trim().replace(/\s+/g, " ").toLowerCase();
+
 /**
- * Who each printed name counts as: a row for this article and role first,
- * then a row for every article, then the name as printed. Rows for this
- * article with no byline add people the article does not print.
+ * Who each printed name counts as: this article's row for the byline in this
+ * role, or else the name as printed. Rows for this article with no byline add
+ * people the article does not print.
  */
 function resolve(
   lines: Omit<Credit, "contributors">[],
   articleRows: Override[],
-  everywhere: Override[],
 ): Credit[] {
-  const forRole = (rows: Override[], role: Role) =>
-    rows.filter((o) => o.role === null || o.role === role);
-
   const credits: Credit[] = lines.map((line) => {
-    const local = forRole(articleRows, line.role);
-    const global = forRole(everywhere, line.role);
+    const local = articleRows.filter(
+      (o) => o.role === null || o.role === line.role,
+    );
     const contributors = line.bylines.flatMap((byline): Contributor[] => {
       const here = local.filter((o) => o.byline && same(o.byline, byline));
       if (here.length > 0)
@@ -225,13 +247,6 @@ function resolve(
           name: o.realName,
           byline,
           source: "article",
-        }));
-      const anywhere = global.filter((o) => o.byline && same(o.byline, byline));
-      if (anywhere.length > 0)
-        return anywhere.map((o) => ({
-          name: o.realName,
-          byline,
-          source: "everywhere",
         }));
       return [{ name: byline, byline: null, source: "printed" }];
     });
@@ -261,9 +276,11 @@ function resolve(
 }
 
 function problemsOf(
+  postId: number,
   section: string,
   credits: Credit[],
   unrecognised: string[],
+  pastUses: Map<string, Use[]>,
 ): ArchiveArticle["problems"] {
   const problems: ArchiveArticle["problems"] = [];
   const has = (role: Role) =>
@@ -298,29 +315,77 @@ function problemsOf(
         problems.push({ kind: "odd-name", detail: byline });
   }
 
+  /* a byline that was someone else on another article, printed here with no
+     answer: most likely the same pen name again, waiting to be said */
+  for (const credit of credits)
+    for (const c of credit.contributors) {
+      if (c.source !== "printed") continue;
+      const elsewhere = (pastUses.get(bylineKey(c.name)) ?? []).filter(
+        (use) => use.postId !== postId,
+      );
+      if (elsewhere.length === 0) continue;
+      const people = countUses(elsewhere);
+      problems.push({
+        kind: "pen-name-again",
+        detail: `${c.name} was ${people
+          .map(
+            (p) =>
+              `${p.name} on ${p.articles === 1 ? "1 article" : `${p.articles} articles`}`,
+          )
+          .join(" and ")}`,
+      });
+    }
+
   if (section === UNCATEGORIZED)
     problems.push({ kind: "uncategorized", detail: "no category set" });
 
   return problems;
 }
 
-function penNames(everywhere: Override[], articles: ArchiveArticle[]) {
-  const grouped = new Map<string, PenName>();
-  for (const o of everywhere) {
-    const key = o.byline!.toLowerCase();
+/* one row naming who a byline was on one article */
+type Use = { postId: number; name: string };
+
+function pastUsesOf(overrides: Override[]) {
+  const uses = new Map<string, Use[]>();
+  for (const o of overrides) {
+    if (!o.byline || same(o.byline, o.realName)) continue;
+    const key = bylineKey(o.byline);
+    const list = uses.get(key) ?? [];
+    if (!list.some((u) => u.postId === o.postId && u.name === o.realName))
+      list.push({ postId: o.postId, name: o.realName });
+    uses.set(key, list);
+  }
+  return uses;
+}
+
+/** each person a byline was, with how many articles, most first */
+function countUses(uses: Use[]): PastUse[] {
+  const articles = new Map<string, Set<number>>();
+  for (const u of uses)
+    articles.set(u.name, (articles.get(u.name) ?? new Set()).add(u.postId));
+  return [...articles]
+    .map(([name, ids]) => ({ name, articles: ids.size }))
+    .sort((a, b) => b.articles - a.articles || a.name.localeCompare(b.name));
+}
+
+function unscopedOf(rows: Unscoped[], articles: ArchiveArticle[]) {
+  const grouped = new Map<string, UnscopedPenName>();
+  for (const row of rows) {
+    const key = bylineKey(row.byline);
     const entry = grouped.get(key) ?? {
-      byline: o.byline!,
-      realName: [],
-      articles: 0,
+      byline: row.byline,
+      realNames: [],
+      articleIds: articles
+        .filter((a) =>
+          a.credits.some((c) => c.bylines.some((b) => same(b, row.byline))),
+        )
+        .map((a) => a.id),
     };
-    entry.realName.push(o.realName);
+    if (!entry.realNames.includes(row.realName))
+      entry.realNames.push(row.realName);
     grouped.set(key, entry);
   }
-  for (const entry of grouped.values())
-    entry.articles = articles.filter((a) =>
-      a.credits.some((c) => c.bylines.some((b) => same(b, entry.byline))),
-    ).length;
-  return [...grouped.values()].sort((a, b) => b.articles - a.articles);
+  return [...grouped.values()];
 }
 
 /* ---- names that are probably the same person ------------------------------ */

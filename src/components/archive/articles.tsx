@@ -6,13 +6,14 @@ import {
   UserRoundPlusIcon,
   XIcon,
 } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import { Fragment, useId, useMemo, useState } from "react";
 import { DataTable, sortable } from "~/components/data-table";
-import { FieldRow, FieldRows } from "~/components/field-row";
+import { FieldNote, FieldRow, FieldRows } from "~/components/field-row";
 import { SidePanel, useIsPhone } from "~/components/panel";
 import { Button, buttonVariants } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import {
+  bylineKey,
   PROBLEM_KINDS,
   type Archive,
   type ArchiveArticle,
@@ -218,7 +219,7 @@ function Articles({ archive, filters, filterNote }: ViewProps) {
   );
 }
 
-function ArticlePanel({
+export function ArticlePanel({
   article,
   archive,
   onClose,
@@ -276,6 +277,7 @@ function ArticlePanel({
           article={article}
           role={role}
           everyone={everyone}
+          pastUses={archive.pastUses}
         />
       ))}
     </SidePanel>
@@ -301,16 +303,19 @@ const entriesOf = ({
 /**
  * One role's contributors on one article: each printed name, who it counts
  * as, and anyone added who is not printed. Saving writes this article's rows
- * for the role and nothing else.
+ * for the role and nothing else. A byline that was someone on other articles
+ * offers that person, but only says so: a pen name can change hands.
  */
 function RoleEditor({
   article,
   role,
   everyone,
+  pastUses,
 }: {
   article: ArchiveArticle;
   role: Role;
   everyone: string[];
+  pastUses: Archive["pastUses"];
 }) {
   const save = useEdit();
   const ids = useId();
@@ -342,15 +347,6 @@ function RoleEditor({
   if (printed.length === 0 && added.length === 0 && role === "other")
     return null;
 
-  /* who a printed name counts as without this article's own row */
-  const fallback = (byline: string) =>
-    people.find(
-      (p) =>
-        p.byline !== null &&
-        same(p.byline, byline) &&
-        p.source === "everywhere",
-    )?.name ?? byline;
-
   return (
     <section className="space-y-3 border-t pt-4">
       <div className="space-y-0.5">
@@ -368,35 +364,66 @@ function RoleEditor({
 
       <FieldRows>
         {printed.map((byline, index) => {
-          const unchanged = fallback(byline);
+          /* who the byline was elsewhere, while nothing is chosen here */
+          const before = renamed[byline]
+            ? []
+            : (pastUses[bylineKey(byline)] ?? []).filter(
+                (use) => !same(use.name, byline),
+              );
           return (
-            <FieldRow
-              key={byline}
-              icon={UserRoundIcon}
-              label={
-                <>
-                  Counts as
-                  {/* which printed name, where the line prints more than one */}
-                  {printed.length > 1 && (
-                    <span className="text-muted-foreground block text-xs font-normal break-words">
-                      {byline}
+            <Fragment key={byline}>
+              <FieldRow
+                icon={UserRoundIcon}
+                label={
+                  <>
+                    Counts as
+                    {/* which printed name, where the line prints more than one */}
+                    {printed.length > 1 && (
+                      <span className="text-muted-foreground block text-xs font-normal break-words">
+                        {byline}
+                      </span>
+                    )}
+                  </>
+                }
+                htmlFor={`${ids}-${index}`}
+                width="panel"
+                top={printed.length > 1}
+              >
+                <PersonPicker
+                  id={`${ids}-${index}`}
+                  value={renamed[byline] ?? ""}
+                  onChange={(name) =>
+                    setRenamed({ ...renamed, [byline]: name })
+                  }
+                  people={everyone}
+                  none="Themselves"
+                />
+              </FieldRow>
+              {before.length > 0 && (
+                <FieldNote width="panel">
+                  {/* the person it was most, and a second if it changed hands */}
+                  Was{" "}
+                  {before.slice(0, 2).map((use, i) => (
+                    <span key={use.name}>
+                      {i > 0 && " or "}
+                      <button
+                        type="button"
+                        className="hover:text-foreground underline underline-offset-4"
+                        aria-label={`Counts as ${use.name}`}
+                        onClick={() =>
+                          setRenamed({ ...renamed, [byline]: use.name })
+                        }
+                      >
+                        {use.name}
+                      </button>{" "}
+                      on {use.articles}{" "}
+                      {use.articles === 1 ? "article" : "articles"}
                     </span>
-                  )}
-                </>
-              }
-              htmlFor={`${ids}-${index}`}
-              width="panel"
-              top={printed.length > 1}
-            >
-              <PersonPicker
-                id={`${ids}-${index}`}
-                value={renamed[byline] ?? ""}
-                onChange={(name) => setRenamed({ ...renamed, [byline]: name })}
-                /* unchanged is whoever the pen name is, offered once */
-                people={everyone.filter((name) => !same(name, unchanged))}
-                none={unchanged === byline ? "Themselves" : unchanged}
-              />
-            </FieldRow>
+                  ))}
+                  .
+                </FieldNote>
+              )}
+            </Fragment>
           );
         })}
         {added.map((name, index) => (

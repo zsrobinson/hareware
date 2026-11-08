@@ -1,8 +1,8 @@
 # 11. WordPress is the record; the Sheet holds only what it cannot
 
 **Status:** Accepted — 2026-11-07. Revised the same day: HareWare writes the
-Sheet, pen names hold on every article, and people are counted in
-contributions; folded in below.
+Sheet and people are counted in contributions; folded in below. How a pen name
+is recorded was changed by ADR 0013.
 
 Supersedes ADRs 0001, 0002, 0004, 0006, 0009 and 0010, which were deleted with
 the code they described; they are in the history before this commit.
@@ -34,12 +34,8 @@ parser handles co-authors, "as told to" and "translated by". Spelling drift is
 fixed in WordPress, not with an alias table.
 
 **A Google Sheet holds the one fact WordPress lacks**: who is really behind a
-pen name. One row says a byline counts as a person on every article that
-prints it, including future ones, so a recurring pen name is entered once; a
-row with a post id corrects one article only. A pen name that changes hands is
-both: the every-article row names whoever has it now, and the articles from
-before keep their own rows naming who wrote them. An article with no rows is
-credited as printed. The Sheet also holds the credit labels, so a new label
+pen name, one row per article (ADR 0013). An article with no rows is credited
+as printed. The Sheet also holds the credit labels, so a new label
 ("Puzzle by") needs no deploy, and the problems someone decided are fine.
 
 **HareWare writes the Sheet, and nobody needs to open it.** Every correction
@@ -67,9 +63,6 @@ domain data.
   public REST endpoint before.
 - **Recording every credit in the Sheet.** That is a copy of WordPress, and the
   thing that rotted in Notion. Overrides only.
-- **Pen names keyed by article alone.** A recurring pen name would need a row
-  per article, forever, which is upkeep. One row per pen name, with
-  per-article rows for the exceptions.
 - **Two counts of people**, credits and articles credited on. They disagreed
   about whether writing and illustrating is one or two; the editors chose two,
   and one count avoids explaining the difference.

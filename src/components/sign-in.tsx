@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { returnToOf } from "~/lib/return-to";
+import { DiscordMark } from "./discord-mark";
 import { buttonVariants } from "./ui/button";
 
 const ERRORS: Record<string, string> = {
@@ -46,14 +47,15 @@ export function SignIn() {
   return (
     <section className="max-w-md">
       <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-      <div className="text-muted-foreground mt-1 text-sm">
-        {error ?? "HareWare uses your Discord account to know who you are."}
-      </div>
+      {error && (
+        <div className="text-muted-foreground mt-1 text-sm">{error}</div>
+      )}
       {configured && (
         <a
           href={`/auth/discord?${new URLSearchParams({ returnTo })}`}
           className={`${buttonVariants()} mt-4`}
         >
+          <DiscordMark />
           {signedIn ? "Sign in again" : "Sign in with Discord"}
         </a>
       )}

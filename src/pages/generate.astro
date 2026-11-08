@@ -18,23 +18,34 @@ export const prerender = true;
 </Dashboard>
 
 <script>
+  import { pageScroller } from "~/lib/page-scroll";
+
   /* paging through the list scrolls back to the top otherwise, which loses the
      place you were reading from. the listeners live on document, so they
      survive the swaps and only need registering once */
   let keepScroll: number | null = null;
 
-  const content = () => document.getElementById("content");
-
   document.addEventListener("astro:before-preparation", (event) => {
     const source = (event as any).sourceElement as Element | undefined;
     keepScroll = source?.closest("[data-keep-scroll]")
-      ? (content()?.scrollTop ?? null)
+      ? pageScroller().element.scrollTop
       : null;
   });
 
+  /* after the router has scrolled the new page to its top. The list is drawn
+     after the swap, so the page is too short to hold the place until it has
+     drawn: try each frame until it does, for a couple of seconds at most */
   document.addEventListener("astro:after-swap", () => {
-    const el = content();
-    if (keepScroll !== null && el) el.scrollTop = keepScroll;
+    const place = keepScroll;
     keepScroll = null;
+    if (place === null) return;
+    const until = performance.now() + 2000;
+    const restore = () => {
+      const scroller = pageScroller().element;
+      scroller.scrollTop = place;
+      if (scroller.scrollTop < place - 1 && performance.now() < until)
+        requestAnimationFrame(restore);
+    };
+    restore();
   });
 </script>

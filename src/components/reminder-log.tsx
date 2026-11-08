@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable, sortable } from "~/components/data-table";
+import { useIsPhone } from "~/components/panel";
 import { Badge } from "~/components/ui/badge";
 import type { Row } from "~/lib/log";
 
@@ -25,15 +26,24 @@ const BADGES: Record<string, "secondary" | "outline" | "destructive"> = {
   failed: "destructive",
 };
 
-const when = (at: number) =>
-  new Date(at * 1000).toLocaleString("en-US", {
-    timeZone: "America/New_York",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+/* the day and the time apart, so a phone can break between them */
+const when = (at: number) => {
+  const date = new Date(at * 1000);
+  const zone = { timeZone: "America/New_York" } as const;
+  return {
+    day: date.toLocaleDateString("en-US", {
+      ...zone,
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }),
+    time: date.toLocaleTimeString("en-US", {
+      ...zone,
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+  };
+};
 
 const SOURCES: Record<Row["source"], string> = {
   cron: "Schedule",
@@ -49,6 +59,7 @@ export function ReminderLog({
   rows: Row[];
   names: Record<string, string>;
 }) {
+  const phone = useIsPhone();
   const by = (row: Row) =>
     (row.actor && names[row.actor]) || SOURCES[row.source];
 
@@ -56,11 +67,15 @@ export function ReminderLog({
     {
       accessorKey: "at",
       header: sortable("When"),
-      cell: ({ row }) => (
-        <span className="text-muted-foreground whitespace-nowrap">
-          {when(row.original.at)}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const { day, time } = when(row.original.at);
+        return (
+          <span className="text-muted-foreground whitespace-normal">
+            <span className="whitespace-nowrap">{day},</span>{" "}
+            <span className="whitespace-nowrap">{time}</span>
+          </span>
+        );
+      },
     },
     {
       id: "outcome",
@@ -78,7 +93,10 @@ export function ReminderLog({
       accessorKey: "summary",
       header: "What happened",
       cell: ({ row }) => (
-        <span className="text-muted-foreground">{row.original.summary}</span>
+        /* wraps, so a phone's table fits without scrolling sideways */
+        <span className="text-muted-foreground whitespace-normal">
+          {row.original.summary}
+        </span>
       ),
     },
     {
@@ -100,6 +118,8 @@ export function ReminderLog({
       facets={[{ id: "outcome", label: "Outcome" }]}
       searchable={false}
       empty="Nothing recorded yet."
+      /* who did it matters least, and a phone has no room for it */
+      hidden={phone ? ["who"] : []}
     />
   );
 }

@@ -3,6 +3,7 @@
   asking is ~/lib/gated.
 */
 
+import { DiscordMark } from "~/components/discord-mark";
 import { buttonVariants } from "~/components/ui/button";
 import type { RefusalBody } from "~/lib/admin-api";
 import { DENIALS, type Action } from "~/lib/denial";
@@ -74,6 +75,8 @@ export function DenialMessage({
         </form>
       ) : (
         <a href={next.href} className={buttonVariants()}>
+          {/* the sidebar's sign-in carries the mark too: one action, one look */}
+          {action === "sign-in" && <DiscordMark />}
           {next.label}
         </a>
       )}

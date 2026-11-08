@@ -227,7 +227,7 @@ export function WordCounter() {
                   <TableRow key={index} data-words={row.words ?? ""}>
                     {/* only the numbers select, so dragging down the column
                         copies one count per line, as a sheet's column pastes */}
-                    <TableCell className="break-all whitespace-normal select-none">
+                    <TableCell className="leading-relaxed wrap-anywhere whitespace-normal select-none">
                       {row.blank ? (
                         <span className="text-muted-foreground">
                           Blank line
@@ -241,7 +241,7 @@ export function WordCounter() {
                           href={row.link}
                           target="_blank"
                           rel="noreferrer"
-                          className="decoration-muted-foreground/40 hover:decoration-foreground break-normal underline-offset-4 hover:underline"
+                          className="decoration-muted-foreground/40 hover:decoration-foreground underline-offset-4 hover:underline"
                           dangerouslySetInnerHTML={{
                             __html: row.title ?? row.link,
                           }}

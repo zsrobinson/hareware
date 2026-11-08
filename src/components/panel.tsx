@@ -16,6 +16,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "~/components/ui/button";
+import { pageScroller } from "~/lib/page-scroll";
 import { cn } from "~/lib/utils";
 
 const PHONE = "(max-width: 767px)";
@@ -127,8 +128,10 @@ export function SidePanel({
       className={cn(
         "bg-background flex flex-col gap-5 overflow-y-auto p-6",
         /* a phone: a page of its own, under the bar that names the tool, and
-           over the Customize sheet a list can be opened from */
-        "max-md:fixed max-md:inset-x-0 max-md:top-12 max-md:bottom-0 max-md:z-50 max-md:p-4",
+           over the Customize sheet a list can be opened from. It scrolls
+           on its own, so the page behind keeps its place for coming back
+           to, and never hands its scrolling on to that page */
+        "max-md:fixed max-md:inset-x-0 max-md:top-12 max-md:bottom-0 max-md:z-50 max-md:overscroll-contain max-md:p-4",
         "md:relative md:w-90 md:shrink-0 md:border-l",
       )}
     >
@@ -241,7 +244,7 @@ function useRoomAbove(sheet: RefObject<HTMLElement | null>) {
         content.querySelector<HTMLElement>("[data-sheet-anchor]") ??
         content.querySelector("table");
       if (!anchor) return;
-      const top = content.getBoundingClientRect().top;
+      const { element: scroller, top } = pageScroller();
       const shown = anchor.getBoundingClientRect();
       if (
         shown.top >= top &&
@@ -249,7 +252,7 @@ function useRoomAbove(sheet: RefObject<HTMLElement | null>) {
       )
         return;
       const still = window.matchMedia("(prefers-reduced-motion: reduce)");
-      content.scrollBy({
+      scroller.scrollBy({
         top: shown.top - top - 16,
         behavior: still.matches ? "auto" : "smooth",
       });

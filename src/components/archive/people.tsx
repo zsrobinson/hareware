@@ -353,7 +353,13 @@ function PersonPanel({
         {counted?.scope && <> {counted.scope}</>}
         {summary && <> ({summary})</>}
         <span className="block">
-          {counted && <>{counted.inAll} in all · </>}
+          {counted && (
+            <>
+              {counted.inAll}{" "}
+              {counted.inAll === 1 ? "contribution" : "contributions"} in all
+              ·{" "}
+            </>
+          )}
           {span}
         </span>
       </p>
@@ -674,7 +680,7 @@ function AddOwnPenName({
               ? `Counts as ${taken.realName.join(" and ")} now. Continue to choose which articles stay theirs.`
               : count === 0
                 ? "Not printed yet."
-                : `${count} ${count === 1 ? "article" : "articles"} in all, and later ones.`}
+                : `${count === 1 ? "1 article" : `All ${count} articles`}, and any later ones.`}
           </FieldNote>
         )}
         <FieldActions width="panel">
@@ -738,6 +744,7 @@ function PenNameOf({
           label="Counts as"
           htmlFor={id}
           width="panel"
+          inline
         >
           <PersonPicker
             id={id}
@@ -748,8 +755,9 @@ function PenNameOf({
           />
         </FieldRow>
         <FieldNote width="panel">
-          {articles === 1 ? "1 article" : `${articles} articles`} in all, and
-          later ones.
+          {articles === 0
+            ? "Not printed yet."
+            : `${articles === 1 ? "1 article" : `All ${articles} articles`}, and any later ones.`}
           {realName && !known && " Not credited yet."}
           {articles > 1 && (
             <>

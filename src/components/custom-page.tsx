@@ -74,11 +74,11 @@ export function CustomPage() {
         <FieldRow icon={HeadingIcon} label="Title" htmlFor="title" top>
           <Textarea
             id="title"
-            rows={2}
-            className="min-h-0 resize-none"
+            rows={1}
+            /* one line high when empty, like the bylines beside it; it grows with the title */
+            className="min-h-8 resize-none py-[3px] md:py-[5px]"
             value={title}
             required
-            placeholder="The article's title"
             onChange={(e) => setTitle(e.target.value)}
           />
         </FieldRow>
@@ -90,7 +90,6 @@ export function CustomPage() {
           <Input
             id="article-byline"
             value={articleByline}
-            placeholder="Who wrote it"
             onChange={(e) => setArticleByline(e.target.value)}
           />
         </FieldRow>
@@ -98,7 +97,6 @@ export function CustomPage() {
           <Input
             id="image-byline"
             value={imageByline}
-            placeholder="Who made the image"
             onChange={(e) => setImageByline(e.target.value)}
           />
         </FieldRow>
@@ -156,7 +154,7 @@ export function CustomPage() {
             id="text"
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="The article's text. Leave a blank line between paragraphs."
+            placeholder="Leave a blank line between paragraphs."
             className="h-64 w-full"
           />
         </FieldRow>

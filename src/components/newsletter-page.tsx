@@ -112,7 +112,7 @@ function Newsletter({ articles }: { articles: NewsletterArticle[] }) {
               id="meeting"
               value={meeting}
               onChange={(event) => setMeeting(event.target.value)}
-              placeholder="Optional: Thursday at 7 pm in Tawes 1100"
+              placeholder="Thursday at 7 pm in Tawes 1100"
             />
           </FieldRow>
           <FieldRow icon={StickyNoteIcon} label="Note" htmlFor="note" top>
@@ -120,7 +120,7 @@ function Newsletter({ articles }: { articles: NewsletterArticle[] }) {
               id="note"
               value={note}
               onChange={(event) => setNote(event.target.value)}
-              placeholder="Optional. Leave a blank line between paragraphs."
+              placeholder="Leave a blank line between paragraphs."
               className="h-40"
             />
           </FieldRow>

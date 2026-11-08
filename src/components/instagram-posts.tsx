@@ -92,9 +92,7 @@ function Landing({ page }: { page: number }) {
   return (
     <>
       <section className="space-y-3">
-        <h2 className="text-base font-semibold">
-          Or start from a recent article
-        </h2>
+        <h2 className="text-base font-semibold">Recent articles</h2>
 
         {/* what was read stays on screen if a later read fails */}
         {!recent.data ? (
@@ -158,8 +156,7 @@ function Landing({ page }: { page: number }) {
         )}
       </section>
 
-      <section className="space-y-3">
-        <h2 className="text-base font-semibold">Or make a custom post</h2>
+      <div>
         <a
           href="/custom"
           data-astro-prefetch
@@ -168,7 +165,7 @@ function Landing({ page }: { page: number }) {
         >
           Custom post
         </a>
-      </section>
+      </div>
     </>
   );
 }

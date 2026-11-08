@@ -128,7 +128,7 @@ export function SidePanel({
         "bg-background flex flex-col gap-5 overflow-y-auto p-6",
         /* a phone: a page of its own, under the bar that names the tool */
         "max-md:fixed max-md:inset-x-0 max-md:top-12 max-md:bottom-0 max-md:z-30 max-md:p-4",
-        "md:w-90 md:shrink-0 md:border-l",
+        "md:relative md:w-90 md:shrink-0 md:border-l",
       )}
     >
       <Button

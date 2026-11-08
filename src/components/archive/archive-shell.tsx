@@ -28,6 +28,7 @@ import {
 import { Input } from "~/components/ui/input";
 import type { Archive } from "~/lib/credits/archive";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
+import { sortSections } from "~/lib/credits/sections";
 import type { Filters } from "~/lib/credits/stats";
 import { cn } from "~/lib/utils";
 import { DenialMessage } from "~/components/gated";
@@ -75,7 +76,31 @@ export type ViewProps = {
   /** rereads WordPress now, for a page where someone just fixed an article */
   refresh: () => void;
   refreshing: boolean;
+  /** what the filters narrow to, for a caption ("Sports · Writing"); empty
+      when nothing is set. A phone hides the filters in a sheet, so the
+      caption is where the cut shows */
+  filterNote: string;
 };
+
+/** the filters that are set, in words, for a view's caption */
+export function describeFilters(state: FilterState): string {
+  const parts: string[] = [];
+  if (state.preset !== DEFAULT_STATE.preset)
+    parts.push(
+      state.preset === "custom"
+        ? [state.from, state.to].filter(Boolean).join(" to ") || "Custom range"
+        : (PRESETS.find((p) => p.id === state.preset)?.label ?? ""),
+    );
+  if (state.sections.length > 0)
+    parts.push(
+      state.sections.length <= 2
+        ? sortSections(state.sections).join(", ")
+        : `${state.sections.length} sections`,
+    );
+  if (state.roles.length > 0)
+    parts.push(state.roles.map((role) => ROLE_NAMES[role]).join(", "));
+  return parts.filter(Boolean).join(" · ");
+}
 
 /** the archive, the filter bar, and whichever view is handed in */
 export function ArchiveShell({
@@ -260,6 +285,7 @@ function Ready({
             filters,
             refresh: refreshNow,
             refreshing,
+            filterNote: describeFilters(state),
           })}
         </div>
       </div>

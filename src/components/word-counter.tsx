@@ -147,10 +147,10 @@ export function WordCounter() {
             <Textarea
               id="links"
               name="articles"
-              /* a link per line, never broken across two */
-              wrap="off"
-              /* a box of links, so set like the other tools' link field */
-              className="min-h-28 overflow-x-auto font-mono whitespace-pre placeholder:font-sans md:text-[13px]"
+              /* a box of links, so set like the other tools' link field. A
+                 long one wraps, as on a phone links share their first forty
+                 characters; wrapping only draws, the value keeps its lines */
+              className="min-h-28 font-mono wrap-anywhere whitespace-pre-wrap placeholder:font-sans md:text-[13px]"
               value={text}
               onChange={(event) => setText(event.target.value)}
               placeholder="Paste up to ten article links, one per line"

@@ -23,6 +23,7 @@ import {
   ChevronDownIcon,
   Columns3Icon,
   DownloadIcon,
+  XIcon,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { toCsv } from "~/lib/csv";
@@ -345,13 +346,14 @@ export function DataTable<T>({
             setSearch("");
           }}
         >
-          Clear
+          <XIcon /> Clear
         </Button>
       )}
+      {/* as an archive page's toolbar: filters, a divider, then the view */}
       {any && !controls && (
-        <span className="ml-auto flex flex-wrap gap-2">
-          {own.download}
+        <span className="flex flex-wrap items-center gap-2 border-l pl-2">
           {own.columns}
+          {own.download}
         </span>
       )}
     </div>

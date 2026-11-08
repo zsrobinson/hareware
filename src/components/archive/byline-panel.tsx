@@ -1,12 +1,9 @@
-import { ArrowLeftIcon } from "lucide-react";
+import { UserRoundIcon } from "lucide-react";
 import { useId, useState } from "react";
+import { FieldNote, FieldRow, FieldRows } from "~/components/field-row";
+import { SidePanel } from "~/components/panel";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import {
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "~/components/ui/sheet";
 import type { Archive, ArchiveArticle } from "~/lib/credits/archive";
 import { ROLE_NAMES, type Role } from "~/lib/credits/labels";
 import { same } from "~/lib/credits/sheet";
@@ -66,8 +63,8 @@ export function BylinePanel({
   byline,
   archive,
   everyone,
-  onBack,
-  onDone,
+  back,
+  onClose,
   handOverTo,
 }: {
   byline: string;
@@ -75,12 +72,14 @@ export function BylinePanel({
   everyone: string[];
   /** opens with this person already typed in, as a hand-over to them */
   handOverTo?: string;
-  /** shows a way back to where the panel was opened from */
-  onBack?: () => void;
-  onDone?: () => void;
+  /** where closing goes back to, named on a phone's back link */
+  back: string;
+  /** on ×, Escape, the back link, and once saved */
+  onClose: () => void;
 }) {
   const save = useEdit();
   const names = useId();
+  const field = useId();
   const uses = usesOf(archive, byline);
   const before =
     archive.penNames.find((pen) => same(pen.byline, byline))?.realName ?? [];
@@ -145,30 +144,17 @@ export function BylinePanel({
             }`
           : `Saved who ${byline} is on ${changes.length} ${changes.length === 1 ? "article" : "articles"}`,
       },
-      { onSuccess: onDone },
+      { onSuccess: onClose },
     );
 
   return (
-    <>
-      <SheetHeader>
-        {onBack && (
-          <Button
-            variant="ghost"
-            size="xs"
-            className="text-muted-foreground -ml-2 w-fit"
-            onClick={onBack}
-          >
-            <ArrowLeftIcon /> Back
-          </Button>
-        )}
-        <SheetTitle>{byline}</SheetTitle>
-        <SheetDescription>
-          Printed on {uses.length} {uses.length === 1 ? "article" : "articles"}
-        </SheetDescription>
-      </SheetHeader>
+    <SidePanel key={byline} title={byline} back={back} onClose={onClose}>
+      <p className="text-muted-foreground -mt-3 text-xs">
+        Printed on {uses.length} {uses.length === 1 ? "article" : "articles"}
+      </p>
 
       <form
-        className="space-y-6 px-4 pb-6"
+        className="space-y-6"
         onSubmit={(event) => {
           event.preventDefault();
           if (changed) submit();
@@ -180,19 +166,26 @@ export function BylinePanel({
           ))}
         </datalist>
 
-        <label className="block space-y-1.5 text-sm">
-          <span className="font-medium">Counts as</span>
-          <Input
-            list={names}
-            value={everywhere}
-            placeholder="as printed"
-            onChange={(event) => setEverywhere(event.target.value)}
-          />
-          <span className="text-muted-foreground block text-xs">
+        <FieldRows>
+          <FieldRow
+            icon={UserRoundIcon}
+            label="Counts as"
+            htmlFor={field}
+            width="panel"
+          >
+            <Input
+              id={field}
+              list={names}
+              value={everywhere}
+              placeholder="As printed"
+              onChange={(event) => setEverywhere(event.target.value)}
+            />
+          </FieldRow>
+          <FieldNote width="panel">
             On every article below unless it says otherwise, and on later ones.
             Separate two people with a comma.
-          </span>
-        </label>
+          </FieldNote>
+        </FieldRows>
 
         {asking && (
           <fieldset className="space-y-1.5 text-sm">
@@ -225,13 +218,13 @@ export function BylinePanel({
           </fieldset>
         )}
 
-        <section className="space-y-2">
+        <section className="space-y-1">
           <h3 className="text-muted-foreground text-xs font-medium">
             Each article
           </h3>
-          <ul className="space-y-3">
+          <ul className="divide-y">
             {uses.map((use) => (
-              <li key={key(use)} className="space-y-1.5">
+              <li key={key(use)} className="space-y-1.5 py-2.5">
                 <div className="text-sm">
                   <span className="font-medium">{use.article.title}</span>
                   <span className="text-muted-foreground block text-xs">
@@ -246,7 +239,6 @@ export function BylinePanel({
                   </span>
                   <Input
                     list={names}
-                    className="h-8"
                     value={own[key(use)] ?? ""}
                     placeholder={shown(asking && keepEarlier ? before : after)}
                     aria-label={`Who ${byline} is on ${use.article.title}`}
@@ -262,13 +254,12 @@ export function BylinePanel({
 
         {changed && (
           <div className="flex gap-2">
-            <Button type="submit" size="sm" disabled={save.isPending}>
+            <Button type="submit" disabled={save.isPending}>
               {save.isPending ? "Saving…" : "Save"}
             </Button>
             <Button
               type="button"
               variant="ghost"
-              size="sm"
               onClick={() => {
                 setEverywhere(before.join(", "));
                 setOwn(
@@ -284,6 +275,6 @@ export function BylinePanel({
           </div>
         )}
       </form>
-    </>
+    </SidePanel>
   );
 }

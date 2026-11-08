@@ -33,8 +33,8 @@ export type DenialCopy = {
 export const DENIALS: Record<Denial, DenialCopy> = {
   "signed-out": {
     status: 401,
-    title: "Sign in to continue",
-    body: () => "This tool is for the Editorial Board.",
+    title: "Editorial Board only",
+    body: () => "Your Discord account needs the Editorial Board role.",
     action: "sign-in",
   },
 

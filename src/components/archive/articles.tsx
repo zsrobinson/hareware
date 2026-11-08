@@ -2,16 +2,11 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { ExternalLinkIcon, PlusIcon, XIcon } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { DataTable, sortable } from "~/components/data-table";
+import { FieldRow, FieldRows } from "~/components/field-row";
+import { SidePanel } from "~/components/panel";
 import { Button, buttonVariants } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import { Input } from "~/components/ui/input";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "~/components/ui/sheet";
 import {
   PROBLEM_KINDS,
   type Archive,
@@ -23,6 +18,7 @@ import { same } from "~/lib/credits/sheet";
 import { applyFilters, easternDate } from "~/lib/credits/stats";
 import { ArchiveShell, type ViewProps } from "./archive-shell";
 import { formatDate } from "./dates";
+import { ShellTableControls } from "./table-controls";
 import { useEdit } from "./use-edit";
 
 const EDIT_IN_WORDPRESS = (id: number) =>
@@ -108,7 +104,8 @@ function Articles({ archive, filters }: ViewProps) {
             <div className="max-w-md min-w-56 whitespace-normal">
               <button
                 type="button"
-                className="decoration-muted-foreground/40 hover:decoration-foreground text-left font-medium underline underline-offset-4"
+                className="text-left font-medium underline-offset-4 hover:underline"
+                aria-current={row.original.id === editing ? "true" : undefined}
                 onClick={() => setEditing(row.original.id)}
               >
                 {row.original.title}
@@ -144,7 +141,7 @@ function Articles({ archive, filters }: ViewProps) {
         }),
       ),
     ],
-    [anyOther],
+    [anyOther, editing],
   );
 
   const article = editing
@@ -159,20 +156,22 @@ function Articles({ archive, filters }: ViewProps) {
         searchable={false}
         empty="No articles match these filters."
         csv="articles"
-        toolbar={
-          <span className="text-muted-foreground text-sm">
+        controls={(controls) => <ShellTableControls {...controls} />}
+        selected={(row) => row.id === editing}
+        caption={
+          <span className="text-muted-foreground text-sm tabular-nums">
             {rows.length} {rows.length === 1 ? "article" : "articles"}
           </span>
         }
       />
-      <Sheet
-        open={Boolean(article)}
-        onOpenChange={(next) => !next && setEditing(null)}
-      >
-        <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
-          {article && <ArticlePanel article={article} archive={archive} />}
-        </SheetContent>
-      </Sheet>
+      {article && (
+        <ArticlePanel
+          key={article.id}
+          article={article}
+          archive={archive}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </>
   );
 }
@@ -180,9 +179,11 @@ function Articles({ archive, filters }: ViewProps) {
 function ArticlePanel({
   article,
   archive,
+  onClose,
 }: {
   article: ArchiveArticle;
   archive: Archive;
+  onClose: () => void;
 }) {
   const everyone = useMemo(
     () =>
@@ -197,18 +198,17 @@ function ArticlePanel({
   );
 
   return (
-    <>
-      <SheetHeader>
-        <SheetTitle className="pr-6">{article.title}</SheetTitle>
-        <SheetDescription>
+    <SidePanel title={article.title} back="Articles" onClose={onClose}>
+      <div className="-mt-3 space-y-3">
+        <p className="text-muted-foreground text-xs">
           {formatDate(article.publishedAt)} · {article.section}
-        </SheetDescription>
-        <div className="flex gap-2 pt-1">
+        </p>
+        <div className="flex flex-wrap gap-2">
           <a
             href={article.link}
             target="_blank"
             rel="noreferrer"
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            className={cn(buttonVariants({ variant: "outline" }))}
           >
             View <ExternalLinkIcon />
           </a>
@@ -216,39 +216,32 @@ function ArticlePanel({
             href={EDIT_IN_WORDPRESS(article.id)}
             target="_blank"
             rel="noreferrer"
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            className={cn(buttonVariants({ variant: "outline" }))}
           >
             Edit in WordPress <ExternalLinkIcon />
           </a>
         </div>
-      </SheetHeader>
-      <div className="space-y-6 px-4 pb-6">
-        <p className="text-muted-foreground text-sm">
-          Changes here count on this article only.
-        </p>
-        {ROLES.map((role) => (
-          <RoleEditor
-            /* a save changes the contributors, which starts the form afresh */
-            key={`${article.id}-${role}-${JSON.stringify(
-              article.credits
-                .filter((c) => c.role === role)
-                .map((c) => c.contributors),
-            )}`}
-            article={article}
-            role={role}
-            everyone={everyone}
-          />
-        ))}
       </div>
-    </>
+      <p className="text-muted-foreground text-sm">
+        Changes here count on this article only.
+      </p>
+      {ROLES.map((role) => (
+        <RoleEditor
+          /* a save changes the contributors, which starts the form afresh */
+          key={`${article.id}-${role}-${JSON.stringify(
+            article.credits
+              .filter((c) => c.role === role)
+              .map((c) => c.contributors),
+          )}`}
+          article={article}
+          role={role}
+          everyone={everyone}
+        />
+      ))}
+    </SidePanel>
   );
 }
 
-/**
- * One role's contributors on one article: each printed name, who it counts
- * as, and anyone added who is not printed. Saving writes this article's rows
- * for the role and nothing else.
- */
 /* the article's own rows for one role, as a form describes them */
 const entriesOf = ({
   renamed,
@@ -265,6 +258,11 @@ const entriesOf = ({
     .map((realName) => ({ byline: null, realName })),
 ];
 
+/**
+ * One role's contributors on one article: each printed name, who it counts
+ * as, and anyone added who is not printed. Saving writes this article's rows
+ * for the role and nothing else.
+ */
 function RoleEditor({
   article,
   role,
@@ -276,6 +274,7 @@ function RoleEditor({
 }) {
   const save = useEdit();
   const list = useId();
+  const ids = useId();
   const credits = article.credits.filter((c) => c.role === role);
   const printed = credits.flatMap((c) => c.bylines);
   const people = credits.flatMap((c) => c.contributors);
@@ -314,13 +313,13 @@ function RoleEditor({
     )?.name ?? byline;
 
   return (
-    <section className="space-y-2">
-      <div className="flex items-baseline justify-between gap-2">
-        <h3 className="text-sm font-medium">{ROLE_NAMES[role]}</h3>
+    <section className="space-y-3 border-t pt-4">
+      <div className="space-y-0.5">
+        <h3 className="text-sm font-semibold">{ROLE_NAMES[role]}</h3>
         {credits[0]?.printed && (
-          <span className="text-muted-foreground truncate text-xs">
+          <p className="text-muted-foreground text-xs break-words">
             {credits[0].label}: {credits.map((c) => c.printed).join(" / ")}
-          </span>
+          </p>
         )}
       </div>
 
@@ -328,46 +327,53 @@ function RoleEditor({
         <p className="text-muted-foreground text-sm">No credit line.</p>
       )}
 
-      <ul className="space-y-1.5">
-        {printed.map((byline) => (
-          <li
+      <FieldRows>
+        {printed.map((byline, index) => (
+          <FieldRow
             key={byline}
-            className="grid grid-cols-[1fr_auto_1.4fr] items-center gap-2"
+            label={<span className="break-words">{byline}</span>}
+            htmlFor={`${ids}-${index}`}
+            width="panel"
           >
-            <span className="truncate text-sm">{byline}</span>
-            <span className="text-muted-foreground text-xs">counts as</span>
             <Input
+              id={`${ids}-${index}`}
               list={list}
-              className="h-8"
+              aria-label={`Who ${byline} counts as`}
               value={renamed[byline] ?? ""}
               placeholder={
-                fallback(byline) === byline ? "as printed" : fallback(byline)
+                fallback(byline) === byline ? "As printed" : fallback(byline)
               }
               onChange={(event) =>
                 setRenamed({ ...renamed, [byline]: event.target.value })
               }
             />
-          </li>
+          </FieldRow>
         ))}
         {added.map((name, index) => (
-          <li
+          <FieldRow
             key={index}
-            className="grid grid-cols-[1fr_auto_1.4fr] items-center gap-2"
+            label={
+              <span className="text-muted-foreground font-normal italic">
+                Not printed
+              </span>
+            }
+            htmlFor={`${ids}-added-${index}`}
+            width="panel"
+            action={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground"
+                aria-label={`Remove ${name || "this name"}`}
+                onClick={() => setAdded(added.filter((_, i) => i !== index))}
+              >
+                <XIcon />
+              </Button>
+            }
           >
-            <span className="text-muted-foreground text-sm italic">
-              not printed
-            </span>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label="Remove"
-              onClick={() => setAdded(added.filter((_, i) => i !== index))}
-            >
-              <XIcon />
-            </Button>
             <Input
+              id={`${ids}-added-${index}`}
               list={list}
-              className="h-8"
               value={name}
               placeholder="Name"
               onChange={(event) =>
@@ -376,19 +382,19 @@ function RoleEditor({
                 )
               }
             />
-          </li>
+          </FieldRow>
         ))}
-      </ul>
+      </FieldRows>
       <datalist id={list}>
         {everyone.map((name) => (
           <option key={name} value={name} />
         ))}
       </datalist>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="ghost"
-          size="xs"
+          className="-ml-2.5"
           onClick={() => setAdded([...added, ""])}
         >
           <PlusIcon /> Add someone not printed
@@ -399,7 +405,6 @@ function RoleEditor({
             Object.values(initial.renamed).some(Boolean)) && (
             <Button
               variant="ghost"
-              size="xs"
               disabled={save.isPending}
               onClick={() =>
                 save.mutate({
@@ -425,7 +430,15 @@ function RoleEditor({
         {changed && (
           <>
             <Button
-              size="xs"
+              variant="ghost"
+              onClick={() => {
+                setRenamed(initial.renamed);
+                setAdded(initial.added);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
               disabled={save.isPending}
               onClick={() =>
                 save.mutate({
@@ -446,16 +459,6 @@ function RoleEditor({
               }
             >
               {save.isPending ? "Saving…" : "Save"}
-            </Button>
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => {
-                setRenamed(initial.renamed);
-                setAdded(initial.added);
-              }}
-            >
-              Cancel
             </Button>
           </>
         )}

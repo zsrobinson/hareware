@@ -10,7 +10,8 @@ import { SHEET_KEY } from "./archive-data";
 
 type Save = { edit: Edit; done?: string; undo?: Edit };
 
-async function send(edit: Edit) {
+/** writes one edit to the Sheet; throws what the server said */
+export async function send(edit: Edit) {
   const response = await fetch("/api/sheet", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -22,7 +23,7 @@ async function send(edit: Edit) {
 /* a refusal means the session ended or changed: asking the gate again puts
    the refusal in place of the page, rather than leaving names on screen that
    this viewer may no longer see */
-function afterFailure(queryClient: QueryClient, error: unknown) {
+export function afterFailure(queryClient: QueryClient, error: unknown) {
   if (error instanceof Refused)
     void queryClient.invalidateQueries({ queryKey: SHEET_KEY });
 }
@@ -42,8 +43,8 @@ async function undoWith(queryClient: QueryClient, edit: Edit) {
 /**
  * Saves an edit to the Sheet, then reloads the archive so every page shows
  * it. `done` is the toast on success; a failure says what the server said.
- * An `undo` puts an Undo button on that toast, which is how every removal
- * stays recoverable without asking first.
+ * An `undo` puts an Undo button on that toast. A removal does not come here:
+ * `useRemovals` undoes it in the row it took away.
  */
 export function useEdit() {
   const queryClient = useQueryClient();

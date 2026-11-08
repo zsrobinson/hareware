@@ -1,7 +1,7 @@
 /*
-  The Social Reminder's cards and log. The page is a static shell (ADR 0012);
-  this asks the gated /api/reminder.json, which reads D1 and plans the next run,
-  and draws the refusal itself when the answer is no.
+  The Social Reminder's next run and log. The page is a static shell (ADR
+  0012); this asks the gated /api/reminder.json, which reads D1 and plans the
+  next run, and draws the refusal itself when the answer is no.
 */
 
 import { useQuery } from "@tanstack/react-query";
@@ -9,9 +9,10 @@ import { queryClient } from "~/lib/query-client";
 import { Refused } from "~/lib/gated";
 import { useHydrated } from "~/lib/use-hydrated";
 import { DenialMessage } from "./gated";
+import { PageActions } from "./page-actions";
 import { reminderQuery } from "./queries";
 import { ReadFailed, Reading } from "./read-state";
-import { OUTCOMES, ReminderLog } from "./reminder-log";
+import { ReminderLog } from "./reminder-log";
 
 export function ReminderPage() {
   const hydrated = useHydrated();
@@ -33,91 +34,57 @@ export function ReminderPage() {
     );
 
   const view = query.data;
-  const lastRun = view.rows.find((row) => row.action === "social-ping");
   const { next } = view;
 
   return (
-    <div className="space-y-6">
-      <p className="text-muted-foreground -mt-4 text-sm">
-        In {view.schedule} Eastern each day.
-      </p>
+    <div className="space-y-10">
+      {/* where and when, every day: true of the whole page */}
+      <PageActions>
+        <span className="text-muted-foreground text-sm">
+          {view.schedule} Eastern, daily
+        </span>
+      </PageActions>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <section className="bg-card space-y-2 rounded-xl border p-4 sm:p-5">
-          <h2 className="font-semibold">Last run</h2>
-          {lastRun ? (
-            <>
-              <p className="font-semibold">
-                {OUTCOMES[lastRun.outcome]}
-                <span className="text-muted-foreground font-normal">
-                  {" "}
-                  · {lastRunLabel(lastRun.at)}
-                </span>
-              </p>
-              <p className="text-muted-foreground text-sm">{lastRun.summary}</p>
-            </>
-          ) : (
-            <p className="text-muted-foreground text-sm">
-              {view.logError ?? "No run recorded yet."}
-            </p>
-          )}
-        </section>
-
-        <section className="bg-card space-y-2 rounded-xl border p-4 sm:p-5">
-          <h2 className="font-semibold">Next run</h2>
-          <p className="font-semibold">
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-baseline gap-x-3">
+          <h2 className="text-base font-semibold">Next run</h2>
+          <span className="text-muted-foreground text-sm">
             {next.at}
-            {next.pings && (
-              <span className="text-muted-foreground font-normal">
-                {" "}
-                · pings {next.pings}
-              </span>
-            )}
-          </p>
-          {next.problem ? (
-            <p className="text-destructive text-sm">{next.problem}</p>
-          ) : next.articles.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              Nothing new since {next.since}.
-            </p>
-          ) : (
-            <>
-              <p className="text-muted-foreground text-sm">
-                Would announce so far ({next.articles.length}):
-              </p>
-              <ul className="divide-y rounded-lg border text-sm">
-                {next.articles.map((article) => (
-                  <li
-                    key={article.link}
-                    className="flex flex-wrap items-baseline justify-between gap-2 px-3 py-2"
-                  >
-                    <a
-                      href={article.link}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-medium hover:underline"
-                    >
-                      {article.title}
-                    </a>
-                    <span className="text-muted-foreground text-xs">
-                      {article.at}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </section>
-      </div>
-
-      <section className="space-y-2">
-        <div>
-          <h2 className="font-semibold">History</h2>
-          <p className="text-muted-foreground text-sm">
-            Every run, and every time someone marks an article posted or not
-            posted in Discord.
-          </p>
+            {next.pings && <> · pings {next.pings}</>}
+          </span>
         </div>
+        {next.problem ? (
+          <p className="text-destructive text-sm">{next.problem}</p>
+        ) : next.articles.length === 0 ? (
+          <p className="text-muted-foreground rounded-lg border px-4 py-6 text-center text-sm">
+            Nothing new since {next.since}.
+          </p>
+        ) : (
+          <ul className="divide-y rounded-lg border text-sm">
+            {next.articles.map((article) => (
+              <li
+                key={article.link}
+                className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 px-3 py-2.5"
+              >
+                <a
+                  href={article.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium underline-offset-4 hover:underline"
+                >
+                  {article.title}
+                </a>
+                <span className="text-muted-foreground text-xs whitespace-nowrap">
+                  {article.at}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold">History</h2>
         {view.logError && (
           <p className="text-destructive text-sm">{view.logError}</p>
         )}
@@ -126,17 +93,3 @@ export function ReminderPage() {
     </div>
   );
 }
-
-/* "Sat, Nov 7, 8:00 AM", as the server writes the other times on the page */
-const lastRunLabel = (at: number) =>
-  new Date(at * 1000)
-    .toLocaleString("en-US", {
-      timeZone: "America/New_York",
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    })
-    /* newer ICU puts a narrow no-break space before AM */
-    .replace(/\u202f/g, " ");

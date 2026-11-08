@@ -3,8 +3,8 @@ import { DataTable, sortable } from "~/components/data-table";
 import { Badge } from "~/components/ui/badge";
 import type { Row } from "~/lib/log";
 
-/** what a run of the reminder did, in words: the page's "Last run" reads this too */
-export const OUTCOMES: Record<Row["outcome"], string> = {
+/** what a run of the reminder did, in words */
+const OUTCOMES: Record<Row["outcome"], string> = {
   ok: "Announced",
   skipped: "Nothing new",
   misconfigured: "Not set up",

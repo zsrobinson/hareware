@@ -73,13 +73,15 @@ export function CopyButton({ id, what }: { id: string; what: string }) {
 }
 
 /** a copy button that says what it copies ("Copy link"): it reads "Copied"
-    for a moment, at the width it already had, so nothing beside it moves */
+    for a moment, at the width it already had, so nothing beside it moves.
+    `iconOnly` draws its icon alone, named by `label`, where a row is short */
 export function CopyTextButton({
   text,
   label,
   what,
   icon: Icon,
   failed,
+  iconOnly = false,
 }: {
   /** read on the click, so it is what is on screen then */
   text: () => string;
@@ -89,6 +91,7 @@ export function CopyTextButton({
   icon: LucideIcon;
   /** where to copy it by hand instead */
   failed: string;
+  iconOnly?: boolean;
 }) {
   const [result, show] = useOutcome();
   const shown = result === "copied" ? "Copied" : label;
@@ -96,9 +99,17 @@ export function CopyTextButton({
   return (
     <>
       <Button
-        variant="outline"
-        className="bg-background"
-        title={result === "failed" ? `Couldn't copy. ${failed}` : undefined}
+        variant={iconOnly ? "ghost" : "outline"}
+        size={iconOnly ? "icon" : "default"}
+        className={cn(!iconOnly && "bg-background")}
+        aria-label={iconOnly ? label : undefined}
+        title={
+          result === "failed"
+            ? `Couldn't copy. ${failed}`
+            : iconOnly
+              ? shown
+              : undefined
+        }
         onClick={() => {
           navigator.clipboard
             .writeText(text())
@@ -117,13 +128,15 @@ export function CopyTextButton({
           <Icon />
         )}
         {/* both words in one cell, the other hidden, so the width holds */}
-        <span className="grid *:col-start-1 *:row-start-1">
-          {[label, "Copied"].map((word) => (
-            <span key={word} className={cn(word !== shown && "invisible")}>
-              {word}
-            </span>
-          ))}
-        </span>
+        {!iconOnly && (
+          <span className="grid *:col-start-1 *:row-start-1">
+            {[label, "Copied"].map((word) => (
+              <span key={word} className={cn(word !== shown && "invisible")}>
+                {word}
+              </span>
+            ))}
+          </span>
+        )}
       </Button>
       <span className="sr-only" role="status">
         {result === "copied"

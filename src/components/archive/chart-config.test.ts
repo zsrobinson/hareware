@@ -1,9 +1,14 @@
 import { expect, test } from "vitest";
 import {
+  allows,
   configOf,
+  COUNTS,
+  DRAWS,
+  GROUPINGS,
   rangeOfView,
   readChart,
   settle,
+  SPLITS,
   VIEWS,
   writeChart,
   type ChartConfig,
@@ -164,4 +169,44 @@ test("a choice that rules another out moves it", () => {
     values: "number",
     count: "contributions",
   });
+});
+
+test("no choice in the builder moves what is counted, grouped or split", () => {
+  /* Articles by section: an article has no one role or person */
+  const sections = VIEWS[0].config;
+  const ok = allows(sections);
+  expect(ok.split.role).toBe(false);
+  expect(ok.by.person).toBe(false);
+  expect(ok.by.role).toBe(false);
+  expect(ok.by.semester).toBe(true);
+
+  const settings = {
+    count: COUNTS.map((c) => c.id),
+    by: GROUPINGS.map((g) => g.id),
+    split: SPLITS.map((s) => s.id),
+  };
+  const configs = settings.count.flatMap((count) =>
+    settings.by.flatMap((by) =>
+      settings.split.flatMap((split) =>
+        DRAWS.map((draw) => settle({ ...sections, count, by, split, draw })),
+      ),
+    ),
+  );
+  for (const config of configs) {
+    const offered = allows(config);
+    for (const key of ["count", "by", "split"] as const)
+      for (const option of settings[key]) {
+        if (!(offered[key] as Record<string, boolean>)[option]) continue;
+        const next = settle({ ...config, [key]: option });
+        expect(
+          { count: next.count, by: next.by, split: next.split },
+          `${JSON.stringify(config)} → ${key} ${option}`,
+        ).toEqual({
+          count: config.count,
+          by: config.by,
+          split: config.split,
+          [key]: option,
+        });
+      }
+  }
 });

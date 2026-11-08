@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { SidePanel } from "~/components/panel";
 import { Button } from "~/components/ui/button";
 import type { ArchiveArticle } from "~/lib/credits/archive";
-import { ROLE_NAMES, type Role } from "~/lib/credits/labels";
+import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import { compareSections } from "~/lib/credits/sections";
 import { easternDate, type Measure, type Member } from "~/lib/credits/stats";
 import { cn } from "~/lib/utils";
@@ -256,10 +256,17 @@ function Meta({
   );
 }
 
+/** each person once, with every role of theirs: "Ada Example (Writing, Image)" */
 function Names({ names }: { names: { name: string; role?: Role }[] }) {
   if (names.length === 0) return <span>No credits</span>;
-  return names.map(({ name, role }, index) => (
-    <span key={`${name} ${role}`}>
+  const roles = new Map<string, Role[]>();
+  for (const { name, role } of names) {
+    const held = roles.get(name) ?? [];
+    if (role && !held.includes(role)) held.push(role);
+    roles.set(name, held);
+  }
+  return [...roles].map(([name, held], index) => (
+    <span key={name}>
       {index > 0 && ", "}
       <a
         href={personHref(name)}
@@ -267,7 +274,11 @@ function Names({ names }: { names: { name: string; role?: Role }[] }) {
       >
         {name}
       </a>
-      {role && ` (${ROLE_NAMES[role]})`}
+      {held.length > 0 &&
+        ` (${held
+          .sort((a, b) => ROLES.indexOf(a) - ROLES.indexOf(b))
+          .map((role) => ROLE_NAMES[role])
+          .join(", ")})`}
     </span>
   ));
 }

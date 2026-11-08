@@ -7,6 +7,7 @@
 */
 
 import {
+  membersAcross,
   membersOf,
   type Grouped,
   type Measure,
@@ -83,6 +84,52 @@ export function sliceMembers(
     slice.category,
     slice.series === null ? columnSeries(grouped, hidden) : [slice.series],
   );
+}
+
+/**
+ * What the chart draws, one member per thing counted: every category it
+ * shows, in the series the legend leaves on. A person in two columns is one.
+ */
+export function drawnMembers(
+  grouped: Grouped,
+  hidden: readonly string[],
+): Member[] {
+  return membersAcross(
+    grouped,
+    grouped.categories.map((c) => c.key),
+    grouped.series.map((s) => s.key).filter((key) => !hidden.includes(key)),
+  );
+}
+
+/**
+ * The chart's count in words, of what is drawn: "418 articles", "233 of 418
+ * articles" with series hidden, "Top 25 of 33 people · 52 of 60
+ * contributions", or "138 different people", which its columns add up to
+ * more than.
+ */
+export function chartCount(grouped: Grouped, hidden: readonly string[]) {
+  const unit = (n: number) =>
+    grouped.measure === "people"
+      ? counted(n, "person", "different people")
+      : unitOf(n, grouped.measure);
+  const drawn = drawnMembers(grouped, hidden).length;
+  const whole = membersAcross(
+    grouped,
+    Object.keys(grouped.cells),
+    grouped.series.map((s) => s.key),
+  ).length;
+  const parts: string[] = [];
+  /* only grouping by person keeps the biggest few */
+  if (grouped.categories.length < grouped.available)
+    parts.push(
+      `Top ${grouped.categories.length} of ${counted(grouped.available, "person", "people")}`,
+    );
+  parts.push(
+    drawn === whole
+      ? unit(whole)
+      : `${drawn.toLocaleString()} of ${unit(whole)}`,
+  );
+  return parts.join(" · ");
 }
 
 /**

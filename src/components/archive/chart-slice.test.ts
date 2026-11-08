@@ -25,7 +25,14 @@ import {
   VIEWS,
   type ChartConfig,
 } from "./chart-config";
-import { readSlice, sliceCount, sliceKey, sliceMembers } from "./chart-slice";
+import {
+  chartCount,
+  drawnMembers,
+  readSlice,
+  sliceCount,
+  sliceKey,
+  sliceMembers,
+} from "./chart-slice";
 
 /*
   A slice lists what its mark counts. These go through every chart the
@@ -219,6 +226,34 @@ function check(grouped: Grouped, config: ChartConfig, filters: Filters) {
     }
     expect(readSlice(category, grouped)).toEqual({ category, series: null });
   }
+
+  for (const hidden of hiddens) {
+    /* the caption's count: everything the marks drawn list, each once */
+    const drawn = drawnMembers(grouped, hidden);
+    const listed = new Set(
+      grouped.categories.flatMap(({ key: category }) =>
+        keys
+          .filter((key) => !hidden.includes(key))
+          .flatMap((series) =>
+            sliceMembers(grouped, { category, series }, []).map((m) => m.id),
+          ),
+      ),
+    );
+    expect(new Set(drawn.map((m) => m.id))).toEqual(listed);
+    expect(drawn).toHaveLength(listed.size);
+    if (measure !== "people" && !grouped.running)
+      expect(drawn.length).toBe(
+        grouped.categories.reduce(
+          (sum, { key: category }) =>
+            sum +
+            sliceMembers(grouped, { category, series: null }, hidden).length,
+          0,
+        ),
+      );
+  }
+  /* with every series on and nobody cut, the chart draws all it counted */
+  if (grouped.categories.length >= grouped.available)
+    expect(drawnMembers(grouped, [])).toHaveLength(grouped.total);
 }
 
 test("the builder makes charts of every kind, so all of them are checked", () => {
@@ -372,4 +407,44 @@ test("a slice's count says what it is of", () => {
       { id: 2, units: [{ article: archive[1]!, role: "writer" }] },
     ]),
   ).toBe("3 contributions on 2 articles");
+});
+
+test("the caption counts what is drawn, of all there is", () => {
+  const history = VIEWS.find((view) => view.id === "history")!.config;
+  const grouped = groupOf(history, archive, NO_FILTERS, archive);
+  expect(chartCount(grouped, [])).toBe("10 articles");
+  /* four of the ten are News */
+  expect(chartCount(grouped, ["News"])).toBe("6 of 10 articles");
+  expect(chartCount(grouped, ["News", "Features", "Sports"])).toBe(
+    "0 of 10 articles",
+  );
+});
+
+test("a top ten's caption counts the ten people's contributions", () => {
+  const config = configs.find(
+    (c) => c.by === "person" && c.top === 10 && c.split === "role",
+  )!;
+  const grouped = groupOf(config, archive, NO_FILTERS, archive);
+  const drawn = grouped.categories.reduce(
+    (sum, { key }) => sum + grouped.totals[key]!,
+    0,
+  );
+  /* 13 people made 21 contributions, and the three left out one each */
+  expect(grouped.available).toBe(13);
+  expect(drawn).toBe(18);
+  expect(chartCount(grouped, [])).toBe(
+    "Top 10 of 13 people · 18 of 21 contributions",
+  );
+  /* five of the ten's are images */
+  expect(chartCount(grouped, ["image"])).toBe(
+    "Top 10 of 13 people · 13 of 21 contributions",
+  );
+});
+
+test("Headcount's caption counts each person once, which its columns do not", () => {
+  const headcount = VIEWS.find((view) => view.id === "headcount")!.config;
+  const grouped = groupOf(headcount, archive, NO_FILTERS, archive);
+  const columns = Object.values(grouped.totals).reduce((a, b) => a + b, 0);
+  expect(chartCount(grouped, [])).toBe("13 different people");
+  expect(columns).toBeGreaterThan(13);
 });

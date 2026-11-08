@@ -309,9 +309,18 @@ export function membersOf(
     grouped.running && at >= 0
       ? grouped.categories.slice(0, at + 1).map((c) => c.key)
       : [category];
+  return membersAcross(grouped, keys, series);
+}
+
+/** what several categories count together, each as counted, not running */
+export function membersAcross(
+  grouped: Pick<Grouped, "cells">,
+  categories: readonly string[],
+  series: readonly string[],
+): Member[] {
   /* one person in two cells is one member, with both cells' contributions */
   const merged = new Map<string | number, Unit[]>();
-  for (const key of keys)
+  for (const key of categories)
     for (const s of series)
       for (const member of grouped.cells[key]?.[s] ?? []) {
         const held = merged.get(member.id);

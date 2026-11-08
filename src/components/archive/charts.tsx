@@ -40,7 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import { ROLE_NAMES, type Role } from "~/lib/credits/labels";
+import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import {
   applyFilters,
   easternDate,
@@ -57,6 +57,7 @@ import { cn } from "~/lib/utils";
 import {
   AboveToolbar,
   ArchiveShell,
+  SearchRowEnd,
   SheetGroup,
   ToolbarEnd,
   type ViewProps,
@@ -77,8 +78,8 @@ import {
   type ViewId,
 } from "./chart-config";
 import {
+  chartCount,
   columnSeries,
-  counted,
   percentText,
   readSlice,
   sliceCount,
@@ -124,26 +125,18 @@ const TABS: { id: ViewId; label: string }[] = [
   { id: "custom", label: "Custom" },
 ];
 
-/**
- * what the caption says was added up, so a number is never read as the wrong
- * unit, and which filters cut it
- */
-function unitLine(grouped: Grouped, config: ChartConfig, filterNote: string) {
-  const parts: string[] = [];
-  if (config.by === "person" && grouped.categories.length < grouped.available)
-    parts.push(
-      `Top ${grouped.categories.length} of ${counted(grouped.available, "person", "people")}`,
-    );
-  parts.push(unitOf(grouped.total, grouped.measure));
-  if (filterNote) parts.push(filterNote);
-  return parts.join(" · ");
-}
+/** what a chart counts, as its one series and its table's column are named */
+const measureName = (measure: Measure) =>
+  COUNTS.find((c) => c.id === measure)!.label;
 
-function titleOf(config: ChartConfig, measure: Measure) {
-  const what = COUNTS.find((c) => c.id === measure)!.label;
+/* the chart's title: one series drawn is named in it, as a legend would */
+function titleOf({ config, grouped, series }: Plot) {
+  const what = measureName(grouped.measure);
   const by = GROUPINGS.find((g) => g.id === config.by)!.label.toLowerCase();
+  const one =
+    config.split !== "none" && series.length === 1 ? series[0]! : null;
   const split =
-    config.split === "none"
+    config.split === "none" || one
       ? ""
       : `, split by ${SPLITS.find((s) => s.id === config.split)!.label.toLowerCase()}`;
   const values =
@@ -154,7 +147,9 @@ function titleOf(config: ChartConfig, measure: Measure) {
       : config.values === "running"
         ? ", as a running total"
         : "";
-  return `${what} by ${by}${split}${values}`;
+  return one
+    ? `${one.label} ${what.toLowerCase()} by ${by}${values}`
+    : `${what} by ${by}${split}${values}`;
 }
 
 /** what a period the chart cannot show whole is short of */
@@ -255,17 +250,29 @@ function Charts({
   useEffect(() => {
     if (missing) opened.close();
   });
-  /* one side panel at a time */
+  /* one side panel at a time: a list opened over Customize gives it back on
+     closing, which takes focus as Customize does when its button opens it */
+  const customizeButton = useRef<HTMLButtonElement>(null);
+  const reopen = useRef(false);
+  const sliceOpen = slice !== null;
+  useEffect(() => {
+    if (sliceOpen || !reopen.current) return;
+    reopen.current = false;
+    customizeButton.current?.focus({ preventScroll: true });
+    setCustomizing(true);
+  }, [sliceOpen]);
   const openSlice = (next: Slice, from: "chart" | "table") => {
     /* the table has every series, so the chart shows them all to match it */
     const drawn = from === "table" ? [] : hidden;
     /* an empty period has nothing to list */
     if (sliceMembers(grouped, next, drawn).length === 0) return;
+    if (customizing) reopen.current = true;
     setHidden(drawn);
     setCustomizing(false);
     opened.show(sliceKey(next));
   };
   const customize = (open: boolean) => {
+    reopen.current = false;
     if (open) opened.close();
     setCustomizing(open);
   };
@@ -289,9 +296,22 @@ function Charts({
       <PageActions>
         <span className="contents max-md:hidden">{copyLink}</span>
       </PageActions>
+      {phone && (
+        <SearchRowEnd>
+          <CopyTextButton
+            text={() => window.location.href}
+            label="Copy link"
+            what="the link to this chart"
+            icon={LinkIcon}
+            failed="Copy it from the address bar."
+            iconOnly
+          />
+        </SearchRowEnd>
+      )}
       {!phone && (
         <ToolbarEnd>
           <Button
+            ref={customizeButton}
             variant="outline"
             aria-expanded={customizing}
             className={cn(customizing && "bg-muted")}
@@ -310,9 +330,14 @@ function Charts({
             <Button
               variant="ghost"
               disabled={state.view !== "custom"}
-              onClick={() =>
-                show({ view: state.base, custom: null, base: state.base })
-              }
+              onClick={(event) => {
+                /* Reset turns itself off, which would drop focus to the page */
+                event.currentTarget
+                  .closest("aside")
+                  ?.querySelector<HTMLElement>("h2")
+                  ?.focus();
+                show({ view: state.base, custom: null, base: state.base });
+              }}
             >
               Reset
             </Button>
@@ -329,10 +354,7 @@ function Charts({
               : undefined
           }
         >
-          <PanelGroup label="Chart">
-            {builder}
-            <div className="flex flex-wrap gap-2">{copyLink}</div>
-          </PanelGroup>
+          <PanelGroup label="Chart">{builder}</PanelGroup>
         </SheetGroup>
       )}
 
@@ -348,9 +370,12 @@ function Charts({
 
       <figure id={panelId} role="tabpanel" className="space-y-4">
         <figcaption className="space-y-0.5">
-          <div className="font-medium">{titleOf(config, grouped.measure)}</div>
+          <div className="font-medium">{titleOf(plot)}</div>
+          {/* what is drawn, and which filters cut it */}
           <div className="text-muted-foreground text-sm">
-            {unitLine(grouped, config, filterNote)}
+            {[chartCount(grouped, hidden), filterNote]
+              .filter(Boolean)
+              .join(" · ")}
           </div>
         </figcaption>
         {grouped.categories.length === 0 ? (
@@ -599,8 +624,13 @@ type Plot = {
   members: (slice: Slice) => Member[];
   /** what a mark shows: its count, or its share */
   value: (category: string, series: string) => number;
+  /** whether the category has anything drawn, and so anything to open */
+  filled: (category: string) => boolean;
   percent: (category: string, series: string) => number;
   color: (category: string, series: string) => string;
+  /** a line drawn dashed: the second of the roles' grey pair, which is
+      too near the first in tone to tell apart at a line's width */
+  dashed: (series: string) => boolean;
 };
 
 const nameOf = (dimension: string, key: string, label: string) =>
@@ -663,6 +693,8 @@ function plotOf(
     whole,
     members,
     value: share ? percent : count,
+    filled: (category) =>
+      total(category) > 0 && series.some((s) => count(category, s.key) > 0),
     percent,
     /* one series by section or role takes each bar's own colour; else the
        section it is cut to, or a grey that names nothing */
@@ -674,6 +706,7 @@ function plotOf(
           : section
             ? seriesColor(section, [], "section")
             : NEUTRAL,
+    dashed: (key) => split === "role" && key === ROLES[1],
   };
 }
 
@@ -695,9 +728,8 @@ function Legend({
 }) {
   const [stop, setStop] = useState(0);
   const toggles = useRef<HTMLDivElement>(null);
-  /* one series is named by the title */
-  const keyed = plot.all.length > 1;
-  if (!keyed && plot.partial.size === 0) return null;
+  /* one series is named by the title, and its faded marks say they are partial */
+  if (plot.all.length <= 1) return null;
   const lines = plot.config.draw === "lines";
   const at = Math.min(stop, plot.all.length - 1);
   /* a period's marks are faded where it is partial, so its swatch is too */
@@ -707,63 +739,65 @@ function Legend({
     /* a gap, not a rule, sets the partial periods apart: a rule is left
        hanging when they wrap */
     <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
-      {keyed && (
-        <div
-          ref={toggles}
-          role="toolbar"
-          aria-label="Series"
-          className="flex flex-wrap items-center gap-1"
-          onKeyDown={(event) => {
-            /* one tab stop for the legend; arrows move along it */
-            const last = plot.all.length - 1;
-            const next =
-              event.key === "ArrowRight" || event.key === "ArrowDown"
-                ? Math.min(last, at + 1)
-                : event.key === "ArrowLeft" || event.key === "ArrowUp"
-                  ? Math.max(0, at - 1)
-                  : event.key === "Home"
-                    ? 0
-                    : event.key === "End"
-                      ? last
-                      : null;
-            if (next === null) return;
-            event.preventDefault();
-            setStop(next);
-            toggles.current
-              ?.querySelector<HTMLElement>(`[data-series="${next}"]`)
-              ?.focus();
-          }}
-        >
-          {plot.all.map((series, index) => {
-            const off = hidden.includes(series.key);
-            return (
-              <button
-                key={series.key}
-                type="button"
-                data-series={index}
-                tabIndex={index === at ? 0 : -1}
-                aria-pressed={!off}
-                title={off ? "Show" : "Hide"}
-                onFocus={() => setStop(index)}
-                onClick={() => onToggle(series.key)}
-                className={cn(
-                  "hover:bg-muted focus-visible:ring-ring/50 flex items-center gap-1.5 rounded-md px-1.5 py-0.5 outline-none focus-visible:ring-3",
-                  off && "text-muted-foreground line-through opacity-60",
-                )}
-              >
-                <Swatch lines={lines} color={plot.color("", series.key)} />
-                {series.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      <div
+        ref={toggles}
+        role="toolbar"
+        aria-label="Series"
+        className="flex flex-wrap items-center gap-1"
+        onKeyDown={(event) => {
+          /* one tab stop for the legend; arrows move along it */
+          const last = plot.all.length - 1;
+          const next =
+            event.key === "ArrowRight" || event.key === "ArrowDown"
+              ? Math.min(last, at + 1)
+              : event.key === "ArrowLeft" || event.key === "ArrowUp"
+                ? Math.max(0, at - 1)
+                : event.key === "Home"
+                  ? 0
+                  : event.key === "End"
+                    ? last
+                    : null;
+          if (next === null) return;
+          event.preventDefault();
+          setStop(next);
+          toggles.current
+            ?.querySelector<HTMLElement>(`[data-series="${next}"]`)
+            ?.focus();
+        }}
+      >
+        {plot.all.map((series, index) => {
+          const off = hidden.includes(series.key);
+          return (
+            <button
+              key={series.key}
+              type="button"
+              data-series={index}
+              tabIndex={index === at ? 0 : -1}
+              aria-pressed={!off}
+              title={off ? "Show" : "Hide"}
+              onFocus={() => setStop(index)}
+              onClick={() => onToggle(series.key)}
+              className={cn(
+                "hover:bg-muted focus-visible:ring-ring/50 flex items-center gap-1.5 rounded-md px-1.5 py-0.5 outline-none focus-visible:ring-3",
+                off && "text-muted-foreground line-through opacity-60",
+              )}
+            >
+              <Swatch
+                lines={lines}
+                dashed={plot.dashed(series.key)}
+                color={plot.color("", series.key)}
+              />
+              {series.label}
+            </button>
+          );
+        })}
+      </div>
       {plot.partial.size > 0 && (
         <span className="text-muted-foreground flex items-center gap-1.5 px-1.5 py-0.5">
           {lines ? (
             <span
               aria-hidden
-              className="w-3.5 border-t-2 border-dashed border-current"
+              className="w-3.5 border-t-2 border-dotted border-current"
             />
           ) : (
             <span
@@ -785,7 +819,23 @@ function Legend({
 }
 
 /** a series' mark in a legend or a card: a square, or a stroke for lines */
-function Swatch({ lines, color }: { lines: boolean; color: string }) {
+function Swatch({
+  lines,
+  dashed = false,
+  color,
+}: {
+  lines: boolean;
+  dashed?: boolean;
+  color: string;
+}) {
+  if (lines && dashed)
+    return (
+      <span
+        aria-hidden
+        className="w-3.5 shrink-0 border-t-2 border-dashed"
+        style={{ borderColor: color }}
+      />
+    );
   return (
     <span
       aria-hidden
@@ -847,6 +897,8 @@ const pointIn = (event: PointerEvent | MouseEvent): Point => {
  * card, which stays until another is tapped or something outside the chart
  * is, and the card's own buttons open. The keyboard reads the category it is
  * on and opens all of it with Enter. One tab stop for the chart; arrows move.
+ * A category with nothing drawn has nothing to read or open, so it is passed
+ * over by all three.
  */
 function useInspect(
   count: number,
@@ -854,6 +906,8 @@ function useInspect(
   /** the series a point in a category's mark falls on, or null for none */
   hit: (index: number, at: Point) => string | null,
   open: (index: number, series: string | null) => void,
+  /** whether a category has anything drawn */
+  filled: (index: number) => boolean,
 ) {
   const [hovered, setHovered] = useState<number | null>(null);
   const [segment, setSegment] = useState<string | null>(null);
@@ -873,64 +927,73 @@ function useInspect(
   }, [pinned, container]);
 
   const at = hovered ?? focused ?? pinned;
-  const active = at !== null && at < count ? at : null;
+  const active = at !== null && at < count && filled(at) ? at : null;
   const keyboard = focused !== null && focused < count ? focused : null;
+  const marks = Array.from({ length: count }, (_, i) => i).filter(filled);
+  /* the one tab stop: the last one moved to, or the nearest after it */
+  const tabStop = marks.find((i) => i >= stop) ?? marks.at(-1);
 
-  const mark = (index: number) => ({
-    "data-mark": index,
-    role: "button",
-    tabIndex: index === Math.min(stop, count - 1) ? 0 : -1,
-    className: "cursor-pointer outline-none",
-    onPointerDown: (event: PointerEvent) => {
-      touch.current = event.pointerType === "touch";
-    },
-    onPointerEnter: (event: PointerEvent) => {
-      if (event.pointerType === "mouse") setHovered(index);
-    },
-    onPointerMove: (event: PointerEvent) => {
-      if (event.pointerType === "mouse") setSegment(hit(index, pointIn(event)));
-    },
-    onClick: (event: MouseEvent) => {
-      setStop(index);
-      if (touch.current) setPinned((now) => (now === index ? null : index));
-      else open(index, hit(index, pointIn(event)));
-    },
-    onFocus: (event: FocusEvent<SVGElement>) => {
-      setStop(index);
-      /* a click focuses too; only the keyboard's focus shows the card */
-      if (event.currentTarget.matches(":focus-visible")) setFocused(index);
-    },
-    onBlur: () => setFocused(null),
-    onKeyDown: (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setPinned(null);
-        setFocused(null);
-        return;
-      }
-      if (event.key === "Enter" || event.key === " ") {
+  const mark = (index: number) => {
+    if (!filled(index))
+      return {
+        "aria-hidden": true,
+        onPointerEnter: () => setHovered(null),
+      };
+    return {
+      "data-mark": index,
+      role: "button",
+      tabIndex: index === tabStop ? 0 : -1,
+      className: "cursor-pointer outline-none",
+      onPointerDown: (event: PointerEvent) => {
+        touch.current = event.pointerType === "touch";
+      },
+      onPointerEnter: (event: PointerEvent) => {
+        if (event.pointerType === "mouse") setHovered(index);
+      },
+      onPointerMove: (event: PointerEvent) => {
+        if (event.pointerType === "mouse")
+          setSegment(hit(index, pointIn(event)));
+      },
+      onClick: (event: MouseEvent) => {
+        setStop(index);
+        if (touch.current) setPinned((now) => (now === index ? null : index));
+        else open(index, hit(index, pointIn(event)));
+      },
+      onFocus: (event: FocusEvent<SVGElement>) => {
+        setStop(index);
+        /* a click focuses too; only the keyboard's focus shows the card */
+        if (event.currentTarget.matches(":focus-visible")) setFocused(index);
+      },
+      onBlur: () => setFocused(null),
+      onKeyDown: (event: KeyboardEvent) => {
+        if (event.key === "Escape") {
+          setPinned(null);
+          setFocused(null);
+          return;
+        }
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          open(index, null);
+          return;
+        }
+        const next =
+          event.key === "ArrowRight" || event.key === "ArrowDown"
+            ? (marks.find((i) => i > index) ?? index)
+            : event.key === "ArrowLeft" || event.key === "ArrowUp"
+              ? (marks.findLast((i) => i < index) ?? index)
+              : event.key === "Home"
+                ? marks[0]
+                : event.key === "End"
+                  ? marks.at(-1)
+                  : null;
+        if (next == null) return;
         event.preventDefault();
-        open(index, null);
-        return;
-      }
-      const next =
-        event.key === "ArrowRight" || event.key === "ArrowDown"
-          ? index + 1
-          : event.key === "ArrowLeft" || event.key === "ArrowUp"
-            ? index - 1
-            : event.key === "Home"
-              ? 0
-              : event.key === "End"
-                ? count - 1
-                : null;
-      if (next === null) return;
-      event.preventDefault();
-      container.current
-        ?.querySelector<SVGElement>(
-          `[data-mark="${Math.max(0, Math.min(count - 1, next))}"]`,
-        )
-        ?.focus();
-    },
-  });
+        container.current
+          ?.querySelector<SVGElement>(`[data-mark="${next}"]`)
+          ?.focus();
+      },
+    };
+  };
 
   return {
     active,
@@ -1052,6 +1115,7 @@ function Card({
             <>
               <Swatch
                 lines={plot.config.draw === "lines"}
+                dashed={plot.dashed(s.key)}
                 color={plot.color(category.key, s.key)}
               />
               <span className="text-muted-foreground min-w-0 flex-1 truncate">
@@ -1097,7 +1161,7 @@ function Card({
           )}
         >
           <span className="text-muted-foreground flex-1">
-            {plot.config.values === "running" ? "Total so far" : "Total"}
+            {totalName(plot.config, many ? null : plot.grouped.measure)}
           </span>
           <span className="font-semibold tabular-nums">
             {total.toLocaleString()}
@@ -1119,6 +1183,10 @@ function Card({
     </div>
   );
 }
+
+/** a column's total, named by what it counts where there is one series */
+const totalName = (config: ChartConfig, single: Measure | null) =>
+  `${single ? measureName(single) : "Total"}${config.values === "running" ? " so far" : ""}`;
 
 /** a clean axis: the smallest round step that keeps it to six intervals or fewer */
 function axis(peak: number): { max: number; ticks: number[] } {
@@ -1272,8 +1340,11 @@ function TimeChart({
   const { max, ticks } = scaleOf(plot);
 
   const height = 280 + (stackedShare ? 14 : 0);
+  /* one period is a point a series, with no line to follow, so each point
+     carries its value instead of the line's name at its end */
+  const single = lines && categories.length === 1;
   const labelRoom =
-    lines && series.length >= 2 && series.length <= 5 && width > 480;
+    lines && !single && series.length >= 2 && series.length <= 5 && width > 480;
   const longestTick = Math.max(...ticks.map((t) => tickText(plot, t).length));
   const margin = {
     top: 16,
@@ -1296,12 +1367,19 @@ function TimeChart({
   );
   const every = short ? Math.max(1, Math.ceil((shortest * 6.5 + 6) / band)) : 1;
 
-  /* line-end labels, spread apart so converging lines never stack them */
-  const labelY = new Map<string, number>();
-  if (labelRoom && categories.length > 0) {
+  /* labels at the lines' last points: series that end level share one
+     ("Writing, Image"), and the rest are spread apart so converging lines
+     never stack them */
+  const labels: { keys: string[]; text: string; y: number }[] = [];
+  if ((labelRoom || single) && categories.length > 0) {
     const lastKey = categories[categories.length - 1]!.key;
-    const ends = series
-      .map((s) => ({ key: s.key, y: y(plot.value(lastKey, s.key)) }))
+    const level = new Map<number, Series[]>();
+    for (const s of series) {
+      const v = plot.value(lastKey, s.key);
+      level.set(v, [...(level.get(v) ?? []), s]);
+    }
+    const ends = [...level]
+      .map(([value, those]) => ({ value, those, y: y(value) }))
       .sort((a, b) => a.y - b.y);
     /* top-down with 14px between them, then lifted if the last one fell below the axis */
     const placed: number[] = [];
@@ -1309,9 +1387,23 @@ function TimeChart({
       placed.push(Math.max(end.y, (placed.at(-1) ?? -Infinity) + 14));
     const overflow = Math.max(0, (placed.at(-1) ?? 0) - (margin.top + plotH));
     ends.forEach((end, i) =>
-      labelY.set(end.key, Math.max(margin.top, placed[i]! - overflow)),
+      labels.push({
+        keys: end.those.map((s) => s.key),
+        text: [
+          single &&
+            (plot.share ? percentText(end.value) : end.value.toLocaleString()),
+          (!single || series.length > 1) &&
+            end.those.map((s) => s.label).join(", "),
+        ]
+          .filter(Boolean)
+          .join(" "),
+        y: Math.max(margin.top, placed[i]! - overflow),
+      }),
     );
   }
+  const labelY = new Map(
+    labels.flatMap((label) => label.keys.map((key) => [key, label.y])),
+  );
 
   /* each column's segments: where they are drawn, and where a click finds them */
   const columns: Segment[][] = categories.map((category, index) => {
@@ -1378,6 +1470,7 @@ function TimeChart({
       return near && near.off <= 10 ? near.key : null;
     },
     (index, at) => onOpen(sliceAt(plot, index, at)),
+    (index) => plot.filled(categories[index]!.key),
   );
   const { active, keyboard } = inspect;
   const chosen = selectedIndex(plot, selected);
@@ -1404,7 +1497,7 @@ function TimeChart({
         width={width}
         height={height}
         role="group"
-        aria-label={`${titleOf(config, plot.grouped.measure)}. Arrow keys move between periods, and Enter lists what a period counts; the table below has every number.`}
+        aria-label={`${titleOf(plot)}. Arrow keys move between periods, and Enter lists what a period counts; the table below has every number.`}
         className="block overflow-visible"
       >
         {[...new Set([active, chosen])].map(
@@ -1531,7 +1624,9 @@ function TimeChart({
               y: y(plot.value(c.key, s.key)),
             }));
             const end = points[points.length - 1];
-            /* the line into a partial period is dashed, so it is not read as a drop */
+            const dashed = plot.dashed(s.key);
+            /* the line into a partial period is dotted, so it is not read as
+               a drop, nor as the dashed series */
             return (
               <g
                 key={s.key}
@@ -1550,8 +1645,10 @@ function TimeChart({
                     strokeLinecap="round"
                     strokeDasharray={
                       partial.has(point.key) || partial.has(points[i]!.key)
-                        ? "4 4"
-                        : undefined
+                        ? "0 5"
+                        : dashed
+                          ? "6 5"
+                          : undefined
                     }
                   />
                 ))}
@@ -1597,19 +1694,18 @@ function TimeChart({
               </g>
             );
           })}
-        {labelRoom &&
-          series.map((s) => (
-            <text
-              key={s.key}
-              x={width - margin.right + 20}
-              y={labelY.get(s.key)}
-              dy="0.32em"
-              className="fill-foreground text-xs"
-              pointerEvents="none"
-            >
-              {s.label}
-            </text>
-          ))}
+        {labels.map((label) => (
+          <text
+            key={label.keys.join()}
+            x={single ? cx(0) + 10 : width - margin.right + 20}
+            y={label.y}
+            dy="0.32em"
+            className="fill-foreground text-xs tabular-nums"
+            pointerEvents="none"
+          >
+            {label.text}
+          </text>
+        ))}
 
         <line
           x1={margin.left}
@@ -1657,69 +1753,78 @@ function TimeChart({
           tapped={inspect.tapped}
           onOpen={(series) => onOpen(sliceAt(plot, active, series))}
           place={(card) => {
-            /* a phone's card is tapped open and stays: over the chart it
-               would hide the columns and their axis, so it sits above */
-            if (phone)
-              return {
-                left: Math.max(
-                  0,
-                  Math.min(width - CARD_WIDTH, cx(active) - CARD_WIDTH / 2),
-                ),
-                top: -card - 8,
-              };
-            /* beside the column, clear of the neighbours' totals */
-            const right = cx(active) + band / 2 + 8;
-            const left = cx(active) - band / 2 - 8 - CARD_WIDTH;
-            const lefts = [
-              ...(right + CARD_WIDTH <= width ? [right] : []),
-              ...(left >= 0 ? [left] : []),
-            ];
-            const numbers: Box[] = categories.flatMap((c, i) => {
-              if (i === active) return [];
-              if (lines)
-                return series.map((s) => {
-                  const at = y(plot.value(c.key, s.key));
-                  return {
-                    left: cx(i) - 5,
-                    right: cx(i) + 5,
-                    top: at - 5,
-                    bottom: at + 5,
-                  };
-                });
-              const total = plot.total(c.key);
-              if (!totals || total <= 0) return [];
-              const text = total.toLocaleString();
-              return [
-                numberBox(
-                  text,
-                  cx(i) - (text.length * 7 + 2) / 2,
-                  y(capOf(c.key)) - 10,
-                ),
-              ];
-            });
-            const tops = [
-              margin.top,
-              ...numbers.flatMap((n) => [n.bottom + 4, n.top - 4 - card]),
-            ]
-              /* it may run over the axis labels, and a little past the chart,
-                 to clear a total; inside the chart first while that clears as many */
-              .filter((top) => top >= 0 && top + card <= height + 56)
-              .sort(
-                (a, b) =>
-                  Number(a + card > height) - Number(b + card > height) ||
-                  a - b,
+            /* over the plot: a phone's card, which is tapped open and stays
+               and would hide the columns and their axis, or one with no
+               room beside its column */
+            const over = {
+              left: Math.max(
+                0,
+                Math.min(width - CARD_WIDTH, cx(active) - CARD_WIDTH / 2),
+              ),
+              top: -card - 8,
+            };
+            if (phone) return over;
+            /* the highest thing drawn in a column: its total, its tallest
+               bar, or its highest point */
+            const peak = (key: string) =>
+              lines
+                ? Math.min(...series.map((s) => y(plot.value(key, s.key)) - 6))
+                : sideBySide
+                  ? Math.min(...series.map((s) => y(plot.value(key, s.key))))
+                  : y(capOf(key)) - (totals && plot.total(key) > 0 ? 18 : 0);
+            /* beside the column, the right first, in the room above every
+               mark it would cover, so reading one column hides no other.
+               A line runs on to the next point, and from this one */
+            const slack = lines ? band : 0;
+            for (const left of [
+              cx(active) + band / 2 + 8,
+              cx(active) - band / 2 - 8 - CARD_WIDTH,
+            ]) {
+              if (left < 0 || left + CARD_WIDTH > width) continue;
+              const under = categories.flatMap((c, i) =>
+                (i !== active || lines) &&
+                cx(i) + band / 2 > left - slack &&
+                cx(i) - band / 2 < left + CARD_WIDTH + slack
+                  ? [peak(c.key)]
+                  : [],
               );
-            return placeCard(
-              lefts.length ? lefts : [Math.max(0, width - CARD_WIDTH)],
-              tops.length ? tops : [margin.top],
-              card,
-              numbers,
-            );
+              const top = Math.min(
+                margin.top,
+                Math.min(y(0), ...under) - 6 - card,
+              );
+              if (top >= 0) return { left, top };
+            }
+            return over;
           }}
         />
       )}
     </div>
   );
+}
+
+/* the chart's labels are 14px in the page's face, and as wide as a hovered
+   one in medium weight; a browser without OffscreenCanvas guesses */
+let measure: OffscreenCanvasRenderingContext2D | null | undefined;
+function textWidth(text: string) {
+  if (measure === undefined) {
+    measure =
+      typeof OffscreenCanvas === "undefined"
+        ? null
+        : new OffscreenCanvas(1, 1).getContext("2d");
+    if (measure)
+      measure.font = `500 14px ${getComputedStyle(document.body).fontFamily}`;
+  }
+  return measure ? measure.measureText(text).width : text.length * 8;
+}
+
+/** a label as it fits in `room` pixels: whole, or cut with an ellipsis */
+function fitted(label: string, room: number) {
+  if (textWidth(label) <= room) return label;
+  for (let n = label.length - 1; n > 0; n--) {
+    const cut = `${label.slice(0, n).trimEnd()}…`;
+    if (textWidth(cut) <= room) return cut;
+  }
+  return "…";
 }
 
 function BarChart({
@@ -1744,6 +1849,8 @@ function BarChart({
   const plotH = categories.length * row;
   const height = plotH + 22;
   const x = (v: number) => labelW + (v / max) * plotW;
+  /* each name cut to the label column, never drawn past the chart's edge */
+  const labels = categories.map((c) => fitted(c.label, labelW - 14));
   const endText = (key: string, sum: number) =>
     plot.share ? percentText(sum) : plot.total(key).toLocaleString();
 
@@ -1796,6 +1903,7 @@ function BarChart({
     ref,
     (index, at) => segmentAt(rows[index] ?? [], at),
     (index, at) => onOpen(sliceAt(plot, index, at)),
+    (index) => plot.filled(categories[index]!.key),
   );
   const { active, keyboard } = inspect;
   const chosen = selectedIndex(plot, selected);
@@ -1817,7 +1925,7 @@ function BarChart({
         width={width}
         height={height}
         role="group"
-        aria-label={`${titleOf(config, plot.grouped.measure)}. Arrow keys move between rows, and Enter lists what a row counts; the table below has every number.`}
+        aria-label={`${titleOf(plot)}. Arrow keys move between rows, and Enter lists what a row counts; the table below has every number.`}
         className="block"
       >
         {[...new Set([active, chosen])].map(
@@ -1883,9 +1991,10 @@ function BarChart({
                   (active === index || chosen === index) && "font-medium",
                 )}
               >
-                {category.label.length > 24
-                  ? `${category.label.slice(0, 23)}…`
-                  : category.label}
+                {labels[index]}
+                {labels[index] !== category.label && (
+                  <title>{category.label}</title>
+                )}
               </text>
               {segments.map((segment) => (
                 <path
@@ -2021,7 +2130,7 @@ function NumbersTable({
     [grouped, config, partial, section],
   );
   const split = plot.all.length > 1;
-  const totalLabel = config.values === "running" ? "Total so far" : "Total";
+  const totalLabel = totalName(config, split ? null : grouped.measure);
 
   const columns: {
     label: string;

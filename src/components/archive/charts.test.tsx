@@ -137,3 +137,59 @@ test("a view brings its own time range, unless Time was chosen", async () => {
   expect(time()).toContain("Last 12 months");
   expect(range()).toBe("12m");
 });
+
+test("a list opened over Customize gives Customize back when it closes", async () => {
+  const user = userEvent.setup();
+  render(<ChartsPage />);
+  const customize = await screen.findByRole("button", { name: "Customize" });
+  await user.click(customize);
+  await screen.findByRole("complementary", { name: "Customize" });
+
+  await user.click(screen.getByRole("button", { name: "Show as table" }));
+  await user.click(
+    screen.getByRole("button", { name: "News: see 2 articles" }),
+  );
+  await screen.findByRole("complementary", { name: "News" });
+  expect(screen.queryByRole("complementary", { name: "Customize" })).toBeNull();
+
+  await user.keyboard("{Escape}");
+  const panel = await screen.findByRole("complementary", { name: "Customize" });
+  await waitFor(() =>
+    expect(document.activeElement).toBe(
+      within(panel).getByRole("heading", { name: "Customize" }),
+    ),
+  );
+  /* and closing it returns to its own button */
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(document.activeElement).toBe(customize));
+});
+
+test("Reset in Customize leaves focus in the panel, not on the page", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    "/charts?view=custom&count=articles&by=section&split=none&draw=stacked&values=share&order=natural&top=25",
+  );
+  const user = userEvent.setup();
+  render(<ChartsPage />);
+  await user.click(await screen.findByRole("button", { name: "Customize" }));
+  const panel = await screen.findByRole("complementary", { name: "Customize" });
+  await user.click(within(panel).getByRole("button", { name: "Reset" }));
+  expect(
+    screen.getByRole("tab", { name: "Sections" }).getAttribute("aria-selected"),
+  ).toBe("true");
+  expect(document.activeElement).toBe(
+    within(panel).getByRole("heading", { name: "Customize" }),
+  );
+});
+
+test("a chart of one series names its count for what it is", async () => {
+  const user = userEvent.setup();
+  render(<ChartsPage />);
+  await user.click(
+    await screen.findByRole("button", { name: "Show as table" }),
+  );
+  expect(
+    screen.getAllByRole("columnheader").map((cell) => cell.textContent),
+  ).toEqual(["Section", "Articles"]);
+});

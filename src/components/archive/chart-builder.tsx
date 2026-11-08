@@ -28,8 +28,9 @@ import {
 import { Choice } from "./choice";
 
 /**
- * The Customize panel's rows. Every change comes back settled, so a choice
- * that rules another out has already moved it.
+ * The Customize panel's rows. What is counted, grouped and split never moves
+ * by itself: an option that would move another is off (see `allows`). Only
+ * how the chart is drawn follows the axis, settled on every change.
  */
 export function ChartBuilder({
   config,
@@ -86,7 +87,7 @@ export function ChartBuilder({
           hideLabel
           width="w-full"
           value={config.by}
-          options={GROUPINGS}
+          options={GROUPINGS.map((g) => ({ ...g, disabled: !ok.by[g.id] }))}
           onChange={(by) => set({ by })}
         />
       </Row>

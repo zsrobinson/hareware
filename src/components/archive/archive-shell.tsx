@@ -68,12 +68,14 @@ type Slots = {
   sheet: HTMLElement | null;
   filters: HTMLElement | null;
   above: HTMLElement | null;
+  row: HTMLElement | null;
 };
 const SlotsContext = createContext<Slots>({
   toolbar: null,
   sheet: null,
   filters: null,
   above: null,
+  row: null,
 });
 
 /* what the sheet's Reset does besides clearing the filters: each view group's
@@ -85,6 +87,12 @@ const ResetContext = createContext<AddReset>(() => () => {});
 export function ToolbarEnd({ children }: { children: ReactNode }) {
   const { toolbar } = useContext(SlotsContext);
   return toolbar ? createPortal(children, toolbar) : null;
+}
+
+/** a page-wide action at the end of a phone's search row, beside Reload */
+export function SearchRowEnd({ children }: { children: ReactNode }) {
+  const { row } = useContext(SlotsContext);
+  return row ? createPortal(children, row) : null;
 }
 
 /** what outranks the filters (Charts' views), over the toolbar */
@@ -372,7 +380,12 @@ function Ready({
     sheet: null,
     filters: null,
     above: null,
+    row: null,
   });
+  const setRow = useCallback(
+    (row: HTMLElement | null) => setSlots((s) => ({ ...s, row })),
+    [],
+  );
   const setAbove = useCallback(
     (above: HTMLElement | null) => setSlots((s) => ({ ...s, above })),
     [],
@@ -449,6 +462,7 @@ function Ready({
               toolbarSlot={setToolbar}
               sheetSlot={setSheet}
               filtersSlot={setFilters}
+              rowSlot={setRow}
             />
           )}
           {showFilters && <SheetNotice archive={archive} />}
@@ -613,6 +627,7 @@ function FilterBar({
   toolbarSlot,
   sheetSlot,
   filtersSlot,
+  rowSlot,
 }: {
   archive: Archive;
   state: FilterState;
@@ -630,6 +645,8 @@ function FilterBar({
   sheetSlot: (element: HTMLElement | null) => void;
   /** where a view's own filter goes, among these */
   filtersSlot: (element: HTMLElement | null) => void;
+  /** where a phone's page-wide action goes, beside Reload */
+  rowSlot: (element: HTMLElement | null) => void;
 }) {
   const phone = useIsPhone();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -748,6 +765,8 @@ function FilterBar({
             </span>
           )}
         </Button>
+        {/* before Reload, which lines up with the content's edge as the last */}
+        <div ref={rowSlot} className="contents" />
         {reloadButton}
         {sheetOpen && (
           <BottomSheet

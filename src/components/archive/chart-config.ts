@@ -182,7 +182,11 @@ export function rangeOfView(state: Pick<ChartState, "view" | "base">): Preset {
   return savedView(state.view === "custom" ? state.base : state.view).range;
 }
 
-/** what the options mean for one another, as the builder offers them */
+/**
+ * What the options mean for one another, as the builder offers them. An
+ * option that would have to change another is off until that one changes,
+ * so no choice moves a setting it was not made in.
+ */
 export function allows(config: ChartConfig) {
   const { count, by, split } = config;
   const time = isPeriod(by);
@@ -196,10 +200,20 @@ export function allows(config: ChartConfig) {
       people,
       newcomers: people,
     } satisfies Record<Measure, boolean>,
+    by: Object.fromEntries(
+      GROUPINGS.map(({ id }) => [
+        id,
+        id === "person"
+          ? count === "contributions"
+          : id === "role"
+            ? count !== "articles" && split !== "role"
+            : id !== "section" || split !== "section",
+      ]),
+    ) as Record<Dimension, boolean>,
     split: {
       none: true,
       section: by !== "section",
-      role: by !== "role",
+      role: by !== "role" && count !== "articles",
     } satisfies Record<Split, boolean>,
     draw: {
       /* one person in two sections would be drawn twice in one column */

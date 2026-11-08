@@ -101,9 +101,20 @@ touches bindings or a route's `Request`.
 `REMINDERS_TEST_CHANNEL` is set. Messages can be deleted; the pings they send
 cannot.
 
-**A preview deploy shares production's secrets.** Every non-`main` push uploads
-a preview version that reads the same Sheet and could post to the same
-channels. Previews run no crons, but a manual trigger on one is real.
+**A preview has its own settings, not production's.** Every non-`main` push
+builds a Worker Preview, served at `<branch>.hareware.zsrobinson.com`.
+Workers Builds runs `npx wrangler@4.149.0 preview`, pinned in the build
+settings rather than `package.json`, so every branch builds without a change.
+Previews take the Worker's Preview settings, not production's: their own
+`SESSION_SECRET`, the `hareware-preview` D1 database, the Google secrets and,
+once set, the Discord ones. They run no crons and have no
+`REMINDERS_TRIGGER_SECRET`, so a manual trigger on one answers 404. They do read
+the club's real Sheet, and `/api/sheet` on one writes it. A Preview copies the
+settings when it is first built, so a setting changed later reaches only new
+Previews; update the others in the dashboard or recreate them.
+
+**`beta.hareware.zsrobinson.com` shows whatever is on the `beta` branch.** Point
+it at any commit with `git push --force origin <branch>:beta`.
 
 **Dashboard variables do not survive a deploy.** Wrangler replaces them with
 `wrangler.jsonc`'s, so every value the code reads is a secret.

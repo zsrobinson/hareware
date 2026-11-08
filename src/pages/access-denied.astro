@@ -7,6 +7,6 @@ import { AccessCheck } from "~/components/access-check";
 export const prerender = true;
 ---
 
-<Dashboard title="No access">
+<Dashboard title="No access" heading={false}>
   <AccessCheck client:load />
 </Dashboard>

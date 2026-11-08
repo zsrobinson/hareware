@@ -4,7 +4,6 @@
   costs the Worker nothing.
 */
 import { WordCounter } from "~/components/word-counter";
-import PageHeader from "~/components/page-header.astro";
 import Dashboard from "~/layouts/dashboard.astro";
 
 export const prerender = true;
@@ -12,10 +11,6 @@ export const prerender = true;
 
 <Dashboard title="Word Counter" width="form">
   <div class="space-y-6">
-    <PageHeader
-      title="Word Counter"
-      description="How long each article is, for planning the print issue."
-    />
     <WordCounter client:only="react" />
   </div>
 </Dashboard>

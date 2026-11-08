@@ -7,7 +7,7 @@ import Message from "~/components/message.astro";
 export const prerender = true;
 ---
 
-<Dashboard title="Page not found">
+<Dashboard title="Page not found" heading={false}>
   <Message
     title="Page not found"
     action={{ label: "Back to the tools", href: "/generate" }}

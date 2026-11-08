@@ -1,4 +1,4 @@
-import { ChevronDownIcon } from "lucide-react";
+import { MenuIcon } from "lucide-react";
 import { NavGroup } from "~/components/nav-group";
 import { SidebarAccount } from "~/components/sidebar-account";
 import {
@@ -15,24 +15,21 @@ import { adminNav, toolsNav } from "~/lib/nav";
 export function SidebarSheet({
   pathname,
   returnTo,
-  title,
 }: {
   pathname: string;
   returnTo: string;
-  /** the current page, which labels the trigger */
-  title: string;
 }) {
   return (
     <Sheet>
       <SheetTrigger
-        className="text-foreground hover:bg-accent inline-flex h-8 min-w-0 items-center gap-1 rounded-md px-1.5 md:hidden"
-        aria-label={`${title}. Open navigation`}
+        className="text-foreground hover:bg-accent ml-auto inline-flex size-8 shrink-0 items-center justify-center rounded-lg md:hidden"
+        aria-label="Open navigation"
       >
-        <span className="truncate text-sm font-medium">{title}</span>
-        <ChevronDownIcon className="text-foreground/50 size-3.5 shrink-0" />
+        <MenuIcon className="size-4" />
       </SheetTrigger>
 
-      <SheetContent side="left" className="bg-sidebar w-64 p-0">
+      {/* opens from the side its button is on */}
+      <SheetContent side="right" className="bg-sidebar w-64 p-0">
         <SheetHeader className="px-3.5 pt-3.5 pb-0">
           <SheetTitle className="flex items-center gap-2 text-sm">
             <img
@@ -47,10 +44,15 @@ export function SidebarSheet({
         </SheetHeader>
 
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
-          <NavGroup items={toolsNav} pathname={pathname} label="Public tools" />
+          <NavGroup items={toolsNav} pathname={pathname} label="Tools" />
 
           {/* shown to everybody: the pages themselves refuse, and say why */}
-          <NavGroup items={adminNav} pathname={pathname} label="Admin tools" />
+          <NavGroup
+            items={adminNav}
+            pathname={pathname}
+            label="Editorial Board"
+            gated
+          />
         </nav>
 
         <SidebarAccount returnTo={returnTo} inSheet />

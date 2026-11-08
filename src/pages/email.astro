@@ -4,7 +4,6 @@
   itself, so serving this costs the Worker nothing.
 */
 import { NewsletterPage } from "~/components/newsletter-page";
-import PageHeader from "~/components/page-header.astro";
 import Dashboard from "~/layouts/dashboard.astro";
 import EarlyFetch from "~/components/early-fetch.astro";
 
@@ -14,10 +13,6 @@ export const prerender = true;
 <Dashboard title="Newsletter" width="wide">
   <EarlyFetch slot="head" early={"latest"} />
   <div class="space-y-6">
-    <PageHeader
-      title="Newsletter"
-      description="This week's club email, with the latest articles, to paste into Gmail."
-    />
     <NewsletterPage client:load />
   </div>
 </Dashboard>

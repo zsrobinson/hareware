@@ -5,7 +5,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
-import { useViewer } from "~/lib/use-session";
+import { useEffect } from "react";
+import { useViewer, useViewerKnown } from "~/lib/use-session";
 import { cn } from "~/lib/utils";
 
 /* lucide carries no brand marks */
@@ -117,6 +118,16 @@ export function SidebarAccount({
   inSheet?: boolean;
 }) {
   const { session, profile } = useViewer();
+  const known = useViewerKnown();
+
+  /* the nav is static html, so it learns who is looking from the root:
+     the board's group shows a lock for someone signed out */
+  useEffect(() => {
+    if (inSheet) return;
+    if (known && !session)
+      document.documentElement.dataset.viewer = "signed-out";
+    else delete document.documentElement.dataset.viewer;
+  }, [known, session, inSheet]);
 
   /* the sheet is only ever open at full width, so it never collapses. the rail
      has no room for a row, so the menu sits under what it belongs to */

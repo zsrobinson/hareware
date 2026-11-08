@@ -6,12 +6,15 @@ import {
   XIcon,
 } from "lucide-react";
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Button } from "~/components/ui/button";
 import {
@@ -28,6 +31,8 @@ import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import type { Filters } from "~/lib/credits/stats";
 import { cn } from "~/lib/utils";
 import { DenialMessage } from "~/components/gated";
+import { PageActions } from "~/components/page-actions";
+import { BottomSheet, PanelGroup, useIsPhone } from "~/components/panel";
 import { couldNotRead, ReadFailed, Reading } from "~/components/read-state";
 import { Refused } from "~/lib/gated";
 import { Choice } from "./choice";
@@ -44,6 +49,23 @@ import {
   writeState,
   type FilterState,
 } from "./filters";
+
+/* where a view puts its own controls: the end of the toolbar on a laptop
+   (Columns, Customize), and its own group in the phone's Customize sheet */
+type Slots = { toolbar: HTMLElement | null; sheet: HTMLElement | null };
+const SlotsContext = createContext<Slots>({ toolbar: null, sheet: null });
+
+/** a view's controls at the end of the toolbar, after a divider (laptop) */
+export function ToolbarEnd({ children }: { children: ReactNode }) {
+  const { toolbar } = useContext(SlotsContext);
+  return toolbar ? createPortal(children, toolbar) : null;
+}
+
+/** a view's own group in the phone's Customize sheet, after Filter */
+export function SheetGroup({ children }: { children: ReactNode }) {
+  const { sheet } = useContext(SlotsContext);
+  return sheet ? createPortal(children, sheet) : null;
+}
 
 export type ViewProps = {
   archive: Archive;
@@ -173,38 +195,50 @@ function Ready({
   }, [reread]);
   const refreshNow = useCallback(() => void refresh(), [refresh]);
 
-  const freshness = (
-    <Freshness
-      fetchedAt={archive.fetchedAt}
-      checking={checking}
-      checkFailed={!refreshing && checkFailed !== null}
-      onRefresh={refreshNow}
-    />
+  const [slots, setSlots] = useState<Slots>({ toolbar: null, sheet: null });
+  const setToolbar = useCallback(
+    (toolbar: HTMLElement | null) => setSlots((s) => ({ ...s, toolbar })),
+    [],
+  );
+  const setSheet = useCallback(
+    (sheet: HTMLElement | null) => setSlots((s) => ({ ...s, sheet })),
+    [],
   );
 
   return (
-    <div className="space-y-6">
-      {showFilters && (
-        <FilterBar
-          archive={archive}
-          state={state}
-          setState={setState}
-          searchPlaceholder={searchPlaceholder}
-          roleFilter={roleFilter}
-          refresh={freshness}
+    <SlotsContext.Provider value={slots}>
+      {/* page-wide, so in the title row beside the h1 */}
+      <PageActions>
+        <Freshness
+          fetchedAt={archive.fetchedAt}
+          checking={checking}
+          checkFailed={!refreshing && checkFailed !== null}
+          onRefresh={refreshNow}
         />
-      )}
-      {showFilters && <SheetNotice archive={archive} />}
-      <div className={cn("transition-opacity", refreshing && "opacity-60")}>
-        {children({
-          archive,
-          filters,
-          refresh: refreshNow,
-          refreshing,
-        })}
+      </PageActions>
+      <div className="space-y-6">
+        {showFilters && (
+          <FilterBar
+            archive={archive}
+            state={state}
+            setState={setState}
+            searchPlaceholder={searchPlaceholder}
+            roleFilter={roleFilter}
+            toolbarSlot={setToolbar}
+            sheetSlot={setSheet}
+          />
+        )}
+        {showFilters && <SheetNotice archive={archive} />}
+        <div className={cn("transition-opacity", refreshing && "opacity-60")}>
+          {children({
+            archive,
+            filters,
+            refresh: refreshNow,
+            refreshing,
+          })}
+        </div>
       </div>
-      {!showFilters && freshness}
-    </div>
+    </SlotsContext.Provider>
   );
 }
 
@@ -276,9 +310,7 @@ function Freshness({
     <span className="flex items-center gap-1">
       <span
         className={cn(
-          /* a set width, so the search box beside it does not shift as the
-             words change */
-          "text-xs leading-tight sm:w-40 sm:text-right",
+          "text-xs leading-tight",
           checkFailed
             ? "text-amber-700 dark:text-amber-400"
             : "text-muted-foreground",
@@ -294,14 +326,13 @@ function Freshness({
       </span>
       <Button
         variant="ghost"
-        size="sm"
-        className="h-9"
+        size="icon"
         onClick={onRefresh}
         disabled={checking}
-        aria-label="Refresh from WordPress"
+        aria-label="Reload from WordPress"
+        title="Reload from WordPress"
       >
         <RefreshCwIcon className={cn(checking && "animate-spin")} />
-        <span className="sr-only sm:not-sr-only">Refresh</span>
       </Button>
     </span>
   );
@@ -332,24 +363,48 @@ function FilterBar({
   setState,
   searchPlaceholder,
   roleFilter,
-  refresh,
+  toolbarSlot,
+  sheetSlot,
 }: {
   archive: Archive;
   state: FilterState;
   setState: (state: FilterState) => void;
   searchPlaceholder: string;
   roleFilter: boolean;
-  /** rereading WordPress, at the end of the row on every page */
-  refresh: ReactNode;
+  /** where the view's own controls go, after the divider */
+  toolbarSlot: (element: HTMLElement | null) => void;
+  /** where the view's own group goes in the phone's sheet */
+  sheetSlot: (element: HTMLElement | null) => void;
 }) {
+  const phone = useIsPhone();
+  const [sheetOpen, setSheetOpen] = useState(false);
   const changed = JSON.stringify(state) !== JSON.stringify(DEFAULT_STATE);
+  /* what the phone hides in its sheet, counted on the button that opens it */
+  const active =
+    (state.preset !== DEFAULT_STATE.preset ? 1 : 0) +
+    (state.sections.length > 0 ? 1 : 0) +
+    (state.roles.length > 0 ? 1 : 0);
 
-  return (
-    <section aria-label="Filters" className="flex flex-wrap items-center gap-2">
+  const search = (
+    <label className="relative min-w-0 flex-1 sm:min-w-56">
+      <span className="sr-only">Search</span>
+      <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+      <Input
+        type="search"
+        placeholder={searchPlaceholder}
+        className="bg-background pl-8"
+        value={state.search}
+        onChange={(event) => setState({ ...state, search: event.target.value })}
+      />
+    </label>
+  );
+
+  const choices = (
+    <>
       <Choice
         label="Period"
         hideLabel
-        width="w-44"
+        width="w-40"
         value={state.preset}
         options={PRESETS}
         onChange={(preset) => setState({ ...state, preset })}
@@ -383,8 +438,8 @@ function FilterBar({
       />
       {roleFilter && (
         <MultiSelect
-          label="Role"
-          all="Any role"
+          label="Roles"
+          all="All roles"
           options={ROLES.map((role) => ({
             value: role,
             label: ROLE_NAMES[role],
@@ -393,32 +448,53 @@ function FilterBar({
           onChange={(roles) => setState({ ...state, roles: roles as Role[] })}
         />
       )}
-
-      <label className="relative order-first w-full sm:order-none sm:w-auto sm:min-w-48 sm:flex-1">
-        <span className="sr-only">Search</span>
-        <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-        <Input
-          type="search"
-          placeholder={searchPlaceholder}
-          className="bg-background h-9 pl-8"
-          value={state.search}
-          onChange={(event) =>
-            setState({ ...state, search: event.target.value })
-          }
-        />
-      </label>
-
       {changed && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-9"
-          onClick={() => setState(DEFAULT_STATE)}
-        >
+        <Button variant="ghost" onClick={() => setState(DEFAULT_STATE)}>
           <XIcon /> Clear
         </Button>
       )}
-      {refresh}
+    </>
+  );
+
+  if (phone)
+    return (
+      <section aria-label="Filters" className="flex items-center gap-2">
+        {search}
+        <Button
+          variant="outline"
+          aria-expanded={sheetOpen}
+          className={cn(sheetOpen && "bg-muted")}
+          onClick={() => setSheetOpen((open) => !open)}
+        >
+          Customize
+          {active > 0 && (
+            <span className="bg-foreground text-background inline-flex size-4.5 items-center justify-center rounded-full text-[0.6875rem] tabular-nums">
+              {active}
+              <span className="sr-only"> filters on</span>
+            </span>
+          )}
+        </Button>
+        {sheetOpen && (
+          <BottomSheet title="Customize" onClose={() => setSheetOpen(false)}>
+            <PanelGroup label="Filter">
+              <div className="flex flex-wrap gap-2">{choices}</div>
+            </PanelGroup>
+            {/* the view's own group (Chart, Table) */}
+            <div ref={sheetSlot} className="contents" />
+          </BottomSheet>
+        )}
+      </section>
+    );
+
+  return (
+    <section aria-label="Filters" className="flex flex-wrap items-center gap-2">
+      {search}
+      {choices}
+      {/* the view's own controls, set apart from the filters */}
+      <div
+        ref={toolbarSlot}
+        className="flex items-center gap-2 border-l pl-2 empty:hidden"
+      />
     </section>
   );
 }
@@ -436,7 +512,7 @@ function DateField({
     <Input
       type="date"
       aria-label={label}
-      className="bg-background h-9 w-auto"
+      className="bg-background w-auto"
       value={value ?? ""}
       onChange={(event) => onChange(event.target.value)}
     />
@@ -472,7 +548,7 @@ function MultiSelect({
           <Button
             variant="outline"
             className={cn(
-              "bg-background h-9 font-normal",
+              "bg-background font-normal",
               selected.length > 0 && "border-foreground/40",
             )}
           />

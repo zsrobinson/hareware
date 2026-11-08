@@ -1,4 +1,5 @@
 ---
+import { PanelLeftIcon } from "lucide-react";
 import { SidebarAccount } from "~/components/sidebar-account";
 import { NavGroup } from "~/components/nav-group";
 import { adminNav, toolsNav } from "~/lib/nav";
@@ -15,29 +16,47 @@ const { pathname, returnTo } = Astro.props;
   class="bg-sidebar text-sidebar-foreground border-sidebar-border hidden h-full w-(--sidebar-width) shrink-0 flex-col border-r transition-[width] duration-200 group-data-[state=collapsed]/shell:w-(--sidebar-width-icon) md:flex"
 >
   {/* the mark must be square to survive the narrow rail */}
-  <a
-    href="/"
-    class="hover:bg-sidebar-accent m-2 flex shrink-0 items-center gap-2 rounded-lg p-1.5 transition-colors group-data-[state=collapsed]/shell:m-1.5"
+  <div
+    class="m-2 flex shrink-0 items-center gap-1 group-data-[state=collapsed]/shell:m-1.5 group-data-[state=collapsed]/shell:flex-col"
   >
-    <img
-      src="/bot-logo.svg"
-      alt=""
-      width="28"
-      height="28"
-      class="size-7 shrink-0 rounded-md"
-    />
-    <span
-      class="truncate text-sm font-semibold group-data-[state=collapsed]/shell:hidden"
+    <a
+      href="/"
+      class="hover:bg-sidebar-accent flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1.5 transition-colors"
     >
-      HareWare
-    </span>
-  </a>
+      <img
+        src="/bot-logo.svg"
+        alt=""
+        width="28"
+        height="28"
+        class="size-7 shrink-0 rounded-md"
+      />
+      <span
+        class="truncate text-sm font-semibold group-data-[state=collapsed]/shell:hidden"
+      >
+        HareWare
+      </span>
+    </a>
+    <button
+      id="sidebar-toggle"
+      type="button"
+      aria-label="Collapse sidebar"
+      aria-controls="shell"
+      class="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground inline-flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors"
+    >
+      <PanelLeftIcon className="size-4" />
+    </button>
+  </div>
 
   <nav class="flex flex-1 flex-col gap-4 overflow-y-auto p-3 pt-1">
-    <NavGroup items={toolsNav} pathname={pathname} label="Public tools" />
+    <NavGroup items={toolsNav} pathname={pathname} label="Tools" />
 
     {/* shown to everybody; the pages refuse and say why (ADR 0007) */}
-    <NavGroup items={adminNav} pathname={pathname} label="Admin tools" />
+    <NavGroup
+      items={adminNav}
+      pathname={pathname}
+      label="Editorial Board"
+      gated
+    />
   </nav>
 
   <SidebarAccount client:idle returnTo={returnTo} />

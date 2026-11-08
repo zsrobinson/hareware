@@ -1,4 +1,3 @@
-import { cn } from "~/lib/utils";
 import {
   Select,
   SelectContent,
@@ -41,7 +40,7 @@ export function Choice<T extends string>({
         }))}
         onValueChange={(next) => onChange(next as T)}
       >
-        <SelectTrigger aria-label={label} className={cn("h-9", width)}>
+        <SelectTrigger aria-label={label} className={width}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

@@ -95,3 +95,13 @@ export function useViewer(): ViewerState {
 
   return value;
 }
+
+/** whether the session lookup has answered, so "signed out" can be told
+    apart from "not asked yet" (the sidebar's lock must not flash) */
+export function useViewerKnown(): boolean {
+  return useSyncExternalStore(
+    subscribe,
+    () => snapshot.status === "resolved",
+    () => false,
+  );
+}

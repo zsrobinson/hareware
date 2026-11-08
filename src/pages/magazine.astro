@@ -4,7 +4,6 @@
   itself, so serving this costs the Worker nothing.
 */
 import { InDesignExport } from "~/components/indesign-export";
-import PageHeader from "~/components/page-header.astro";
 import Dashboard from "~/layouts/dashboard.astro";
 import EarlyFetch from "~/components/early-fetch.astro";
 
@@ -14,10 +13,6 @@ export const prerender = true;
 <Dashboard title="InDesign Export" width="form">
   <EarlyFetch slot="head" early={"article"} />
   <div class="space-y-6">
-    <PageHeader
-      title="InDesign Export"
-      description="An article's title, bylines, image and text, ready for the print issue."
-    />
     <InDesignExport client:only="react" />
   </div>
 </Dashboard>

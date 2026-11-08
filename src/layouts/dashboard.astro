@@ -1,6 +1,5 @@
 ---
 import { ClientRouter } from "astro:transitions";
-import { PanelLeftIcon } from "lucide-react";
 import AppSidebar from "~/components/app-sidebar.astro";
 import NavProgress from "~/components/nav-progress.astro";
 import { SidebarSheet } from "~/components/sidebar-sheet";
@@ -12,6 +11,8 @@ type Props = {
   title: string;
   /** how wide the content may get */
   width?: keyof typeof WIDTHS;
+  /** false where the page is a message that names itself (404, sign-in) */
+  heading?: boolean;
 };
 
 const WIDTHS = {
@@ -21,7 +22,7 @@ const WIDTHS = {
   full: "max-w-none",
 } as const;
 
-const { title, width = "wide" } = Astro.props;
+const { title, width = "wide", heading = true } = Astro.props;
 
 /* every page is prerendered (ADR 0012), so the sidebar is drawn open and the
    script below applies shadcn's sidebar_state cookie */
@@ -56,18 +57,13 @@ const collapsed = false;
       />
 
       <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {
-          /* opaque and outside the scroll container, so content cannot show through */
-        }
+        {/* a phone has no sidebar, so a bar carries the brand and the menu */}
         <header
-          class="bg-background relative z-20 flex h-12 shrink-0 items-center gap-1 border-b px-3"
+          class="bg-background relative z-20 flex h-12 shrink-0 items-center gap-2 border-b px-3 md:hidden"
         >
-          {
-            /* on a phone the bar carries the brand; below 400px only the mark */
-          }
           <a
             href="/"
-            class="hover:bg-accent -ml-1 flex shrink-0 items-center gap-1.5 rounded-md p-1 transition-colors md:hidden"
+            class="hover:bg-accent -ml-1 flex shrink-0 rounded-md p-1 transition-colors"
             aria-label="HareWare, home"
           >
             <img
@@ -77,50 +73,52 @@ const collapsed = false;
               height="24"
               class="size-6 shrink-0 rounded"
             />
-            <span class="hidden text-sm font-semibold min-[400px]:inline"
-              >HareWare</span
-            >
           </a>
-
-          <span class="text-foreground/25 shrink-0 md:hidden" aria-hidden="true"
-            >/</span
+          <span class="truncate text-sm font-semibold" aria-hidden="true"
+            >{title}</span
           >
-
           <SidebarSheet
             client:media="(max-width: 767px)"
             pathname={Astro.url.pathname}
             returnTo={`${Astro.url.pathname}${Astro.url.search}`}
-            title={title}
           />
-
-          <button
-            id="sidebar-toggle"
-            type="button"
-            aria-label="Toggle sidebar"
-            aria-controls="shell"
-            class="text-foreground/70 hover:bg-accent hover:text-foreground hidden size-8 items-center justify-center rounded-md transition-colors md:inline-flex"
-          >
-            <PanelLeftIcon className="size-4" />
-          </button>
-
-          {/* below `md` the sheet trigger shows the title */}
-          <h1 class="hidden truncate px-1 text-sm font-medium md:block">
-            {title}
-          </h1>
-
-          <div class="ml-auto flex items-center gap-2">
-            <slot name="sync" />
-          </div>
         </header>
 
-        <main id="content" class="min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
-          {
-            /* every page starts from the same left edge, however wide it runs */
-          }
-          <div class:list={["w-full", WIDTHS[width]]}>
-            <slot />
-          </div>
-        </main>
+        {
+          /* a side panel (Customize, a person) opens beside the content and
+            narrows it rather than covering it; islands portal into it */
+        }
+        <div class="flex min-h-0 flex-1">
+          <main
+            id="content"
+            class="min-w-0 flex-1 overflow-y-auto p-4 md:px-10 md:py-7"
+          >
+            {
+              /* every page starts from the same left edge, however wide it runs */
+            }
+            <div class:list={["w-full", WIDTHS[width]]}>
+              {
+                heading && (
+                  <div class="mb-6 flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2">
+                    {/* the bar above names the page on a phone */}
+                    <h1 class="text-2xl font-semibold tracking-tight max-md:sr-only">
+                      {title}
+                    </h1>
+                    {/* Reload, Download CSV: what acts on the whole page */}
+                    <div
+                      id="page-actions"
+                      class="flex flex-wrap items-center gap-2 empty:hidden md:ml-auto"
+                    >
+                      <slot name="actions" />
+                    </div>
+                  </div>
+                )
+              }
+              <slot />
+            </div>
+          </main>
+          <div id="side-panel" class="contents"></div>
+        </div>
       </div>
     </div>
 

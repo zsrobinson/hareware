@@ -120,11 +120,20 @@ unread; answered in `src/worker.ts` before Astro it costs 1 ms. And a test file
 under `src/pages` without a leading `_` is a route: one put vitest in the
 Worker bundle.
 
-**Previews are not in Workers Logs.** Traffic to a preview version is counted
-only by the GraphQL Analytics API (`workersInvocationsAdaptive`, filtered by
-`scriptVersion`). A short measurement there can also undercount: answers
-Cloudflare's edge serves from cache never reach the Worker, so send uncached
-requests when the question is what one run costs.
+**A Preview's settings are copied when it is first created.** Changing the
+Worker's Preview settings reaches only Previews created afterwards; an existing
+one keeps what it had, even through a rebuild, and reads exactly like the change
+not working. Delete it and push again. The dashboard's "Previews Base" tab has
+also shown nothing while the API and every new Preview had the settings, so
+check a Preview's latest deployment, not that tab.
+
+**Measure what one run costs with uncached requests.** Answers Cloudflare's
+edge serves from cache never reach the Worker, so a short measurement through
+`/api/wordpress` undercounts unless each request is new. Branch builds used to
+be versions of production, measured in the GraphQL Analytics API filtered by
+`scriptVersion`; Worker Previews are not versions, and preview requests did not
+show in Workers Logs when looked for (2026-11-08), so measure CPU on
+production after a deploy.
 
 **`wrangler types` reads `.dev.vars`.** Whatever is in that untracked file is
 added to the generated `Env`, so a variable can type check on one machine and

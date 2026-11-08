@@ -15,11 +15,13 @@ export default defineConfig({
   session: false,
   integrations: [react(), preloadIslands()],
 
-  // the old admin urls are in Discord messages the bot has already posted, and
-  // one of them is what an alert tells somebody to go and read. the reminder,
-  // its log and its commands are all one page now. these become _redirects
-  // rules, which the asset server answers without the Worker
+  // these become _redirects rules, which the asset server answers with a 301
+  // and without the Worker. the front door is the tool people came for. the
+  // old admin urls are in Discord messages the bot has already posted, and
+  // one of them is what an alert tells somebody to go and read; the reminder,
+  // its log and its commands are all one page now
   redirects: {
+    "/": "/generate",
     "/admin": "/reminder",
     "/admin/automations": "/reminder",
     "/admin/commands": "/reminder",

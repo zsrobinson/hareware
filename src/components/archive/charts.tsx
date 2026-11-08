@@ -514,9 +514,12 @@ function ViewTabs({
         ref={list}
         role="tablist"
         aria-label="Chart views"
-        /* the baseline is a shadow inside the strip, so the chosen tab's
-         underline covers it without overflowing, which would scroll */
-        className="relative flex [scrollbar-width:none] gap-x-1 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--color-border)]"
+        /* a mouse wraps the views onto another row where they do not fit,
+           so none is out of reach without a scrollbar; a touch screen
+           swipes them, faded at the end that has more. The rule under each
+           row is a background, not a border: tabs pulled over a border made
+           the strip scroll down by a pixel */
+        className="relative flex [scrollbar-width:none] flex-wrap gap-x-1 overflow-x-auto overflow-y-hidden bg-[repeating-linear-gradient(to_bottom,transparent_0_39px,var(--color-border)_39px_40px)] pointer-coarse:flex-nowrap"
         style={{ maskImage: fade }}
         onKeyDown={(event) => {
           /* the tabs pattern: arrows move between the views, and choose */

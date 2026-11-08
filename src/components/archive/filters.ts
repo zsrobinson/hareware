@@ -36,12 +36,13 @@ export type FilterState = {
   search: string;
 };
 
-export const DEFAULT_STATE: FilterState = {
-  preset: "all",
+/** nothing narrowed but the page's own time range */
+export const clearedState = (preset: Preset): FilterState => ({
+  preset,
   sections: [],
   roles: [],
   search: "",
-};
+});
 
 const SEMESTER_STARTS = ["01-01", "06-01"];
 const SEMESTER_ENDS = ["05-31", "12-31"];
@@ -113,11 +114,12 @@ export function toFilters(state: FilterState): Filters {
 const list = (value: string | null) =>
   value ? value.split(",").filter(Boolean) : [];
 
-export function readState(search: string): FilterState {
+/** `fallback` is the page's own range, which its links leave out */
+export function readState(search: string, fallback: Preset): FilterState {
   const params = new URLSearchParams(search);
   const preset = params.get("range") as Preset | null;
   return {
-    preset: preset && PRESETS.some((p) => p.id === preset) ? preset : "all",
+    preset: preset && PRESETS.some((p) => p.id === preset) ? preset : fallback,
     from: params.get("from") ?? undefined,
     to: params.get("to") ?? undefined,
     sections: list(params.get("sections")),
@@ -127,11 +129,15 @@ export function readState(search: string): FilterState {
 }
 
 /** writes the filters into `params`, leaving a view's own parameters alone */
-export function writeState(state: FilterState, params: URLSearchParams) {
+export function writeState(
+  state: FilterState,
+  params: URLSearchParams,
+  fallback: Preset,
+) {
   const set = (key: string, value: string | undefined) =>
     value ? params.set(key, value) : params.delete(key);
 
-  set("range", state.preset === "all" ? undefined : state.preset);
+  set("range", state.preset === fallback ? undefined : state.preset);
   set("from", state.preset === "custom" ? state.from : undefined);
   set("to", state.preset === "custom" ? state.to : undefined);
   set("sections", state.sections.join(","));

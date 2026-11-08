@@ -27,7 +27,8 @@ const needsWork = (article: ArchiveArticle) =>
 
 export function ProblemsPage() {
   return (
-    <ArchiveShell roleFilter={false}>
+    /* a list to work through: a date cut would hide what is still wrong */
+    <ArchiveShell roleFilter={false} defaultPreset="all">
       {(props) => <Problems {...props} />}
     </ArchiveShell>
   );

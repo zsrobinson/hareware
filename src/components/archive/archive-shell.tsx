@@ -50,12 +50,13 @@ import { useHydrated } from "~/lib/use-hydrated";
 import { useArchive, useReadProgress, type ArchiveState } from "./archive-data";
 import { formatDateTime } from "./dates";
 import {
-  DEFAULT_STATE,
+  clearedState,
   PRESETS,
   readState,
   toFilters,
   writeState,
   type FilterState,
+  type Preset,
 } from "./filters";
 
 /* where a view puts its own controls: the end of the toolbar on a laptop
@@ -64,11 +65,13 @@ type Slots = {
   toolbar: HTMLElement | null;
   sheet: HTMLElement | null;
   filters: HTMLElement | null;
+  above: HTMLElement | null;
 };
 const SlotsContext = createContext<Slots>({
   toolbar: null,
   sheet: null,
   filters: null,
+  above: null,
 });
 
 /* what the sheet's Reset does besides clearing the filters: each view group's
@@ -80,6 +83,12 @@ const ResetContext = createContext<AddReset>(() => () => {});
 export function ToolbarEnd({ children }: { children: ReactNode }) {
   const { toolbar } = useContext(SlotsContext);
   return toolbar ? createPortal(children, toolbar) : null;
+}
+
+/** what outranks the filters (Charts' views), over the toolbar */
+export function AboveToolbar({ children }: { children: ReactNode }) {
+  const { above } = useContext(SlotsContext);
+  return above ? createPortal(children, above) : null;
 }
 
 /** a view's own filter (People's "All people"), among the shell's filters:
@@ -166,16 +175,20 @@ export type ViewProps = {
   /** rereads WordPress now, for a page where someone just fixed an article */
   refresh: () => void;
   refreshing: boolean;
-  /** what the filters narrow to, for a caption ("Sports · Writing"); empty
-      when nothing is set. A phone hides the filters in a sheet, so the
+  /** what the filters narrow to, for a caption ("Last 3 months · Sports");
+      empty when nothing is set. A phone hides the filters in a sheet, so the
       caption is where the cut shows */
   filterNote: string;
+  /** sets the Time filter, as choosing a chart view does */
+  setPreset: (preset: Preset) => void;
 };
 
 /** the filters that are set, in words, for a view's caption */
 export function describeFilters(state: FilterState): string {
   const parts: string[] = [];
-  if (state.preset !== DEFAULT_STATE.preset)
+  /* named even when it is the page's own range, which is not all time and
+     would otherwise go unsaid */
+  if (state.preset !== "all")
     parts.push(
       state.preset === "custom"
         ? [state.from, state.to].filter(Boolean).join(" to ") || "Custom range"
@@ -199,6 +212,8 @@ export function ArchiveShell({
   filters = true,
   roleFilter = true,
   reload = "wordpress",
+  /* without a filter bar there is no Time to see, so nothing is cut */
+  defaultPreset = filters ? "3m" : "all",
 }: {
   children: (props: ViewProps) => ReactNode;
   searchPlaceholder?: string;
@@ -208,6 +223,8 @@ export function ArchiveShell({
   roleFilter?: boolean;
   /** what the title row's Reload is named for: on Settings, the Sheet */
   reload?: Reload;
+  /** the Time filter a page opens on and Clear goes back to */
+  defaultPreset?: Preset;
 }) {
   return (
     <QueryClientProvider client={queryClient}>
@@ -216,6 +233,7 @@ export function ArchiveShell({
         showFilters={filters}
         roleFilter={roleFilter}
         reload={reload}
+        defaultPreset={defaultPreset}
       >
         {children}
       </Shell>
@@ -229,12 +247,14 @@ function Shell({
   showFilters,
   roleFilter,
   reload,
+  defaultPreset,
 }: {
   children: (props: ViewProps) => ReactNode;
   searchPlaceholder: string;
   showFilters: boolean;
   roleFilter: boolean;
   reload: Reload;
+  defaultPreset: Preset;
 }) {
   const state = useArchive();
   const hydrated = useHydrated();
@@ -264,6 +284,7 @@ function Shell({
       showFilters={showFilters}
       roleFilter={roleFilter}
       reload={reload}
+      defaultPreset={defaultPreset}
     >
       {children}
     </Ready>
@@ -277,6 +298,7 @@ function Ready({
   showFilters,
   roleFilter,
   reload,
+  defaultPreset,
 }: {
   state: Extract<ArchiveState, { status: "ready" }>;
   children: (props: ViewProps) => ReactNode;
@@ -284,19 +306,24 @@ function Ready({
   showFilters: boolean;
   roleFilter: boolean;
   reload: Reload;
+  defaultPreset: Preset;
 }) {
   /* asked for by a person, as against a read behind the page: only this one
      dims the page, since only here are they waiting on it */
   const [refreshing, setRefreshing] = useState(false);
   /* drawn only once hydrated (Shell), so the address is there */
   const [state, setState] = useState<FilterState>(() =>
-    readState(window.location.search),
+    readState(window.location.search, defaultPreset),
   );
   useEffect(() => {
     const url = new URL(window.location.href);
-    writeState(state, url.searchParams);
+    writeState(state, url.searchParams, defaultPreset);
     window.history.replaceState(window.history.state, "", url);
-  }, [state]);
+  }, [state, defaultPreset]);
+  const setPreset = useCallback(
+    (preset: Preset) => setState((now) => ({ ...now, preset })),
+    [],
+  );
 
   const filters = useMemo(() => toFilters(state), [state]);
 
@@ -325,7 +352,12 @@ function Ready({
     toolbar: null,
     sheet: null,
     filters: null,
+    above: null,
   });
+  const setAbove = useCallback(
+    (above: HTMLElement | null) => setSlots((s) => ({ ...s, above })),
+    [],
+  );
   const setToolbar = useCallback(
     (toolbar: HTMLElement | null) => setSlots((s) => ({ ...s, toolbar })),
     [],
@@ -383,6 +415,7 @@ function Ready({
         {/* page-wide, so in the title row beside the h1 */}
         {!inToolbar && <PageActions>{freshness(false)}</PageActions>}
         <div className="space-y-6">
+          <div ref={setAbove} className="empty:hidden" />
           {showFilters && (
             <FilterBar
               archive={archive}
@@ -390,6 +423,7 @@ function Ready({
               setState={setState}
               searchPlaceholder={searchPlaceholder}
               roleFilter={roleFilter}
+              defaultPreset={defaultPreset}
               reloadButton={inToolbar && freshness(true)}
               resets={resets}
               toolbarSlot={setToolbar}
@@ -405,6 +439,7 @@ function Ready({
               refresh: refreshNow,
               refreshing,
               filterNote: describeFilters(state),
+              setPreset,
             })}
           </div>
         </div>
@@ -550,6 +585,7 @@ function FilterBar({
   setState,
   searchPlaceholder,
   roleFilter,
+  defaultPreset,
   reloadButton,
   resets,
   toolbarSlot,
@@ -561,6 +597,7 @@ function FilterBar({
   setState: (state: FilterState) => void;
   searchPlaceholder: string;
   roleFilter: boolean;
+  defaultPreset: Preset;
   /** a phone's Reload, at the end of the search row */
   reloadButton: ReactNode;
   /** the view groups' own resets, which the sheet's Reset runs */
@@ -574,10 +611,11 @@ function FilterBar({
 }) {
   const phone = useIsPhone();
   const [sheetOpen, setSheetOpen] = useState(false);
-  const changed = JSON.stringify(state) !== JSON.stringify(DEFAULT_STATE);
+  const clear = clearedState(defaultPreset);
+  const changed = JSON.stringify(state) !== JSON.stringify(clear);
   /* what the phone hides in its sheet, counted on the button that opens it */
   const active =
-    (state.preset !== DEFAULT_STATE.preset ? 1 : 0) +
+    (state.preset !== defaultPreset ? 1 : 0) +
     (state.sections.length > 0 ? 1 : 0) +
     (state.roles.length > 0 ? 1 : 0);
 
@@ -655,7 +693,7 @@ function FilterBar({
 
   if (phone) {
     /* the search is outside the sheet, so the sheet's Reset leaves it */
-    const cleared = { ...DEFAULT_STATE, search: state.search };
+    const cleared = { ...clear, search: state.search };
     const reset = () => {
       setState(cleared);
       for (const each of resets) each();
@@ -736,7 +774,7 @@ function FilterBar({
         {sections}
         {roles}
         {changed && (
-          <Button variant="ghost" onClick={() => setState(DEFAULT_STATE)}>
+          <Button variant="ghost" onClick={() => setState(clear)}>
             <XIcon /> Clear
           </Button>
         )}

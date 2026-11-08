@@ -33,7 +33,7 @@ export function ProblemsPage() {
   );
 }
 
-function Problems({ archive, filters, refresh }: ViewProps) {
+function Problems({ archive, filters, refresh, filterNote }: ViewProps) {
   /* back from fixing something in WordPress, read it again so the fix shows */
   const away = useRef(false);
   useEffect(() => {
@@ -68,6 +68,7 @@ function Problems({ archive, filters, refresh }: ViewProps) {
     ignoring.remove(article, {
       done: `Ignored “${article.title}”; it still counts`,
       restored: `“${article.title}” is back on the list`,
+      undoLabel: `Undo ignoring ${article.title}`,
       edit: () => ({ kind: "ignore", postId: article.id, ignored: true }),
       undo: () => ({ kind: "ignore", postId: article.id, ignored: false }),
     });
@@ -75,6 +76,7 @@ function Problems({ archive, filters, refresh }: ViewProps) {
     separating.remove(pair, {
       done: `Marked ${pair.names.join(" and ")} as different people`,
       restored: `${pair.names.join(" and ")} are back on the list`,
+      undoLabel: `Undo marking ${pair.names.join(" and ")} as different people`,
       edit: () => ({
         kind: "different-people",
         names: pair.names,
@@ -90,18 +92,18 @@ function Problems({ archive, filters, refresh }: ViewProps) {
   return (
     <div className="space-y-10">
       <section className="space-y-3">
-        <div className="flex flex-wrap items-baseline gap-x-3">
-          <h2 className="text-base font-semibold">
-            {open.length === 0
+        {/* the count as People and Articles give theirs, over the list */}
+        <h2 className="text-muted-foreground text-sm font-normal tabular-nums">
+          {[
+            open.length === 0
               ? "Every article's credits read cleanly"
-              : `${open.length} ${open.length === 1 ? "article" : "articles"} to check`}
-          </h2>
-          {outside > 0 && (
-            <span className="text-muted-foreground text-sm">
-              {outside} more outside these filters
-            </span>
-          )}
-        </div>
+              : `${open.length} ${open.length === 1 ? "article" : "articles"} to check`,
+            filterNote,
+            outside > 0 && `${outside} more outside these filters`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </h2>
         {ignoring.entries.length > 0 && (
           <ul className="divide-y rounded-lg border">
             {ignoring.entries.map(({ key, item, removed }) =>
@@ -206,19 +208,20 @@ function ArticleProblems({
           ))}
         </ul>
       </div>
-      <div className="text-muted-foreground -ml-2 flex shrink-0 gap-1 sm:-mr-2 sm:ml-0">
+      <div className="flex shrink-0 gap-1 sm:-mr-2">
         <a
           href={EDIT_IN_WORDPRESS(article.id)}
           target="_blank"
           rel="noreferrer"
           onClick={onLeave}
-          className={cn(buttonVariants({ variant: "ghost" }))}
+          className={cn(buttonVariants({ variant: "outline" }))}
         >
           Edit in WordPress <ExternalLinkIcon />
         </a>
         <Button
           ref={ignoreRef}
           variant="ghost"
+          className="text-muted-foreground"
           onClick={onIgnore}
           title="Hide this article's problems; it stays in every count"
         >

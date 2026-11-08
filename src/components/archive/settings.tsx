@@ -23,6 +23,7 @@ import { same } from "~/lib/credits/sheet";
 import { ArchiveShell, type ViewProps } from "./archive-shell";
 import { BylinePanel, usesOf } from "./byline-panel";
 import { Choice } from "./choice";
+import { PersonPicker } from "./person-picker";
 import { useRemovals } from "./removals";
 import { useEdit } from "./use-edit";
 
@@ -150,6 +151,7 @@ function PenNames({
     removals.remove(pen, {
       done: `Removed “${pen.byline}”`,
       restored: `Restored “${pen.byline}”`,
+      undoLabel: `Undo removing ${pen.byline}`,
       edit: () => ({
         kind: "pen-names",
         entries: [{ byline: pen.byline, realName: "" }],
@@ -173,6 +175,7 @@ function PenNames({
 
       <AddPenName
         list={list}
+        everyone={everyone}
         printedCount={printedCount}
         penNames={archive.penNames}
         pasting={pasting}
@@ -282,6 +285,7 @@ function PenNameRow({
 
 function AddPenName({
   list,
+  everyone,
   printedCount,
   penNames,
   pasting,
@@ -289,6 +293,7 @@ function AddPenName({
   onHandOver,
 }: {
   list: string;
+  everyone: string[];
   printedCount: (byline: string) => number;
   penNames: PenName[];
   pasting: boolean;
@@ -355,12 +360,11 @@ function AddPenName({
           />
         </FieldRow>
         <FieldRow icon={UserRoundIcon} label="Counts as" htmlFor={ids.realName}>
-          <Input
+          <PersonPicker
             id={ids.realName}
-            list={list}
-            placeholder="Choose a person"
             value={realName}
-            onChange={(event) => setRealName(event.target.value)}
+            onChange={setRealName}
+            people={everyone}
           />
         </FieldRow>
         {count !== null && (
@@ -430,7 +434,7 @@ function PasteSeveral({
         rows={5}
         aria-label="Pen names to add"
         placeholder={
-          "One per line: Pen name = Real name\nPasting two columns from a spreadsheet works too."
+          "Pen name = Real name, one per line\nPasting two columns from a spreadsheet works too."
         }
         value={text}
         onChange={(event) => setText(event.target.value)}
@@ -490,7 +494,7 @@ function PasteSeveral({
                   realName,
                 })),
               },
-              done: `Saved ${valid.length} pen ${valid.length === 1 ? "name" : "names"}`,
+              done: `Added ${valid.length} pen ${valid.length === 1 ? "name" : "names"}`,
               /* what those bylines counted as before, or nobody */
               undo: {
                 kind: "pen-names",
@@ -520,8 +524,8 @@ function PasteSeveral({
         }
       >
         {save.isPending
-          ? "Saving…"
-          : `Save ${valid.length || ""} pen ${valid.length === 1 ? "name" : "names"}`}
+          ? "Adding…"
+          : `Add ${valid.length || ""} pen ${valid.length === 1 ? "name" : "names"}`}
       </Button>
     </div>
   );
@@ -558,6 +562,7 @@ function ArticleRows({ archive }: { archive: Archive }) {
       removals.remove(o, {
         done: `Removed “${o.byline}” on ${where}`,
         restored: `Restored “${o.byline}” on ${where}`,
+        undoLabel: `Undo removing ${o.byline} on ${where}`,
         edit: (rest) => ({
           kind: "byline",
           byline: o.byline!,
@@ -575,6 +580,7 @@ function ArticleRows({ archive }: { archive: Archive }) {
       removals.remove(o, {
         done: `Removed “${o.realName}” from ${where}`,
         restored: `Restored “${o.realName}” on ${where}`,
+        undoLabel: `Undo removing ${o.realName} from ${where}`,
         edit: (rest) => ({
           kind: "article-credits",
           postId: o.postId!,
@@ -592,10 +598,17 @@ function ArticleRows({ archive }: { archive: Archive }) {
   };
 
   return (
-    <Section title="Counted differently on one article">
+    <Section title="Articles counted differently">
       {removals.entries.length === 0 ? (
-        <p className="text-muted-foreground rounded-lg border px-4 py-6 text-center text-sm">
-          None yet.
+        <p className="text-muted-foreground text-sm">
+          None yet. Set one from{" "}
+          <a
+            href="/articles"
+            className="hover:text-foreground underline underline-offset-4"
+          >
+            Articles
+          </a>
+          .
         </p>
       ) : (
         <ul className={LIST}>
@@ -676,6 +689,7 @@ function Labels({ archive }: { archive: Archive }) {
           ? `Removed “${label.label}:”; ${uses} ${uses === 1 ? "article stops" : "articles stop"} counting it`
           : `Removed “${label.label}:”`,
       restored: `Restored “${label.label}:”`,
+      undoLabel: `Undo removing ${label.label}:`,
       edit: (rest) => ({ kind: "labels", labels: rest }),
       undo: (rest) => ({
         kind: "labels",
@@ -862,7 +876,7 @@ function AddLabel({
             onChange={(event) => setLabel(event.target.value)}
           />
         </FieldRow>
-        <FieldRow icon={IdCardIcon} label="Role">
+        <FieldRow icon={IdCardIcon} label="Role" inline>
           <Choice
             label="Role"
             hideLabel

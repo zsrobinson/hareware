@@ -3,7 +3,7 @@ import { ExternalLinkIcon, PlusIcon, XIcon } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { DataTable, sortable } from "~/components/data-table";
 import { FieldRow, FieldRows } from "~/components/field-row";
-import { SidePanel } from "~/components/panel";
+import { SidePanel, useIsPhone } from "~/components/panel";
 import { Button, buttonVariants } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import { Input } from "~/components/ui/input";
@@ -18,6 +18,7 @@ import { same } from "~/lib/credits/sheet";
 import { applyFilters, easternDate } from "~/lib/credits/stats";
 import { ArchiveShell, type ViewProps } from "./archive-shell";
 import { formatDate } from "./dates";
+import { OpenRowProvider, RowDetails, RowOpener, useOpenRow } from "./open-row";
 import { ShellTableControls } from "./table-controls";
 import { useEdit } from "./use-edit";
 
@@ -61,8 +62,15 @@ function Contributors({ credits }: { credits: Credit[] }) {
   );
 }
 
-function Articles({ archive, filters }: ViewProps) {
-  const [editing, setEditing] = useState<number | null>(null);
+/* what a narrower table leaves out until someone asks for it, so none of
+   it is cut off at the edge: beside a panel, and on a phone */
+const BESIDE_PANEL = ["section", "image", "other"];
+const ON_PHONE = ["writer", ...BESIDE_PANEL];
+
+function Articles({ archive, filters, filterNote }: ViewProps) {
+  const phone = useIsPhone();
+  const openRow = useOpenRow("article");
+  const editing = openRow.open === null ? null : Number(openRow.open);
 
   const rows = useMemo(() => {
     const shown = applyFilters(archive.articles, filters);
@@ -78,7 +86,8 @@ function Articles({ archive, filters }: ViewProps) {
         );
   }, [archive, filters]);
 
-  /* "other" credits are rare, so their column waits until someone asks for them */
+  /* "other" credits are rare, so their column waits until someone asks for
+     them. Nothing else here depends on which row is open (see open-row.tsx) */
   const anyOther = filters.roles.includes("other");
 
   const columns = useMemo<ColumnDef<ArchiveArticle, unknown>[]>(
@@ -97,19 +106,18 @@ function Articles({ archive, filters }: ViewProps) {
       {
         accessorKey: "title",
         header: sortable("Title"),
+        meta: { csvHeader: "Title" },
         cell: ({ row }) => {
           const open =
             row.original.problems.length > 0 && !row.original.ignored;
           return (
             <div className="max-w-md min-w-56 whitespace-normal">
-              <button
-                type="button"
-                className="text-left font-medium underline-offset-4 hover:underline"
-                aria-current={row.original.id === editing ? "true" : undefined}
-                onClick={() => setEditing(row.original.id)}
+              <RowOpener
+                rowKey={String(row.original.id)}
+                className="font-medium"
               >
                 {row.original.title}
-              </button>
+              </RowOpener>
               {open && (
                 <a
                   href={`/problems?q=${encodeURIComponent(row.original.title)}`}
@@ -124,7 +132,11 @@ function Articles({ archive, filters }: ViewProps) {
           );
         },
       },
-      { accessorKey: "section", header: sortable("Section") },
+      {
+        accessorKey: "section",
+        header: sortable("Section"),
+        meta: { csvHeader: "Section" },
+      },
       ...ROLES.filter((role) => role !== "other" || anyOther).map(
         (role): ColumnDef<ArchiveArticle, unknown> => ({
           id: role,
@@ -141,7 +153,7 @@ function Articles({ archive, filters }: ViewProps) {
         }),
       ),
     ],
-    [anyOther, editing],
+    [anyOther],
   );
 
   const article = editing
@@ -149,7 +161,7 @@ function Articles({ archive, filters }: ViewProps) {
     : undefined;
 
   return (
-    <>
+    <OpenRowProvider value={openRow}>
       <DataTable
         columns={columns}
         data={rows}
@@ -158,21 +170,29 @@ function Articles({ archive, filters }: ViewProps) {
         csv="articles"
         controls={(controls) => <ShellTableControls {...controls} />}
         selected={(row) => row.id === editing}
+        hidden={phone ? ON_PHONE : article ? BESIDE_PANEL : []}
         caption={
           <span className="text-muted-foreground text-sm tabular-nums">
-            {rows.length} {rows.length === 1 ? "article" : "articles"}
+            {[
+              `${rows.length} ${rows.length === 1 ? "article" : "articles"}`,
+              filterNote,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
         }
       />
       {article && (
-        <ArticlePanel
-          key={article.id}
-          article={article}
-          archive={archive}
-          onClose={() => setEditing(null)}
-        />
+        <RowDetails>
+          <ArticlePanel
+            key={article.id}
+            article={article}
+            archive={archive}
+            onClose={openRow.close}
+          />
+        </RowDetails>
       )}
-    </>
+    </OpenRowProvider>
   );
 }
 
@@ -198,7 +218,7 @@ function ArticlePanel({
   );
 
   return (
-    <SidePanel title={article.title} back="Articles" onClose={onClose}>
+    <SidePanel title={article.title} back="All articles" onClose={onClose}>
       <div className="-mt-3 space-y-3">
         <p className="text-muted-foreground text-xs">
           {formatDate(article.publishedAt)} · {article.section}
@@ -222,9 +242,6 @@ function ArticlePanel({
           </a>
         </div>
       </div>
-      <p className="text-muted-foreground text-sm">
-        Changes here count on this article only.
-      </p>
       {ROLES.map((role) => (
         <RoleEditor
           /* a save changes the contributors, which starts the form afresh */
@@ -341,7 +358,7 @@ function RoleEditor({
               aria-label={`Who ${byline} counts as`}
               value={renamed[byline] ?? ""}
               placeholder={
-                fallback(byline) === byline ? "As printed" : fallback(byline)
+                fallback(byline) === byline ? "Unchanged" : fallback(byline)
               }
               onChange={(event) =>
                 setRenamed({ ...renamed, [byline]: event.target.value })

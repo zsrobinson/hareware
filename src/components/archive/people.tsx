@@ -1,6 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { PenLineIcon, UserRoundIcon, XIcon } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import {
+  PenLineIcon,
+  UserRoundIcon,
+  UsersRoundIcon,
+  XIcon,
+} from "lucide-react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { DataTable, sortable } from "~/components/data-table";
 import {
   FieldActions,
@@ -8,9 +13,10 @@ import {
   FieldRow,
   FieldRows,
 } from "~/components/field-row";
-import { SidePanel } from "~/components/panel";
+import { SidePanel, useIsPhone } from "~/components/panel";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { cn } from "~/lib/utils";
 import type { Archive, ArchiveArticle } from "~/lib/credits/archive";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import { same } from "~/lib/credits/sheet";
@@ -21,10 +27,12 @@ import {
   searchable,
   type PersonRow,
 } from "~/lib/credits/stats";
-import { ArchiveShell, type ViewProps } from "./archive-shell";
+import { ArchiveShell, ToolbarFilters, type ViewProps } from "./archive-shell";
 import { BylinePanel } from "./byline-panel";
 import { Choice } from "./choice";
 import { formatDate, formatMonth } from "./dates";
+import { OpenRowProvider, RowDetails, RowOpener, useOpenRow } from "./open-row";
+import { PersonPicker } from "./person-picker";
 import { useRemovals } from "./removals";
 import { ShellTableControls } from "./table-controls";
 import { useEdit } from "./use-edit";
@@ -68,9 +76,69 @@ const count = (
   },
 });
 
-function People({ archive, filters }: ViewProps) {
+const MINIMUMS = ["1", "2", "3", "5", "10"].map((n) => ({
+  id: n,
+  label: n === "1" ? "All people" : `${n}+ contributions`,
+}));
+
+/* never depend on which row is open, so its name is never redrawn as a new
+   button (see open-row.tsx) */
+const COLUMNS: ColumnDef<PersonRow, unknown>[] = [
+  {
+    accessorKey: "name",
+    header: sortable("Name"),
+    meta: { csvHeader: "Name" },
+    cell: ({ row }) => (
+      <RowOpener rowKey={row.original.name}>
+        <span className="font-medium">{row.original.name}</span>
+        {row.original.bylines.length > 0 && (
+          <span className="text-muted-foreground block text-xs">
+            as {row.original.bylines.join(", ")}
+          </span>
+        )}
+      </RowOpener>
+    ),
+  },
+  count(
+    "contributions",
+    "Contributions",
+    "One per person, per role, per article",
+  ),
+  count("writer", ROLE_NAMES.writer),
+  count("image", ROLE_NAMES.image),
+  count("other", ROLE_NAMES.other),
+  {
+    accessorKey: "first",
+    header: sortable("First"),
+    meta: { csvHeader: "First" },
+    cell: ({ row }) => (
+      <span className="text-muted-foreground whitespace-nowrap">
+        {formatMonth(row.original.first)}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "last",
+    header: sortable("Latest"),
+    meta: { csvHeader: "Latest" },
+    cell: ({ row }) => (
+      <span className="text-muted-foreground whitespace-nowrap">
+        {formatMonth(row.original.last)}
+      </span>
+    ),
+  },
+];
+
+/* what a narrower table leaves out until someone asks for it, so none of
+   it is cut off at the edge: beside a panel, and on a phone */
+const BESIDE_PANEL = ["other", "first", "last"];
+const ON_PHONE = ["writer", "image", ...BESIDE_PANEL];
+
+function People({ archive, filters, filterNote }: ViewProps) {
+  const phone = useIsPhone();
   const [minimum, setMinimum] = useState("1");
-  const [open, setOpen] = useState<string | null>(null);
+  const openRow = useOpenRow("person");
+  const { open } = openRow;
 
   /* the search box here looks for a person or a byline they use */
   const all = useMemo(
@@ -93,57 +161,6 @@ function People({ archive, filters }: ViewProps) {
     );
   }, [all, filters.search, minimum]);
 
-  const columns = useMemo<ColumnDef<PersonRow, unknown>[]>(
-    () => [
-      {
-        accessorKey: "name",
-        header: sortable("Name"),
-        cell: ({ row }) => (
-          <button
-            type="button"
-            className="text-left underline-offset-4 hover:underline"
-            aria-current={row.original.name === open ? "true" : undefined}
-            onClick={() => setOpen(row.original.name)}
-          >
-            <span className="font-medium">{row.original.name}</span>
-            {row.original.bylines.length > 0 && (
-              <span className="text-muted-foreground block text-xs">
-                as {row.original.bylines.join(", ")}
-              </span>
-            )}
-          </button>
-        ),
-      },
-      count(
-        "contributions",
-        "Contributions",
-        "One per person, per role, per article",
-      ),
-      count("writer", ROLE_NAMES.writer),
-      count("image", ROLE_NAMES.image),
-      count("other", ROLE_NAMES.other),
-      {
-        accessorKey: "first",
-        header: sortable("First"),
-        cell: ({ row }) => (
-          <span className="text-muted-foreground whitespace-nowrap">
-            {formatMonth(row.original.first)}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "last",
-        header: sortable("Latest"),
-        cell: ({ row }) => (
-          <span className="text-muted-foreground whitespace-nowrap">
-            {formatMonth(row.original.last)}
-          </span>
-        ),
-      },
-    ],
-    [open],
-  );
-
   /* names to suggest and check against ignore the filters: a person is
      still credited when this semester or section leaves them out */
   const everybody = useMemo(
@@ -155,46 +172,64 @@ function People({ archive, filters }: ViewProps) {
       everybody.find((row) => row.name === open))
     : undefined;
 
+  const show = (
+    <Choice
+      label="Show"
+      hideLabel
+      value={minimum}
+      options={MINIMUMS}
+      onChange={setMinimum}
+    />
+  );
+
   return (
-    <>
+    <OpenRowProvider value={openRow}>
+      {/* a filter like the shell's, so it sits among them */}
+      <ToolbarFilters>
+        {phone ? (
+          <div className="w-full">
+            <FieldRow icon={UsersRoundIcon} label="Show" inline>
+              {show}
+            </FieldRow>
+          </div>
+        ) : (
+          show
+        )}
+      </ToolbarFilters>
       <DataTable
-        columns={columns}
+        columns={COLUMNS}
         data={rows}
         searchable={false}
         empty="Nobody matches these filters."
         csv="people"
         controls={(controls) => <ShellTableControls {...controls} />}
         selected={(row) => row.name === open}
+        hidden={phone ? ON_PHONE : selected ? BESIDE_PANEL : []}
         caption={
-          <>
-            <Choice
-              label="Show"
-              hideLabel
-              width="w-44"
-              value={minimum}
-              options={["1", "2", "3", "5", "10"].map((n) => ({
-                id: n,
-                label: n === "1" ? "All people" : `${n}+ contributions`,
-              }))}
-              onChange={setMinimum}
-            />
-            <span className="text-muted-foreground text-sm tabular-nums">
-              {rows.length} {rows.length === 1 ? "person" : "people"}
-            </span>
-          </>
+          <span className="text-muted-foreground text-sm tabular-nums">
+            {[
+              `${rows.length} ${rows.length === 1 ? "person" : "people"}`,
+              filterNote,
+              minimum !== "1" && `${minimum}+ contributions`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
         }
       />
 
       {selected && (
-        <PersonPanel
-          key={selected.name}
-          person={selected}
-          archive={archive}
-          everyone={everybody.map((row) => row.name)}
-          onClose={() => setOpen(null)}
-        />
+        <RowDetails>
+          <PersonPanel
+            key={selected.name}
+            person={selected}
+            archive={archive}
+            everyone={everybody.map((row) => row.name)}
+            onClose={openRow.close}
+          />
+        </RowDetails>
       )}
-    </>
+    </OpenRowProvider>
   );
 }
 
@@ -211,6 +246,13 @@ function PersonPanel({
 }) {
   const [byline, setByline] = useState<string | null>(null);
   const [handOver, setHandOver] = useState(false);
+  /* the pen name just added, marked in the list for a moment */
+  const [added, setAdded] = useState<string | null>(null);
+  useEffect(() => {
+    if (!added) return;
+    const timer = setTimeout(() => setAdded(null), 4000);
+    return () => clearTimeout(timer);
+  }, [added]);
   const byId = new Map(archive.articles.map((a) => [a.id, a]));
   const articles = person.articleIds
     .map((id) => byId.get(id))
@@ -263,12 +305,18 @@ function PersonPanel({
         <AddOwnPenName
           person={person}
           archive={archive}
+          onAdded={setAdded}
           onHandOver={(pen) => {
             setHandOver(true);
             setByline(pen);
           }}
         />
-        <PenNames person={person} archive={archive} onOpen={setByline} />
+        <PenNames
+          person={person}
+          archive={archive}
+          added={added}
+          onOpen={setByline}
+        />
       </div>
 
       {printedOn > 0 && (
@@ -329,10 +377,13 @@ type PenNameUse = {
 function PenNames({
   person,
   archive,
+  added,
   onOpen,
 }: {
   person: PersonRow;
   archive: Archive;
+  /** a pen name just added, to mark */
+  added: string | null;
   onOpen: (byline: string) => void;
 }) {
   /* every byline they are credited through: as a pen name on every article,
@@ -367,6 +418,17 @@ function PenNames({
           });
       }
   }
+  /* and the ones not printed yet, which no article credits them through */
+  for (const pen of archive.penNames)
+    if (
+      pen.realName.includes(person.name) &&
+      !found.has(pen.byline.toLowerCase())
+    )
+      found.set(pen.byline.toLowerCase(), {
+        byline: pen.byline,
+        articles: 0,
+        rows: [],
+      });
   const mine = [...found.values()].sort((a, b) => b.articles - a.articles);
   const removals = useRemovals(mine, (use) => use.byline.toLowerCase());
   if (removals.entries.length === 0) return removals.status;
@@ -380,6 +442,7 @@ function PenNames({
     removals.remove(use, {
       done: `Removed “${byline}”`,
       restored: `Restored “${byline}”`,
+      undoLabel: `Undo removing ${byline}`,
       edit: () => ({
         kind: "byline",
         byline,
@@ -400,7 +463,7 @@ function PenNames({
 
   return (
     <>
-      <ul className="divide-y rounded-lg border text-sm">
+      <ul className="divide-y overflow-hidden rounded-lg border text-sm">
         {removals.entries.map(({ key, item, removed }) => {
           if (removed) return removals.removedRow(key);
           const everywhere = archive.penNames
@@ -409,7 +472,10 @@ function PenNames({
           return (
             <li
               key={key}
-              className="flex min-h-11 items-center gap-2 py-1.5 pr-1.5 pl-3"
+              className={cn(
+                "flex min-h-11 items-center gap-2 py-1.5 pr-1.5 pl-3 transition-colors duration-700",
+                added !== null && same(added, item.byline) && "bg-muted/60",
+              )}
             >
               <span className="min-w-0 flex-1">
                 <button
@@ -420,9 +486,11 @@ function PenNames({
                   {item.byline}
                 </button>
                 <span className="text-muted-foreground block text-xs">
-                  {everywhere
-                    ? `On every article (${item.articles})`
-                    : `Only on ${item.articles} ${item.articles === 1 ? "article" : "articles"}`}
+                  {item.articles === 0
+                    ? "Not printed yet"
+                    : everywhere
+                      ? `On every article (${item.articles})`
+                      : `Only on ${item.articles} ${item.articles === 1 ? "article" : "articles"}`}
                 </span>
               </span>
               <Button
@@ -448,10 +516,13 @@ function PenNames({
 function AddOwnPenName({
   person,
   archive,
+  onAdded,
   onHandOver,
 }: {
   person: PersonRow;
   archive: Archive;
+  /** saved: the list below shows it, with its × to take it back */
+  onAdded: (byline: string) => void;
   /** the pen name counts as someone else already: hand it over instead */
   onHandOver: (byline: string) => void;
 }) {
@@ -459,6 +530,7 @@ function AddOwnPenName({
   const id = useId();
   const list = useId();
   const [byline, setByline] = useState("");
+  const [said, setSaid] = useState("");
   const printed = useMemo(
     () =>
       [
@@ -492,24 +564,22 @@ function AddOwnPenName({
         event.preventDefault();
         if (!typed) return;
         if (taken) return onHandOver(taken.byline);
+        /* no toast: the new row in the list below is the confirmation, and
+           its × takes it back */
         save.mutate(
           {
             edit: {
               kind: "pen-names",
               entries: [{ byline: typed, realName: person.name }],
             },
-            done: `${typed} now counts as ${person.name}`,
-            undo: {
-              kind: "pen-names",
-              entries: archive.penNames
-                .find((pen) => same(pen.byline, typed))
-                ?.realName.map((realName) => ({
-                  byline: typed,
-                  realName,
-                })) ?? [{ byline: typed, realName: "" }],
+          },
+          {
+            onSuccess: () => {
+              setByline("");
+              setSaid(`${typed} now counts as ${person.name}`);
+              onAdded(typed);
             },
           },
-          { onSuccess: () => setByline("") },
         );
       }}
     >
@@ -539,7 +609,7 @@ function AddOwnPenName({
               ? `Counts as ${taken.realName.join(" and ")} now. Continue to choose which articles stay theirs.`
               : count === 0
                 ? "Not printed yet."
-                : `${count} ${count === 1 ? "article" : "articles"}, and any later ones.`}
+                : `${count} ${count === 1 ? "article" : "articles"} and later ones.`}
           </FieldNote>
         )}
         <FieldActions width="panel">
@@ -552,6 +622,9 @@ function AddOwnPenName({
           </Button>
         </FieldActions>
       </FieldRows>
+      <p role="status" aria-live="polite" className="sr-only">
+        {said}
+      </p>
     </form>
   );
 }
@@ -572,23 +645,22 @@ function PenNameOf({
 }) {
   const save = useEdit();
   const id = useId();
-  const list = useId();
+  /* "" is the printed name counting as its own person */
   const [realName, setRealName] = useState("");
+  const known = everyone.some((name) => same(name, realName));
 
-  const typed = realName.trim();
-  const known = everyone.find((name) => same(name, typed));
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        if (!typed) return;
+        if (!realName) return;
         save.mutate(
           {
             edit: {
               kind: "pen-names",
-              entries: [{ byline, realName: known ?? typed }],
+              entries: [{ byline, realName }],
             },
-            done: `${byline} now counts as ${known ?? typed}`,
+            done: `${byline} now counts as ${realName}`,
             undo: { kind: "pen-names", entries: [{ byline, realName: "" }] },
           },
           { onSuccess: onSaved },
@@ -602,23 +674,18 @@ function PenNameOf({
           htmlFor={id}
           width="panel"
         >
-          <Input
+          <PersonPicker
             id={id}
-            list={list}
             value={realName}
-            onChange={(event) => setRealName(event.target.value)}
-            placeholder={byline}
+            onChange={setRealName}
+            people={everyone}
+            none="Themselves"
           />
-          <datalist id={list}>
-            {everyone.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
         </FieldRow>
         <FieldNote width="panel">
-          {articles === 1 ? "1 article" : `${articles} articles`}, and any later
+          {articles === 1 ? "1 article" : `${articles} articles`} and later
           ones.
-          {typed && !known && " Not credited yet."}
+          {realName && !known && " Not credited yet."}
           {articles > 1 && (
             <>
               {" "}
@@ -627,12 +694,12 @@ function PenNameOf({
                 className="hover:text-foreground text-left underline underline-offset-4"
                 onClick={onEachArticle}
               >
-                Different people on different articles?
+                Set per article
               </button>
             </>
           )}
         </FieldNote>
-        {typed && (
+        {realName && (
           <FieldActions width="panel">
             <Button type="submit" disabled={save.isPending}>
               {save.isPending ? "Saving…" : "Save"}

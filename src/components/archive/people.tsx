@@ -140,15 +140,26 @@ function People({ archive, filters, filterNote }: ViewProps) {
   const openRow = useOpenRow("person");
   const { open } = openRow;
 
-  /* the search box here looks for a person or a byline they use */
-  const all = useMemo(
-    () =>
-      people(
-        applyFilters(archive.articles, { ...filters, search: undefined }),
-        filters,
-      ),
-    [archive, filters],
+  /* names to suggest and check against ignore the filters: a person is
+     still credited when this semester or section leaves them out */
+  const everybody = useMemo(
+    () => people(archive.articles, NO_FILTERS),
+    [archive],
   );
+
+  /* the search box here looks for a person or a byline they use. First and
+     Latest are a person's own, whatever the filters: under "Last 3 months"
+     the first credit in range would read as when they joined */
+  const all = useMemo(() => {
+    const span = new Map(everybody.map((row) => [row.name, row]));
+    return people(
+      applyFilters(archive.articles, { ...filters, search: undefined }),
+      filters,
+    ).map((row) => {
+      const own = span.get(row.name);
+      return own ? { ...row, first: own.first, last: own.last } : row;
+    });
+  }, [archive, filters, everybody]);
   const rows = useMemo(() => {
     const search = filters.search?.trim() ? searchable(filters.search) : "";
     return all.filter(
@@ -161,12 +172,6 @@ function People({ archive, filters, filterNote }: ViewProps) {
     );
   }, [all, filters.search, minimum]);
 
-  /* names to suggest and check against ignore the filters: a person is
-     still credited when this semester or section leaves them out */
-  const everybody = useMemo(
-    () => people(archive.articles, NO_FILTERS),
-    [archive],
-  );
   const selected = open
     ? (all.find((row) => row.name === open) ??
       everybody.find((row) => row.name === open))

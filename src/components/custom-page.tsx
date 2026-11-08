@@ -1,10 +1,18 @@
 import { useState } from "react";
-import { ChevronLeftIcon, ImageIcon } from "lucide-react";
+import {
+  CameraIcon,
+  ChevronLeftIcon,
+  HeadingIcon,
+  ImageIcon,
+  PenLineIcon,
+  PilcrowIcon,
+} from "lucide-react";
 import { cn } from "~/lib/utils";
-import { Input } from "./ui/input";
-import { Textarea } from "./ui/textarea";
+import { FieldActions, FieldNote, FieldRow, FieldRows } from "./field-row";
 import { GeneratePage } from "./generate-page";
 import { Button, buttonVariants } from "./ui/button";
+import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
 
 function fileToBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -44,7 +52,6 @@ export function CustomPage() {
           defaultTitle={title}
           defaultArticleByline={articleByline}
           defaultImageByline={imageByline}
-          articleLink={""}
           imageURI={imageURI ?? ""}
         >
           {content.split("\n\n").map((para, i) => (
@@ -55,90 +62,109 @@ export function CustomPage() {
     );
   }
 
-  const field = (
-    label: string,
-    value: string,
-    set: (value: string) => void,
-    placeholder: string,
-  ) => (
-    <label className="block space-y-1.5">
-      <span className="text-sm font-medium">{label}</span>
-      <Input
-        value={value}
-        required={label === "Title"}
-        placeholder={placeholder}
-        onChange={(e) => set(e.target.value)}
-      />
-    </label>
-  );
-
   return (
     <form
-      className="max-w-2xl space-y-4"
+      className="max-w-2xl"
       onSubmit={(e) => {
         e.preventDefault();
         setHasSubmitted(true);
       }}
     >
-      {field("Title", title, setTitle, "The article's title")}
-      {field("Article byline", articleByline, setArticleByline, "Who wrote it")}
-      {field("Image byline", imageByline, setImageByline, "Who made the image")}
+      <FieldRows>
+        <FieldRow icon={HeadingIcon} label="Title" htmlFor="title" top>
+          <Textarea
+            id="title"
+            rows={2}
+            className="min-h-0 resize-none"
+            value={title}
+            required
+            placeholder="The article's title"
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </FieldRow>
+        <FieldRow
+          icon={PenLineIcon}
+          label="Article byline"
+          htmlFor="article-byline"
+        >
+          <Input
+            id="article-byline"
+            value={articleByline}
+            placeholder="Who wrote it"
+            onChange={(e) => setArticleByline(e.target.value)}
+          />
+        </FieldRow>
+        <FieldRow icon={CameraIcon} label="Image byline" htmlFor="image-byline">
+          <Input
+            id="image-byline"
+            value={imageByline}
+            placeholder="Who made the image"
+            onChange={(e) => setImageByline(e.target.value)}
+          />
+        </FieldRow>
+        <FieldNote>
+          <code>&lt;br&gt;</code> breaks a line in the title or bylines.
+        </FieldNote>
 
-      <div className="space-y-1.5">
-        <span className="text-sm font-medium">Image</span>
-        <div className="flex items-center gap-3">
-          {/* the native chooser crowds a phone, so a button stands in for it */}
-          <label
-            className={cn(
-              buttonVariants({ variant: "outline" }),
-              "cursor-pointer has-[:focus-visible]:ring-2",
+        <FieldRow icon={ImageIcon} label="Image" htmlFor="image">
+          <div className="flex items-center gap-3">
+            {/* the native chooser crowds a phone, so a button stands in for it */}
+            <label
+              className={cn(
+                buttonVariants({ variant: "outline" }),
+                "cursor-pointer has-[:focus-visible]:ring-3",
+              )}
+            >
+              {imageURI ? "Change image" : "Choose image"}
+              <input
+                id="image"
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={(e) => {
+                  setImageError(false);
+                  if (e.target.files?.length !== 1) return;
+                  fileToBase64(e.target.files[0])
+                    .then(setImageURI)
+                    .catch((error: unknown) => {
+                      console.error("could not read the image", error);
+                      setImageURI(undefined);
+                      setImageError(true);
+                    });
+                }}
+              />
+            </label>
+            {imageURI && (
+              <img
+                src={imageURI}
+                alt=""
+                className="h-8 w-auto rounded-md border object-contain"
+              />
             )}
-          >
-            <ImageIcon />
-            {imageURI ? "Change image" : "Choose image"}
-            <input
-              type="file"
-              accept="image/*"
-              className="sr-only"
-              onChange={(e) => {
-                setImageError(false);
-                if (e.target.files?.length !== 1) return;
-                fileToBase64(e.target.files[0])
-                  .then(setImageURI)
-                  .catch((error: unknown) => {
-                    console.error("could not read the image", error);
-                    setImageURI(undefined);
-                    setImageError(true);
-                  });
-              }}
-            />
-          </label>
-          {imageURI && (
-            <img
-              src={imageURI}
-              alt=""
-              className="h-12 w-auto rounded-md border object-contain"
-            />
-          )}
-        </div>
+          </div>
+        </FieldRow>
         {imageError && (
-          <p className="text-destructive text-sm">
-            That file couldn't be read as an image.
-          </p>
+          <FieldNote>
+            <span className="text-destructive">
+              That file couldn't be read as an image.
+            </span>
+          </FieldNote>
         )}
-      </div>
 
-      <label className="block space-y-1.5">
-        <span className="text-sm font-medium">Text</span>
-        <Textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="The article's text. Leave a blank line between paragraphs."
-          className="h-64 w-full"
-        />
-      </label>
+        <FieldRow icon={PilcrowIcon} label="Text" htmlFor="text" top>
+          <Textarea
+            id="text"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="The article's text. Leave a blank line between paragraphs."
+            className="h-64 w-full"
+          />
+        </FieldRow>
 
-      <Button type="submit">Make slides</Button>
+        <FieldActions>
+          <Button type="submit">Make slides</Button>
+        </FieldActions>
+      </FieldRows>
     </form>
   );
 }

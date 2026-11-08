@@ -1,6 +1,19 @@
-import { ChevronRightIcon, SlidersHorizontalIcon } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { ChevronRightIcon } from "lucide-react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FocusEvent,
+  type KeyboardEvent,
+  type PointerEvent,
+  type RefObject,
+} from "react";
+import { DataTable } from "~/components/data-table";
+import { PanelGroup, SidePanel, useIsPhone } from "~/components/panel";
 import { Button } from "~/components/ui/button";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -11,115 +24,95 @@ import {
   applyFilters,
   easternDate,
   group,
+  isPeriod,
   periodBounds,
-  type Dimension,
   type Filters,
   type Grouped,
   type Measure,
-  type Period,
 } from "~/lib/credits/stats";
 import { cn } from "~/lib/utils";
-import { ArchiveShell, type ViewProps } from "./archive-shell";
-import { Choice } from "./choice";
+import {
+  ArchiveShell,
+  SheetGroup,
+  ToolbarEnd,
+  type ViewProps,
+} from "./archive-shell";
+import { ChartBuilder } from "./chart-builder";
+import {
+  configOf,
+  COUNTS,
+  GROUPINGS,
+  readChart,
+  SPLITS,
+  VIEWS,
+  writeChart,
+  type ChartConfig,
+  type ChartState,
+  type ViewId,
+} from "./chart-config";
 import { seriesColor } from "./colors";
-
-type Breakdown = "none" | "section" | "role";
-type Kind = "bars" | "lines";
-type Scale = "count" | "share";
-
-type Config = {
-  measure: Measure;
-  by: Dimension;
-  breakdown: Breakdown;
-  kind: Kind;
-  scale: Scale;
-};
-
-const MEASURES: { id: Measure; label: string }[] = [
-  { id: "articles", label: "Articles" },
-  { id: "contributions", label: "Contributions" },
-];
-const DIMENSIONS: { id: Dimension; label: string }[] = [
-  { id: "semester", label: "Semester" },
-  { id: "month", label: "Month" },
-  { id: "year", label: "Year" },
-  { id: "section", label: "Section" },
-  { id: "person", label: "Person" },
-  { id: "role", label: "Role" },
-];
-
-/* the questions the board actually asks, one click each */
-/* the questions the board actually asks, one click each */
-const QUICK: { label: string; config: Config }[] = [
-  {
-    label: "Sections over time",
-    config: {
-      measure: "articles",
-      by: "semester",
-      breakdown: "section",
-      kind: "bars",
-      scale: "count",
-    },
-  },
-  {
-    label: "Section mix",
-    config: {
-      measure: "articles",
-      by: "semester",
-      breakdown: "section",
-      kind: "bars",
-      scale: "share",
-    },
-  },
-  {
-    label: "Contributors",
-    config: {
-      measure: "contributions",
-      by: "person",
-      breakdown: "role",
-      kind: "bars",
-      scale: "count",
-    },
-  },
-  {
-    label: "Section totals",
-    config: {
-      measure: "articles",
-      by: "section",
-      breakdown: "none",
-      kind: "bars",
-      scale: "count",
-    },
-  },
-];
-
-const isPeriod = (dimension: Dimension): dimension is Period =>
-  dimension === "month" || dimension === "semester" || dimension === "year";
 
 export function ChartsPage() {
   return <ArchiveShell>{(props) => <Charts {...props} />}</ArchiveShell>;
 }
 
-const plural = (count: number, one: string, many: string) =>
-  `${count.toLocaleString()} ${count === 1 ? one : many}`;
+const TABS: { id: ViewId; label: string }[] = [
+  ...VIEWS,
+  { id: "custom", label: "Custom" },
+];
+
+const UNITS: Record<Measure, [string, string]> = {
+  articles: ["article", "articles"],
+  contributions: ["contribution", "contributions"],
+  people: ["person", "people"],
+  newcomers: ["new person", "new people"],
+};
+
+const counted = (n: number, one: string, many: string) =>
+  `${n.toLocaleString()} ${n === 1 ? one : many}`;
+
+const unitOf = (n: number, measure: Measure) => counted(n, ...UNITS[measure]);
 
 /** what the caption says was added up, so a number is never read as the wrong unit */
-function unitLine(grouped: Grouped, by: Dimension, inView: number) {
+function unitLine(grouped: Grouped, config: ChartConfig, inView: number) {
+  const { measure } = grouped;
   const missing =
-    inView > grouped.articles && grouped.measure === "contributions"
-      ? ` ${plural(inView - grouped.articles, "article has", "articles have")} no credits.`
+    inView > grouped.articles && measure === "contributions"
+      ? ` ${counted(inView - grouped.articles, "article has", "articles have")} no credits.`
       : "";
-  const counted =
-    grouped.measure === "contributions"
-      ? `${plural(grouped.total, "contribution", "contributions")} on ${plural(grouped.articles, "article", "articles")}`
-      : plural(grouped.total, "article", "articles");
-  if (by === "person" && grouped.categories.length < grouped.available)
-    return `Top ${grouped.categories.length} of ${plural(grouped.available, "person", "people")}. ${counted}.${missing}`;
-  return `${counted}.${missing}`;
+  const total =
+    measure === "articles" || measure === "newcomers"
+      ? unitOf(grouped.total, measure)
+      : `${unitOf(grouped.total, measure)} on ${counted(grouped.articles, "article", "articles")}`;
+  if (config.by === "person" && grouped.categories.length < grouped.available)
+    return `Top ${grouped.categories.length} of ${counted(grouped.available, "person", "people")}. ${total}.${missing}`;
+  return `${total}.${missing}`;
+}
+
+function titleOf(config: ChartConfig, measure: Measure) {
+  const what = COUNTS.find((c) => c.id === measure)!.label;
+  const by = GROUPINGS.find((g) => g.id === config.by)!.label.toLowerCase();
+  const split =
+    config.split === "none"
+      ? ""
+      : `, split by ${SPLITS.find((s) => s.id === config.split)!.label.toLowerCase()}`;
+  const values =
+    config.values === "share"
+      ? config.split === "none"
+        ? ", as a share of all"
+        : ", as a share of each"
+      : config.values === "running"
+        ? ", as a running total"
+        : "";
+  return `${what} by ${by}${split}${values}`;
 }
 
 /** which periods the chart cannot show whole: still running, or cut by the filter */
-function partialKeys(grouped: Grouped, by: Dimension, filters: Filters) {
+function partialKeys(
+  grouped: Grouped,
+  by: ChartConfig["by"],
+  filters: Filters,
+) {
   const partial = new Set<string>();
   if (!isPeriod(by)) return partial;
   const today = easternDate(new Date().toISOString());
@@ -136,232 +129,270 @@ function partialKeys(grouped: Grouped, by: Dimension, filters: Filters) {
 }
 
 function Charts({ archive, filters }: ViewProps) {
-  const [config, setConfig] = useState<Config>(QUICK[0]!.config);
-  const [limit, setLimit] = useState(25);
+  /* drawn only once hydrated (ArchiveShell), so the address is there */
+  const [state, setState] = useState<ChartState>(() =>
+    readChart(window.location.search),
+  );
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    writeChart(state, url.searchParams);
+    window.history.replaceState(window.history.state, "", url);
+  }, [state]);
+
+  const config = configOf(state);
   const [hidden, setHidden] = useState<string[]>([]);
-  const { measure, by, breakdown, kind, scale } = config;
-  const set = (patch: Partial<Config>) =>
-    setConfig((now) => ({ ...now, ...patch }));
+  const [customizing, setCustomizing] = useState(false);
+  const phone = useIsPhone();
+
+  const show = (next: ChartState) => {
+    setState(next);
+    setHidden([]);
+  };
+  /* changing a saved view makes a custom one from it; the saved one stays */
+  const change = (next: ChartConfig) => show({ view: "custom", custom: next });
+  /* Custom starts from what was on screen until the builder has made one */
+  const choose = (view: ViewId) =>
+    show({ view, custom: state.custom ?? config });
 
   const shown = useMemo(
     () => applyFilters(archive.articles, filters),
     [archive, filters],
   );
-  const split: Breakdown = breakdown === by ? "none" : breakdown;
-  const grouped = useMemo(() => {
-    const raw = group(shown, {
-      measure,
+  const { grouped, partial } = useMemo(() => {
+    const { count, by, split, order, top, values } = configOf(state);
+    const grouped = group(shown, {
+      measure: count,
       by,
       breakdown: split,
       filters,
-      limit: isPeriod(by) ? undefined : limit,
+      order,
+      limit: by === "person" ? top || undefined : undefined,
+      running: values === "running",
+      history: archive.articles,
     });
-    return raw;
-  }, [shown, measure, by, split, filters, limit]);
+    return { grouped, partial: partialKeys(grouped, by, filters) };
+  }, [shown, state, filters, archive]);
+  const plot = plotOf(grouped, config, hidden, partial);
 
-  const visible = useMemo(
-    () => ({
-      ...grouped,
-      series: grouped.series.filter((s) => !hidden.includes(s.key)),
-    }),
-    [grouped, hidden],
-  );
-
-  const drawLines = isPeriod(by) && kind === "lines";
-  const asShare = scale === "share" && split !== "none" && !drawLines;
-  const partial = useMemo(
-    () => partialKeys(grouped, by, filters),
-    [grouped, by, filters],
-  );
-
-  const title = `${MEASURES.find((m) => m.id === grouped.measure)!.label} by ${DIMENSIONS.find((d) => d.id === by)!.label.toLowerCase()}${
-    split === "none" ? "" : `, split by ${split}`
-  }${asShare ? ", in percent" : ""}`;
-
-  const active = QUICK.find(
-    (q) => JSON.stringify(q.config) === JSON.stringify(config),
-  );
-  const [customizing, setCustomizing] = useState(false);
+  const builder = <ChartBuilder config={config} onChange={change} />;
+  const tabs = useRef<HTMLDivElement>(null);
+  const panelId = useId();
 
   return (
     <div className="space-y-4">
-      <figure className="bg-card rounded-xl border">
-        {/* the questions first; the knobs behind them */}
-        <div className="flex items-center justify-between gap-2 border-b px-3">
-          <div
-            role="tablist"
-            aria-label="Quick views"
-            /* wraps on a phone, so no view hides off the edge */
-            className="-mx-1 flex min-w-0 flex-1 flex-wrap gap-x-1 px-1"
-          >
-            {QUICK.map((quick) => (
-              <button
-                key={quick.label}
-                type="button"
-                role="tab"
-                aria-selected={active === quick}
-                onClick={() => {
-                  setConfig(quick.config);
-                  setHidden([]);
-                }}
-                className={cn(
-                  /* the active view is underlined, so a hovered tab never looks chosen */
-                  "h-11 shrink-0 border-b-2 px-3 text-sm whitespace-nowrap transition-colors",
-                  active === quick
-                    ? "border-foreground text-foreground font-medium"
-                    : "text-muted-foreground hover:text-foreground border-transparent",
-                )}
-              >
-                {quick.label}
-              </button>
-            ))}
-          </div>
+      {!phone && (
+        <ToolbarEnd>
           <Button
-            variant={customizing ? "secondary" : "ghost"}
-            size="sm"
+            variant="outline"
             aria-expanded={customizing}
+            className={cn(customizing && "bg-muted")}
             onClick={() => setCustomizing(!customizing)}
           >
-            <SlidersHorizontalIcon />
-            <span className="sr-only sm:not-sr-only">Customize</span>
+            Customize
           </Button>
-        </div>
-        {customizing && (
-          <div className="flex flex-wrap items-end gap-3 border-b px-4 py-3 sm:px-5">
-            <Choice
-              label="Count"
-              value={grouped.measure}
-              options={MEASURES.map((m) => ({
-                ...m,
-                /* a person or a role is counted in contributions */
-                disabled:
-                  m.id === "articles" &&
-                  [by, split].some((d) => d === "person" || d === "role"),
-              }))}
-              onChange={(measure) => set({ measure })}
-            />
-            <Choice
-              label="Grouped by"
-              value={by}
-              options={DIMENSIONS}
-              onChange={(by) => set({ by })}
-            />
-            <Choice
-              label="Split by"
-              value={breakdown}
-              options={[
-                { id: "none", label: "Nothing" },
-                { id: "section", label: "Section", disabled: by === "section" },
-                { id: "role", label: "Role", disabled: by === "role" },
-              ]}
-              onChange={(breakdown) => {
-                set({ breakdown });
-                setHidden([]);
+        </ToolbarEnd>
+      )}
+      {!phone && customizing && (
+        <SidePanel
+          title="Customize"
+          back="Charts"
+          onClose={() => setCustomizing(false)}
+          actions={
+            <Button
+              variant="ghost"
+              disabled={state.view !== "custom"}
+              onClick={() => show({ view: VIEWS[0].id, custom: null })}
+            >
+              Reset
+            </Button>
+          }
+        >
+          {builder}
+        </SidePanel>
+      )}
+      {phone && (
+        <SheetGroup>
+          <PanelGroup label="Chart">{builder}</PanelGroup>
+        </SheetGroup>
+      )}
+
+      <div
+        ref={tabs}
+        role="tablist"
+        aria-label="Chart views"
+        className="flex gap-x-1 overflow-x-auto border-b"
+        onKeyDown={(event) => {
+          /* the tabs pattern: arrows move between the views, and choose */
+          const step =
+            event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+          if (!step) return;
+          event.preventDefault();
+          const at = TABS.findIndex((tab) => tab.id === state.view);
+          const next = TABS[(at + step + TABS.length) % TABS.length]!;
+          choose(next.id);
+          tabs.current
+            ?.querySelector<HTMLElement>(`[data-view="${next.id}"]`)
+            ?.focus();
+        }}
+      >
+        {TABS.map((tab) => {
+          const selected = state.view === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              data-view={tab.id}
+              aria-selected={selected}
+              aria-controls={panelId}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => {
+                choose(tab.id);
+                if (tab.id === "custom" && !phone) setCustomizing(true);
               }}
-            />
-            {isPeriod(by) ? (
-              <Choice
-                label="Draw as"
-                value={kind}
-                options={[
-                  { id: "bars", label: "Columns" },
-                  { id: "lines", label: "Lines" },
-                ]}
-                onChange={(kind) => set({ kind })}
-              />
-            ) : (
-              <Choice
-                label="Show"
-                value={String(limit)}
-                options={["10", "25", "50", "1000"].map((n) => ({
-                  id: n,
-                  label: n === "1000" ? "Everyone" : `Top ${n}`,
-                }))}
-                onChange={(value) => setLimit(Number(value))}
-              />
-            )}
-            {split !== "none" && !drawLines && (
-              <Choice
-                label="Values"
-                value={scale}
-                options={[
-                  { id: "count", label: "Counts" },
-                  { id: "share", label: "Percent" },
-                ]}
-                onChange={(scale) => set({ scale })}
-              />
+              className={cn(
+                /* the chosen view is underlined, so a hovered tab never looks chosen */
+                "-mb-px h-10 shrink-0 border-b-2 px-2 text-sm whitespace-nowrap transition-colors sm:px-3",
+                selected
+                  ? "border-foreground text-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground border-transparent",
+              )}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <figure id={panelId} role="tabpanel" className="space-y-4">
+        <figcaption className="space-y-0.5">
+          <div className="font-medium">{titleOf(config, grouped.measure)}</div>
+          <div className="text-muted-foreground text-sm">
+            {unitLine(grouped, config, shown.length)}
+            {partial.size > 0 && (
+              <span
+                className="ml-2 inline-flex items-center gap-1 align-middle"
+                title="Still running, or cut off by the period filter"
+              >
+                <HatchSwatch />
+                Partly counted
+              </span>
             )}
           </div>
+        </figcaption>
+        {grouped.categories.length === 0 ? (
+          <p className="text-muted-foreground py-12 text-center text-sm">
+            Nothing matches these filters.
+          </p>
+        ) : (
+          <>
+            <Legend
+              plot={plot}
+              hidden={hidden}
+              onToggle={(key) =>
+                setHidden((now) =>
+                  now.includes(key)
+                    ? now.filter((k) => k !== key)
+                    : [...now, key],
+                )
+              }
+            />
+            {plot.time ? <TimeChart plot={plot} /> : <BarChart plot={plot} />}
+          </>
         )}
-
-        <div className="space-y-4 p-4 sm:p-5">
-          <figcaption className="space-y-1">
-            <div className="font-medium">{title}</div>
-            <div className="text-muted-foreground text-sm">
-              {unitLine(grouped, by, shown.length)}
-              {partial.size > 0 && (
-                <span
-                  className="ml-2 inline-flex items-center gap-1 align-middle"
-                  title="Still running, or cut off by the period filter"
-                >
-                  <HatchSwatch />
-                  Partly counted
-                </span>
-              )}
-            </div>
-          </figcaption>
-          {grouped.categories.length === 0 ? (
-            <p className="text-muted-foreground py-12 text-center text-sm">
-              Nothing matches these filters.
-            </p>
-          ) : (
-            <>
-              <Legend
-                grouped={grouped}
-                dimension={split}
-                lines={drawLines}
-                hidden={hidden}
-                onToggle={(key) =>
-                  setHidden((now) =>
-                    now.includes(key)
-                      ? now.filter((k) => k !== key)
-                      : [...now, key],
-                  )
-                }
-              />
-              {isPeriod(by) ? (
-                <TimeChart
-                  grouped={visible}
-                  all={grouped}
-                  dimension={split}
-                  lines={drawLines}
-                  share={asShare}
-                  partial={partial}
-                />
-              ) : (
-                <BarChart
-                  grouped={visible}
-                  all={grouped}
-                  dimension={split}
-                  share={asShare}
-                />
-              )}
-            </>
-          )}
-        </div>
       </figure>
 
-      <NumbersTable grouped={grouped} dimension={split} partial={partial} />
+      <NumbersTable grouped={grouped} config={config} partial={partial} />
     </div>
   );
 }
 
-const seriesLabel = (key: string, label: string, dimension: Breakdown) =>
-  dimension === "role"
-    ? (ROLE_NAMES[key as Role] ?? label)
-    : dimension === "none"
-      ? "Total"
-      : label;
+type Series = { key: string; label: string };
+
+/**
+ * Everything a drawing needs, worked out once: which series are on, what each
+ * mark's value is, and what a reading of it says.
+ */
+type Plot = {
+  config: ChartConfig;
+  grouped: Grouped;
+  time: boolean;
+  categories: Series[];
+  /** the series drawn, in stacking order, without those the legend has off */
+  series: Series[];
+  /** every series, drawn or not */
+  all: Series[];
+  partial: Set<string>;
+  /** values as percentages */
+  share: boolean;
+  /** the count behind a mark: as counted, or so far for a running total */
+  count: (category: string, series: string) => number;
+  /** the category's total, over the series drawn */
+  total: (category: string) => number;
+  /** what a mark shows: its count, or its share */
+  value: (category: string, series: string) => number;
+  percent: (category: string, series: string) => number;
+  color: (category: string, series: string) => string;
+};
+
+const nameOf = (dimension: string, key: string, label: string) =>
+  dimension === "role" ? (ROLE_NAMES[key as Role] ?? label) : label;
+
+function plotOf(
+  grouped: Grouped,
+  config: ChartConfig,
+  hidden: string[],
+  partial: Set<string>,
+): Plot {
+  const { split, by } = config;
+  const all = grouped.series.map((s) => ({
+    key: s.key,
+    label:
+      split === "none"
+        ? COUNTS.find((c) => c.id === grouped.measure)!.label
+        : nameOf(split, s.key, s.label),
+  }));
+  const series = all.filter((s) => !hidden.includes(s.key));
+  const allKeys = all.map((s) => s.key);
+  const count = (category: string, key: string) =>
+    grouped.values[category]?.[key] ?? 0;
+  /* people overlap across series, so only their own total is true */
+  const additive = grouped.measure !== "people";
+  const total = (category: string) =>
+    additive
+      ? series.reduce((sum, s) => sum + count(category, s.key), 0)
+      : (grouped.totals[category] ?? 0);
+  const share = config.values === "share";
+  /* a split shares out each category; one series shares out everything */
+  const percent = (category: string, key: string) => {
+    const whole = split === "none" ? grouped.total : total(category);
+    return whole ? (count(category, key) / whole) * 100 : 0;
+  };
+  return {
+    config,
+    grouped,
+    time: isPeriod(by),
+    categories: grouped.categories.map((c) => ({
+      key: c.key,
+      label: nameOf(by, c.key, c.label),
+    })),
+    series,
+    all,
+    partial,
+    share,
+    count,
+    total,
+    value: share ? percent : count,
+    percent,
+    /* one series by section or role takes each bar's own colour */
+    color: (category, key) =>
+      split !== "none"
+        ? seriesColor(key, allKeys, split)
+        : by === "section" || by === "role"
+          ? seriesColor(category, [], by)
+          : "var(--series-1)",
+  };
+}
 
 function HatchSwatch() {
   return (
@@ -374,7 +405,7 @@ function HatchSwatch() {
       />
       <path
         d="M-2,4 l6,-6 M0,12 l12,-12 M8,14 l6,-6"
-        className="stroke-card"
+        className="stroke-background"
         strokeWidth="2"
       />
     </svg>
@@ -382,24 +413,20 @@ function HatchSwatch() {
 }
 
 function Legend({
-  grouped,
-  dimension,
-  lines,
+  plot,
   hidden,
   onToggle,
 }: {
-  grouped: Grouped;
-  dimension: Breakdown;
-  lines: boolean;
+  plot: Plot;
   hidden: string[];
   onToggle: (key: string) => void;
 }) {
   /* one series is named by the title */
-  if (grouped.series.length < 2) return null;
-  const keys = grouped.series.map((s) => s.key);
+  if (plot.all.length < 2) return null;
+  const lines = plot.config.draw === "lines";
   return (
     <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm">
-      {grouped.series.map((series) => {
+      {plot.all.map((series) => {
         const off = hidden.includes(series.key);
         return (
           <button
@@ -418,9 +445,9 @@ function Legend({
               className={
                 lines ? "h-0.5 w-3.5 rounded-full" : "size-3 rounded-sm"
               }
-              style={{ background: seriesColor(series.key, keys, dimension) }}
+              style={{ background: plot.color("", series.key) }}
             />
-            {seriesLabel(series.key, series.label, dimension)}
+            {series.label}
           </button>
         );
       })}
@@ -442,175 +469,204 @@ function useWidth() {
   return { ref, width };
 }
 
-/** where the mark is, so the tooltip can sit beside it rather than on it */
-type Hover = { key: string; left: number; right: number; y: number } | null;
+const percentText = (value: number) =>
+  value > 0 && value < 1 ? "<1%" : `${Math.round(value)}%`;
 
-const sum = (row: Record<string, number>, keys: string[]) =>
-  keys.reduce((total, key) => total + (row[key] ?? 0), 0);
+/** one category in words: what its mark says to a screen reader */
+function reading(plot: Plot, category: Series) {
+  const total = plot.total(category.key);
+  const parts = plot.series.map((s) => {
+    const n = plot.count(category.key, s.key);
+    return plot.share
+      ? `${s.label} ${percentText(plot.percent(category.key, s.key))} (${n.toLocaleString()})`
+      : `${s.label} ${n.toLocaleString()}`;
+  });
+  const partly = plot.partial.has(category.key) ? " (partly counted)" : "";
+  const sofar = plot.config.values === "running" ? " so far" : "";
+  return `${category.label}${partly}: ${unitOf(total, plot.grouped.measure)}${sofar}${
+    plot.series.length > 1 || plot.share ? `. ${parts.join(", ")}` : ""
+  }`;
+}
 
-const TOOLTIP_WIDTH = 200;
+/**
+ * Which category is being read: the one under the pointer, the one the
+ * keyboard is on, or the one tapped or clicked, which stays until another is
+ * or something outside the chart is. One tab stop for the chart; arrows move.
+ */
+function useInspect(count: number, container: RefObject<HTMLElement | null>) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  const [focused, setFocused] = useState<number | null>(null);
+  const [pinned, setPinned] = useState<number | null>(null);
+  const [stop, setStop] = useState(0);
 
-function Tooltip({
-  grouped,
-  hover,
-  dimension,
+  useEffect(() => {
+    if (pinned === null) return;
+    const away = (event: globalThis.PointerEvent) => {
+      if (!container.current?.contains(event.target as Node)) setPinned(null);
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [pinned, container]);
+
+  const at = hovered ?? focused ?? pinned;
+  const active = at !== null && at < count ? at : null;
+  const keyboard = focused !== null && focused < count ? focused : null;
+
+  const mark = (index: number) => ({
+    "data-mark": index,
+    role: "button",
+    tabIndex: index === Math.min(stop, count - 1) ? 0 : -1,
+    className: "outline-none",
+    onPointerEnter: (event: PointerEvent) => {
+      /* a touch has no hover: a tap pins instead */
+      if (event.pointerType === "mouse") setHovered(index);
+    },
+    onClick: () => {
+      setStop(index);
+      setPinned((now) => (now === index ? null : index));
+    },
+    onFocus: (event: FocusEvent<SVGElement>) => {
+      setStop(index);
+      /* a click focuses too; only the keyboard's focus shows the card */
+      if (event.currentTarget.matches(":focus-visible")) setFocused(index);
+    },
+    onBlur: () => setFocused(null),
+    onKeyDown: (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPinned(null);
+        setFocused(null);
+        return;
+      }
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        setPinned((now) => (now === index ? null : index));
+        return;
+      }
+      const next =
+        event.key === "ArrowRight" || event.key === "ArrowDown"
+          ? index + 1
+          : event.key === "ArrowLeft" || event.key === "ArrowUp"
+            ? index - 1
+            : event.key === "Home"
+              ? 0
+              : event.key === "End"
+                ? count - 1
+                : null;
+      if (next === null) return;
+      event.preventDefault();
+      container.current
+        ?.querySelector<SVGElement>(
+          `[data-mark="${Math.max(0, Math.min(count - 1, next))}"]`,
+        )
+        ?.focus();
+    },
+  });
+
+  return { active, keyboard, mark, leave: () => setHovered(null) };
+}
+
+const CARD_WIDTH = 216;
+
+/** the card beside a column, or under (or over) a bar */
+function Card({
+  plot,
+  index,
+  anchor,
   width,
-  partial,
 }: {
-  grouped: Grouped;
-  hover: Hover;
-  dimension: Breakdown;
+  plot: Plot;
+  index: number;
+  anchor: { left: number; right: number; top: number; bottom: number };
   width: number;
-  partial?: Set<string>;
 }) {
-  if (!hover) return null;
-  const category = grouped.categories.find((c) => c.key === hover.key);
-  if (!category) return null;
-  const row = grouped.values[hover.key] ?? {};
-  const keys = grouped.series.map((s) => s.key);
-  const total = sum(row, keys);
-  /* to the right of the mark when it fits, else to its left */
-  const left =
-    hover.right + 12 + TOOLTIP_WIDTH <= width
-      ? hover.right + 12
-      : Math.max(0, hover.left - 12 - TOOLTIP_WIDTH);
+  const category = plot.categories[index]!;
+  const total = plot.total(category.key);
+  const side = plot.time;
+  const left = side
+    ? anchor.right + 8 + CARD_WIDTH <= width
+      ? anchor.right + 8
+      : Math.max(0, anchor.left - 8 - CARD_WIDTH)
+    : Math.min(anchor.left, Math.max(0, width - CARD_WIDTH));
+  /* the last rows' card opens upward, so it does not run into the table */
+  const above = !side && index > plot.categories.length - 5 && index > 3;
+  const many = plot.series.length > 1;
 
   return (
     <div
-      role="tooltip"
+      aria-hidden
       className="bg-popover text-popover-foreground pointer-events-none absolute z-10 rounded-lg border px-3 py-2 text-xs shadow-md"
-      style={{ left, top: hover.y, width: TOOLTIP_WIDTH }}
+      style={{
+        left,
+        width: CARD_WIDTH,
+        top: side ? anchor.top : above ? anchor.top - 4 : anchor.bottom + 4,
+        transform: above ? "translateY(-100%)" : undefined,
+      }}
     >
-      <div className="text-muted-foreground mb-1">
+      <div className="mb-1 font-medium">
         {category.label}
-        {partial?.has(category.key) && " (partly counted)"}
+        {plot.partial.has(category.key) && (
+          <span className="text-muted-foreground font-normal">
+            {" "}
+            · partly counted
+          </span>
+        )}
       </div>
-      {grouped.series.length > 1 &&
-        [...grouped.series]
-          .reverse()
-          .filter((series) => row[series.key])
-          .map((series) => (
-            <div key={series.key} className="flex items-center gap-2">
+      {(many || plot.share) &&
+        plot.series.map((s) => {
+          const n = plot.count(category.key, s.key);
+          return (
+            <div
+              key={s.key}
+              className={cn("flex items-center gap-2", !n && "opacity-50")}
+            >
               <span
                 aria-hidden
                 className="h-0.5 w-3 shrink-0 rounded-full"
-                style={{ background: seriesColor(series.key, keys, dimension) }}
+                style={{ background: plot.color(category.key, s.key) }}
               />
+              <span className="text-muted-foreground min-w-0 flex-1 truncate">
+                {s.label}
+              </span>
               <span className="font-semibold tabular-nums">
-                {row[series.key]}
+                {n.toLocaleString()}
               </span>
-              <span className="text-muted-foreground truncate">
-                {seriesLabel(series.key, series.label, dimension)}
-              </span>
-              <span className="text-muted-foreground ml-auto pl-2 tabular-nums">
-                {Math.round((row[series.key]! / total) * 100)}%
-              </span>
-            </div>
-          ))}
-      <div
-        className={cn(
-          "flex gap-2",
-          grouped.series.length > 1 && "mt-1 border-t pt-1",
-        )}
-      >
-        <span className="font-semibold tabular-nums">{total}</span>
-        <span className="text-muted-foreground">total</span>
-      </div>
-    </div>
-  );
-}
-
-function Readout({
-  grouped,
-  hover,
-  dimension,
-  partial,
-  share,
-  lines,
-}: {
-  grouped: Grouped;
-  hover: Hover;
-  dimension: Breakdown;
-  partial: Set<string>;
-  share: boolean;
-  lines: boolean;
-}) {
-  const category = hover && grouped.categories.find((c) => c.key === hover.key);
-  const keys = grouped.series.map((s) => s.key);
-  return (
-    <div
-      aria-live="polite"
-      /* over the plot's top margin, so it takes no room until it has something to say */
-      className="bg-card absolute inset-x-0 top-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
-    >
-      {!category ? (
-        <span aria-hidden />
-      ) : (
-        <>
-          <span className="font-medium">
-            {category.label}
-            {partial.has(category.key) && (
-              <span className="text-muted-foreground font-normal">
-                {" "}
-                (partly counted)
-              </span>
-            )}
-          </span>
-          <span className="tabular-nums">
-            <span className="font-semibold">
-              {sum(grouped.values[category.key] ?? {}, keys)}
-            </span>{" "}
-            <span className="text-muted-foreground">total</span>
-          </span>
-          {grouped.series.length > 1 &&
-            grouped.series
-              .filter((series) => grouped.values[category.key]?.[series.key])
-              .map((series) => (
-                <span
-                  key={series.key}
-                  className="flex items-center gap-1.5 tabular-nums"
-                >
-                  <span
-                    aria-hidden
-                    className={
-                      lines ? "h-0.5 w-3 rounded-full" : "size-2.5 rounded-sm"
-                    }
-                    style={{
-                      background: seriesColor(series.key, keys, dimension),
-                    }}
-                  />
-                  <span className="font-semibold">
-                    {share
-                      ? `${Math.round((grouped.values[category.key]![series.key]! / sum(grouped.values[category.key] ?? {}, keys)) * 100)}%`
-                      : grouped.values[category.key]![series.key]}
-                  </span>
-                  {share && (
-                    <span className="text-muted-foreground">
-                      ({grouped.values[category.key]![series.key]})
-                    </span>
-                  )}
-                  <span className="text-muted-foreground">
-                    {seriesLabel(series.key, series.label, dimension)}
-                  </span>
+              {plot.share && (
+                <span className="text-muted-foreground w-9 text-right tabular-nums">
+                  {percentText(plot.percent(category.key, s.key))}
                 </span>
-              ))}
-        </>
+              )}
+            </div>
+          );
+        })}
+      {(many || !plot.share) && (
+        <div className={cn("flex gap-2", many && "mt-1 border-t pt-1")}>
+          <span className="text-muted-foreground flex-1">
+            {plot.config.values === "running" ? "Total so far" : "Total"}
+          </span>
+          <span className="font-semibold tabular-nums">
+            {total.toLocaleString()}
+          </span>
+          {plot.share && <span className="w-9" />}
+        </div>
       )}
     </div>
   );
 }
 
-/** a clean axis: the smallest round step that keeps it to seven intervals or fewer */
-function axis(peak: number) {
-  for (const step of [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500]) {
-    const max = Math.ceil(Math.max(peak, 1) / step) * step;
-    if (max / step <= 7) {
-      const ticks = [];
-      for (let t = 0; t <= max; t += step) ticks.push(t);
-      return { max, ticks };
+/** a clean axis: the smallest round step that keeps it to six intervals or fewer */
+function axis(peak: number): { max: number; ticks: number[] } {
+  const top = Math.max(peak, 1);
+  for (let magnitude = 1; ; magnitude *= 10)
+    for (const m of [1, 2, 2.5, 5]) {
+      const step = m * magnitude;
+      if (!Number.isInteger(step)) continue;
+      const max = Math.ceil(top / step) * step;
+      if (max / step <= 6) {
+        const ticks = [];
+        for (let t = 0; t <= max; t += step) ticks.push(t);
+        return { max, ticks };
+      }
     }
-  }
-  return { max: peak, ticks: [0, peak] };
 }
 
 /** "Fall 2022" → "F22" when every label must fit */
@@ -619,6 +675,8 @@ function shortLabel(label: string) {
   if (term) return `${term[1] === "Spring" ? "Sp" : "F"}${term[2]!.slice(2)}`;
   const month = /^(\w{3}) (\d{4})$/.exec(label);
   if (month) return `${month[1]} ’${month[2]!.slice(2)}`;
+  const school = /^\d{2}(\d{2})–(\d{2})$/.exec(label);
+  if (school) return `${school[1]}–${school[2]}`;
   return label;
 }
 
@@ -633,77 +691,68 @@ function rightRounded(x: number, y: number, w: number, h: number, r: number) {
   return `M${x},${y}H${x + w - radius}Q${x + w},${y} ${x + w},${y + radius}V${y + h - radius}Q${x + w},${y + h} ${x + w - radius},${y + h}H${x}Z`;
 }
 
-function TimeChart({
-  grouped,
-  all,
-  dimension,
-  lines,
-  share,
-  partial,
-}: {
-  grouped: Grouped;
-  all: Grouped;
-  dimension: Breakdown;
-  lines: boolean;
-  share: boolean;
-  partial: Set<string>;
-}) {
+const tickText = (plot: Plot, tick: number) =>
+  plot.share ? `${tick}%` : tick.toLocaleString();
+
+/** a full stack of shares is out of 100; anything else is scaled to its biggest mark */
+function scaleOf(plot: Plot) {
+  const { draw, split } = plot.config;
+  const stacked = draw === "stacked";
+  if (plot.share && split !== "none" && stacked)
+    return { max: 100, ticks: [0, 25, 50, 75, 100] };
+  const peak = Math.max(
+    0,
+    ...plot.categories.map((c) =>
+      stacked
+        ? plot.series.reduce((sum, s) => sum + plot.value(c.key, s.key), 0)
+        : Math.max(0, ...plot.series.map((s) => plot.value(c.key, s.key))),
+    ),
+  );
+  return axis(peak);
+}
+
+function TimeChart({ plot }: { plot: Plot }) {
   const { ref, width } = useWidth();
   const hatch = `hatch-${useId().replace(/:/g, "")}`;
-  const [hover, setHover] = useState<Hover>(null);
-  const counted = share;
-  const height = 280 + (counted ? 14 : 0);
-  const endLabels = lines && grouped.series.length <= 5 && width > 480;
+  const { categories, series, partial, config } = plot;
+  const inspect = useInspect(categories.length, ref);
+  const lines = config.draw === "lines";
+  const sideBySide = config.draw === "grouped" && series.length > 1;
+  const stackedShare =
+    plot.share && config.split !== "none" && config.draw === "stacked";
+  const { max, ticks } = scaleOf(plot);
+
+  const height = 280 + (stackedShare ? 14 : 0);
+  const labelRoom =
+    lines && series.length >= 2 && series.length <= 5 && width > 480;
+  const longestTick = Math.max(...ticks.map((t) => tickText(plot, t).length));
   const margin = {
-    top: 28,
-    right: endLabels ? 104 : 8,
-    bottom: counted ? 44 : 30,
-    left: share ? 44 : 36,
+    top: 16,
+    right: labelRoom ? 104 : 8,
+    bottom: stackedShare ? 44 : 30,
+    left: longestTick * 7 + 12,
   };
   const plotW = Math.max(100, width - margin.left - margin.right);
   const plotH = height - margin.top - margin.bottom;
-  const keys = grouped.series.map((s) => s.key);
-  const allKeys = all.series.map((s) => s.key);
-
-  const value = (categoryKey: string, seriesKey: string) => {
-    const row = grouped.values[categoryKey] ?? {};
-    const raw = row[seriesKey] ?? 0;
-    if (!share) return raw;
-    const total = sum(row, keys);
-    return total ? (raw / total) * 100 : 0;
-  };
-  const rawTotals = grouped.categories.map((c) =>
-    sum(grouped.values[c.key] ?? {}, keys),
-  );
-  const totals = share ? rawTotals.map(() => 100) : rawTotals;
-  const peak = lines
-    ? Math.max(
-        1,
-        ...grouped.categories.flatMap((c) => keys.map((k) => value(c.key, k))),
-      )
-    : Math.max(1, ...totals);
-  const { max, ticks } = share
-    ? { max: 100, ticks: [0, 25, 50, 75, 100] }
-    : axis(peak);
-  const band = plotW / grouped.categories.length;
-  const barW = Math.min(24, band * 0.68);
+  const band = plotW / categories.length;
+  const barW = Math.min(28, band * 0.68);
   const y = (v: number) => margin.top + plotH - (v / max) * plotH;
   const cx = (index: number) => margin.left + band * index + band / 2;
 
   /* every label when they fit, short forms when that makes them fit, and only then every nth */
-  const longest = Math.max(...grouped.categories.map((c) => c.label.length));
+  const longest = Math.max(...categories.map((c) => c.label.length));
   const short = longest * 6.5 > band - 4;
   const shortest = Math.max(
-    ...grouped.categories.map((c) => shortLabel(c.label).length),
+    ...categories.map((c) => shortLabel(c.label).length),
   );
   const every = short ? Math.max(1, Math.ceil((shortest * 6.5 + 6) / band)) : 1;
 
   /* line-end labels, spread apart so converging lines never stack them */
   const labelY = new Map<string, number>();
-  if (endLabels && grouped.categories.length > 0) {
-    const lastKey = grouped.categories[grouped.categories.length - 1]!.key;
-    const ends = grouped.series
-      .map((series) => ({ key: series.key, y: y(value(lastKey, series.key)) }))
+  if (labelRoom && categories.length > 0) {
+    const lastKey = categories[categories.length - 1]!.key;
+    const ends = series
+      .map((s) => ({ key: s.key, y: y(plot.value(lastKey, s.key)) }))
       .sort((a, b) => a.y - b.y);
     /* top-down with 14px between them, then lifted if the last one fell below the axis */
     const placed: number[] = [];
@@ -715,31 +764,15 @@ function TimeChart({
     );
   }
 
-  const hoverAt = (key: string, index: number) =>
-    setHover({
-      key,
-      left: cx(index) - band / 2,
-      right: cx(index) + band / 2,
-      y: margin.top,
-    });
+  const { active, keyboard } = inspect;
 
   return (
-    <div ref={ref} className="relative" onPointerLeave={() => setHover(null)}>
-      {/* a fixed line above the plot rather than a box over it, so reading one
-          column never hides another */}
-      <Readout
-        grouped={grouped}
-        hover={hover}
-        dimension={dimension}
-        partial={partial}
-        share={share}
-        lines={lines}
-      />
+    <div ref={ref} className="relative" onPointerLeave={inspect.leave}>
       <svg
         width={width}
         height={height}
-        role="img"
-        aria-label="Chart; the same numbers are in the table below"
+        role="group"
+        aria-label={`${titleOf(config, plot.grouped.measure)}. Arrow keys move between periods; the table below has every number.`}
         className="block overflow-visible"
       >
         <defs>
@@ -755,20 +788,41 @@ function TimeChart({
               y1="0"
               x2="0"
               y2="6"
-              className="stroke-card"
+              className="stroke-background"
               strokeWidth="1.5"
             />
           </pattern>
         </defs>
 
+        {active !== null && (
+          <rect
+            x={margin.left + band * active}
+            y={margin.top}
+            width={band}
+            height={plotH}
+            className="fill-muted"
+            pointerEvents="none"
+          />
+        )}
+
         {ticks.map((tick) => (
-          <g key={tick}>
+          <g key={tick} pointerEvents="none">
+            {tick > 0 && (
+              <line
+                x1={margin.left}
+                x2={margin.left + plotW}
+                y1={y(tick)}
+                y2={y(tick)}
+                className="stroke-border"
+                strokeWidth={1}
+              />
+            )}
             <line
-              x1={margin.left}
-              x2={margin.left + plotW}
+              x1={margin.left - 4}
+              x2={margin.left}
               y1={y(tick)}
               y2={y(tick)}
-              className="stroke-border"
+              className="stroke-muted-foreground/60"
               strokeWidth={1}
             />
             <text
@@ -778,39 +832,66 @@ function TimeChart({
               textAnchor="end"
               className="fill-muted-foreground text-xs tabular-nums"
             >
-              {share ? `${tick}%` : tick}
+              {tickText(plot, tick)}
             </text>
           </g>
         ))}
 
         {!lines &&
-          grouped.categories.map((category, index) => {
-            let base = 0;
-            const present = grouped.series.filter(
-              (s) => value(category.key, s.key) > 0,
+          categories.map((category, index) => {
+            let segments: { key: string; d: string }[];
+            if (sideBySide) {
+              const w = Math.min(14, (band * 0.8) / series.length);
+              const start = cx(index) - (w * series.length) / 2;
+              segments = series.flatMap((s, i) => {
+                const v = plot.value(category.key, s.key);
+                if (v <= 0) return [];
+                const top = y(v);
+                /* a 2px surface gap between neighbours */
+                return [
+                  {
+                    key: s.key,
+                    d: topRounded(
+                      start + i * w + 1,
+                      top,
+                      Math.max(1, w - 2),
+                      Math.max(1, y(0) - top),
+                      3,
+                    ),
+                  },
+                ];
+              });
+            } else {
+              let base = 0;
+              const present = series.filter(
+                (s) => plot.value(category.key, s.key) > 0,
+              );
+              segments = present.map((s, i) => {
+                const v = plot.value(category.key, s.key);
+                const top = y(base + v);
+                const bottom = y(base);
+                base += v;
+                /* a 2px surface gap between stacked segments */
+                const h = Math.max(1, bottom - top - (i > 0 ? 2 : 0));
+                const d =
+                  i === present.length - 1
+                    ? topRounded(cx(index) - barW / 2, top, barW, h, 4)
+                    : `M${cx(index) - barW / 2},${top}h${barW}v${h}h${-barW}Z`;
+                return { key: s.key, d };
+              });
+            }
+            const total = plot.total(category.key);
+            const cap = series.reduce(
+              (sum, s) => sum + plot.value(category.key, s.key),
+              0,
             );
-            const segments = present.map((series, i) => {
-              const v = value(category.key, series.key);
-              const top = y(base + v);
-              const bottom = y(base);
-              base += v;
-              /* a 2px surface gap between stacked segments */
-              const h = Math.max(1, bottom - top - (i > 0 ? 2 : 0));
-              const d =
-                i === present.length - 1
-                  ? topRounded(cx(index) - barW / 2, top, barW, h, 4)
-                  : `M${cx(index) - barW / 2},${top}h${barW}v${h}h${-barW}Z`;
-              return { key: series.key, d };
-            });
             return (
-              <g key={category.key}>
+              <g key={category.key} pointerEvents="none">
                 {segments.map((segment) => (
                   <path
                     key={segment.key}
                     d={segment.d}
-                    style={{
-                      fill: seriesColor(segment.key, allKeys, dimension),
-                    }}
+                    style={{ fill: plot.color(category.key, segment.key) }}
                   />
                 ))}
                 {/* the full colour stays; the hatching says "not the whole period" */}
@@ -823,22 +904,22 @@ function TimeChart({
                     />
                   ))}
                 {/* the total on the cap, where there is room for it */}
-                {!share && band >= 28 && rawTotals[index]! > 0 && (
+                {!sideBySide && !plot.share && band >= 28 && total > 0 && (
                   <text
                     x={cx(index)}
-                    y={y(totals[index]!) - 6}
+                    y={y(cap) - 6}
                     textAnchor="middle"
                     className="fill-muted-foreground text-xs tabular-nums"
                   >
-                    {rawTotals[index]}
+                    {total.toLocaleString()}
                   </text>
                 )}
               </g>
             );
           })}
 
-        {grouped.categories.map((category, index) => (
-          <g key={category.key}>
+        {categories.map((category, index) => (
+          <g key={category.key} pointerEvents="none">
             {index % every === 0 && (
               <text
                 x={cx(index)}
@@ -846,52 +927,40 @@ function TimeChart({
                 textAnchor="middle"
                 className={cn(
                   "text-xs",
-                  hover?.key === category.key
-                    ? "fill-foreground"
+                  active === index
+                    ? "fill-foreground font-medium"
                     : "fill-muted-foreground",
                 )}
               >
                 {short ? shortLabel(category.label) : category.label}
               </text>
             )}
-            {counted && index % every === 0 && (
+            {stackedShare && index % every === 0 && (
               <text
                 x={cx(index)}
                 y={y(0) + 32}
                 textAnchor="middle"
                 className="fill-muted-foreground text-[11px] tabular-nums"
               >
-                n={rawTotals[index]}
+                n={plot.total(category.key)}
               </text>
             )}
-            {/* the whole column is the hit target */}
-            <rect
-              x={margin.left + band * index}
-              y={margin.top}
-              width={band}
-              height={plotH}
-              fill="transparent"
-              tabIndex={0}
-              aria-label={`${category.label}: ${sum(all.values[category.key] ?? {}, allKeys)}`}
-              onPointerEnter={() => hoverAt(category.key, index)}
-              onFocus={() => hoverAt(category.key, index)}
-            />
           </g>
         ))}
 
         {lines &&
-          grouped.series.map((series) => {
-            const points = grouped.categories.map((c, i) => ({
+          series.map((s) => {
+            const points = categories.map((c, i) => ({
               key: c.key,
               x: cx(i),
-              y: y(value(c.key, series.key)),
+              y: y(plot.value(c.key, s.key)),
             }));
             const end = points[points.length - 1];
             /* the line into a partial period is dashed, so it is not read as a drop */
             return (
               <g
-                key={series.key}
-                style={{ color: seriesColor(series.key, allKeys, dimension) }}
+                key={s.key}
+                style={{ color: plot.color("", s.key) }}
                 pointerEvents="none"
               >
                 {points.slice(1).map((point, i) => (
@@ -911,28 +980,33 @@ function TimeChart({
                     }
                   />
                 ))}
-                {points.length <= 40 &&
-                  points.map((point) => (
+                {points.map((point, i) =>
+                  points.length <= 40 || i === active ? (
                     <circle
                       key={point.key}
                       cx={point.x}
                       cy={point.y}
                       r={4}
                       fill={
-                        partial.has(point.key) ? "var(--card)" : "currentColor"
+                        partial.has(point.key)
+                          ? "var(--background)"
+                          : "currentColor"
                       }
                       stroke={
-                        partial.has(point.key) ? "currentColor" : "var(--card)"
+                        partial.has(point.key)
+                          ? "currentColor"
+                          : "var(--background)"
                       }
                       strokeWidth={2}
                     />
-                  ))}
-                {endLabels && end && (
+                  ) : null,
+                )}
+                {labelRoom && end && (
                   <line
                     x1={end.x + 6}
                     x2={width - margin.right + 16}
                     y1={end.y}
-                    y2={labelY.get(series.key) ?? end.y}
+                    y2={labelY.get(s.key) ?? end.y}
                     stroke="currentColor"
                     strokeWidth={1}
                   />
@@ -940,160 +1014,213 @@ function TimeChart({
               </g>
             );
           })}
-        {endLabels &&
-          grouped.series.map((series) => (
+        {labelRoom &&
+          series.map((s) => (
             <text
-              key={series.key}
+              key={s.key}
               x={width - margin.right + 20}
-              y={labelY.get(series.key)}
+              y={labelY.get(s.key)}
               dy="0.32em"
               className="fill-foreground text-xs"
+              pointerEvents="none"
             >
-              {seriesLabel(series.key, series.label, dimension)}
+              {s.label}
             </text>
           ))}
 
-        {hover && lines && (
-          <line
-            x1={cx(grouped.categories.findIndex((c) => c.key === hover.key))}
-            x2={cx(grouped.categories.findIndex((c) => c.key === hover.key))}
-            y1={margin.top}
-            y2={margin.top + plotH}
-            className="stroke-muted-foreground"
-            strokeWidth={1}
-            pointerEvents="none"
-          />
-        )}
         <line
           x1={margin.left}
           x2={margin.left + plotW}
           y1={y(0)}
           y2={y(0)}
-          className="stroke-muted-foreground/60"
+          className="stroke-muted-foreground"
           strokeWidth={1}
+          pointerEvents="none"
         />
+
+        {/* the whole column and its label is the target, drawn last so it is on top */}
+        {categories.map((category, index) => (
+          <rect
+            key={category.key}
+            x={margin.left + band * index}
+            y={margin.top}
+            width={band}
+            height={plotH + 24}
+            fill="transparent"
+            aria-label={reading(plot, category)}
+            {...inspect.mark(index)}
+          />
+        ))}
+        {keyboard !== null && (
+          <rect
+            x={margin.left + band * keyboard + 1}
+            y={margin.top + 1}
+            width={Math.max(1, band - 2)}
+            height={plotH + 22}
+            rx={4}
+            fill="none"
+            className="stroke-ring"
+            strokeWidth={2}
+            pointerEvents="none"
+          />
+        )}
       </svg>
+      {active !== null && (
+        <Card
+          plot={plot}
+          index={active}
+          width={width}
+          anchor={{
+            left: cx(active) - band / 2,
+            right: cx(active) + band / 2,
+            top: margin.top,
+            bottom: margin.top + plotH,
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function BarChart({
-  grouped,
-  all,
-  dimension,
-  share,
-}: {
-  grouped: Grouped;
-  all: Grouped;
-  dimension: Breakdown;
-  share: boolean;
-}) {
+function BarChart({ plot }: { plot: Plot }) {
   const { ref, width } = useWidth();
-  const [hover, setHover] = useState<Hover>(null);
-  const row = 26;
-  const barH = 16;
-  const labelW = Math.min(180, width * 0.38);
-  const valueW = 44;
-  const plotW = Math.max(60, width - labelW - valueW);
-  const height = grouped.categories.length * row;
-  const keys = grouped.series.map((s) => s.key);
-  const allKeys = all.series.map((s) => s.key);
-  const totals = grouped.categories.map((c) =>
-    sum(grouped.values[c.key] ?? {}, keys),
-  );
-  const max = share ? 100 : Math.max(1, ...totals);
-  const x = (v: number) => (v / max) * plotW;
+  const { categories, series, config } = plot;
+  const inspect = useInspect(categories.length, ref);
+  const sideBySide = config.draw === "grouped" && series.length > 1;
+  const { max, ticks } = scaleOf(plot);
+  const row = sideBySide ? Math.max(26, series.length * 8 + 12) : 26;
+  /* a stack of shares is always 100: the value at its end says nothing */
+  const ends = !sideBySide && !(plot.share && config.split !== "none");
+  const labelW = Math.min(180, width * 0.36);
+  const plotW = Math.max(60, width - labelW - (ends ? 48 : 20));
+  const plotH = categories.length * row;
+  const height = plotH + 22;
+  const x = (v: number) => labelW + (v / max) * plotW;
+  const { active, keyboard } = inspect;
 
   return (
-    <div ref={ref} className="relative" onPointerLeave={() => setHover(null)}>
+    <div ref={ref} className="relative" onPointerLeave={inspect.leave}>
       <svg
         width={width}
         height={height}
-        role="img"
-        aria-label="Chart; the same numbers are in the table below"
+        role="group"
+        aria-label={`${titleOf(config, plot.grouped.measure)}. Arrow keys move between rows; the table below has every number.`}
         className="block"
       >
-        {grouped.categories.map((category, index) => {
-          const top = index * row + (row - barH) / 2;
-          const values = grouped.values[category.key] ?? {};
-          const total = totals[index]!;
-          let base = 0;
-          const present = grouped.series.filter((s) => values[s.key]);
-          const end = labelW + x(share ? 100 : total);
+        {active !== null && (
+          <rect
+            x={0}
+            y={active * row}
+            width={width}
+            height={row}
+            rx={4}
+            className="fill-muted"
+            pointerEvents="none"
+          />
+        )}
+        {ticks.map((tick) => (
+          <g key={tick} pointerEvents="none">
+            {tick > 0 && (
+              <line
+                x1={x(tick)}
+                x2={x(tick)}
+                y1={0}
+                y2={plotH}
+                className="stroke-border"
+                strokeWidth={1}
+              />
+            )}
+            <line
+              x1={x(tick)}
+              x2={x(tick)}
+              y1={plotH}
+              y2={plotH + 4}
+              className="stroke-muted-foreground/60"
+              strokeWidth={1}
+            />
+            <text
+              x={x(tick)}
+              y={plotH + 16}
+              textAnchor="middle"
+              className="fill-muted-foreground text-xs tabular-nums"
+            >
+              {tickText(plot, tick)}
+            </text>
+          </g>
+        ))}
+        {categories.map((category, index) => {
+          const values = series.map((s) => plot.value(category.key, s.key));
+          const sum = values.reduce((a, b) => a + b, 0);
+          let marks;
+          if (sideBySide) {
+            const barH = (row - 10) / series.length;
+            marks = series.map((s, i) =>
+              values[i]! > 0 ? (
+                <path
+                  key={s.key}
+                  d={rightRounded(
+                    labelW,
+                    index * row + 5 + i * barH + 1,
+                    Math.max(1, x(values[i]!) - labelW),
+                    Math.max(1, barH - 2),
+                    3,
+                  )}
+                  style={{ fill: plot.color(category.key, s.key) }}
+                />
+              ) : null,
+            );
+          } else {
+            const top = index * row + 5;
+            const present = series.filter((_, i) => values[i]! > 0);
+            let base = 0;
+            marks = present.map((s, i) => {
+              const v = plot.value(category.key, s.key);
+              /* a 2px surface gap between stacked segments */
+              const start = x(base) + (i > 0 ? 2 : 0);
+              const w = Math.max(1, x(base + v) - x(base) - (i > 0 ? 2 : 0));
+              base += v;
+              return (
+                <path
+                  key={s.key}
+                  d={
+                    i === present.length - 1
+                      ? rightRounded(start, top, w, 16, 4)
+                      : `M${start},${top}h${w}v16h${-w}Z`
+                  }
+                  style={{ fill: plot.color(category.key, s.key) }}
+                />
+              );
+            });
+          }
           return (
-            <g key={category.key}>
+            <g key={category.key} pointerEvents="none">
               <text
                 x={labelW - 10}
                 y={index * row + row / 2}
                 dy="0.32em"
                 textAnchor="end"
-                className="fill-foreground text-sm"
+                className={cn(
+                  "fill-foreground text-sm",
+                  active === index && "font-medium",
+                )}
               >
                 {category.label.length > 24
                   ? `${category.label.slice(0, 23)}…`
                   : category.label}
               </text>
-              {present.map((series, i) => {
-                const raw = values[series.key]!;
-                const v = share ? (raw / total) * 100 : raw;
-                const start = labelW + x(base) + (i > 0 ? 2 : 0);
-                const w = Math.max(1, x(v) - (i > 0 ? 2 : 0));
-                base += v;
-                const fill = {
-                  fill: seriesColor(series.key, allKeys, dimension),
-                };
-                return i === present.length - 1 ? (
-                  <path
-                    key={series.key}
-                    d={rightRounded(start, top, w, barH, 4)}
-                    style={fill}
-                  />
-                ) : (
-                  <rect
-                    key={series.key}
-                    x={start}
-                    y={top}
-                    width={w}
-                    height={barH}
-                    style={fill}
-                  />
-                );
-              })}
-              {!share && (
+              {marks}
+              {ends && (
                 <text
-                  x={end + 6}
+                  x={x(sum) + 6}
                   y={index * row + row / 2}
                   dy="0.32em"
                   className="fill-muted-foreground text-xs tabular-nums"
                 >
-                  {total}
+                  {plot.share
+                    ? percentText(sum)
+                    : plot.total(category.key).toLocaleString()}
                 </text>
               )}
-              <rect
-                x={0}
-                y={index * row}
-                width={width}
-                height={row}
-                fill="transparent"
-                tabIndex={0}
-                aria-label={`${category.label}: ${total}`}
-                onPointerEnter={() =>
-                  setHover({
-                    key: category.key,
-                    left: labelW,
-                    right: end + 30,
-                    y: top,
-                  })
-                }
-                onFocus={() =>
-                  setHover({
-                    key: category.key,
-                    left: labelW,
-                    right: end + 30,
-                    y: top,
-                  })
-                }
-              />
             </g>
           );
         })}
@@ -1101,87 +1228,158 @@ function BarChart({
           x1={labelW}
           x2={labelW}
           y1={0}
-          y2={height}
-          className="stroke-muted-foreground/60"
+          y2={plotH}
+          className="stroke-muted-foreground"
           strokeWidth={1}
+          pointerEvents="none"
         />
+        {categories.map((category, index) => (
+          <rect
+            key={category.key}
+            x={0}
+            y={index * row}
+            width={width}
+            height={row}
+            fill="transparent"
+            aria-label={reading(plot, category)}
+            {...inspect.mark(index)}
+          />
+        ))}
+        {keyboard !== null && (
+          <rect
+            x={1}
+            y={keyboard * row + 1}
+            width={Math.max(1, width - 2)}
+            height={row - 2}
+            rx={4}
+            fill="none"
+            className="stroke-ring"
+            strokeWidth={2}
+            pointerEvents="none"
+          />
+        )}
       </svg>
-      <Tooltip
-        grouped={grouped}
-        hover={hover}
-        dimension={dimension}
-        width={width}
-      />
+      {active !== null && (
+        <Card
+          plot={plot}
+          index={active}
+          width={width}
+          anchor={{
+            left: labelW,
+            right: width,
+            top: active * row,
+            bottom: (active + 1) * row,
+          }}
+        />
+      )}
     </div>
   );
 }
 
+type NumbersRow = {
+  key: string;
+  label: string;
+  partial: boolean;
+  counts: Record<string, number>;
+  total: number;
+};
+
 /** the chart's numbers, which every chart carries: the light-mode hues are not all 3:1 */
 function NumbersTable({
   grouped,
-  dimension,
+  config,
   partial,
 }: {
   grouped: Grouped;
-  dimension: Breakdown;
+  config: ChartConfig;
   partial: Set<string>;
 }) {
-  const split = grouped.series.length > 1;
-  const keys = grouped.series.map((s) => s.key);
+  /* the full record: every series, whatever the legend has off */
+  const plot = plotOf(grouped, config, [], partial);
+  const split = plot.all.length > 1;
+  const totalLabel = config.values === "running" ? "Total so far" : "Total";
+
+  const number = (value: number, share?: number) => (
+    <div className="text-right tabular-nums">
+      {value.toLocaleString()}
+      {share !== undefined && (
+        <span className="text-muted-foreground ml-1.5 inline-block w-9">
+          {percentText(share)}
+        </span>
+      )}
+    </div>
+  );
+  const heading = (label: string) => {
+    const Heading = () => <div className="text-right">{label}</div>;
+    return Heading;
+  };
+
+  const rows: NumbersRow[] = plot.categories.map((c) => ({
+    key: c.key,
+    label: c.label,
+    partial: partial.has(c.key),
+    counts: Object.fromEntries(
+      plot.all.map((s) => [s.key, plot.count(c.key, s.key)]),
+    ),
+    total: plot.total(c.key),
+  }));
+
+  const columns: ColumnDef<NumbersRow, unknown>[] = [
+    {
+      id: GROUPINGS.find((g) => g.id === config.by)!.label,
+      accessorFn: (row) => row.label,
+      enableHiding: false,
+      cell: ({ row }) => (
+        <>
+          {row.original.label}
+          {row.original.partial && (
+            <span className="text-muted-foreground"> (partly counted)</span>
+          )}
+        </>
+      ),
+    },
+    ...(split
+      ? plot.all.map((s): ColumnDef<NumbersRow, unknown> => ({
+          id: s.label,
+          accessorFn: (row) => row.counts[s.key] ?? 0,
+          header: heading(s.label),
+          meta: { csvHeader: s.label },
+          cell: ({ row }) =>
+            number(
+              row.original.counts[s.key] ?? 0,
+              plot.share ? plot.percent(row.original.key, s.key) : undefined,
+            ),
+        }))
+      : []),
+    {
+      id: totalLabel,
+      accessorFn: (row) => row.total,
+      header: heading(totalLabel),
+      meta: { csvHeader: totalLabel },
+      cell: ({ row }) =>
+        number(
+          row.original.total,
+          plot.share && !split
+            ? plot.percent(row.original.key, plot.all[0]!.key)
+            : undefined,
+        ),
+    },
+  ];
 
   return (
-    <Collapsible className="rounded-xl border">
-      <CollapsibleTrigger className="group hover:bg-muted/50 flex w-full items-center gap-2 rounded-xl px-4 py-2.5 text-left text-sm font-medium">
+    <Collapsible className="space-y-3">
+      <CollapsibleTrigger className="group hover:bg-muted/50 flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium">
         <ChevronRightIcon className="text-muted-foreground size-4 transition-transform group-data-[panel-open]:rotate-90" />
         Show as table
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="overflow-x-auto px-4 pb-3">
-          <table className="w-full text-sm tabular-nums">
-            <thead className="text-muted-foreground text-xs">
-              <tr>
-                <th className="py-1.5 text-left font-medium"></th>
-                {split &&
-                  grouped.series.map((s) => (
-                    <th
-                      key={s.key}
-                      className="px-2 py-1.5 text-right font-medium"
-                    >
-                      {seriesLabel(s.key, s.label, dimension)}
-                    </th>
-                  ))}
-                <th className="py-1.5 text-right font-medium">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {grouped.categories.map((category) => {
-                const row = grouped.values[category.key] ?? {};
-                return (
-                  <tr key={category.key} className="border-t">
-                    <td className="py-1.5">
-                      {category.label}
-                      {partial.has(category.key) && (
-                        <span className="text-muted-foreground">
-                          {" "}
-                          (partly counted)
-                        </span>
-                      )}
-                    </td>
-                    {split &&
-                      grouped.series.map((s) => (
-                        <td key={s.key} className="px-2 py-1.5 text-right">
-                          {row[s.key] ?? ""}
-                        </td>
-                      ))}
-                    <td className="py-1.5 text-right font-medium">
-                      {sum(row, keys)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          columns={columns}
+          data={rows}
+          searchable={false}
+          csv="chart"
+          empty="Nothing matches these filters."
+        />
       </CollapsibleContent>
     </Collapsible>
   );

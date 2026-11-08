@@ -34,18 +34,23 @@ export function useIsPhone(): boolean {
 
 /* the opener, remembered at the moment of opening, gets focus back on close;
    Escape closes; the heading takes focus so a screen reader starts there */
-function useFocusLoop(onClose: () => void) {
+function useFocusLoop(
+  onClose: () => void,
+  restoreFocus?: () => HTMLElement | null,
+) {
   const heading = useRef<HTMLHeadingElement>(null);
   const close = useRef(onClose);
+  const restore = useRef(restoreFocus);
   useLayoutEffect(() => {
     close.current = onClose;
+    restore.current = restoreFocus;
   });
 
   useLayoutEffect(() => {
+    /* body when the opener was redrawn by the same click that opened this */
+    const active = document.activeElement;
     const opener =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
+      active instanceof HTMLElement && active !== document.body ? active : null;
     heading.current?.focus({ preventScroll: true });
 
     const onKey = (event: KeyboardEvent) => {
@@ -54,8 +59,23 @@ function useFocusLoop(onClose: () => void) {
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
-      /* the opener may have been redrawn while the panel was open */
-      if (opener?.isConnected) opener.focus({ preventScroll: true });
+      if (opener?.isConnected) {
+        opener.focus({ preventScroll: true });
+        return;
+      }
+      /* closing may redraw the opener again, in this commit or a frame
+         later, so its replacement is asked for after each, for as long as
+         focus is left on nothing */
+      const replacement = restore.current;
+      if (!replacement) return;
+      let frames = 0;
+      const settle = () => {
+        const now = document.activeElement;
+        if (now && now !== document.body) return;
+        replacement()?.focus({ preventScroll: true });
+        if (++frames < 3) requestAnimationFrame(settle);
+      };
+      queueMicrotask(settle);
     };
   }, []);
 
@@ -83,6 +103,7 @@ export function SidePanel({
   onClose,
   actions,
   back,
+  restoreFocus,
   children,
 }: {
   title: ReactNode;
@@ -91,10 +112,13 @@ export function SidePanel({
   actions?: ReactNode;
   /** the phone's back link, e.g. "All people" */
   back: string;
+  /** where focus goes on closing if the opener is gone from the page, as
+      when its row was redrawn: the opener's replacement */
+  restoreFocus?: () => HTMLElement | null;
   children: ReactNode;
 }) {
   const slot = useSlot("side-panel");
-  const heading = useFocusLoop(onClose);
+  const heading = useFocusLoop(onClose, restoreFocus);
 
   const panel = (
     <aside

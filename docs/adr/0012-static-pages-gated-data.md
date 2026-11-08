@@ -50,11 +50,20 @@ edge cache cannot be relied on to keep the WordPress read rare.
    The requests themselves go through `/api/wordpress` first. A browser's
    cross-origin request carries an `Origin` header, and WordPress.com answers
    any request with one from its server rather than its cache: about 400 ms
-   for an article, against about 130 ms cached. The pass-through asks without
-   one and streams the answer back unread, which costs the Worker about what
-   a refusal does, and the browser reuses the connection it already has. It
-   passes two collections and the query keys the pages use; when it fails,
-   the browser asks WordPress itself.
+   for an article, against about 130 ms cached. Nothing a page can do changes
+   that: a cross-origin `fetch` always sends `Origin`, and JSONP, which does
+   not, would run WordPress's answer as script on HareWare's origin. The
+   pass-through asks without one and streams the compressed answer back
+   unread, and the browser reuses the connection it already has. It passes
+   two collections and the query keys the pages use; when it fails, the
+   browser asks WordPress itself.
+
+   It is answered in `src/worker.ts`, before Astro. As an Astro route the
+   same forwarding cost 6.3 ms of CPU at p50 and 12.2 ms at p90 for an
+   article; answered first, 1.0 ms and 1.6 ms, beside 0.7 ms and 1.3 ms for
+   `/api/session.json` in the same run (2026-11-08, 30 uncached requests
+   each). Cloudflare's edge also keeps its answers for the minute they allow,
+   so a repeat within it does not reach the Worker at all.
 
 3. **The browser builds the archive.** `/api/archive.json` returns only what
    needs a secret: the Sheet, behind the gate. The archive page asks it first,

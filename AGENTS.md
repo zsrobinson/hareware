@@ -75,8 +75,10 @@ browser (its REST API answers any origin), and the archive is built there too;
 the Worker hands out only what needs a secret. A new route under `/api` or
 `/auth` must stay well under 10 ms of CPU: no parsing article bodies, no
 building the archive, no linkedom (a dev dependency, for tests only).
-`/api/wordpress` passes WordPress's cached answers to the browser, and it can
-only because it streams the body without reading it; never parse there. Anything
+`/api/wordpress` passes WordPress's cached answers to the browser, from
+`src/worker.ts` ahead of Astro: as an Astro route the same forwarding cost
+6 ms of CPU at p50 and 12 ms at p90, and answered first it costs 1 ms. Keep it
+out of `src/pages`, and never read or parse the body there. Anything
 else under `src/pages` must be `export const prerender = true`. A test file
 under `src/pages` must start with `_`, or Astro routes it and bundles vitest.
 

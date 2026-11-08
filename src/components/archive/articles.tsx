@@ -112,7 +112,9 @@ function Articles({ archive, filters, filterNote }: ViewProps) {
           const open =
             row.original.problems.length > 0 && !row.original.ignored;
           return (
-            <div className="max-w-md min-w-56 whitespace-normal">
+            /* fits beside the date on a phone-wide window that shows a
+               scrollbar, so the table only scrolls when it must */
+            <div className="max-w-md min-w-52 whitespace-normal">
               <RowOpener
                 rowKey={String(row.original.id)}
                 className="font-medium"

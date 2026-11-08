@@ -1,8 +1,8 @@
-import type { ColumnDef } from "@tanstack/react-table";
-import { ChevronRightIcon } from "lucide-react";
+import { ChevronRightIcon, DownloadIcon } from "lucide-react";
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -11,7 +11,6 @@ import {
   type PointerEvent,
   type RefObject,
 } from "react";
-import { DataTable } from "~/components/data-table";
 import { PanelGroup, SidePanel, useIsPhone } from "~/components/panel";
 import { Button } from "~/components/ui/button";
 import {
@@ -19,6 +18,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "~/components/ui/collapsible";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "~/components/ui/table";
 import { ROLE_NAMES, type Role } from "~/lib/credits/labels";
 import {
   applyFilters,
@@ -30,6 +37,8 @@ import {
   type Grouped,
   type Measure,
 } from "~/lib/credits/stats";
+import { toCsv } from "~/lib/csv";
+import { saveFile } from "~/lib/save-file";
 import { cn } from "~/lib/utils";
 import {
   ArchiveShell,
@@ -73,20 +82,33 @@ const counted = (n: number, one: string, many: string) =>
 
 const unitOf = (n: number, measure: Measure) => counted(n, ...UNITS[measure]);
 
-/** what the caption says was added up, so a number is never read as the wrong unit */
-function unitLine(grouped: Grouped, config: ChartConfig, inView: number) {
+/**
+ * what the caption says was added up, so a number is never read as the wrong
+ * unit, and which filters cut it
+ */
+function unitLine(
+  grouped: Grouped,
+  config: ChartConfig,
+  inView: number,
+  filterNote: string,
+) {
   const { measure } = grouped;
-  const missing =
-    inView > grouped.articles && measure === "contributions"
-      ? ` ${counted(inView - grouped.articles, "article has", "articles have")} no credits.`
-      : "";
-  const total =
+  const parts: string[] = [];
+  if (config.by === "person" && grouped.categories.length < grouped.available)
+    parts.push(
+      `Top ${grouped.categories.length} of ${counted(grouped.available, "person", "people")}`,
+    );
+  parts.push(
     measure === "articles" || measure === "newcomers"
       ? unitOf(grouped.total, measure)
-      : `${unitOf(grouped.total, measure)} on ${counted(grouped.articles, "article", "articles")}`;
-  if (config.by === "person" && grouped.categories.length < grouped.available)
-    return `Top ${grouped.categories.length} of ${counted(grouped.available, "person", "people")}. ${total}.${missing}`;
-  return `${total}.${missing}`;
+      : `${unitOf(grouped.total, measure)} on ${counted(grouped.articles, "article", "articles")}`,
+  );
+  if (inView > grouped.articles && measure === "contributions")
+    parts.push(
+      `${counted(inView - grouped.articles, "article has", "articles have")} no credits`,
+    );
+  if (filterNote) parts.push(filterNote);
+  return parts.join(" · ");
 }
 
 function titleOf(config: ChartConfig, measure: Measure) {
@@ -107,28 +129,31 @@ function titleOf(config: ChartConfig, measure: Measure) {
   return `${what} by ${by}${split}${values}`;
 }
 
+/** what a period the chart cannot show whole is short of */
+type Incomplete = "so far" | "in part";
+
 /** which periods the chart cannot show whole: still running, or cut by the filter */
 function partialKeys(
   grouped: Grouped,
   by: ChartConfig["by"],
   filters: Filters,
 ) {
-  const partial = new Set<string>();
+  const partial = new Map<string, Incomplete>();
   if (!isPeriod(by)) return partial;
   const today = easternDate(new Date().toISOString());
   for (const category of grouped.categories) {
     const { from, to } = periodBounds(category.key, by);
-    if (
-      to > today ||
+    if (to > today) partial.set(category.key, "so far");
+    else if (
       (filters.from && from < filters.from) ||
       (filters.to && to > filters.to)
     )
-      partial.add(category.key);
+      partial.set(category.key, "in part");
   }
   return partial;
 }
 
-function Charts({ archive, filters }: ViewProps) {
+function Charts({ archive, filters, filterNote }: ViewProps) {
   /* drawn only once hydrated (ArchiveShell), so the address is there */
   const [state, setState] = useState<ChartState>(() =>
     readChart(window.location.search),
@@ -149,10 +174,19 @@ function Charts({ archive, filters }: ViewProps) {
     setHidden([]);
   };
   /* changing a saved view makes a custom one from it; the saved one stays */
-  const change = (next: ChartConfig) => show({ view: "custom", custom: next });
+  const change = (next: ChartConfig) =>
+    show({
+      view: "custom",
+      custom: next,
+      base: state.view === "custom" ? state.base : state.view,
+    });
   /* Custom starts from what was on screen until the builder has made one */
   const choose = (view: ViewId) =>
-    show({ view, custom: state.custom ?? config });
+    show(
+      view === "custom" && !state.custom && state.view !== "custom"
+        ? { view, custom: config, base: state.view }
+        : { ...state, view },
+    );
 
   const shown = useMemo(
     () => applyFilters(archive.articles, filters),
@@ -201,7 +235,9 @@ function Charts({ archive, filters }: ViewProps) {
             <Button
               variant="ghost"
               disabled={state.view !== "custom"}
-              onClick={() => show({ view: VIEWS[0].id, custom: null })}
+              onClick={() =>
+                show({ view: state.base, custom: null, base: state.base })
+              }
             >
               Reset
             </Button>
@@ -264,20 +300,16 @@ function Charts({ archive, filters }: ViewProps) {
         })}
       </div>
 
-      <figure id={panelId} role="tabpanel" className="space-y-4">
+      <figure
+        id={panelId}
+        role="tabpanel"
+        data-sheet-anchor
+        className="space-y-4"
+      >
         <figcaption className="space-y-0.5">
           <div className="font-medium">{titleOf(config, grouped.measure)}</div>
           <div className="text-muted-foreground text-sm">
-            {unitLine(grouped, config, shown.length)}
-            {partial.size > 0 && (
-              <span
-                className="ml-2 inline-flex items-center gap-1 align-middle"
-                title="Still running, or cut off by the period filter"
-              >
-                <HatchSwatch />
-                Partly counted
-              </span>
-            )}
+            {unitLine(grouped, config, shown.length, filterNote)}
           </div>
         </figcaption>
         {grouped.categories.length === 0 ? (
@@ -322,7 +354,7 @@ type Plot = {
   series: Series[];
   /** every series, drawn or not */
   all: Series[];
-  partial: Set<string>;
+  partial: Map<string, Incomplete>;
   /** values as percentages */
   share: boolean;
   /** the count behind a mark: as counted, or so far for a running total */
@@ -342,7 +374,7 @@ function plotOf(
   grouped: Grouped,
   config: ChartConfig,
   hidden: string[],
-  partial: Set<string>,
+  partial: Map<string, Incomplete>,
 ): Plot {
   const { split, by } = config;
   const all = grouped.series.map((s) => ({
@@ -394,23 +426,12 @@ function plotOf(
   };
 }
 
-function HatchSwatch() {
-  return (
-    <svg width="12" height="12" aria-hidden className="text-muted-foreground">
-      <rect
-        width="12"
-        height="12"
-        rx="2"
-        className="fill-muted-foreground/40"
-      />
-      <path
-        d="M-2,4 l6,-6 M0,12 l12,-12 M8,14 l6,-6"
-        className="stroke-background"
-        strokeWidth="2"
-      />
-    </svg>
-  );
-}
+/** "Fall 2026 so far": each period the chart cannot show whole, by name */
+const partialNote = (plot: Plot) =>
+  plot.categories
+    .filter((c) => plot.partial.has(c.key))
+    .map((c) => `${c.label} ${plot.partial.get(c.key)}`)
+    .join(", ");
 
 function Legend({
   plot,
@@ -421,36 +442,103 @@ function Legend({
   hidden: string[];
   onToggle: (key: string) => void;
 }) {
+  const [stop, setStop] = useState(0);
+  const toggles = useRef<HTMLDivElement>(null);
   /* one series is named by the title */
-  if (plot.all.length < 2) return null;
+  const keyed = plot.all.length > 1;
+  if (!keyed && plot.partial.size === 0) return null;
   const lines = plot.config.draw === "lines";
+  const at = Math.min(stop, plot.all.length - 1);
+  /* a period's marks are faded where it is partial, so its swatch is too */
+  const faded = plot.series.slice(0, 3).map((s) => plot.color("", s.key));
+
   return (
-    <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm">
-      {plot.all.map((series) => {
-        const off = hidden.includes(series.key);
-        return (
-          <button
-            key={series.key}
-            type="button"
-            aria-pressed={!off}
-            title={off ? "Show" : "Hide"}
-            onClick={() => onToggle(series.key)}
-            className={cn(
-              "hover:bg-muted flex items-center gap-1.5 rounded-md px-1.5 py-0.5",
-              off && "text-muted-foreground line-through opacity-60",
-            )}
-          >
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+      {keyed && (
+        <div
+          ref={toggles}
+          role="toolbar"
+          aria-label="Series"
+          className="flex flex-wrap items-center gap-1"
+          onKeyDown={(event) => {
+            /* one tab stop for the legend; arrows move along it */
+            const last = plot.all.length - 1;
+            const next =
+              event.key === "ArrowRight" || event.key === "ArrowDown"
+                ? Math.min(last, at + 1)
+                : event.key === "ArrowLeft" || event.key === "ArrowUp"
+                  ? Math.max(0, at - 1)
+                  : event.key === "Home"
+                    ? 0
+                    : event.key === "End"
+                      ? last
+                      : null;
+            if (next === null) return;
+            event.preventDefault();
+            setStop(next);
+            toggles.current
+              ?.querySelector<HTMLElement>(`[data-series="${next}"]`)
+              ?.focus();
+          }}
+        >
+          {plot.all.map((series, index) => {
+            const off = hidden.includes(series.key);
+            return (
+              <button
+                key={series.key}
+                type="button"
+                data-series={index}
+                tabIndex={index === at ? 0 : -1}
+                aria-pressed={!off}
+                title={off ? "Show" : "Hide"}
+                onFocus={() => setStop(index)}
+                onClick={() => onToggle(series.key)}
+                className={cn(
+                  "hover:bg-muted focus-visible:ring-ring/50 flex items-center gap-1.5 rounded-md px-1.5 py-0.5 outline-none focus-visible:ring-3",
+                  off && "text-muted-foreground line-through opacity-60",
+                )}
+              >
+                <span
+                  aria-hidden
+                  className={
+                    lines ? "h-0.5 w-3.5 rounded-full" : "size-3 rounded-sm"
+                  }
+                  style={{ background: plot.color("", series.key) }}
+                />
+                {series.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {plot.partial.size > 0 && (
+        <span
+          className={cn(
+            "text-muted-foreground flex items-center gap-1.5 px-1.5 py-0.5",
+            /* set apart from the series; on a phone it wraps, and a rule would open the line */
+            keyed && "sm:border-l sm:pl-3",
+          )}
+        >
+          {lines ? (
             <span
               aria-hidden
-              className={
-                lines ? "h-0.5 w-3.5 rounded-full" : "size-3 rounded-sm"
-              }
-              style={{ background: plot.color("", series.key) }}
+              className="w-3.5 border-t-2 border-dashed border-current"
             />
-            {series.label}
-          </button>
-        );
-      })}
+          ) : (
+            <span
+              aria-hidden
+              className="size-3 rounded-sm opacity-45"
+              style={{
+                background:
+                  faded.length > 1
+                    ? `linear-gradient(90deg, ${faded.join(", ")})`
+                    : faded[0],
+              }}
+            />
+          )}
+          {partialNote(plot)}
+        </span>
+      )}
     </div>
   );
 }
@@ -481,7 +569,9 @@ function reading(plot: Plot, category: Series) {
       ? `${s.label} ${percentText(plot.percent(category.key, s.key))} (${n.toLocaleString()})`
       : `${s.label} ${n.toLocaleString()}`;
   });
-  const partly = plot.partial.has(category.key) ? " (partly counted)" : "";
+  const partly = plot.partial.has(category.key)
+    ? ` (${plot.partial.get(category.key)})`
+    : "";
   const sofar = plot.config.values === "running" ? " so far" : "";
   return `${category.label}${partly}: ${unitOf(total, plot.grouped.measure)}${sofar}${
     plot.series.length > 1 || plot.share ? `. ${parts.join(", ")}` : ""
@@ -567,47 +657,82 @@ function useInspect(count: number, container: RefObject<HTMLElement | null>) {
 
 const CARD_WIDTH = 216;
 
-/** the card beside a column, or under (or over) a bar */
+type Box = { left: number; right: number; top: number; bottom: number };
+
+/** a number drawn on the chart, as the box its text takes */
+const numberBox = (text: string, left: number, middle: number): Box => ({
+  left,
+  right: left + text.length * 7 + 2,
+  top: middle - 9,
+  bottom: middle + 9,
+});
+
+/**
+ * Where the card goes: of `lefts` and `tops`, in order of preference, the
+ * place that covers the fewest of the chart's other numbers, so reading one
+ * column never hides its neighbours' totals.
+ */
+function placeCard(
+  lefts: number[],
+  tops: number[],
+  height: number,
+  numbers: Box[],
+) {
+  let best = { left: lefts[0] ?? 0, top: tops[0] ?? 0, covered: Infinity };
+  for (const top of tops)
+    for (const left of lefts) {
+      const covered = numbers.filter(
+        (n) =>
+          n.left < left + CARD_WIDTH &&
+          n.right > left &&
+          n.top < top + height &&
+          n.bottom > top,
+      ).length;
+      if (covered < best.covered) best = { left, top, covered };
+    }
+  return best;
+}
+
+/** the card reading one category, put where `place` says once its height is known */
 function Card({
   plot,
   index,
-  anchor,
-  width,
+  place,
 }: {
   plot: Plot;
   index: number;
-  anchor: { left: number; right: number; top: number; bottom: number };
-  width: number;
+  place: (height: number) => { left: number; top: number };
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(0);
+  useLayoutEffect(() => {
+    const card = ref.current;
+    if (!card) return;
+    const measure = () => setHeight(card.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, []);
+
   const category = plot.categories[index]!;
   const total = plot.total(category.key);
-  const side = plot.time;
-  const left = side
-    ? anchor.right + 8 + CARD_WIDTH <= width
-      ? anchor.right + 8
-      : Math.max(0, anchor.left - 8 - CARD_WIDTH)
-    : Math.min(anchor.left, Math.max(0, width - CARD_WIDTH));
-  /* the last rows' card opens upward, so it does not run into the table */
-  const above = !side && index > plot.categories.length - 5 && index > 3;
   const many = plot.series.length > 1;
+  const { left, top } = place(height);
 
   return (
     <div
+      ref={ref}
       aria-hidden
       className="bg-popover text-popover-foreground pointer-events-none absolute z-10 rounded-lg border px-3 py-2 text-xs shadow-md"
-      style={{
-        left,
-        width: CARD_WIDTH,
-        top: side ? anchor.top : above ? anchor.top - 4 : anchor.bottom + 4,
-        transform: above ? "translateY(-100%)" : undefined,
-      }}
+      style={{ left, top, width: CARD_WIDTH }}
     >
       <div className="mb-1 font-medium">
         {category.label}
         {plot.partial.has(category.key) && (
           <span className="text-muted-foreground font-normal">
             {" "}
-            · partly counted
+            {plot.partial.get(category.key)}
           </span>
         )}
       </div>
@@ -713,7 +838,6 @@ function scaleOf(plot: Plot) {
 
 function TimeChart({ plot }: { plot: Plot }) {
   const { ref, width } = useWidth();
-  const hatch = `hatch-${useId().replace(/:/g, "")}`;
   const { categories, series, partial, config } = plot;
   const inspect = useInspect(categories.length, ref);
   const lines = config.draw === "lines";
@@ -765,6 +889,10 @@ function TimeChart({ plot }: { plot: Plot }) {
   }
 
   const { active, keyboard } = inspect;
+  /* each column's total on its cap, where there is room for it */
+  const totals = !lines && !sideBySide && !plot.share && band >= 28;
+  const capOf = (key: string) =>
+    series.reduce((sum, s) => sum + plot.value(key, s.key), 0);
 
   return (
     <div ref={ref} className="relative" onPointerLeave={inspect.leave}>
@@ -775,25 +903,6 @@ function TimeChart({ plot }: { plot: Plot }) {
         aria-label={`${titleOf(config, plot.grouped.measure)}. Arrow keys move between periods; the table below has every number.`}
         className="block overflow-visible"
       >
-        <defs>
-          <pattern
-            id={hatch}
-            width="6"
-            height="6"
-            patternUnits="userSpaceOnUse"
-            patternTransform="rotate(45)"
-          >
-            <line
-              x1="0"
-              y1="0"
-              x2="0"
-              y2="6"
-              className="stroke-background"
-              strokeWidth="1.5"
-            />
-          </pattern>
-        </defs>
-
         {active !== null && (
           <rect
             x={margin.left + band * active}
@@ -881,33 +990,21 @@ function TimeChart({ plot }: { plot: Plot }) {
               });
             }
             const total = plot.total(category.key);
-            const cap = series.reduce(
-              (sum, s) => sum + plot.value(category.key, s.key),
-              0,
-            );
             return (
               <g key={category.key} pointerEvents="none">
+                {/* faded where the period is not whole, as its legend entry says */}
                 {segments.map((segment) => (
                   <path
                     key={segment.key}
                     d={segment.d}
+                    fillOpacity={partial.has(category.key) ? 0.45 : undefined}
                     style={{ fill: plot.color(category.key, segment.key) }}
                   />
                 ))}
-                {/* the full colour stays; the hatching says "not the whole period" */}
-                {partial.has(category.key) &&
-                  segments.map((segment) => (
-                    <path
-                      key={segment.key}
-                      d={segment.d}
-                      fill={`url(#${hatch})`}
-                    />
-                  ))}
-                {/* the total on the cap, where there is room for it */}
-                {!sideBySide && !plot.share && band >= 28 && total > 0 && (
+                {totals && total > 0 && (
                   <text
                     x={cx(index)}
-                    y={y(cap) - 6}
+                    y={y(capOf(category.key)) - 6}
                     textAnchor="middle"
                     className="fill-muted-foreground text-xs tabular-nums"
                   >
@@ -1069,12 +1166,55 @@ function TimeChart({ plot }: { plot: Plot }) {
         <Card
           plot={plot}
           index={active}
-          width={width}
-          anchor={{
-            left: cx(active) - band / 2,
-            right: cx(active) + band / 2,
-            top: margin.top,
-            bottom: margin.top + plotH,
+          place={(card) => {
+            /* beside the column, clear of the neighbours' totals */
+            const right = cx(active) + band / 2 + 8;
+            const left = cx(active) - band / 2 - 8 - CARD_WIDTH;
+            const lefts = [
+              ...(right + CARD_WIDTH <= width ? [right] : []),
+              ...(left >= 0 ? [left] : []),
+            ];
+            const numbers: Box[] = categories.flatMap((c, i) => {
+              if (i === active) return [];
+              if (lines)
+                return series.map((s) => {
+                  const at = y(plot.value(c.key, s.key));
+                  return {
+                    left: cx(i) - 5,
+                    right: cx(i) + 5,
+                    top: at - 5,
+                    bottom: at + 5,
+                  };
+                });
+              const total = plot.total(c.key);
+              if (!totals || total <= 0) return [];
+              const text = total.toLocaleString();
+              return [
+                numberBox(
+                  text,
+                  cx(i) - (text.length * 7 + 2) / 2,
+                  y(capOf(c.key)) - 10,
+                ),
+              ];
+            });
+            const tops = [
+              margin.top,
+              ...numbers.flatMap((n) => [n.bottom + 4, n.top - 4 - card]),
+            ]
+              /* it may run over the axis labels, and a little past the chart,
+                 to clear a total; inside the chart first while that clears as many */
+              .filter((top) => top >= 0 && top + card <= height + 56)
+              .sort(
+                (a, b) =>
+                  Number(a + card > height) - Number(b + card > height) ||
+                  a - b,
+              );
+            return placeCard(
+              lefts.length ? lefts : [Math.max(0, width - CARD_WIDTH)],
+              tops.length ? tops : [margin.top],
+              card,
+              numbers,
+            );
           }}
         />
       )}
@@ -1096,6 +1236,8 @@ function BarChart({ plot }: { plot: Plot }) {
   const plotH = categories.length * row;
   const height = plotH + 22;
   const x = (v: number) => labelW + (v / max) * plotW;
+  const endText = (key: string, sum: number) =>
+    plot.share ? percentText(sum) : plot.total(key).toLocaleString();
   const { active, keyboard } = inspect;
 
   return (
@@ -1216,9 +1358,7 @@ function BarChart({ plot }: { plot: Plot }) {
                   dy="0.32em"
                   className="fill-muted-foreground text-xs tabular-nums"
                 >
-                  {plot.share
-                    ? percentText(sum)
-                    : plot.total(category.key).toLocaleString()}
+                  {endText(category.key, sum)}
                 </text>
               )}
             </g>
@@ -1263,26 +1403,44 @@ function BarChart({ plot }: { plot: Plot }) {
         <Card
           plot={plot}
           index={active}
-          width={width}
-          anchor={{
-            left: labelW,
-            right: width,
-            top: active * row,
-            bottom: (active + 1) * row,
+          place={(card) => {
+            /* under the row (over it near the end), clear of the others' numbers */
+            const numbers = ends
+              ? categories.flatMap((c, i) => {
+                  if (i === active) return [];
+                  const sum = series.reduce(
+                    (total, s) => total + plot.value(c.key, s.key),
+                    0,
+                  );
+                  return [
+                    numberBox(
+                      endText(c.key, sum),
+                      x(sum) + 6,
+                      i * row + row / 2,
+                    ),
+                  ];
+                })
+              : [];
+            const lefts = [labelW, ...numbers.map((n) => n.right + 8)]
+              .filter((left) => left + CARD_WIDTH <= width)
+              .sort((a, b) => a - b);
+            const below = (active + 1) * row + 4;
+            const above = active * row - 4 - card;
+            const late = active > categories.length - 5 && active > 3;
+            return placeCard(
+              lefts.length ? lefts : [Math.max(0, width - CARD_WIDTH)],
+              (late ? [above, below] : [below, above]).filter(
+                (top) => top >= 0,
+              ),
+              card,
+              numbers,
+            );
           }}
         />
       )}
     </div>
   );
 }
-
-type NumbersRow = {
-  key: string;
-  label: string;
-  partial: boolean;
-  counts: Record<string, number>;
-  total: number;
-};
 
 /** the chart's numbers, which every chart carries: the light-mode hues are not all 3:1 */
 function NumbersTable({
@@ -1292,94 +1450,119 @@ function NumbersTable({
 }: {
   grouped: Grouped;
   config: ChartConfig;
-  partial: Set<string>;
+  partial: Map<string, Incomplete>;
 }) {
+  const [open, setOpen] = useState(false);
   /* the full record: every series, whatever the legend has off */
   const plot = plotOf(grouped, config, [], partial);
   const split = plot.all.length > 1;
   const totalLabel = config.values === "running" ? "Total so far" : "Total";
 
-  const number = (value: number, share?: number) => (
-    <div className="text-right tabular-nums">
-      {value.toLocaleString()}
-      {share !== undefined && (
-        <span className="text-muted-foreground ml-1.5 inline-block w-9">
-          {percentText(share)}
-        </span>
-      )}
-    </div>
-  );
-  const heading = (label: string) => {
-    const Heading = () => <div className="text-right">{label}</div>;
-    return Heading;
-  };
-
-  const rows: NumbersRow[] = plot.categories.map((c) => ({
-    key: c.key,
-    label: c.label,
-    partial: partial.has(c.key),
-    counts: Object.fromEntries(
-      plot.all.map((s) => [s.key, plot.count(c.key, s.key)]),
-    ),
-    total: plot.total(c.key),
-  }));
-
-  const columns: ColumnDef<NumbersRow, unknown>[] = [
-    {
-      id: GROUPINGS.find((g) => g.id === config.by)!.label,
-      accessorFn: (row) => row.label,
-      enableHiding: false,
-      cell: ({ row }) => (
-        <>
-          {row.original.label}
-          {row.original.partial && (
-            <span className="text-muted-foreground"> (partly counted)</span>
-          )}
-        </>
-      ),
-    },
+  const columns: {
+    label: string;
+    count: (category: string) => number;
+    /** the share shown beside the count, when the chart is of shares */
+    share?: (category: string) => number;
+  }[] = [
     ...(split
-      ? plot.all.map((s): ColumnDef<NumbersRow, unknown> => ({
-          id: s.label,
-          accessorFn: (row) => row.counts[s.key] ?? 0,
-          header: heading(s.label),
-          meta: { csvHeader: s.label },
-          cell: ({ row }) =>
-            number(
-              row.original.counts[s.key] ?? 0,
-              plot.share ? plot.percent(row.original.key, s.key) : undefined,
-            ),
+      ? plot.all.map((s) => ({
+          label: s.label,
+          count: (category: string) => plot.count(category, s.key),
+          share: plot.share
+            ? (category: string) => plot.percent(category, s.key)
+            : undefined,
         }))
       : []),
     {
-      id: totalLabel,
-      accessorFn: (row) => row.total,
-      header: heading(totalLabel),
-      meta: { csvHeader: totalLabel },
-      cell: ({ row }) =>
-        number(
-          row.original.total,
-          plot.share && !split
-            ? plot.percent(row.original.key, plot.all[0]!.key)
-            : undefined,
-        ),
+      label: totalLabel,
+      count: plot.total,
+      share:
+        plot.share && !split
+          ? (category: string) => plot.percent(category, plot.all[0]!.key)
+          : undefined,
     },
   ];
+  const by = GROUPINGS.find((g) => g.id === config.by)!.label;
 
+  function download() {
+    const day = new Date().toISOString().slice(0, 10);
+    const body = plot.categories.map((c) => [
+      c.label,
+      ...columns.map((column) => column.count(c.key)),
+    ]);
+    saveFile(
+      /* the BOM makes excel read utf-8 */
+      new Blob(["\uFEFF", toCsv([by, ...columns.map((c) => c.label)], body)], {
+        type: "text/csv;charset=utf-8",
+      }),
+      `chart-${day}.csv`,
+      "text/csv",
+    );
+  }
+
+  /* one bordered box: its top row opens it, and the table is inside */
   return (
-    <Collapsible className="space-y-3">
-      <CollapsibleTrigger className="group hover:bg-muted/50 flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium">
-        <ChevronRightIcon className="text-muted-foreground size-4 transition-transform group-data-[panel-open]:rotate-90" />
-        Show as table
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <DataTable
-          columns={columns}
-          data={rows}
-          searchable={false}
-          csv="chart"
-          empty="Nothing matches these filters."
-        />
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="overflow-hidden rounded-lg border"
+    >
+      <div className="flex items-center gap-2 pr-2">
+        <CollapsibleTrigger className="group hover:bg-muted/50 focus-visible:ring-ring/50 flex h-10 flex-1 items-center gap-2 px-3 text-left text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-inset">
+          <ChevronRightIcon className="text-muted-foreground size-4 transition-transform group-data-[panel-open]:rotate-90" />
+          Show as table
+        </CollapsibleTrigger>
+        {open && (
+          <Button variant="ghost" size="sm" onClick={download}>
+            <DownloadIcon />
+            Download CSV
+          </Button>
+        )}
+      </div>
+      <CollapsibleContent className="border-t">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="pl-3">{by}</TableHead>
+              {columns.map((column) => (
+                <TableHead
+                  key={column.label}
+                  className="pr-3 text-right last:pr-3"
+                >
+                  {column.label}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {plot.categories.map((category) => (
+              <TableRow key={category.key}>
+                <TableCell className="pl-3">
+                  {category.label}
+                  {partial.has(category.key) && (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      ({partial.get(category.key)})
+                    </span>
+                  )}
+                </TableCell>
+                {columns.map((column) => (
+                  <TableCell
+                    key={column.label}
+                    className="pr-3 text-right tabular-nums"
+                  >
+                    {column.count(category.key).toLocaleString()}
+                    {column.share && (
+                      <span className="text-muted-foreground ml-1.5 inline-block w-9">
+                        {percentText(column.share(category.key))}
+                      </span>
+                    )}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </CollapsibleContent>
     </Collapsible>
   );

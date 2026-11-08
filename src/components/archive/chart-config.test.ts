@@ -29,18 +29,23 @@ test("a link reproduces a custom chart, and keeps the filters' parameters", () =
     order: "largest",
     top: 25,
   };
-  const { params, state } = roundTrip({ view: "custom", custom });
+  const { params, state } = roundTrip({ view: "custom", custom, base: "mix" });
   expect(configOf(state)).toEqual(custom);
+  expect(state.base).toBe("mix");
   expect(params.get("range")).toBe("semester");
   expect(params.get("q")).toBe("ann");
 });
 
 test("a saved view links by name alone, and the default by nothing", () => {
-  const mix = roundTrip({ view: "mix", custom: VIEWS[0].config });
+  const mix = roundTrip({ view: "mix", custom: VIEWS[0].config, base: "mix" });
   expect([...mix.params.keys()].sort()).toEqual(["q", "range", "view"]);
   expect(mix.state.view).toBe("mix");
 
-  const first = roundTrip({ view: "over-time", custom: null });
+  const first = roundTrip({
+    view: "over-time",
+    custom: null,
+    base: "over-time",
+  });
   expect(first.params.has("view")).toBe(false);
 });
 

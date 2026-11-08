@@ -114,10 +114,14 @@ export const VIEWS = [
 
 export type ViewId = (typeof VIEWS)[number]["id"] | "custom";
 
+export type SavedId = (typeof VIEWS)[number]["id"];
+
 export type ChartState = {
   view: ViewId;
   /** null until the builder has been used, so Custom starts from what was on screen */
   custom: ChartConfig | null;
+  /** the saved view Custom was made from, which Reset goes back to */
+  base: SavedId;
 };
 
 const DEFAULT_CONFIG: ChartConfig = VIEWS[0].config;
@@ -183,18 +187,19 @@ const pick = <T extends string>(
   fallback: T,
 ): T => (options.includes(value as T) ? (value as T) : fallback);
 
+const savedId = (id: string | null): SavedId =>
+  VIEWS.find((v) => v.id === id)?.id ?? "over-time";
+
 export function readChart(search: string): ChartState {
   const params = new URLSearchParams(search);
   const view = params.get("view");
   if (view !== "custom")
-    return {
-      view: VIEWS.find((v) => v.id === view)?.id ?? "over-time",
-      custom: null,
-    };
+    return { view: savedId(view), custom: null, base: savedId(view) };
   const d = DEFAULT_CONFIG;
   const top = Number(params.get("top"));
   return {
     view: "custom",
+    base: savedId(params.get("base")),
     custom: settle({
       count: pick(
         params.get("count"),
@@ -237,4 +242,6 @@ export function writeChart(state: ChartState, params: URLSearchParams) {
   for (const key of KEYS)
     if (custom) params.set(key, String(custom[key]));
     else params.delete(key);
+  if (custom && state.base !== "over-time") params.set("base", state.base);
+  else params.delete("base");
 }

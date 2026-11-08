@@ -1,5 +1,6 @@
 import { handle } from "@astrojs/cloudflare/handler";
 import { runScheduled } from "~/lib/automations/run";
+import { passThrough, PREFIX } from "~/lib/services/wordpress/pass-through";
 import "./middleware";
 
 /*
@@ -27,7 +28,15 @@ import.meta.glob(["./pages/api/**/*.ts", "./pages/auth/**/*.ts", "!**/_*"], {
   reach the astro pipeline
 */
 export default {
-  fetch: handle,
+  fetch(request, env, ctx) {
+    /* WordPress's cached answers for the browser, ahead of Astro: the
+       pipeline is not needed to forward a GET, and every request here is
+       held to 10 ms of CPU (ADR 0012) */
+    const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname.startsWith(PREFIX))
+      return passThrough(url);
+    return handle(request, env, ctx);
+  },
 
   /*
     not async: `waitUntil` is what keeps the isolate alive for the run, and

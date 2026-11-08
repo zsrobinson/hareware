@@ -1,21 +1,20 @@
-import type { APIRoute } from "astro";
-import { ORIGIN } from "~/lib/services/wordpress/article-url";
-
-export const prerender = false;
+import { ORIGIN } from "./article-url";
 
 /*
-  WordPress's REST API, passed through from our own origin. A browser's
-  cross-origin request carries an Origin header, and WordPress.com answers any
-  request with one from its server rather than its cache: about 400 ms for an
-  article, against about 130 ms from the cache (measured 2026-11-07). Asked
-  from here there is no Origin, so the cache answers, and the browser reuses
-  the connection it already has to this site.
+  WordPress's REST API, passed through from HareWare's own origin, for the
+  browser. A browser's cross-origin request carries an Origin header, and
+  WordPress.com answers any request with one from its server rather than its
+  cache: about 400 ms for an article, against about 130 ms from the cache
+  (measured 2026-11-07). Asked from the Worker there is no Origin, so the
+  cache answers, and the browser reuses the connection it already has.
 
-  The body is streamed through unread, so this costs the Worker about what a
-  refusal does (ADR 0012). It passes only what the pages ask for: two
-  collections and the query keys they use. When it fails, the browser asks
-  WordPress itself (~/lib/services/wordpress/request).
+  src/worker.ts calls this before Astro sees the request, so it costs the
+  Worker only the fetch, and the body is streamed through unread. It passes
+  only what the pages ask for: two collections and the query keys they use.
+  When it fails, the browser asks WordPress itself (./request).
 */
+
+export const PREFIX = "/api/wordpress/";
 
 const COLLECTIONS = new Set(["wp/v2/posts", "wp/v2/categories"]);
 const KEYS = new Set([
@@ -42,8 +41,9 @@ const PASSED = [
   "x-wp-totalpages",
 ];
 
-export const GET: APIRoute = async ({ params, url }) => {
-  const collection = params.path ?? "";
+/** WordPress's answer to a GET of `/api/wordpress/<collection>?<query>` */
+export async function passThrough(url: URL): Promise<Response> {
+  const collection = url.pathname.slice(PREFIX.length);
   if (!COLLECTIONS.has(collection))
     return new Response("not a collection HareWare reads", { status: 404 });
 
@@ -62,6 +62,7 @@ export const GET: APIRoute = async ({ params, url }) => {
   }
 
   const headers = new Headers({
+    "x-content-type-options": "nosniff",
     /* the cache WordPress answers from is minutes behind at most; a minute
        more in the browser saves going back and forth between pages */
     "cache-control": "public, max-age=60",
@@ -71,4 +72,4 @@ export const GET: APIRoute = async ({ params, url }) => {
     if (value) headers.set(name, value);
   }
   return new Response(upstream.body, { status: upstream.status, headers });
-};
+}

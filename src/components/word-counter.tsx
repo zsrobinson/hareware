@@ -4,6 +4,7 @@
   the next column, one per line in the same order, gaps included.
 */
 
+import { CheckIcon, CopyIcon, LinkIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getWordCount } from "~/lib/get-word-count";
 import {
@@ -12,7 +13,17 @@ import {
 } from "~/lib/services/wordpress/article-url";
 import { Throttled } from "~/lib/services/wordpress/request";
 import { scrapeArticles } from "~/lib/services/wordpress/scrape-article";
+import { FieldActions, FieldNote, FieldRow, FieldRows } from "./field-row";
 import { Button } from "./ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui/table";
 import { Textarea } from "./ui/textarea";
 
 /* one row per pasted line, in order; a line that couldn't be counted keeps its
@@ -46,6 +57,7 @@ export function WordCounter() {
   const [counting, setCounting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<"yes" | "failed" | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const table = useRef<HTMLTableElement>(null);
 
   async function count(pasted: string) {
@@ -109,6 +121,7 @@ export function WordCounter() {
   const column = rows.map((row) => row.words ?? "").join("\n");
 
   function copyColumn() {
+    clearTimeout(copiedTimer.current);
     navigator.clipboard
       .writeText(column)
       .then(() => setCopied("yes"))
@@ -116,49 +129,74 @@ export function WordCounter() {
         console.error("could not copy the counts", thrown);
         setCopied("failed");
       })
-      .finally(() => setTimeout(() => setCopied(null), 1500));
+      .finally(() => {
+        copiedTimer.current = setTimeout(() => setCopied(null), 1600);
+      });
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <form
-        className="space-y-2"
         onSubmit={(event) => {
           event.preventDefault();
           void count(text);
         }}
       >
-        <Textarea
-          name="articles"
-          aria-label="Article links"
-          className="h-40"
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          placeholder="Paste up to ten article links, one per line"
-          aria-invalid={error ? true : undefined}
-        />
-        {error && <p className="text-destructive text-sm">{error}</p>}
-        <Button type="submit" disabled={counting}>
-          {counting ? "Counting…" : "Count words"}
-        </Button>
+        <FieldRows>
+          <FieldRow icon={LinkIcon} label="Article links" htmlFor="links" top>
+            <Textarea
+              id="links"
+              name="articles"
+              /* a link per line, never broken across two */
+              wrap="off"
+              className="min-h-28 overflow-x-auto whitespace-pre"
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              placeholder="Paste up to ten article links, one per line"
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? "links-error" : undefined}
+            />
+          </FieldRow>
+          {error && (
+            <FieldNote>
+              <span id="links-error" className="text-destructive">
+                {error}
+              </span>
+            </FieldNote>
+          )}
+          <FieldActions>
+            <Button type="submit" disabled={counting}>
+              {counting ? "Counting…" : "Count words"}
+            </Button>
+          </FieldActions>
+        </FieldRows>
       </form>
 
       {rows.length > 0 && (
-        <div className="space-y-2">
+        <section className="space-y-3" aria-labelledby="counted">
           <div className="flex items-center justify-between gap-4">
-            <span className="text-sm font-medium">Word counts</span>
-            <Button variant="outline" size="sm" onClick={copyColumn}>
+            <h2 id="counted" className="text-base font-semibold">
+              {listed.length} {listed.length === 1 ? "article" : "articles"}
+            </h2>
+            <Button variant="outline" className="min-w-32" onClick={copyColumn}>
+              {copied === "yes" ? <CheckIcon /> : <CopyIcon />}
               {copied === "yes"
                 ? "Copied"
                 : copied === "failed"
                   ? "Couldn't copy"
-                  : "Copy word counts"}
+                  : "Copy counts"}
             </Button>
+            <span className="sr-only" role="status">
+              {copied === "yes"
+                ? "Copied the counts"
+                : copied === "failed"
+                  ? "Couldn't copy the counts"
+                  : ""}
+            </span>
           </div>
-          <div className="overflow-hidden rounded-xl border">
-            <table
+          <div className="overflow-x-auto rounded-lg border">
+            <Table
               ref={table}
-              className="w-full text-sm"
               /* a dragged selection down the Words column copies those rows'
                  counts one per line, gaps included: the browser would drop
                  the empty rows, and the counts would no longer line up */
@@ -177,18 +215,18 @@ export function WordCounter() {
                 event.preventDefault();
               }}
             >
-              <thead>
-                <tr className="text-muted-foreground bg-muted/40 border-b text-left">
-                  <th className="px-4 py-2 font-medium">Article</th>
-                  <th className="px-4 py-2 text-right font-medium">Words</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Article</TableHead>
+                  <TableHead className="text-right">Words</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {rows.map((row, index) => (
-                  <tr key={index} data-words={row.words ?? ""}>
+                  <TableRow key={index} data-words={row.words ?? ""}>
                     {/* only the numbers select, so dragging down the column
                         copies one count per line, as a sheet's column pastes */}
-                    <td className="px-4 py-2 break-all select-none">
+                    <TableCell className="break-all whitespace-normal select-none">
                       {row.blank ? (
                         <span className="text-muted-foreground">
                           Blank line
@@ -202,14 +240,14 @@ export function WordCounter() {
                           href={row.link}
                           target="_blank"
                           rel="noreferrer"
-                          className="decoration-muted-foreground/40 hover:decoration-foreground break-normal underline underline-offset-4"
+                          className="decoration-muted-foreground/40 hover:decoration-foreground break-normal underline-offset-4 hover:underline"
                           dangerouslySetInnerHTML={{
                             __html: row.title ?? row.link,
                           }}
                         />
                       )}
-                    </td>
-                    <td className="text-muted-foreground px-4 py-2 text-right whitespace-nowrap tabular-nums">
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-right align-top tabular-nums">
                       {row.blank ? null : row.foreign ? (
                         <span className="select-none">Not a Hare link</span>
                       ) : row.words === null ? (
@@ -221,14 +259,14 @@ export function WordCounter() {
                           {row.words.toLocaleString("en-US")}
                         </span>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
+              </TableBody>
               {listed.length > 1 && (
-                <tfoot className="select-none">
-                  <tr className="border-t font-medium">
-                    <td className="px-4 py-2">
+                <TableFooter className="bg-transparent select-none">
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell className="font-semibold whitespace-normal">
                       Total
                       {listed.some((row) => row.words === null) && (
                         <span className="text-muted-foreground font-normal">
@@ -239,23 +277,23 @@ export function WordCounter() {
                           of {listed.length} counted)
                         </span>
                       )}
-                    </td>
-                    <td className="px-4 py-2 text-right tabular-nums">
+                    </TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
                       {rows
                         .reduce((sum, row) => sum + (row.words ?? 0), 0)
                         .toLocaleString("en-US")}
-                    </td>
-                  </tr>
-                </tfoot>
+                    </TableCell>
+                  </TableRow>
+                </TableFooter>
               )}
-            </table>
+            </Table>
           </div>
-          <p className="text-muted-foreground text-sm">
-            One per line, in the order pasted, to paste into the next column.
-            {rows.some((row) => row.busy) &&
-              " WordPress was busy for some; count again in a minute."}
-          </p>
-        </div>
+          {rows.some((row) => row.busy) && (
+            <p className="text-muted-foreground text-sm">
+              WordPress was busy for some; count again in a minute.
+            </p>
+          )}
+        </section>
       )}
     </div>
   );

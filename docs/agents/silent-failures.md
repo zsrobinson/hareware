@@ -120,10 +120,12 @@ unread; answered in `src/worker.ts` before Astro it costs 1 ms. And a test file
 under `src/pages` without a leading `_` is a route: one put vitest in the
 Worker bundle.
 
-**A Preview's settings are copied when it is first built.** Changing the
+**A Preview's settings are copied when it is first created.** Changing the
 Worker's Preview settings reaches only Previews created afterwards; an existing
-one keeps what it had, and reads exactly like the change not working. Update it
-in the dashboard, or delete it and push again.
+one keeps what it had, even through a rebuild, and reads exactly like the change
+not working. Delete it and push again. The dashboard's "Previews Base" tab has
+also shown nothing while the API and every new Preview had the settings, so
+check a Preview's latest deployment, not that tab.
 
 **Measure what one run costs with uncached requests.** Answers Cloudflare's
 edge serves from cache never reach the Worker, so a short measurement through

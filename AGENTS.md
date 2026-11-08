@@ -102,19 +102,22 @@ touches bindings or a route's `Request`.
 cannot.
 
 **A preview has its own settings, not production's.** Every non-`main` push
-builds a Worker Preview, served at `<branch>.hareware.zsrobinson.com`.
-Workers Builds runs `npx wrangler@4.149.0 preview`, pinned in the build
-settings rather than `package.json`, so every branch builds without a change.
-Previews take the Worker's Preview settings, not production's: their own
-`SESSION_SECRET`, the `hareware-preview` D1 database, the Google secrets and,
-once set, the Discord ones. They run no crons and have no
-`REMINDERS_TRIGGER_SECRET`, so a manual trigger on one answers 404. They do read
-the club's real Sheet, and `/api/sheet` on one writes it. A Preview copies the
-settings when it is first built, so a setting changed later reaches only new
-Previews; update the others in the dashboard or recreate them.
+builds a Worker Preview, served at `<branch>.hareware.zsrobinson.com` (slashes
+become hyphens). Workers Builds runs `npx wrangler@4.149.0 preview`, pinned in
+the build settings rather than `package.json`, so every branch builds without a
+change. Previews take the Worker's Preview settings, not production's: their
+own `SESSION_SECRET`, and the same Discord and Google secrets and D1 log as
+production, so a preview reads and writes the club's real Sheet and log. They
+run no crons and have no `REMINDERS_TRIGGER_SECRET`, so a manual trigger on one
+answers 404. A Preview copies the settings when it is first created, and
+rebuilding does not refresh them: after changing the Preview settings, delete
+the Previews in the dashboard and push again.
 
 **`beta.hareware.zsrobinson.com` shows whatever is on the `beta` branch.** Point
-it at any commit with `git push --force origin <branch>:beta`.
+it at any commit with `git push --force origin <branch>:beta`. To send beta to
+production instead, turn on the zone's redirect rule "HareWare beta off: send
+beta to production" (zsrobinson.com → Rules → Redirect Rules), and off again to
+bring it back.
 
 **Dashboard variables do not survive a deploy.** Wrangler replaces them with
 `wrangler.jsonc`'s, so every value the code reads is a secret.

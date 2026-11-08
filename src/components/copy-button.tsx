@@ -1,66 +1,64 @@
-import { useState } from "react";
-import { Button } from "./ui/button";
+import { useRef, useState } from "react";
 import { CheckIcon, CopyIcon, XIcon } from "lucide-react";
+import { Button } from "./ui/button";
 
-export function CopyButton({
-  id,
-  label = "Copy",
-}: {
-  id: string;
-  label?: string;
-}) {
-  /* the outcome shows for a moment, long enough to notice */
+/** a field's copy button: the icon says what happened, and a screen reader
+    hears it, while focus stays on the button */
+export function CopyButton({ id, what }: { id: string; what: string }) {
   const [result, setResult] = useState<"copied" | "failed" | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const show = (outcome: "copied" | "failed") => {
+    clearTimeout(timer.current);
     setResult(outcome);
-    setTimeout(() => setResult(null), 1500);
+    timer.current = setTimeout(() => setResult(null), 1600);
   };
 
   return (
-    <Button
-      onClick={() => {
-        const input = document.getElementById(id) as
-          HTMLInputElement | undefined;
-        input?.select();
-        input?.setSelectionRange(0, 99999);
+    <>
+      <Button
+        onClick={() => {
+          const field = document.getElementById(id) as
+            HTMLInputElement | HTMLTextAreaElement | null;
 
-        /*
-          the clipboard rejects when the document is not focused or permission
-          was refused, and an unhandled rejection there would be the only sign.
-          the selection above still lets somebody copy it by hand, so say what
-          happened and leave the tick off
-        */
-        navigator.clipboard
-          .writeText(input?.value ?? "")
-          .then(() => show("copied"))
-          .catch((error: unknown) => {
-            console.error("could not write to the clipboard", error);
-            show("failed");
-          });
-      }}
-      aria-label={
-        result === "copied"
-          ? "Copied"
-          : result === "failed"
+          /*
+            the clipboard rejects when the document is not focused or permission
+            was refused, and an unhandled rejection there would be the only sign.
+            selecting the text then lets somebody copy it by hand; only then,
+            since selecting moves focus off the button
+          */
+          navigator.clipboard
+            .writeText(field?.value ?? "")
+            .then(() => show("copied"))
+            .catch((error: unknown) => {
+              console.error("could not write to the clipboard", error);
+              field?.select();
+              show("failed");
+            });
+        }}
+        aria-label={`Copy ${what}`}
+        title={
+          result === "failed"
             ? "Couldn't copy; it's selected to copy by hand"
-            : label
-      }
-      title={
-        result === "failed"
-          ? "Couldn't copy; it's selected to copy by hand"
-          : undefined
-      }
-      variant="outline"
-      size="icon"
-      className="px-3"
-    >
-      {result === "copied" ? (
-        <CheckIcon />
-      ) : result === "failed" ? (
-        <XIcon />
-      ) : (
-        <CopyIcon />
-      )}
-    </Button>
+            : `Copy ${what}`
+        }
+        variant="ghost"
+        size="icon"
+      >
+        {result === "copied" ? (
+          <CheckIcon />
+        ) : result === "failed" ? (
+          <XIcon />
+        ) : (
+          <CopyIcon />
+        )}
+      </Button>
+      <span className="sr-only" role="status">
+        {result === "copied"
+          ? `Copied ${what}`
+          : result === "failed"
+            ? `Couldn't copy ${what}; it's selected to copy by hand`
+            : ""}
+      </span>
+    </>
   );
 }

@@ -1,10 +1,18 @@
 /*
   InDesign Export, read in the browser (ADR 0012): a static page whose island
   reads `?article=`, asks WordPress for the article, and builds the tagged text
-  here. The layout is the one the page had when the Worker rendered it.
+  here.
 */
 
-import { DownloadIcon } from "lucide-react";
+import {
+  CameraIcon,
+  DownloadIcon,
+  HeadingIcon,
+  ImageIcon,
+  PenLineIcon,
+  PilcrowIcon,
+  type LucideIcon,
+} from "lucide-react";
 import { getTaggedText } from "~/lib/get-tagged-text";
 import { saveFile } from "~/lib/save-file";
 import {
@@ -14,10 +22,13 @@ import {
 } from "~/lib/services/wordpress/image-url";
 import type { scrapeArticle } from "~/lib/services/wordpress/scrape-article";
 import { slugify } from "~/lib/utils";
+import { ArticleLink } from "./article-link";
 import { CopyButton } from "./copy-button";
+import { FieldNote, FieldRow, FieldRows } from "./field-row";
 import { Reading } from "./read-state";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
 import { useArticleFromAddress } from "./use-article";
 
 type Article = Awaited<ReturnType<typeof scrapeArticle>>;
@@ -27,21 +38,13 @@ export function InDesignExport() {
 
   return (
     <div className="space-y-6">
-      <form action="/magazine" className="flex gap-2">
-        <Input
-          /* remounted once the article is read, to show its full link */
-          key={article?.link ?? "typed"}
-          type="text"
-          name="article"
-          placeholder="Paste an article link"
-          aria-label="Article link"
-          defaultValue={article?.link ?? typed}
-          aria-invalid={error ? true : undefined}
-        />
-        <Button type="submit">Open article</Button>
-      </form>
-
-      {error && <p className="text-destructive -mt-4 text-sm">{error}</p>}
+      <ArticleLink
+        action="/magazine"
+        verb="Load article"
+        typed={typed}
+        link={article?.link}
+        error={error}
+      />
 
       {reading && <Reading>Reading the article…</Reading>}
 
@@ -73,10 +76,17 @@ function Fields({ article }: { article: Article }) {
       });
 
   return (
-    <div className="space-y-4">
-      <Field label="Title" id="title" value={title} />
-      <Field
-        label="Section, byline and date"
+    <FieldRows>
+      <Copyable
+        icon={HeadingIcon}
+        label="Title"
+        id="title"
+        value={title}
+        long
+      />
+      <Copyable
+        icon={PenLineIcon}
+        label="Article byline"
         id="article-by"
         value={[
           section?.toUpperCase(),
@@ -85,21 +95,21 @@ function Fields({ article }: { article: Article }) {
           .filter(Boolean)
           .join(" | ")}
       />
-      <Field
+      <Copyable
+        icon={CameraIcon}
         label="Image byline"
         id="image-by"
         value={imageCredits ? `Image by ${imageCredits}` : ""}
         empty="No image credit on the article"
       />
 
-      <div className="space-y-1.5">
-        <span className="block text-sm font-medium">Image</span>
+      <FieldRow icon={ImageIcon} label="Image" top>
         {image ? (
-          <>
+          <div className="flex flex-col items-start gap-2.5">
             <img
               src={toSizedImage(image, PREVIEW_IMAGE_WIDTH)}
               alt=""
-              className="bg-secondary max-h-56 w-auto max-w-full rounded-md object-contain"
+              className="bg-secondary max-h-56 w-auto max-w-full rounded-lg object-contain sm:max-w-80"
             />
             <Button
               variant="outline"
@@ -108,59 +118,83 @@ function Fields({ article }: { article: Article }) {
               <DownloadIcon />
               Download image
             </Button>
-          </>
+          </div>
         ) : (
-          <p className="text-muted-foreground text-sm">No featured image.</p>
-        )}
-      </div>
-
-      <div className="space-y-1.5">
-        <span className="block text-sm font-medium">Text</span>
-        <Button
-          variant="outline"
-          onClick={() => saveFile(output, `${name}.txt`, "text/plain")}
-        >
-          <DownloadIcon />
-          Download text for InDesign
-        </Button>
-        <p className="text-muted-foreground text-sm">
-          In InDesign, use File → Place with this file, then check the result
-          against the article.
-        </p>
-        {unprocessed.size > 0 && (
-          <p className="text-muted-foreground text-sm">
-            Some formatting won't carry over (
-            {[...unprocessed].map((tag) => tag.toLowerCase()).join(", ")});
-            check those parts by hand.
+          <p className="text-muted-foreground text-sm sm:pt-1.5">
+            No featured image.
           </p>
         )}
-      </div>
-    </div>
+      </FieldRow>
+
+      <FieldRow icon={PilcrowIcon} label="Text">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={() => saveFile(output, `${name}.txt`, "text/plain")}
+          >
+            <DownloadIcon />
+            Download text
+          </Button>
+          <span className="text-muted-foreground text-xs">
+            Then File → Place
+          </span>
+        </div>
+      </FieldRow>
+      {unprocessed.size > 0 && (
+        <FieldNote>
+          Some formatting won't carry over (
+          {[...unprocessed].map((tag) => tag.toLowerCase()).join(", ")}); check
+          those parts by hand.
+        </FieldNote>
+      )}
+    </FieldRows>
   );
 }
 
-/* a read-only value with its label above and a copy button beside it */
-function Field({
+/* a read-only value with a copy button beside it */
+function Copyable({
+  icon,
   label,
   id,
   value,
   empty,
+  long = false,
 }: {
+  icon: LucideIcon;
   label: string;
   id: string;
   value: string;
   /** said in the field when there is nothing to copy */
   empty?: string;
+  /** wraps rather than scrolling sideways, as a title does */
+  long?: boolean;
 }) {
   return (
-    <div className="space-y-1.5">
-      <label htmlFor={id} className="text-sm font-medium">
-        {label}
-      </label>
-      <div className="flex gap-2">
+    <FieldRow
+      icon={icon}
+      label={label}
+      htmlFor={id}
+      top={long}
+      action={
+        value ? (
+          <CopyButton id={id} what={label.toLowerCase()} />
+        ) : (
+          /* holds the column, so this field ends where the others do */
+          <span className="size-8" />
+        )
+      }
+    >
+      {long ? (
+        <Textarea
+          id={id}
+          value={value}
+          rows={2}
+          className="min-h-0 resize-none"
+          readOnly
+        />
+      ) : (
         <Input type="text" value={value} placeholder={empty} id={id} readOnly />
-        {value && <CopyButton id={id} />}
-      </div>
-    </div>
+      )}
+    </FieldRow>
   );
 }

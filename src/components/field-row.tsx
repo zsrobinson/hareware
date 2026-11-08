@@ -12,9 +12,18 @@ import { cn } from "~/lib/utils";
 /** the label column: wide on a page, narrower in a side panel */
 type Width = "page" | "panel";
 
-const COLUMNS: Record<Width, string> = {
-  page: "sm:grid-cols-[1rem_8rem_minmax(0,1fr)_auto]",
-  panel: "sm:grid-cols-[1rem_5.5rem_minmax(0,1fr)_auto]",
+/* the action's column only where there is an action: an empty track still
+   takes its gap, and stops the control short of the edge that tables and the
+   buttons beside it end at */
+const COLUMNS: Record<Width, { plain: string; action: string }> = {
+  page: {
+    plain: "sm:grid-cols-[1rem_8rem_minmax(0,1fr)]",
+    action: "sm:grid-cols-[1rem_8rem_minmax(0,1fr)_auto]",
+  },
+  panel: {
+    plain: "sm:grid-cols-[1rem_5.5rem_minmax(0,1fr)]",
+    action: "sm:grid-cols-[1rem_5.5rem_minmax(0,1fr)_auto]",
+  },
 };
 
 /** a stack of rows with one rhythm */
@@ -55,7 +64,7 @@ export function FieldRow({
     <div
       className={cn(
         "grid grid-cols-[1rem_minmax(0,1fr)_auto] gap-x-3 gap-y-1.5",
-        COLUMNS[width],
+        COLUMNS[width][action ? "action" : "plain"],
         top ? "items-start" : "items-center",
       )}
     >
@@ -85,16 +94,18 @@ export function FieldRow({
       >
         {children}
       </div>
-      <div
-        className={cn(
-          "flex justify-end empty:hidden",
-          /* on a phone the action sits on the label's line */
-          "max-sm:col-start-3 max-sm:row-start-1",
-          inline && "max-sm:hidden",
-        )}
-      >
-        {action}
-      </div>
+      {action && (
+        <div
+          className={cn(
+            "flex justify-end",
+            /* on a phone the action sits on the label's line */
+            "max-sm:col-start-3 max-sm:row-start-1",
+            inline && "max-sm:hidden",
+          )}
+        >
+          {action}
+        </div>
+      )}
     </div>
   );
 }

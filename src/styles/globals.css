@@ -26,6 +26,8 @@
   --font-heading: var(--font-sans);
   --font-serif: "Source Serif 4", serif;
   --font-display: "Source Serif 4 Display", serif;
+  /* tailwind's own stack tries Courier New before the system's monospace */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   /* the hare's own colours. the slide templates paint from these and from the
      hex presets in lib/color-presets, never from the shadcn tokens below */

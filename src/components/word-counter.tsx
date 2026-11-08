@@ -149,7 +149,8 @@ export function WordCounter() {
               name="articles"
               /* a link per line, never broken across two */
               wrap="off"
-              className="min-h-28 overflow-x-auto whitespace-pre"
+              /* a box of links, so set like the other tools' link field */
+              className="min-h-28 overflow-x-auto font-mono whitespace-pre placeholder:font-sans md:text-[13px]"
               value={text}
               onChange={(event) => setText(event.target.value)}
               placeholder="Paste up to ten article links, one per line"

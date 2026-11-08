@@ -12,6 +12,7 @@ import {
   useRef,
   useSyncExternalStore,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "~/components/ui/button";
@@ -34,18 +35,23 @@ export function useIsPhone(): boolean {
 
 /* the opener, remembered at the moment of opening, gets focus back on close;
    Escape closes; the heading takes focus so a screen reader starts there */
-function useFocusLoop(onClose: () => void) {
+function useFocusLoop(
+  onClose: () => void,
+  restoreFocus?: () => HTMLElement | null,
+) {
   const heading = useRef<HTMLHeadingElement>(null);
   const close = useRef(onClose);
+  const restore = useRef(restoreFocus);
   useLayoutEffect(() => {
     close.current = onClose;
+    restore.current = restoreFocus;
   });
 
   useLayoutEffect(() => {
+    /* body when the opener was redrawn by the same click that opened this */
+    const active = document.activeElement;
     const opener =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
+      active instanceof HTMLElement && active !== document.body ? active : null;
     heading.current?.focus({ preventScroll: true });
 
     const onKey = (event: KeyboardEvent) => {
@@ -54,8 +60,23 @@ function useFocusLoop(onClose: () => void) {
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
-      /* the opener may have been redrawn while the panel was open */
-      if (opener?.isConnected) opener.focus({ preventScroll: true });
+      if (opener?.isConnected) {
+        opener.focus({ preventScroll: true });
+        return;
+      }
+      /* closing may redraw the opener again, in this commit or a frame
+         later, so its replacement is asked for after each, for as long as
+         focus is left on nothing */
+      const replacement = restore.current;
+      if (!replacement) return;
+      let frames = 0;
+      const settle = () => {
+        const now = document.activeElement;
+        if (now && now !== document.body) return;
+        replacement()?.focus({ preventScroll: true });
+        if (++frames < 3) requestAnimationFrame(settle);
+      };
+      queueMicrotask(settle);
     };
   }, []);
 
@@ -83,6 +104,7 @@ export function SidePanel({
   onClose,
   actions,
   back,
+  restoreFocus,
   children,
 }: {
   title: ReactNode;
@@ -91,10 +113,13 @@ export function SidePanel({
   actions?: ReactNode;
   /** the phone's back link, e.g. "All people" */
   back: string;
+  /** where focus goes on closing if the opener is gone from the page, as
+      when its row was redrawn: the opener's replacement */
+  restoreFocus?: () => HTMLElement | null;
   children: ReactNode;
 }) {
   const slot = useSlot("side-panel");
-  const heading = useFocusLoop(onClose);
+  const heading = useFocusLoop(onClose, restoreFocus);
 
   const panel = (
     <aside
@@ -159,9 +184,12 @@ export function BottomSheet({
   children: ReactNode;
 }) {
   const heading = useFocusLoop(onClose);
+  const sheet = useRef<HTMLElement>(null);
+  useRoomAbove(sheet);
 
   return createPortal(
     <section
+      ref={sheet}
       role="dialog"
       aria-modal="false"
       aria-label={title}
@@ -185,6 +213,53 @@ export function BottomSheet({
     </section>,
     document.body,
   );
+}
+
+/* the sheet covers the bottom of the page, so the layout's <main> gets that
+   much more room to scroll into, and what the sheet changes is brought up
+   above it: the chart or table a view marks with data-sheet-anchor, or the
+   page's table */
+function useRoomAbove(sheet: RefObject<HTMLElement | null>) {
+  useLayoutEffect(() => {
+    const content = document.getElementById("content");
+    const element = sheet.current;
+    if (!content || !element) return;
+
+    const pad = () => {
+      content.style.paddingBottom = `calc(${element.offsetHeight}px + 1rem)`;
+    };
+    pad();
+    const resized = new ResizeObserver(pad);
+    resized.observe(element);
+
+    /* a frame on, once the view's own group has filled the sheet */
+    const frame = requestAnimationFrame(() => {
+      /* before the observer has seen it grow, or the scroll stops short */
+      pad();
+      const anchor =
+        content.querySelector<HTMLElement>("[data-sheet-anchor]") ??
+        content.querySelector("table");
+      if (!anchor) return;
+      const top = content.getBoundingClientRect().top;
+      const shown = anchor.getBoundingClientRect();
+      if (
+        shown.top >= top &&
+        shown.bottom <= element.getBoundingClientRect().top
+      )
+        return;
+      const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+      content.scrollBy({
+        top: shown.top - top - 16,
+        behavior: still.matches ? "auto" : "smooth",
+      });
+    });
+
+    return () => {
+      cancelAnimationFrame(frame);
+      resized.disconnect();
+      content.style.paddingBottom = "";
+    };
+  }, [sheet]);
 }
 
 /** a quiet heading for a group inside a panel or sheet ("Filter", "Chart") */

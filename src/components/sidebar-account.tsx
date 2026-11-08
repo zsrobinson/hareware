@@ -64,7 +64,7 @@ function AccountMenu({
         <span className="sr-only">More</span>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent side="top" align="end" className="min-w-48">
+      <DropdownMenuContent side="top" align="end">
         {signedIn ? (
           /* a <button> sizes to its text where an <a> fills the row */
           <form

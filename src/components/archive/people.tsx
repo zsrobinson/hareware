@@ -34,6 +34,7 @@ import { formatDate, formatMonth } from "./dates";
 import { OpenRowProvider, RowDetails, RowOpener, useOpenRow } from "./open-row";
 import { PersonPicker } from "./person-picker";
 import { useRemovals } from "./removals";
+import { SectionName } from "./section-name";
 import { ShellTableControls } from "./table-controls";
 import { useEdit } from "./use-edit";
 
@@ -351,7 +352,8 @@ function PersonPanel({
                   {article.title}
                 </a>
                 <p className="text-muted-foreground text-xs">
-                  {formatDate(article.publishedAt)} · {article.section} ·{" "}
+                  {formatDate(article.publishedAt)} ·{" "}
+                  <SectionName section={article.section} /> ·{" "}
                   {[...new Set(roles)].join(", ")}
                   {as && <> · as {as}</>}
                 </p>

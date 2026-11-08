@@ -58,6 +58,7 @@ import {
   type FilterState,
   type Preset,
 } from "./filters";
+import { SectionDot } from "./section-name";
 
 /* where a view puts its own controls: the end of the toolbar on a laptop
    (Columns, Customize), and its own group in the phone's Customize sheet */
@@ -672,6 +673,7 @@ function FilterBar({
       options={archive.sections.map((section) => ({
         value: section,
         label: section,
+        icon: <SectionDot section={section} />,
       }))}
       selected={state.sections}
       onChange={(sections) => setState({ ...state, sections })}
@@ -820,7 +822,7 @@ function MultiSelect({
 }: {
   label: string;
   all: string;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; icon?: ReactNode }[];
   selected: string[];
   onChange: (selected: string[]) => void;
   className?: string;
@@ -850,7 +852,7 @@ function MultiSelect({
         {summary}
         <ChevronDownIcon className="text-muted-foreground" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-48">
+      <DropdownMenuContent>
         {options.map((option) => (
           <DropdownMenuCheckboxItem
             key={option.value}
@@ -863,6 +865,7 @@ function MultiSelect({
               )
             }
           >
+            {option.icon}
             {option.label}
           </DropdownMenuCheckboxItem>
         ))}

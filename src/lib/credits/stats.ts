@@ -22,7 +22,7 @@ export type Filters = {
 
 export const NO_FILTERS: Filters = { sections: [], roles: [] };
 
-export const PERIODS = ["month", "semester", "school-year", "year"] as const;
+const PERIODS = ["month", "semester", "school-year", "year"] as const;
 export type Period = (typeof PERIODS)[number];
 export type Dimension = Period | "section" | "role" | "person";
 
@@ -365,9 +365,10 @@ export function group(
         : keyOf(unit, breakdown);
     categoryLabels.set(category.key, category.label);
     seriesLabels.set(series.key, series.label);
-    const row = cells.get(category.key) ?? new Map();
+    const row =
+      cells.get(category.key) ?? new Map<string, Set<string | number>>();
     cells.set(category.key, row);
-    const cell = row.get(series.key) ?? new Set();
+    const cell = row.get(series.key) ?? new Set<string | number>();
     row.set(series.key, cell);
     cell.add(identity(unit, index));
   });

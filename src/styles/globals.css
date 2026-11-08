@@ -172,6 +172,13 @@
   html {
     @apply font-sans;
   }
+
+  /* tailwind v4 leaves buttons on the default cursor; this is shadcn's
+     snippet for bringing the pointer back */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
 }
 
 /* view transitions cross-fade the whole document by default, which reads as a

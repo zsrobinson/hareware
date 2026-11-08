@@ -44,6 +44,14 @@ export const adminNav: (NavItem & { href: AdminRoute })[] = [
   { href: "/reminder", label: "Social Reminder", icon: BellIcon },
 ];
 
+/**
+ * a page's own path as its links name it: a prerendered page is built as
+ * `people.html`, so at build time Astro calls it `/people.html`
+ */
+export function pagePath(pathname: string) {
+  return pathname.replace(/(\/index)?\.html$/, "") || "/";
+}
+
 /* `/` would otherwise light up on every page */
 export function isActive(pathname: string, item: NavItem) {
   return (item.match ?? [item.href]).some((route) =>

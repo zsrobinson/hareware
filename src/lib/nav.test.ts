@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { expect, test } from "vitest";
 import { ADMIN_ROUTES } from "./admin-routes";
-import { adminNav, isActive, toolsNav } from "./nav";
+import { adminNav, isActive, pagePath, toolsNav } from "./nav";
 
 /*
   Nothing about a url says which tools need the role, so `ADMIN_ROUTES` says it
@@ -120,4 +120,13 @@ test("lights the nav item for the page being looked at", () => {
   /* the generator's other working page belongs to the same item */
   expect(isActive("/custom", generate)).toBe(true);
   expect(isActive("/words", generate)).toBe(false);
+});
+
+/* every page is prerendered, and the build names each one by its file */
+test("lights the item for a page built as a file", () => {
+  const people = adminNav.find((item) => item.href === "/people")!;
+
+  expect(isActive(pagePath("/people.html"), people)).toBe(true);
+  expect(pagePath("/index.html")).toBe("/");
+  expect(pagePath("/people")).toBe("/people");
 });

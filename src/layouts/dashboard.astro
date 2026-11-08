@@ -3,6 +3,7 @@ import { ClientRouter } from "astro:transitions";
 import AppSidebar from "~/components/app-sidebar.astro";
 import NavProgress from "~/components/nav-progress.astro";
 import { SidebarSheet } from "~/components/sidebar-sheet";
+import { pagePath } from "~/lib/nav";
 import { Toaster } from "~/components/ui/sonner";
 import "~/styles/globals.css";
 import "~/styles/fonts.css";
@@ -23,6 +24,7 @@ const WIDTHS = {
 } as const;
 
 const { title, width = "wide", heading = true } = Astro.props;
+const pathname = pagePath(Astro.url.pathname);
 
 /* every page is prerendered (ADR 0012), so the sidebar is drawn open and the
    script below applies shadcn's sidebar_state cookie */
@@ -58,8 +60,8 @@ const collapsed = false;
       style="--sidebar-width: 15rem; --sidebar-width-icon: 3.25rem"
     >
       <AppSidebar
-        pathname={Astro.url.pathname}
-        returnTo={`${Astro.url.pathname}${Astro.url.search}`}
+        pathname={pathname}
+        returnTo={`${pathname}${Astro.url.search}`}
       />
 
       <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -85,8 +87,8 @@ const collapsed = false;
           >
           <SidebarSheet
             client:media="(max-width: 767px)"
-            pathname={Astro.url.pathname}
-            returnTo={`${Astro.url.pathname}${Astro.url.search}`}
+            pathname={pathname}
+            returnTo={`${pathname}${Astro.url.search}`}
           />
         </header>
 

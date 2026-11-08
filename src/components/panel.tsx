@@ -12,6 +12,7 @@ import {
   useRef,
   useSyncExternalStore,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "~/components/ui/button";
@@ -183,9 +184,12 @@ export function BottomSheet({
   children: ReactNode;
 }) {
   const heading = useFocusLoop(onClose);
+  const sheet = useRef<HTMLElement>(null);
+  useRoomAbove(sheet);
 
   return createPortal(
     <section
+      ref={sheet}
       role="dialog"
       aria-modal="false"
       aria-label={title}
@@ -209,6 +213,53 @@ export function BottomSheet({
     </section>,
     document.body,
   );
+}
+
+/* the sheet covers the bottom of the page, so the layout's <main> gets that
+   much more room to scroll into, and what the sheet changes is brought up
+   above it: the chart or table a view marks with data-sheet-anchor, or the
+   page's table */
+function useRoomAbove(sheet: RefObject<HTMLElement | null>) {
+  useLayoutEffect(() => {
+    const content = document.getElementById("content");
+    const element = sheet.current;
+    if (!content || !element) return;
+
+    const pad = () => {
+      content.style.paddingBottom = `calc(${element.offsetHeight}px + 1rem)`;
+    };
+    pad();
+    const resized = new ResizeObserver(pad);
+    resized.observe(element);
+
+    /* a frame on, once the view's own group has filled the sheet */
+    const frame = requestAnimationFrame(() => {
+      /* before the observer has seen it grow, or the scroll stops short */
+      pad();
+      const anchor =
+        content.querySelector<HTMLElement>("[data-sheet-anchor]") ??
+        content.querySelector("table");
+      if (!anchor) return;
+      const top = content.getBoundingClientRect().top;
+      const shown = anchor.getBoundingClientRect();
+      if (
+        shown.top >= top &&
+        shown.bottom <= element.getBoundingClientRect().top
+      )
+        return;
+      const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+      content.scrollBy({
+        top: shown.top - top - 16,
+        behavior: still.matches ? "auto" : "smooth",
+      });
+    });
+
+    return () => {
+      cancelAnimationFrame(frame);
+      resized.disconnect();
+      content.style.paddingBottom = "";
+    };
+  }, [sheet]);
 }
 
 /** a quiet heading for a group inside a panel or sheet ("Filter", "Chart") */

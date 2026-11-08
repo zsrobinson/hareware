@@ -240,7 +240,7 @@ export function DataTable<T>({
           <span className="@max-2xl:sr-only">Columns</span>
           <ChevronDownIcon className="text-muted-foreground @max-2xl:hidden" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-44">
+        <DropdownMenuContent align="end">
           {table
             .getAllColumns()
             .filter((column) => column.getCanHide())
@@ -300,7 +300,7 @@ export function DataTable<T>({
                     : `${chosen.size} selected`}
                 <ChevronDownIcon className="text-muted-foreground" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="min-w-44">
+              <DropdownMenuContent>
                 {values.map((value) => (
                   <DropdownMenuCheckboxItem
                     key={value}

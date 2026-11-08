@@ -86,7 +86,7 @@ export function PersonPicker({
         >
           <Combobox.Popup
             aria-label="People"
-            className="bg-popover text-popover-foreground ring-foreground/10 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 flex max-h-[min(20rem,var(--available-height))] w-72 max-w-(--available-width) min-w-(--anchor-width) origin-(--transform-origin) flex-col overflow-hidden rounded-lg shadow-md ring-1 duration-100"
+            className="bg-popover text-popover-foreground ring-foreground/10 data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 flex max-h-[min(20rem,var(--available-height))] w-72 max-w-(--available-width) min-w-(--anchor-width) origin-(--transform-origin) flex-col overflow-hidden rounded-lg shadow-md ring-1 duration-100"
           >
             <label className="relative flex shrink-0 items-center border-b">
               <span className="sr-only">Search people</span>

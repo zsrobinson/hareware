@@ -814,7 +814,7 @@ function MultiSelect({
         {summary}
         <ChevronDownIcon className="text-muted-foreground" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-48">
+      <DropdownMenuContent>
         {options.map((option) => (
           <DropdownMenuCheckboxItem
             key={option.value}

@@ -204,7 +204,14 @@ function fillPeriods(
 }
 
 /** one countable thing: an article, or one person in one role on it */
-type Unit = { article: ArchiveArticle; role?: Role; person?: string };
+export type Unit = { article: ArchiveArticle; role?: Role; person?: string };
+
+/**
+ * One of the things a number counts: an article, a contribution or a
+ * newcomer's first contribution, each one unit; or, when people are counted,
+ * a person with every contribution of theirs the number covers.
+ */
+export type Member = { id: string | number; units: Unit[] };
 
 function contributions(articles: ArchiveArticle[], filters: Filters): Unit[] {
   const roles = filters.roles;
@@ -268,7 +275,7 @@ export type Grouped = {
   measure: Measure;
   categories: { key: string; label: string }[];
   series: { key: string; label: string }[];
-  /** value[categoryKey][seriesKey] */
+  /** value[categoryKey][seriesKey]: how many members the cell has */
   values: Record<string, Record<string, number>>;
   /**
    * each category's own total. The sum of its values, except for people:
@@ -281,7 +288,38 @@ export type Grouped = {
   articles: number;
   /** how many categories there were before `limit` cut them */
   available: number;
+  /** what each cell counts, before a running total gathers it; read through `membersOf` */
+  cells: Record<string, Record<string, Member[]>>;
+  /** each period holds everything up to and including it */
+  running: boolean;
 };
+
+/**
+ * What a category's number counts, in the series given (every series if
+ * none are): its members. Every value and total is the length of this list,
+ * so a list and the number it explains cannot disagree.
+ */
+export function membersOf(
+  grouped: Pick<Grouped, "categories" | "series" | "cells" | "running">,
+  category: string,
+  series: readonly string[] = grouped.series.map((s) => s.key),
+): Member[] {
+  const at = grouped.categories.findIndex((c) => c.key === category);
+  const keys =
+    grouped.running && at >= 0
+      ? grouped.categories.slice(0, at + 1).map((c) => c.key)
+      : [category];
+  /* one person in two cells is one member, with both cells' contributions */
+  const merged = new Map<string | number, Unit[]>();
+  for (const key of keys)
+    for (const s of series)
+      for (const member of grouped.cells[key]?.[s] ?? []) {
+        const held = merged.get(member.id);
+        if (held) held.push(...member.units);
+        else merged.set(member.id, [...member.units]);
+      }
+  return [...merged].map(([id, units]) => ({ id, units }));
+}
 
 export type Order = "largest" | "natural";
 
@@ -349,11 +387,11 @@ export function group(
     }
   };
 
-  /* what makes two units one: the same person, when people are counted */
+  /* what makes two units one member: the same person, when people are counted */
   const identity = (unit: Unit, index: number): string | number =>
     measure === "people" ? unit.person! : index;
 
-  const cells = new Map<string, Map<string, Set<string | number>>>();
+  const cells = new Map<string, Map<string, Map<string | number, Unit[]>>>();
   const categoryLabels = new Map<string, string>();
   const seriesLabels = new Map<string, string>();
 
@@ -366,25 +404,40 @@ export function group(
     categoryLabels.set(category.key, category.label);
     seriesLabels.set(series.key, series.label);
     const row =
-      cells.get(category.key) ?? new Map<string, Set<string | number>>();
+      cells.get(category.key) ??
+      new Map<string, Map<string | number, Unit[]>>();
     cells.set(category.key, row);
-    const cell = row.get(series.key) ?? new Set<string | number>();
+    const cell = row.get(series.key) ?? new Map<string | number, Unit[]>();
     row.set(series.key, cell);
-    cell.add(identity(unit, index));
+    const id = identity(unit, index);
+    cell.set(id, [...(cell.get(id) ?? []), unit]);
   });
 
-  const sizes = new Map(
+  const members: Grouped["cells"] = Object.fromEntries(
     [...cells].map(([key, row]) => [
       key,
-      new Set([...row.values()].flatMap((cell) => [...cell])).size,
+      Object.fromEntries(
+        [...row].map(([series, cell]) => [
+          series,
+          [...cell].map(([id, units]) => ({ id, units })),
+        ]),
+      ),
     ]),
   );
-  const sizeOf = (key: string) => sizes.get(key) ?? 0;
+  const series = [...seriesLabels].map(([key, label]) => ({ key, label }));
+  series.sort(naturalOrder(breakdown));
+  const running = Boolean(options.running) && isPeriod(by);
+  const own = { categories: [], series, cells: members, running: false };
 
   let categories: { key: string; label: string }[];
   if (isPeriod(by)) {
     categories = fillPeriods([...categoryLabels.keys()], by);
   } else {
+    /* the biggest first, by the members each has */
+    const sizes = new Map(
+      [...cells.keys()].map((key) => [key, membersOf(own, key).length]),
+    );
+    const sizeOf = (key: string) => sizes.get(key) ?? 0;
     categories = [...categoryLabels].map(([key, label]) => ({ key, label }));
     categories.sort(
       (a, b) => sizeOf(b.key) - sizeOf(a.key) || a.label.localeCompare(b.label),
@@ -393,39 +446,21 @@ export function group(
     if (options.order === "natural") categories.sort(naturalOrder(by));
   }
 
+  /* every number here is the length of a list `membersOf` gives */
+  const shape = { categories, series, cells: members, running };
   const values: Record<string, Record<string, number>> = {};
   const totals: Record<string, number> = {};
-  if (options.running && isPeriod(by)) {
-    /* a running union rather than a running sum, so a person is counted once
-       however many periods they appear in */
-    const sofar = new Map<string, Set<string | number>>();
-    const everyone = new Set<string | number>();
-    for (const { key } of categories) {
-      for (const [series, cell] of cells.get(key) ?? []) {
-        const seen = sofar.get(series) ?? new Set();
-        sofar.set(series, seen);
-        for (const id of cell) {
-          seen.add(id);
-          everyone.add(id);
-        }
-      }
-      if (everyone.size === 0) continue;
-      values[key] = Object.fromEntries(
-        [...sofar].map(([series, seen]) => [series, seen.size]),
-      );
-      totals[key] = everyone.size;
-    }
-  } else {
-    for (const [key, row] of cells) {
-      values[key] = Object.fromEntries(
-        [...row].map(([series, cell]) => [series, cell.size]),
-      );
-      totals[key] = sizeOf(key);
-    }
+  for (const key of running ? categories.map((c) => c.key) : cells.keys()) {
+    const total = membersOf(shape, key).length;
+    if (total === 0) continue;
+    totals[key] = total;
+    values[key] = Object.fromEntries(
+      series.flatMap(({ key: s }) => {
+        const n = membersOf(shape, key, [s]).length;
+        return n > 0 ? [[s, n] as const] : [];
+      }),
+    );
   }
-
-  const series = [...seriesLabels].map(([key, label]) => ({ key, label }));
-  series.sort(naturalOrder(breakdown));
 
   return {
     measure,
@@ -436,6 +471,8 @@ export function group(
     total: new Set(list.map(identity)).size,
     articles: new Set(list.map((unit) => unit.article.id)).size,
     available: categoryLabels.size,
+    cells: members,
+    running,
   };
 }
 

@@ -8,9 +8,13 @@
   it is a filter, and leaves the view as it is.
 */
 
+import type { ArchiveArticle } from "~/lib/credits/archive";
 import {
+  group,
   isPeriod,
   type Dimension,
+  type Filters,
+  type Grouped,
   type Measure,
   type Order,
 } from "~/lib/credits/stats";
@@ -209,6 +213,27 @@ export function allows(config: ChartConfig) {
     order: !time,
     top: by === "person",
   };
+}
+
+/** what a configuration counts, over the articles the filters left */
+export function groupOf(
+  config: ChartConfig,
+  shown: ArchiveArticle[],
+  filters: Filters,
+  /** the whole archive, where a newcomer's first contribution is looked for */
+  history: ArchiveArticle[],
+): Grouped {
+  const { count, by, split, order, top, values } = config;
+  return group(shown, {
+    measure: count,
+    by,
+    breakdown: split,
+    filters,
+    order,
+    limit: by === "person" ? top || undefined : undefined,
+    running: values === "running",
+    history,
+  });
 }
 
 /** the nearest configuration the builder could have made, so the url and the drawing never disagree */

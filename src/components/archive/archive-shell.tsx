@@ -53,13 +53,28 @@ import {
 
 /* where a view puts its own controls: the end of the toolbar on a laptop
    (Columns, Customize), and its own group in the phone's Customize sheet */
-type Slots = { toolbar: HTMLElement | null; sheet: HTMLElement | null };
-const SlotsContext = createContext<Slots>({ toolbar: null, sheet: null });
+type Slots = {
+  toolbar: HTMLElement | null;
+  sheet: HTMLElement | null;
+  filters: HTMLElement | null;
+};
+const SlotsContext = createContext<Slots>({
+  toolbar: null,
+  sheet: null,
+  filters: null,
+});
 
 /** a view's controls at the end of the toolbar, after a divider (laptop) */
 export function ToolbarEnd({ children }: { children: ReactNode }) {
   const { toolbar } = useContext(SlotsContext);
   return toolbar ? createPortal(children, toolbar) : null;
+}
+
+/** a view's own filter (People's "All people"), among the shell's filters:
+    before the divider on a laptop, in the sheet's Filter group on a phone */
+export function ToolbarFilters({ children }: { children: ReactNode }) {
+  const { filters } = useContext(SlotsContext);
+  return filters ? createPortal(children, filters) : null;
 }
 
 /** a view's own group in the phone's Customize sheet, after Filter */
@@ -231,9 +246,17 @@ function Ready({
   }, [reread]);
   const refreshNow = useCallback(() => void refresh(), [refresh]);
 
-  const [slots, setSlots] = useState<Slots>({ toolbar: null, sheet: null });
+  const [slots, setSlots] = useState<Slots>({
+    toolbar: null,
+    sheet: null,
+    filters: null,
+  });
   const setToolbar = useCallback(
     (toolbar: HTMLElement | null) => setSlots((s) => ({ ...s, toolbar })),
+    [],
+  );
+  const setFilters = useCallback(
+    (filters: HTMLElement | null) => setSlots((s) => ({ ...s, filters })),
     [],
   );
   const setSheet = useCallback(
@@ -276,6 +299,7 @@ function Ready({
             roleFilter={roleFilter}
             toolbarSlot={setToolbar}
             sheetSlot={setSheet}
+            filtersSlot={setFilters}
           />
         )}
         {showFilters && <SheetNotice archive={archive} />}
@@ -416,6 +440,7 @@ function FilterBar({
   roleFilter,
   toolbarSlot,
   sheetSlot,
+  filtersSlot,
 }: {
   archive: Archive;
   state: FilterState;
@@ -426,6 +451,8 @@ function FilterBar({
   toolbarSlot: (element: HTMLElement | null) => void;
   /** where the view's own group goes in the phone's sheet */
   sheetSlot: (element: HTMLElement | null) => void;
+  /** where a view's own filter goes, among these */
+  filtersSlot: (element: HTMLElement | null) => void;
 }) {
   const phone = useIsPhone();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -528,7 +555,10 @@ function FilterBar({
         {sheetOpen && (
           <BottomSheet title="Customize" onClose={() => setSheetOpen(false)}>
             <PanelGroup label="Filter">
-              <div className="flex flex-wrap gap-2">{choices}</div>
+              <div className="flex flex-wrap gap-2">
+                {choices}
+                <div ref={filtersSlot} className="contents" />
+              </div>
             </PanelGroup>
             {/* the view's own group (Chart, Table) */}
             <div ref={sheetSlot} className="contents" />
@@ -541,6 +571,7 @@ function FilterBar({
     <section aria-label="Filters" className="flex flex-wrap items-center gap-2">
       {search}
       {choices}
+      <div ref={filtersSlot} className="contents" />
       {/* the view's own controls, set apart from the filters */}
       <div
         ref={toolbarSlot}

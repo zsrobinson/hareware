@@ -19,11 +19,8 @@ const ERRORS: Record<string, string> = {
 
 export function SignIn() {
   const [{ returnTo, code }] = useState(() => {
-    const url = new URL(
-      typeof window === "undefined"
-        ? "https://x.invalid/"
-        : window.location.href,
-    );
+    /* client-only, so the address is there on the first render */
+    const url = new URL(window.location.href);
     return {
       returnTo: returnToOf(url),
       code: url.searchParams.get("error") ?? "",

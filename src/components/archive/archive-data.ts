@@ -19,9 +19,9 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "sonner";
-import { fetchGated, Refused } from "~/components/gated";
+import { fetchGated, Refused } from "~/lib/gated";
 import {
   buildArchive,
   type Archive,
@@ -164,7 +164,7 @@ export type ArchiveState =
   | { status: "reading" }
   | { status: "refused"; refusal: Refused }
   /** nothing to show: the gate or the first read failed */
-  | { status: "failed"; error: Error; retry: () => void }
+  | { status: "failed"; error: Error; retry: () => void; retrying: boolean }
   | {
       status: "ready";
       archive: Archive;
@@ -216,6 +216,24 @@ export function useArchive(): ArchiveState {
       );
   }, [wordpress.data]);
 
+  /* reads the Sheet and WordPress again, WordPress past every cache. Stable,
+     so a view can listen for something to refresh on. A read already running
+     behind the page is cancelled first: joined, it would be a cached one */
+  const refresh = useCallback(async () => {
+    await queryClient.cancelQueries({ queryKey: WORDPRESS_KEY, exact: true });
+    await Promise.all([
+      queryClient.refetchQueries(
+        { queryKey: SHEET_KEY, exact: true },
+        { throwOnError: true },
+      ),
+      queryClient.query({
+        queryKey: WORDPRESS_KEY,
+        queryFn: () => readSnapshot(true),
+        staleTime: 0,
+      }),
+    ]);
+  }, [queryClient]);
+
   /* a refusal wins over anything already held, as when a session ends */
   if (sheet.error instanceof Refused)
     return { status: "refused", refusal: sheet.error };
@@ -225,6 +243,7 @@ export function useArchive(): ArchiveState {
         status: "failed",
         error: sheet.error,
         retry: () => void sheet.refetch(),
+        retrying: sheet.isFetching,
       };
     return { status: "access" };
   }
@@ -234,6 +253,7 @@ export function useArchive(): ArchiveState {
         status: "failed",
         error: wordpress.error,
         retry: () => void wordpress.refetch(),
+        retrying: wordpress.isFetching,
       };
     return { status: "reading" };
   }
@@ -243,18 +263,6 @@ export function useArchive(): ArchiveState {
     archive: build(wordpress.data, sheet.data),
     checking: wordpress.isFetching,
     checkFailed: wordpress.isRefetchError ? wordpress.error : null,
-    refresh: async () => {
-      await Promise.all([
-        queryClient.refetchQueries(
-          { queryKey: SHEET_KEY, exact: true },
-          { throwOnError: true },
-        ),
-        queryClient.query({
-          queryKey: WORDPRESS_KEY,
-          queryFn: () => readSnapshot(true),
-          staleTime: 0,
-        }),
-      ]);
-    },
+    refresh,
   };
 }

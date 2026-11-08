@@ -5,7 +5,13 @@ import {
   SearchIcon,
   XIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { toast } from "sonner";
 import { Button } from "~/components/ui/button";
 import {
@@ -21,11 +27,13 @@ import type { Archive } from "~/lib/credits/archive";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import type { Filters } from "~/lib/credits/stats";
 import { cn } from "~/lib/utils";
-import { DenialMessage, Refused } from "~/components/gated";
+import { DenialMessage } from "~/components/gated";
+import { couldNotRead, ReadFailed, Reading } from "~/components/read-state";
+import { Refused } from "~/lib/gated";
 import { Choice } from "./choice";
 import { Throttled } from "~/lib/services/wordpress/request";
 import { queryClient } from "~/lib/query-client";
-import { useHydrated } from "~/components/queries";
+import { useHydrated } from "~/lib/use-hydrated";
 import { useArchive, useReadProgress, type ArchiveState } from "./archive-data";
 import { formatDateTime } from "./dates";
 import {
@@ -84,28 +92,24 @@ function Shell({
   roleFilter: boolean;
 }) {
   const state = useArchive();
-  /* the build drew "Opening the archive…"; an archive already in memory, as
-     after moving between pages, is drawn just after hydration rather than in
-     it, so the two agree */
   const hydrated = useHydrated();
 
   if (!hydrated || state.status === "access")
-    return <Waiting>Opening the archive…</Waiting>;
+    return <Reading>Opening the archive…</Reading>;
   if (state.status === "reading") return <FirstRead />;
   if (state.status === "refused")
     return <DenialMessage refusal={state.refusal.body} />;
   if (state.status === "failed")
     return (
-      <div className="space-y-2 text-sm">
-        <p className="text-destructive">
-          {state.error instanceof Throttled
-            ? "WordPress is busy right now, so the archive couldn't be read. Try again in a minute."
-            : state.error.message}
-        </p>
-        <Button variant="outline" size="sm" onClick={state.retry}>
-          Try again
-        </Button>
-      </div>
+      <ReadFailed
+        message={
+          state.error instanceof Throttled
+            ? couldNotRead(state.error, "the archive")
+            : state.error.message
+        }
+        onRetry={state.retry}
+        retrying={state.retrying}
+      />
     );
 
   return (
@@ -136,10 +140,9 @@ function Ready({
   /* asked for by a person, as against a read behind the page: only this one
      dims the page, since only here are they waiting on it */
   const [refreshing, setRefreshing] = useState(false);
+  /* drawn only once hydrated (Shell), so the address is there */
   const [state, setState] = useState<FilterState>(() =>
-    typeof window === "undefined"
-      ? DEFAULT_STATE
-      : readState(window.location.search),
+    readState(window.location.search),
   );
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -149,7 +152,9 @@ function Ready({
 
   const filters = useMemo(() => toFilters(state), [state]);
 
-  async function refresh() {
+  /* stable, so a view that listens for something to refresh on (Problems,
+     on coming back from WordPress) is not re-subscribed on every render */
+  const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
       await reread();
@@ -165,14 +170,15 @@ function Ready({
     } finally {
       setRefreshing(false);
     }
-  }
+  }, [reread]);
+  const refreshNow = useCallback(() => void refresh(), [refresh]);
 
   const freshness = (
     <Freshness
       fetchedAt={archive.fetchedAt}
       checking={checking}
       checkFailed={!refreshing && checkFailed !== null}
-      onRefresh={() => void refresh()}
+      onRefresh={refreshNow}
     />
   );
 
@@ -193,21 +199,12 @@ function Ready({
         {children({
           archive,
           filters,
-          refresh: () => void refresh(),
+          refresh: refreshNow,
           refreshing,
         })}
       </div>
       {!showFilters && freshness}
     </div>
-  );
-}
-
-function Waiting({ children }: { children: ReactNode }) {
-  return (
-    <p className="text-muted-foreground flex items-center gap-2 text-sm">
-      <RefreshCwIcon className="size-4 animate-spin" />
-      {children}
-    </p>
   );
 }
 
@@ -217,8 +214,8 @@ function Waiting({ children }: { children: ReactNode }) {
 function FirstRead() {
   const { read, total } = useReadProgress();
   return (
-    <div className="max-w-sm space-y-2" role="status">
-      <Waiting>
+    <div className="max-w-sm space-y-2">
+      <Reading>
         Reading every published article from WordPress…
         {total > 1 && (
           <span className="tabular-nums">
@@ -226,7 +223,7 @@ function FirstRead() {
             {read} of {total}
           </span>
         )}
-      </Waiting>
+      </Reading>
       <div className="bg-muted h-1 overflow-hidden rounded-full">
         <div
           className="bg-foreground/60 h-full rounded-full transition-[width] duration-500"

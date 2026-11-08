@@ -31,17 +31,16 @@ type Row = {
 
 /** the pasted column as rows to count: trailing blanks are the end of the
     paste, but leading ones are rows of the sheet and must stay */
-export function linesOf(pasted: string): string[] {
+function linesOf(pasted: string): string[] {
   const lines = pasted.split(/\r?\n/).map((line) => line.trim());
   while (lines.at(-1) === "") lines.pop();
   return lines;
 }
 
 export function WordCounter() {
-  const [text, setText] = useState(() =>
-    typeof window === "undefined"
-      ? ""
-      : (new URLSearchParams(window.location.search).get("articles") ?? ""),
+  /* client-only, so the address is there on the first render */
+  const [text, setText] = useState(
+    () => new URLSearchParams(window.location.search).get("articles") ?? "",
   );
   const [rows, setRows] = useState<Row[]>([]);
   const [counting, setCounting] = useState(false);

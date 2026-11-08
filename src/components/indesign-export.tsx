@@ -5,15 +5,8 @@
 */
 
 import { DownloadIcon } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { queryClient } from "~/lib/query-client";
 import { getTaggedText } from "~/lib/get-tagged-text";
 import { saveFile } from "~/lib/save-file";
-import {
-  toArticleLink,
-  toArticleSlug,
-} from "~/lib/services/wordpress/article-url";
 import {
   PREVIEW_IMAGE_WIDTH,
   toOriginalImage,
@@ -22,37 +15,15 @@ import {
 import type { scrapeArticle } from "~/lib/services/wordpress/scrape-article";
 import { slugify } from "~/lib/utils";
 import { CopyButton } from "./copy-button";
-import { articleError, NOT_OURS } from "./instagram-posts";
-import { LoaderCircle } from "./loader-circle";
-import { articleQuery } from "./queries";
+import { Reading } from "./read-state";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import { useArticleFromAddress } from "./use-article";
 
 type Article = Awaited<ReturnType<typeof scrapeArticle>>;
 
 export function InDesignExport() {
-  const [typed] = useState(() =>
-    typeof window === "undefined"
-      ? ""
-      : (new URLSearchParams(window.location.search).get("article") ?? ""),
-  );
-  const link = typed ? toArticleLink(typed) : undefined;
-  const slug = link && toArticleSlug(link);
-  const query = useQuery(
-    { ...articleQuery(slug ?? ""), enabled: Boolean(slug) },
-    queryClient,
-  );
-  if (query.error) console.error("could not read the article", query.error);
-  const article = query.data;
-  const error =
-    typed && !link ? NOT_OURS : query.error ? articleError(query.error) : null;
-
-  useEffect(() => {
-    if (!article || !slug) return;
-    const url = new URL(window.location.href);
-    url.searchParams.set("article", slug);
-    window.history.replaceState(window.history.state, "", url);
-  }, [article, slug]);
+  const { typed, reading, article, error } = useArticleFromAddress();
 
   return (
     <div className="space-y-6">
@@ -72,12 +43,7 @@ export function InDesignExport() {
 
       {error && <p className="text-destructive -mt-4 text-sm">{error}</p>}
 
-      {slug && query.isPending && (
-        <p className="text-muted-foreground flex items-center gap-2 text-sm">
-          <LoaderCircle className="size-4 animate-spin" />
-          Reading the article…
-        </p>
-      )}
+      {reading && <Reading>Reading the article…</Reading>}
 
       {article && <Fields article={article} />}
     </div>

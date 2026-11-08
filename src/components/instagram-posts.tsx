@@ -6,44 +6,25 @@
 */
 
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
-import {
-  createElement,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { createElement, useEffect, useRef, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "~/lib/query-client";
-import {
-  toArticleLink,
-  toArticleSlug,
-} from "~/lib/services/wordpress/article-url";
+import { toArticleSlug } from "~/lib/services/wordpress/article-url";
 import {
   SLIDE_IMAGE_WIDTH,
   toSizedImage,
 } from "~/lib/services/wordpress/image-url";
-import { Throttled } from "~/lib/services/wordpress/request";
 import { pageOf } from "~/lib/services/wordpress/urls";
 import { GeneratePage } from "./generate-page";
 import { articleQuery, recentQuery } from "./queries";
-import { LoaderCircle } from "./loader-circle";
+import { couldNotRead, ReadFailed, Reading } from "./read-state";
 import { Button, buttonVariants } from "./ui/button";
 import { Input } from "./ui/input";
-
-/** why an article couldn't be shown, in the words the page uses */
-export function articleError(error: unknown): string {
-  return error instanceof Throttled
-    ? "WordPress is busy right now. Try again in a minute."
-    : "That article couldn't be read. Check the link, and that it's published.";
-}
-
-export const NOT_OURS =
-  "That isn't a link to a Hare article. It should start with theumdhare.com.";
+import { useArticleFromAddress } from "./use-article";
 
 /** the article's body elements as react ones, so the content slide can
     show and hide them one by one */
-export function bodyNodes(body: Element[]): ReactNode[] {
+function bodyNodes(body: Element[]): ReactNode[] {
   return body.map((element, index) =>
     createElement(element.tagName.toLowerCase(), {
       key: index,
@@ -54,54 +35,21 @@ export function bodyNodes(body: Element[]): ReactNode[] {
 }
 
 export function InstagramPosts() {
-  const [params] = useState(() =>
-    typeof window === "undefined"
-      ? new URLSearchParams()
-      : new URLSearchParams(window.location.search),
-  );
-  const typed = params.get("article") ?? "";
-  const link = typed ? toArticleLink(typed) : undefined;
-  const slug = link && toArticleSlug(link);
+  const { params, typed, link, reading, article, error } =
+    useArticleFromAddress();
 
-  const article = useQuery(
-    { ...articleQuery(slug ?? ""), enabled: Boolean(slug) },
-    queryClient,
-  );
-  if (article.error) console.error("could not read the article", article.error);
+  if (reading) return <Reading>Reading the article…</Reading>;
 
-  /* the address names the article the short way, as it always has */
-  useEffect(() => {
-    if (!article.data || !slug) return;
-    const url = new URL(window.location.href);
-    url.searchParams.set("article", slug);
-    window.history.replaceState(window.history.state, "", url);
-  }, [article.data, slug]);
-
-  const error =
-    typed && !link
-      ? NOT_OURS
-      : article.error
-        ? articleError(article.error)
-        : null;
-
-  if (slug && article.isPending)
-    return (
-      <p className="text-muted-foreground flex items-center gap-2 text-sm">
-        <LoaderCircle className="size-4 animate-spin" />
-        Reading the article…
-      </p>
-    );
-
-  if (article.data && link)
+  if (article && link)
     return (
       <GeneratePage
-        defaultTitle={article.data.title}
-        defaultArticleByline={article.data.author ?? ""}
-        defaultImageByline={article.data.imageCredits ?? ""}
+        defaultTitle={article.title}
+        defaultArticleByline={article.author ?? ""}
+        defaultImageByline={article.imageCredits ?? ""}
         articleLink={link}
-        imageURI={toSizedImage(article.data.image, SLIDE_IMAGE_WIDTH)}
+        imageURI={toSizedImage(article.image, SLIDE_IMAGE_WIDTH)}
       >
-        {bodyNodes(article.data.body)}
+        {bodyNodes(article.body)}
       </GeneratePage>
     );
 
@@ -130,8 +78,10 @@ function Landing({
     hover.current = setTimeout(() => prefetch(link), 120);
   };
   const recent = useQuery(recentQuery(page), queryClient);
-  if (recent.error)
-    console.error("could not read the recent articles", recent.error);
+  useEffect(() => {
+    if (recent.error)
+      console.error("could not read the recent articles", recent.error);
+  }, [recent.error]);
 
   return (
     <>
@@ -163,27 +113,17 @@ function Landing({
         Or start from a recent article
       </h2>
 
-      {recent.isPending ? (
-        <p className="text-muted-foreground flex items-center gap-2 text-sm">
-          <LoaderCircle className="size-4 animate-spin" />
-          Reading the latest articles…
-        </p>
-      ) : recent.isError ? (
-        <div className="flex items-center gap-3 text-sm">
-          <p className="text-muted-foreground">
-            {recent.error instanceof Throttled
-              ? "WordPress is busy right now, so the recent articles couldn't be read."
-              : "The recent articles couldn't be read just now."}
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void recent.refetch()}
-            disabled={recent.isFetching}
-          >
-            {recent.isFetching ? "Trying…" : "Try again"}
-          </Button>
-        </div>
+      {/* what was read stays on screen if a later read fails */}
+      {!recent.data ? (
+        recent.isError ? (
+          <ReadFailed
+            message={couldNotRead(recent.error, "the recent articles")}
+            onRetry={() => void recent.refetch()}
+            retrying={recent.isFetching}
+          />
+        ) : (
+          <Reading>Reading the latest articles…</Reading>
+        )
       ) : (
         <>
           <ul className="pb-2">

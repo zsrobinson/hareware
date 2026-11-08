@@ -6,7 +6,7 @@
 */
 
 import { QueryClient } from "@tanstack/react-query";
-import { Refused } from "~/components/gated";
+import { Refused } from "~/lib/gated";
 import { Throttled } from "~/lib/services/wordpress/request";
 
 export const queryClient = new QueryClient({

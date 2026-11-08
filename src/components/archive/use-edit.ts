@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Edit } from "~/lib/credits/edits";
+import { failureOf, Refused } from "~/lib/gated";
 import { SHEET_KEY } from "./archive-data";
 
 type Save = { edit: Edit; done?: string; undo?: Edit };
@@ -15,10 +16,15 @@ async function send(edit: Edit) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(edit),
   });
-  if (!response.ok)
-    throw new Error(
-      (await response.text()) || `HareWare answered ${response.status}`,
-    );
+  if (!response.ok) throw await failureOf(response);
+}
+
+/* a refusal means the session ended or changed: asking the gate again puts
+   the refusal in place of the page, rather than leaving names on screen that
+   this viewer may no longer see */
+function afterFailure(queryClient: QueryClient, error: unknown) {
+  if (error instanceof Refused)
+    void queryClient.invalidateQueries({ queryKey: SHEET_KEY });
 }
 
 /* the row that offered Undo has usually gone by then, so it owns nothing */
@@ -29,6 +35,7 @@ async function undoWith(queryClient: QueryClient, edit: Edit) {
     toast.success("Undone");
   } catch (error) {
     toast.error(`Not undone: ${(error as Error).message}`);
+    afterFailure(queryClient, error);
   }
 }
 
@@ -57,6 +64,9 @@ export function useEdit() {
         },
       );
     },
-    onError: (error) => toast.error(`Not saved: ${error.message}`),
+    onError: (error) => {
+      toast.error(`Not saved: ${error.message}`);
+      afterFailure(queryClient, error);
+    },
   });
 }

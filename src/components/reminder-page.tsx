@@ -6,38 +6,30 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "~/lib/query-client";
-import { DenialMessage, Refused } from "./gated";
-import { LoaderCircle } from "./loader-circle";
-import { reminderQuery, useHydrated } from "./queries";
-import { Button } from "./ui/button";
+import { Refused } from "~/lib/gated";
+import { useHydrated } from "~/lib/use-hydrated";
+import { DenialMessage } from "./gated";
+import { reminderQuery } from "./queries";
+import { ReadFailed, Reading } from "./read-state";
 import { OUTCOMES, ReminderLog } from "./reminder-log";
 
 export function ReminderPage() {
   const hydrated = useHydrated();
   const query = useQuery(reminderQuery, queryClient);
 
-  if (!hydrated || query.isPending)
-    return (
-      <p className="text-muted-foreground flex items-center gap-2 text-sm">
-        <LoaderCircle className="size-4 animate-spin" />
-        Reading the log…
-      </p>
-    );
+  /* a refusal wins over anything already held, as when a session ends */
   if (query.error instanceof Refused)
     return <DenialMessage refusal={query.error.body} />;
-  if (query.isError)
-    return (
-      <div className="flex items-center gap-3 text-sm">
-        <p className="text-destructive">{query.error.message}</p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void query.refetch()}
-          disabled={query.isFetching}
-        >
-          {query.isFetching ? "Trying…" : "Try again"}
-        </Button>
-      </div>
+  /* what was read stays on screen if a later read fails */
+  if (!hydrated || !query.data)
+    return hydrated && query.isError ? (
+      <ReadFailed
+        message={query.error.message}
+        onRetry={() => void query.refetch()}
+        retrying={query.isFetching}
+      />
+    ) : (
+      <Reading>Reading the log…</Reading>
     );
 
   const view = query.data;

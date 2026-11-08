@@ -1,37 +1,11 @@
 /*
-  The admin pages are static shells (ADR 0012): what makes one private is its
-  data, which only a gated API hands out. These read that API, and when it says
-  no, draw the refusal it names in place of the page.
+  The refusal a gated API names, drawn in place of the page (ADR 0012); the
+  asking is ~/lib/gated.
 */
 
 import { buttonVariants } from "~/components/ui/button";
 import type { RefusalBody } from "~/lib/admin-api";
 import { DENIALS, type Action } from "~/lib/denial";
-import { takeEarly } from "~/lib/early-requests";
-
-/** a gated API's refusal, carried as an error so a query can hold it */
-export class Refused extends Error {
-  constructor(readonly body: RefusalBody) {
-    super(DENIALS[body.denial].title);
-  }
-}
-
-/** a gated API's answer, or a `Refused`, or an error saying what went wrong */
-export async function fetchGated<T>(url: string): Promise<T> {
-  /* the page may have sent it already: ~/lib/early */
-  const response = await (takeEarly(url) ?? fetch(url, { cache: "no-store" }));
-  if (response.ok) return (await response.json()) as T;
-
-  const text = await response.text();
-  try {
-    const body = JSON.parse(text) as Partial<RefusalBody>;
-    if (body.denial && body.denial in DENIALS)
-      throw new Refused(body as RefusalBody);
-  } catch (error) {
-    if (error instanceof Refused) throw error;
-  }
-  throw new Error(text || `HareWare answered ${response.status}`);
-}
 
 /** where each action goes, with the label beside it so both stay in step */
 function actionFor(action: Action, returnTo: string) {

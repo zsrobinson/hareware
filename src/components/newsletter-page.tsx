@@ -2,14 +2,14 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useState } from "react";
 import { queryClient } from "~/lib/query-client";
+import { useHydrated } from "~/lib/use-hydrated";
 import { newsletterHtml, type NewsletterArticle } from "~/lib/newsletter";
 import {
   EMAIL_IMAGE_WIDTH,
   toSizedImage,
 } from "~/lib/services/wordpress/image-url";
-import { Throttled } from "~/lib/services/wordpress/request";
-import { LoaderCircle } from "./loader-circle";
-import { latestQuery, useHydrated } from "./queries";
+import { latestQuery } from "./queries";
+import { couldNotRead, ReadFailed, Reading } from "./read-state";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
@@ -41,35 +41,22 @@ export function NewsletterPage() {
     },
     queryClient,
   );
-  if (latest.error)
-    console.error("could not read the latest articles", latest.error);
+  useEffect(() => {
+    if (latest.error)
+      console.error("could not read the latest articles", latest.error);
+  }, [latest.error]);
 
-  if (!hydrated || latest.isPending)
+  /* what was read stays on screen if a later read fails */
+  if (hydrated && latest.data) return <Newsletter articles={latest.data} />;
+  if (hydrated && latest.isError)
     return (
-      <p className="text-muted-foreground flex items-center gap-2 text-sm">
-        <LoaderCircle className="size-4 animate-spin" />
-        Reading the latest articles…
-      </p>
+      <ReadFailed
+        message={couldNotRead(latest.error, "the latest articles")}
+        onRetry={() => void latest.refetch()}
+        retrying={latest.isFetching}
+      />
     );
-  if (latest.isError)
-    return (
-      <div className="flex items-center gap-3 text-sm">
-        <p className="text-muted-foreground">
-          {latest.error instanceof Throttled
-            ? "WordPress is busy right now, so the latest articles couldn't be read."
-            : "The latest articles couldn't be read just now."}
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void latest.refetch()}
-          disabled={latest.isFetching}
-        >
-          {latest.isFetching ? "Trying…" : "Try again"}
-        </Button>
-      </div>
-    );
-  return <Newsletter articles={latest.data} />;
+  return <Reading>Reading the latest articles…</Reading>;
 }
 
 function Newsletter({ articles }: { articles: NewsletterArticle[] }) {

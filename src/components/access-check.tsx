@@ -2,20 +2,19 @@
    member it admits, the way back in */
 import { useEffect, useState } from "react";
 import type { RefusalBody } from "~/lib/admin-api";
-import { DenialMessage, Refused } from "./gated";
+import { fetchGated, Refused } from "~/lib/gated";
+import { DenialMessage } from "./gated";
 import { buttonVariants } from "./ui/button";
 
 export function AccessCheck() {
   const [answer, setAnswer] = useState<RefusalBody | "allowed" | "unknown">();
 
   useEffect(() => {
-    fetch("/api/access.json", { cache: "no-store" })
-      .then(async (response) => {
-        if (response.ok) return setAnswer("allowed");
-        const body = (await response.json()) as RefusalBody;
-        setAnswer(new Refused(body).body);
-      })
-      .catch(() => setAnswer("unknown"));
+    fetchGated<null>("/api/access.json")
+      .then(() => setAnswer("allowed"))
+      .catch((error: unknown) =>
+        setAnswer(error instanceof Refused ? error.body : "unknown"),
+      );
   }, []);
 
   if (answer === undefined) return null;

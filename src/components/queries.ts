@@ -7,7 +7,6 @@
 */
 
 import { queryOptions } from "@tanstack/react-query";
-import { useSyncExternalStore } from "react";
 import type { ReminderView } from "~/lib/reminder-view";
 import { toArticleLink } from "~/lib/services/wordpress/article-url";
 import { NEWSLETTER_COUNT } from "~/lib/services/wordpress/urls";
@@ -16,7 +15,7 @@ import {
   latestArticles,
   scrapeArticle,
 } from "~/lib/services/wordpress/scrape-article";
-import { fetchGated } from "./gated";
+import { fetchGated } from "~/lib/gated";
 
 /* WordPress changes when someone publishes, a few times a day */
 const ARTICLES_FRESH_MS = 5 * 60_000;
@@ -52,17 +51,3 @@ export const reminderQuery = queryOptions({
   queryFn: () => fetchGated<ReminderView>("/api/reminder.json"),
   staleTime: 30_000,
 });
-
-const noSubscription = () => () => {};
-/**
- * false while hydrating, then true. A page drawn at build time shows its
- * loading line; something already in memory, as after moving between pages,
- * is drawn just after hydration rather than in it, so the two agree
- */
-export function useHydrated(): boolean {
-  return useSyncExternalStore(
-    noSubscription,
-    () => true,
-    () => false,
-  );
-}

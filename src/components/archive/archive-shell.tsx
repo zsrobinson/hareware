@@ -67,6 +67,8 @@ export function SheetGroup({ children }: { children: ReactNode }) {
   return sheet ? createPortal(children, sheet) : null;
 }
 
+type Reload = "wordpress" | "sheet";
+
 export type ViewProps = {
   archive: Archive;
   filters: Filters;
@@ -81,6 +83,7 @@ export function ArchiveShell({
   searchPlaceholder = "Search titles and names",
   filters = true,
   roleFilter = true,
+  reload = "wordpress",
 }: {
   children: (props: ViewProps) => ReactNode;
   searchPlaceholder?: string;
@@ -88,6 +91,8 @@ export function ArchiveShell({
   filters?: boolean;
   /** false where a role means nothing, as on Problems */
   roleFilter?: boolean;
+  /** what the title row's Reload is named for: on Settings, the Sheet */
+  reload?: Reload;
 }) {
   return (
     <QueryClientProvider client={queryClient}>
@@ -95,6 +100,7 @@ export function ArchiveShell({
         searchPlaceholder={searchPlaceholder}
         showFilters={filters}
         roleFilter={roleFilter}
+        reload={reload}
       >
         {children}
       </Shell>
@@ -107,11 +113,13 @@ function Shell({
   searchPlaceholder,
   showFilters,
   roleFilter,
+  reload,
 }: {
   children: (props: ViewProps) => ReactNode;
   searchPlaceholder: string;
   showFilters: boolean;
   roleFilter: boolean;
+  reload: Reload;
 }) {
   const state = useArchive();
   const hydrated = useHydrated();
@@ -140,6 +148,7 @@ function Shell({
       searchPlaceholder={searchPlaceholder}
       showFilters={showFilters}
       roleFilter={roleFilter}
+      reload={reload}
     >
       {children}
     </Ready>
@@ -152,12 +161,14 @@ function Ready({
   searchPlaceholder,
   showFilters,
   roleFilter,
+  reload,
 }: {
   state: Extract<ArchiveState, { status: "ready" }>;
   children: (props: ViewProps) => ReactNode;
   searchPlaceholder: string;
   showFilters: boolean;
   roleFilter: boolean;
+  reload: Reload;
 }) {
   /* asked for by a person, as against a read behind the page: only this one
      dims the page, since only here are they waiting on it */
@@ -209,12 +220,26 @@ function Ready({
     <SlotsContext.Provider value={slots}>
       {/* page-wide, so in the title row beside the h1 */}
       <PageActions>
-        <Freshness
-          fetchedAt={archive.fetchedAt}
-          checking={checking}
-          checkFailed={!refreshing && checkFailed !== null}
-          onRefresh={refreshNow}
-        />
+        {reload === "sheet" ? (
+          /* the Sheet is read afresh on every visit, so it has no age to
+             give; Reload rereads WordPress with it */
+          <Button
+            variant="ghost"
+            className="text-muted-foreground"
+            onClick={refreshNow}
+            disabled={refreshing}
+          >
+            <RefreshCwIcon className={cn(refreshing && "animate-spin")} />
+            Reload from the Sheet
+          </Button>
+        ) : (
+          <Freshness
+            fetchedAt={archive.fetchedAt}
+            checking={checking}
+            checkFailed={!refreshing && checkFailed !== null}
+            onRefresh={refreshNow}
+          />
+        )}
       </PageActions>
       <div className="space-y-6">
         {showFilters && (

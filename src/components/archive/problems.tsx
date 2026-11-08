@@ -16,6 +16,7 @@ import {
 import { applyFilters, NO_FILTERS } from "~/lib/credits/stats";
 import { ArchiveShell, type ViewProps } from "./archive-shell";
 import { formatDate } from "./dates";
+import { useRemovals } from "./removals";
 import { useEdit } from "./use-edit";
 
 const EDIT_IN_WORDPRESS = (id: number) =>
@@ -60,11 +61,37 @@ function Problems({ archive, filters, refresh }: ViewProps) {
   const similar = pairs.filter((pair) => !pair.ignored);
   const different = pairs.filter((pair) => pair.ignored);
 
+  const ignoring = useRemovals(open, (article) => String(article.id));
+  const separating = useRemovals(similar, (pair) => pair.names.join("|"));
+
+  const ignore = (article: ArchiveArticle) =>
+    ignoring.remove(article, {
+      done: `Ignored “${article.title}”; it still counts`,
+      restored: `“${article.title}” is back on the list`,
+      edit: () => ({ kind: "ignore", postId: article.id, ignored: true }),
+      undo: () => ({ kind: "ignore", postId: article.id, ignored: false }),
+    });
+  const separate = (pair: SimilarNames) =>
+    separating.remove(pair, {
+      done: `Marked ${pair.names.join(" and ")} as different people`,
+      restored: `${pair.names.join(" and ")} are back on the list`,
+      edit: () => ({
+        kind: "different-people",
+        names: pair.names,
+        different: true,
+      }),
+      undo: () => ({
+        kind: "different-people",
+        names: pair.names,
+        different: false,
+      }),
+    });
+
   return (
     <div className="space-y-10">
       <section className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-3">
-          <h2 className="font-semibold">
+          <h2 className="text-base font-semibold">
             {open.length === 0
               ? "Every article's credits read cleanly"
               : `${open.length} ${open.length === 1 ? "article" : "articles"} to check`}
@@ -75,32 +102,51 @@ function Problems({ archive, filters, refresh }: ViewProps) {
             </span>
           )}
         </div>
-        {open.length > 0 && (
-          <ul className="divide-y rounded-xl border">
-            {open.map((article) => (
-              <ArticleProblems
-                key={article.id}
-                article={article}
-                onLeave={() => (away.current = true)}
-              />
-            ))}
+        {ignoring.entries.length > 0 && (
+          <ul className="divide-y rounded-lg border">
+            {ignoring.entries.map(({ key, item, removed }) =>
+              removed ? (
+                ignoring.removedRow(key, "px-4")
+              ) : (
+                <ArticleProblems
+                  key={key}
+                  article={item}
+                  ignoreRef={ignoring.focusBack(key)}
+                  onIgnore={() => ignore(item)}
+                  onLeave={() => (away.current = true)}
+                />
+              ),
+            )}
           </ul>
         )}
+        {ignoring.status}
       </section>
 
-      {similar.length > 0 && (
+      {separating.entries.length > 0 && (
         <section className="space-y-3">
           <div>
-            <h2 className="font-semibold">Names that might be one person</h2>
+            <h2 className="text-base font-semibold">
+              Names that might be one person
+            </h2>
             <p className="text-muted-foreground text-sm">
               Fix the spelling in WordPress, or say they're different people.
             </p>
           </div>
-          <ul className="divide-y rounded-xl border">
-            {similar.map((pair) => (
-              <PairRow key={pair.names.join("|")} pair={pair} />
-            ))}
+          <ul className="divide-y rounded-lg border">
+            {separating.entries.map(({ key, item, removed }) =>
+              removed ? (
+                separating.removedRow(key, "px-4")
+              ) : (
+                <PairRow
+                  key={key}
+                  pair={item}
+                  separateRef={separating.focusBack(key)}
+                  onSeparate={() => separate(item)}
+                />
+              ),
+            )}
           </ul>
+          {separating.status}
         </section>
       )}
 
@@ -111,19 +157,15 @@ function Problems({ archive, filters, refresh }: ViewProps) {
 
 function ArticleProblems({
   article,
+  onIgnore,
+  ignoreRef,
   onLeave,
 }: {
   article: ArchiveArticle;
+  onIgnore: () => void;
+  ignoreRef: (element: HTMLElement | null) => void;
   onLeave: () => void;
 }) {
-  const save = useEdit();
-  const ignore = () =>
-    save.mutate({
-      edit: { kind: "ignore", postId: article.id, ignored: true },
-      done: `Ignored “${article.title}”; it still counts`,
-      undo: { kind: "ignore", postId: article.id, ignored: false },
-    });
-
   return (
     <li className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
       <div className="min-w-0 flex-1 space-y-2">
@@ -170,15 +212,14 @@ function ArticleProblems({
           target="_blank"
           rel="noreferrer"
           onClick={onLeave}
-          className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+          className={cn(buttonVariants({ variant: "ghost" }))}
         >
           Edit in WordPress <ExternalLinkIcon />
         </a>
         <Button
+          ref={ignoreRef}
           variant="ghost"
-          size="sm"
-          disabled={save.isPending}
-          onClick={ignore}
+          onClick={onIgnore}
           title="Hide this article's problems; it stays in every count"
         >
           Ignore
@@ -188,17 +229,24 @@ function ArticleProblems({
   );
 }
 
-function PairRow({ pair }: { pair: SimilarNames }) {
-  const save = useEdit();
+function PairRow({
+  pair,
+  onSeparate,
+  separateRef,
+}: {
+  pair: SimilarNames;
+  onSeparate: () => void;
+  separateRef: (element: HTMLElement | null) => void;
+}) {
   return (
-    <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-3 text-sm">
+    <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-2 text-sm">
       <span>
         {pair.names.map((name, i) => (
           <span key={name}>
             {i > 0 && <span className="text-muted-foreground"> and </span>}
             <a
               href={`/articles?q=${encodeURIComponent(name)}`}
-              className="decoration-muted-foreground/40 font-medium underline underline-offset-4"
+              className="font-medium underline-offset-4 hover:underline"
             >
               {name}
             </a>
@@ -210,25 +258,10 @@ function PairRow({ pair }: { pair: SimilarNames }) {
         ))}
       </span>
       <Button
+        ref={separateRef}
         className="text-muted-foreground"
         variant="ghost"
-        size="sm"
-        disabled={save.isPending}
-        onClick={() =>
-          save.mutate({
-            edit: {
-              kind: "different-people",
-              names: pair.names,
-              different: true,
-            },
-            done: `Marked ${pair.names.join(" and ")} as different people`,
-            undo: {
-              kind: "different-people",
-              names: pair.names,
-              different: false,
-            },
-          })
-        }
+        onClick={onSeparate}
       >
         Different people
       </Button>
@@ -254,11 +287,11 @@ function Ignored({
         {count} ignored
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <ul className="mt-3 divide-y rounded-xl border text-sm">
+        <ul className="mt-3 divide-y rounded-lg border text-sm">
           {articles.map((article) => (
             <li
               key={article.id}
-              className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2"
+              className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-1.5 pr-1.5 pl-4"
             >
               <span className="min-w-0 flex-1">
                 {article.title}
@@ -269,7 +302,6 @@ function Ignored({
               </span>
               <Button
                 variant="ghost"
-                size="xs"
                 disabled={save.isPending}
                 onClick={() =>
                   save.mutate({
@@ -289,7 +321,7 @@ function Ignored({
           {pairs.map((pair) => (
             <li
               key={pair.names.join("|")}
-              className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2"
+              className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-1.5 pr-1.5 pl-4"
             >
               <span className="min-w-0 flex-1">
                 {pair.names.join(" and ")}
@@ -300,7 +332,6 @@ function Ignored({
               </span>
               <Button
                 variant="ghost"
-                size="xs"
                 disabled={save.isPending}
                 onClick={() =>
                   save.mutate({

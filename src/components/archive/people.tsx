@@ -1,26 +1,15 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import {
-  CheckIcon,
-  PenLineIcon,
-  UserRoundIcon,
-  UsersRoundIcon,
-  XIcon,
-} from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { UsersRoundIcon } from "lucide-react";
+import { useMemo, useState } from "react";
 import { DataTable, sortable } from "~/components/data-table";
-import {
-  FieldActions,
-  FieldNote,
-  FieldRow,
-  FieldRows,
-} from "~/components/field-row";
 import { SidePanel, useIsPhone } from "~/components/panel";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import type { Archive, ArchiveArticle } from "~/lib/credits/archive";
+import {
+  bylineKey,
+  type Archive,
+  type ArchiveArticle,
+} from "~/lib/credits/archive";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import { sortSections } from "~/lib/credits/sections";
-import { same } from "~/lib/credits/sheet";
 import {
   applyFilters,
   NO_FILTERS,
@@ -30,15 +19,17 @@ import {
   type PersonRow,
 } from "~/lib/credits/stats";
 import { ArchiveShell, ToolbarFilters, type ViewProps } from "./archive-shell";
-import { BylinePanel } from "./byline-panel";
 import { Choice } from "./choice";
 import { formatDate, formatMonth } from "./dates";
-import { OpenRowProvider, RowDetails, RowOpener, useOpenRow } from "./open-row";
-import { PersonPicker } from "./person-picker";
-import { useRemovals } from "./removals";
+import {
+  articleHref,
+  OpenRowProvider,
+  RowDetails,
+  RowOpener,
+  useOpenRow,
+} from "./open-row";
 import { SectionName } from "./section-name";
 import { ShellTableControls } from "./table-controls";
-import { useEdit } from "./use-edit";
 
 export function PeoplePage() {
   return (
@@ -263,7 +254,6 @@ function People({ archive, filters, filterNote }: ViewProps) {
                 : null
             }
             archive={archive}
-            everyone={everybody.map((row) => row.name)}
             onClose={openRow.close}
           />
         </RowDetails>
@@ -276,39 +266,38 @@ function PersonPanel({
   person,
   counted,
   archive,
-  everyone,
   onClose,
 }: {
   person: PersonRow;
   /** under filters: the count they leave, in what words, and the whole */
   counted: { inRange: number; scope: string; inAll: number } | null;
   archive: Archive;
-  everyone: string[];
   onClose: () => void;
 }) {
-  const [byline, setByline] = useState<string | null>(null);
-  const [handOver, setHandOver] = useState(false);
-  /* the pen name just added, marked in the list for a moment */
-  const [added, setAdded] = useState<string | null>(null);
-  useEffect(() => {
-    if (!added) return;
-    const timer = setTimeout(() => setAdded(null), 4000);
-    return () => clearTimeout(timer);
-  }, [added]);
   const byId = new Map(archive.articles.map((a) => [a.id, a]));
   const articles = person.articleIds
     .map((id) => byId.get(id))
     .filter((a): a is ArchiveArticle => Boolean(a))
     .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 
-  /* the name as an article prints it, which is what a pen name is */
-  const printedOn = archive.articles.filter((a) =>
-    a.credits.some((c) =>
-      c.contributors.some(
-        (p) => p.source === "printed" && p.name === person.name,
-      ),
-    ),
-  ).length;
+  /* the bylines an article's own row credits them through, in contributions */
+  const bylines = new Map<string, { byline: string; contributions: number }>();
+  for (const article of articles)
+    for (const credit of article.credits)
+      for (const c of credit.contributors)
+        if (c.name === person.name && c.byline) {
+          const key = bylineKey(c.byline);
+          const entry = bylines.get(key) ?? {
+            byline: c.byline,
+            contributions: 0,
+          };
+          entry.contributions += 1;
+          bylines.set(key, entry);
+        }
+  const creditedAs = [...bylines.values()].sort(
+    (a, b) =>
+      b.contributions - a.contributions || a.byline.localeCompare(b.byline),
+  );
 
   const contributions = counted ? counted.inRange : person.contributions;
   /* someone the filters leave out still opens, on their whole record */
@@ -321,29 +310,6 @@ function PersonPanel({
               `${person.counts[role]} ${ROLE_NAMES[role].toLowerCase()}`,
           )
           .join(", ");
-  const span = (
-    <>
-      {formatMonth(person.first)}
-      {person.first.slice(0, 7) !== person.last.slice(0, 7) && (
-        <> – {formatMonth(person.last)}</>
-      )}
-    </>
-  );
-
-  if (byline)
-    return (
-      <BylinePanel
-        byline={byline}
-        archive={archive}
-        everyone={everyone}
-        handOverTo={handOver ? person.name : undefined}
-        back={person.name}
-        onClose={() => {
-          setByline(null);
-          setHandOver(false);
-        }}
-      />
-    );
 
   return (
     <SidePanel title={person.name} back="All people" onClose={onClose}>
@@ -360,39 +326,30 @@ function PersonPanel({
               ·{" "}
             </>
           )}
-          {span}
+          {formatMonth(person.first)}
+          {person.first.slice(0, 7) !== person.last.slice(0, 7) && (
+            <> – {formatMonth(person.last)}</>
+          )}
         </span>
       </p>
 
-      <div className="space-y-3">
-        <AddOwnPenName
-          person={person}
-          archive={archive}
-          onAdded={setAdded}
-          onHandOver={(pen) => {
-            setHandOver(true);
-            setByline(pen);
-          }}
-        />
-        <PenNames
-          person={person}
-          archive={archive}
-          added={added}
-          onOpen={setByline}
-        />
-      </div>
-
-      {printedOn > 0 && (
-        <>
-          <hr />
-          <PenNameOf
-            byline={person.name}
-            articles={printedOn}
-            everyone={everyone.filter((name) => name !== person.name)}
-            onSaved={onClose}
-            onEachArticle={() => setByline(person.name)}
-          />
-        </>
+      {creditedAs.length > 0 && (
+        <section className="space-y-1">
+          <h3 className="text-muted-foreground text-xs font-medium">
+            Credited as
+          </h3>
+          <ul className="text-sm">
+            {creditedAs.map((use) => (
+              <li key={use.byline}>
+                {use.byline}
+                <span className="text-muted-foreground tabular-nums">
+                  {" "}
+                  · {use.contributions}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <section className="space-y-1">
@@ -407,10 +364,9 @@ function PersonPanel({
               .find((p) => p.name === person.name && p.byline)?.byline;
             return (
               <li key={article.id} className="space-y-0.5 py-2.5">
+                {/* the article's panel, where its credits are set */}
                 <a
-                  href={article.link}
-                  target="_blank"
-                  rel="noreferrer"
+                  href={articleHref(article.id)}
                   className="font-medium underline-offset-4 hover:underline"
                 >
                   {article.title}
@@ -427,366 +383,5 @@ function PersonPanel({
         </ul>
       </section>
     </SidePanel>
-  );
-}
-
-type PenNameUse = {
-  byline: string;
-  articles: number;
-  /* the rows naming them on particular articles */
-  rows: { postId: number; role: Role; realNames: string[] }[];
-};
-
-/** the pen names that count as this person, each removable in place */
-function PenNames({
-  person,
-  archive,
-  added,
-  onOpen,
-}: {
-  person: PersonRow;
-  archive: Archive;
-  /** a pen name just added, to mark */
-  added: string | null;
-  onOpen: (byline: string) => void;
-}) {
-  /* every byline they are credited through: as a pen name on every article,
-     or on particular articles only, as when a series changed hands */
-  const found = new Map<string, PenNameUse>();
-  for (const article of archive.articles) {
-    let credited = false;
-    for (const credit of article.credits)
-      for (const p of credit.contributors) {
-        if (p.name !== person.name || !p.byline || p.source === "printed")
-          continue;
-        const entry = found.get(p.byline.toLowerCase()) ?? {
-          byline: p.byline,
-          articles: 0,
-          rows: [],
-        };
-        found.set(p.byline.toLowerCase(), entry);
-        if (!credited) entry.articles += 1;
-        credited = true;
-        if (p.source === "article")
-          entry.rows.push({
-            postId: article.id,
-            role: credit.role,
-            realNames: credit.contributors
-              .filter(
-                (q) =>
-                  q.source === "article" &&
-                  q.byline &&
-                  same(q.byline, p.byline!),
-              )
-              .map((q) => q.name),
-          });
-      }
-  }
-  /* and the ones not printed yet, which no article credits them through */
-  for (const pen of archive.penNames)
-    if (
-      pen.realName.includes(person.name) &&
-      !found.has(pen.byline.toLowerCase())
-    )
-      found.set(pen.byline.toLowerCase(), {
-        byline: pen.byline,
-        articles: 0,
-        rows: [],
-      });
-  const mine = [...found.values()].sort((a, b) => b.articles - a.articles);
-  const removals = useRemovals(mine, (use) => use.byline.toLowerCase());
-  if (removals.entries.length === 0) return removals.status;
-
-  const remove = (use: PenNameUse) => {
-    const { byline, rows } = use;
-    const pen = archive.penNames.find((p) => same(p.byline, byline));
-    const everywhere = pen?.realName.includes(person.name) ?? false;
-    const without = (names: string[]) =>
-      names.filter((name) => name !== person.name);
-    removals.remove(use, {
-      done: `Removed “${byline}”`,
-      restored: `Restored “${byline}”`,
-      undoLabel: `Undo removing ${byline}`,
-      edit: () => ({
-        kind: "byline",
-        byline,
-        everywhere: everywhere ? without(pen!.realName) : undefined,
-        articles: rows.map((row) => ({
-          ...row,
-          realNames: without(row.realNames),
-        })),
-      }),
-      undo: () => ({
-        kind: "byline",
-        byline,
-        everywhere: everywhere ? pen!.realName : undefined,
-        articles: rows,
-      }),
-    });
-  };
-
-  return (
-    <>
-      <ul className="divide-y overflow-hidden rounded-lg border text-sm">
-        {removals.entries.map(({ key, item, removed }) => {
-          if (removed) return removals.removedRow(key);
-          const everywhere = archive.penNames
-            .find((p) => same(p.byline, item.byline))
-            ?.realName.includes(person.name);
-          return (
-            <li
-              key={key}
-              className="flex min-h-11 items-center gap-2 py-1.5 pr-1.5 pl-3"
-            >
-              <span className="min-w-0 flex-1">
-                <button
-                  type="button"
-                  className="font-medium underline-offset-4 hover:underline"
-                  onClick={() => onOpen(item.byline)}
-                >
-                  {item.byline}
-                </button>
-                <span className="text-muted-foreground block text-xs">
-                  {item.articles === 0
-                    ? "Not printed yet"
-                    : everywhere
-                      ? `On every article (${item.articles})`
-                      : `Only on ${item.articles} ${item.articles === 1 ? "article" : "articles"}`}
-                </span>
-              </span>
-              {/* marked in words: a muted fill is what a removed row wears */}
-              {added !== null && same(added, item.byline) && (
-                <span className="text-muted-foreground flex items-center gap-1 text-xs">
-                  <CheckIcon className="size-3.5" /> Added
-                </span>
-              )}
-              <Button
-                ref={removals.focusBack(key)}
-                variant="ghost"
-                size="icon"
-                className="text-muted-foreground"
-                aria-label={`Remove ${item.byline}`}
-                onClick={() => remove(item)}
-              >
-                <XIcon />
-              </Button>
-            </li>
-          );
-        })}
-      </ul>
-      {removals.status}
-    </>
-  );
-}
-
-/** starts from the person: one of the bylines they publish under */
-function AddOwnPenName({
-  person,
-  archive,
-  onAdded,
-  onHandOver,
-}: {
-  person: PersonRow;
-  archive: Archive;
-  /** saved: the list below shows it, with its × to take it back */
-  onAdded: (byline: string) => void;
-  /** the pen name counts as someone else already: hand it over instead */
-  onHandOver: (byline: string) => void;
-}) {
-  const save = useEdit();
-  const id = useId();
-  const list = useId();
-  /* Add disables as the field clears, which would leave focus on the page */
-  const input = useRef<HTMLInputElement>(null);
-  const [byline, setByline] = useState("");
-  const [said, setSaid] = useState("");
-  const printed = useMemo(
-    () =>
-      [
-        ...new Set(
-          archive.articles.flatMap((a) =>
-            a.credits.flatMap((c) =>
-              c.contributors
-                .filter((p) => p.source === "printed")
-                .map((p) => p.name),
-            ),
-          ),
-        ),
-      ]
-        .filter((name) => name !== person.name)
-        .sort(),
-    [archive, person.name],
-  );
-
-  const typed = byline.trim();
-  const count = typed
-    ? archive.articles.filter((a) =>
-        a.credits.some((c) => c.bylines.some((b) => same(b, typed))),
-      ).length
-    : null;
-  const taken = archive.penNames.find(
-    (pen) => same(pen.byline, typed) && !pen.realName.includes(person.name),
-  );
-  return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!typed) return;
-        if (taken) return onHandOver(taken.byline);
-        /* no toast: the new row in the list below is the confirmation, and
-           its × takes it back */
-        save.mutate(
-          {
-            edit: {
-              kind: "pen-names",
-              entries: [{ byline: typed, realName: person.name }],
-            },
-          },
-          {
-            onSuccess: () => {
-              setByline("");
-              setSaid(`${typed} now counts as ${person.name}`);
-              onAdded(typed);
-              input.current?.focus();
-            },
-          },
-        );
-      }}
-    >
-      <FieldRows>
-        <FieldRow
-          icon={PenLineIcon}
-          label="Pen name"
-          htmlFor={id}
-          width="panel"
-        >
-          <Input
-            ref={input}
-            id={id}
-            list={list}
-            value={byline}
-            onChange={(event) => setByline(event.target.value)}
-            placeholder="As printed"
-          />
-          <datalist id={list}>
-            {printed.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
-        </FieldRow>
-        {count !== null && (
-          <FieldNote width="panel">
-            {taken
-              ? `Counts as ${taken.realName.join(" and ")} now. Continue to choose which articles stay theirs.`
-              : count === 0
-                ? "Not printed yet."
-                : `${count === 1 ? "1 article" : `All ${count} articles`}, and any later ones.`}
-          </FieldNote>
-        )}
-        <FieldActions width="panel">
-          <Button
-            type="submit"
-            variant="outline"
-            disabled={!typed || save.isPending}
-          >
-            {save.isPending ? "Adding…" : taken ? "Continue" : "Add"}
-          </Button>
-        </FieldActions>
-      </FieldRows>
-      <p role="status" aria-live="polite" className="sr-only">
-        {said}
-      </p>
-    </form>
-  );
-}
-
-/** says who is really behind a printed name, on every article */
-function PenNameOf({
-  byline,
-  articles,
-  everyone,
-  onEachArticle,
-  onSaved,
-}: {
-  byline: string;
-  articles: number;
-  everyone: string[];
-  onEachArticle: () => void;
-  onSaved: () => void;
-}) {
-  const save = useEdit();
-  const id = useId();
-  /* "" is the printed name counting as its own person */
-  const [realName, setRealName] = useState("");
-  const known = everyone.some((name) => same(name, realName));
-
-  return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!realName) return;
-        save.mutate(
-          {
-            edit: {
-              kind: "pen-names",
-              entries: [{ byline, realName }],
-            },
-            done: `${byline} now counts as ${realName}`,
-            undo: { kind: "pen-names", entries: [{ byline, realName: "" }] },
-          },
-          { onSuccess: onSaved },
-        );
-      }}
-    >
-      <FieldRows>
-        <FieldRow
-          icon={UserRoundIcon}
-          label="Counts as"
-          htmlFor={id}
-          width="panel"
-          inline
-        >
-          <PersonPicker
-            id={id}
-            value={realName}
-            onChange={setRealName}
-            people={everyone}
-            none="Themselves"
-          />
-        </FieldRow>
-        <FieldNote width="panel">
-          {articles === 0
-            ? "Not printed yet."
-            : `${articles === 1 ? "1 article" : `All ${articles} articles`}, and any later ones.`}
-          {realName && !known && " Not credited yet."}
-          {articles > 1 && (
-            <>
-              {" "}
-              <button
-                type="button"
-                className="hover:text-foreground text-left underline underline-offset-4"
-                onClick={onEachArticle}
-              >
-                Set per article
-              </button>
-            </>
-          )}
-        </FieldNote>
-        {realName && (
-          <FieldActions width="panel">
-            <Button type="submit" disabled={save.isPending}>
-              {save.isPending ? "Saving…" : "Save"}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setRealName("")}
-            >
-              Cancel
-            </Button>
-          </FieldActions>
-        )}
-      </FieldRows>
-    </form>
   );
 }

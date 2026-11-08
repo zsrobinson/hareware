@@ -1,18 +1,19 @@
 import { expect, test } from "vitest";
 import { buildArchive, similarNames, type SourcePost } from "./archive";
 import { DEFAULT_LABELS } from "./labels";
-import type { Ignored, Override, SheetState } from "./sheet";
+import type { Ignored, Override, SheetState, Unscoped } from "./sheet";
 
 /* invented names only: what the Sheet maps is private, so no test may pair a
    real byline with a real person */
 
+/* a later id is a later article, a day apart */
 const post = (
   id: number,
   paragraphs: string[],
   categoryIds = [103],
 ): SourcePost => ({
   id,
-  publishedAt: "2026-10-01T10:00:00Z",
+  publishedAt: new Date(Date.UTC(2026, 9, id, 10)).toISOString(),
   link: `https://theumdhare.com/${id}/`,
   title: `Post ${id}`,
   categoryIds,
@@ -24,8 +25,9 @@ const categories = new Map([
   [1, "Uncategorized"],
 ]);
 
-const row = (o: Partial<Override> & { realName: string }): Override => ({
-  postId: null,
+const row = (
+  o: Partial<Override> & { postId: number; realName: string },
+): Override => ({
   role: null,
   byline: null,
   note: "",
@@ -35,9 +37,11 @@ const row = (o: Partial<Override> & { realName: string }): Override => ({
 const read = (
   overrides: Override[] = [],
   ignored: Ignored[] = [],
+  unscoped: Unscoped[] = [],
 ): SheetState => ({
   status: "read",
   overrides,
+  unscoped,
   ignored,
   labels: null,
   problems: [],
@@ -68,59 +72,164 @@ test("credits an article as printed when the Sheet says nothing about it", () =>
   expect(archive.articles[0]!.problems).toEqual([]);
 });
 
-test("one row for a pen name resolves it on every article, and only that name", () => {
+test("a row says who a pen name is on its own article, and nowhere else", () => {
   const archive = build(
     [
       post(1, ["Article by: Penn Name and Sam Second", "Image Credits: B"]),
       post(2, ["Article by: Penn Name", "Image Credits: B"]),
     ],
-    read([row({ byline: "penn name", realName: "Riley Real" })]),
-  );
-
-  expect(names(archive, 0)).toEqual(["Riley Real", "Sam Second"]);
-  expect(names(archive, 1)).toEqual(["Riley Real"]);
-  const riley = archive.articles[0]!.credits[0]!.contributors[0]!;
-  expect(riley).toEqual({
-    name: "Riley Real",
-    byline: "Penn Name",
-    source: "everywhere",
-  });
-  expect(archive.penNames).toEqual([
-    { byline: "penn name", realName: ["Riley Real"], articles: 2 },
-  ]);
-});
-
-test("a row for one article wins over the row for every article", () => {
-  const archive = build(
-    [
-      post(1, ["Article by: Penn Name", "Image Credits: B"]),
-      post(2, ["Article by: Penn Name", "Image Credits: B"]),
-    ],
     read([
-      row({ byline: "Penn Name", realName: "Riley Real" }),
       row({
-        postId: 2,
+        postId: 1,
         role: "writer",
-        byline: "Penn Name",
-        realName: "Other Person",
+        byline: "penn name",
+        realName: "Riley Real",
       }),
     ]),
   );
 
-  expect(names(archive, 0)).toEqual(["Riley Real"]);
-  expect(names(archive, 1)).toEqual(["Other Person"]);
+  expect(names(archive, 0)).toEqual(["Riley Real", "Sam Second"]);
+  expect(archive.articles[0]!.credits[0]!.contributors[0]).toEqual({
+    name: "Riley Real",
+    byline: "Penn Name",
+    source: "article",
+  });
+  /* the same name on another article is that article's question */
+  expect(names(archive, 1)).toEqual(["Penn Name"]);
 });
 
-test("a pen name can stand for two people", () => {
+test("a row in one role leaves the same byline in another role as printed", () => {
+  const archive = build(
+    [post(1, ["Article by: Penn Name", "Image Credits: Penn Name"])],
+    read([
+      row({
+        postId: 1,
+        role: "writer",
+        byline: "Penn Name",
+        realName: "Riley Real",
+      }),
+    ]),
+  );
+
+  expect(names(archive, 0, "writer")).toEqual(["Riley Real"]);
+  expect(names(archive, 0, "image")).toEqual(["Penn Name"]);
+});
+
+test("a byline on one article can be two people", () => {
   const archive = build(
     [post(1, ["Article by: Penn Name", "Image Credits: B"])],
     read([
-      row({ byline: "Penn Name", realName: "Riley Real" }),
-      row({ byline: "Penn Name", realName: "Sam Second" }),
+      row({ postId: 1, byline: "Penn Name", realName: "Riley Real" }),
+      row({ postId: 1, byline: "Penn Name", realName: "Sam Second" }),
     ]),
   );
 
   expect(names(archive)).toEqual(["Riley Real", "Sam Second"]);
+});
+
+test("a pen name printed again with no answer is flagged, naming who it was", () => {
+  const archive = build(
+    [
+      post(1, ["Article by: Penn Name", "Image Credits: B"]),
+      post(2, ["Article by: Penn Name", "Image Credits: B"]),
+      post(3, ["Article by: Penn Name", "Image Credits: B"]),
+    ],
+    read([
+      row({
+        postId: 1,
+        role: "writer",
+        byline: "Penn Name",
+        realName: "Riley Real",
+      }),
+      row({
+        postId: 2,
+        role: "writer",
+        byline: "Penn Name",
+        realName: "Riley Real",
+      }),
+    ]),
+  );
+
+  expect(archive.pastUses["penn name"]).toEqual([
+    { name: "Riley Real", postIds: [1, 2] },
+  ]);
+  /* the answered ones are fine; the third is the question */
+  expect(archive.articles[0]!.problems).toEqual([]);
+  expect(archive.articles[2]!.problems).toEqual([
+    {
+      kind: "pen-name-again",
+      detail: "Penn Name was Riley Real on 2 articles",
+    },
+  ]);
+});
+
+test("a byline once a pen name is not flagged on its earlier articles", () => {
+  /* a real person, whose name someone later borrowed for one joke */
+  const archive = build(
+    [
+      post(1, ["Article by: Penn Name", "Image Credits: B"]),
+      post(2, ["Article by: Penn Name", "Image Credits: B"]),
+      post(3, ["Article by: Penn Name", "Image Credits: B"]),
+    ],
+    read([
+      row({
+        postId: 2,
+        role: "writer",
+        byline: "Penn Name",
+        realName: "Riley Real",
+      }),
+    ]),
+  );
+
+  const kinds = (i: number) => archive.articles[i]!.problems.map((p) => p.kind);
+  expect(kinds(0)).toEqual([]);
+  expect(kinds(2)).toEqual(["pen-name-again"]);
+});
+
+test("an old row for every article counts nowhere, and is offered on the articles without an answer", () => {
+  const old = {
+    byline: "Penn Name",
+    role: null,
+    realName: "Riley Real",
+    note: "",
+  };
+  const archive = build(
+    [
+      post(1, ["Article by: Penn Name", "Image Credits: B"]),
+      post(2, ["Article by: Penn Name", "Image Credits: Penn Name"]),
+      post(3, ["Article by: Penn Name", "Image Credits: B"]),
+      post(4, ["Article by: Somebody Else", "Image Credits: B"]),
+    ],
+    read(
+      /* part 3 was handed over, and keeps its own answer */
+      [
+        row({
+          postId: 3,
+          role: "writer",
+          byline: "Penn Name",
+          realName: "Sam Second",
+        }),
+      ],
+      [],
+      [old],
+    ),
+  );
+
+  expect(names(archive, 0)).toEqual(["Penn Name"]);
+  expect(archive.unscoped).toEqual([
+    {
+      byline: "Penn Name",
+      role: null,
+      realNames: ["Riley Real"],
+      rows: [old],
+      targets: [
+        { postId: 1, title: "Post 1", roles: ["writer"] },
+        { postId: 2, title: "Post 2", roles: ["writer", "image"] },
+      ],
+    },
+  ]);
+  /* it still suggests who the byline was, without crediting anyone */
+  expect(archive.pastUses["penn name"]?.[0]?.name).toBe("Riley Real");
 });
 
 test("a row with no byline adds someone the article does not print", () => {
@@ -253,26 +362,30 @@ test("a missing tab is named, so a renamed Overrides tab is never mistaken for a
 
 test("a series under one pen name counts each part as whoever wrote it", () => {
   const archive = build(
-    [
-      post(1, ["Article by: Penn Name"]),
-      post(2, ["Article by: Penn Name"]),
-      post(3, ["Article by: Penn Name"]),
-    ],
+    [post(1, ["Article by: Penn Name"]), post(2, ["Article by: Penn Name"])],
     read([
-      /* the byline is Sam's now, and part 1 stays Riley's */
-      row({ byline: "Penn Name", realName: "Sam Second" }),
       row({
         postId: 1,
         role: "writer",
         byline: "Penn Name",
         realName: "Riley Real",
       }),
+      row({
+        postId: 2,
+        role: "writer",
+        byline: "Penn Name",
+        realName: "Sam Second",
+      }),
     ]),
   );
 
   expect(names(archive, 0)).toEqual(["Riley Real"]);
   expect(names(archive, 1)).toEqual(["Sam Second"]);
-  expect(names(archive, 2)).toEqual(["Sam Second"]);
+  /* a tie goes to whoever had it last, as a series' next part would */
+  expect(archive.pastUses["penn name"]).toEqual([
+    { name: "Sam Second", postIds: [2] },
+    { name: "Riley Real", postIds: [1] },
+  ]);
 });
 
 test("the archive lists its sections in the paper's order, not alphabetically", () => {

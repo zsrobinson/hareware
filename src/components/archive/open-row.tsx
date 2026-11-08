@@ -46,6 +46,13 @@ function address(param: string, key: string | null): URL {
   return url;
 }
 
+/** where an article's panel opens, from any page */
+export const articleHref = (postId: number) => `/articles?article=${postId}`;
+
+/** where a person's panel opens, from any page */
+export const personHref = (name: string) =>
+  `/people?person=${encodeURIComponent(name)}`;
+
 /** which row is open, kept in the address under `param`; drawn once hydrated */
 export function useOpenRow(param: string): OpenRow {
   const phone = useIsPhone();

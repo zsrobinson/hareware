@@ -2,7 +2,7 @@
   The club's Sheet: the few facts WordPress does not hold. Three tabs, each
   read by its header row so the columns can be in any order:
 
-    Overrides  who a printed byline really is, for every article or one
+    Overrides  who a printed byline really is, on one article
     Labels     which paragraph labels are credit lines, and their roles
     Ignored    articles whose problems are intended
 
@@ -29,13 +29,12 @@ const COLUMNS: Record<Tab, string[]> = {
 };
 
 /**
- * One fact about a byline. With no `postId` it holds on every article, so a
- * pen name needs one row however often it is used; with one, it holds on
- * that article only and wins over an everywhere row. With no `byline` it adds
- * a person the article does not print.
+ * One fact about one article's credits: who a printed byline really is there,
+ * or, with no `byline`, someone the article does not print. A row never
+ * reaches past its own article (ADR 0013).
  */
 export type Override = {
-  postId: number | null;
+  postId: number;
   /** null for any role */
   role: Role | null;
   /** the printed name this replaces; null to add someone unprinted */
@@ -55,6 +54,17 @@ export type Ignored = {
   note: string;
 };
 
+/**
+ * a row with a byline and no post id: it counts nowhere (ADR 0013), and
+ * Settings offers to set it on the articles that print it
+ */
+export type Unscoped = {
+  byline: string;
+  role: Role | null;
+  realName: string;
+  note: string;
+};
+
 /** a row the Sheet holds that HareWare could not use, and why */
 export type SheetProblem = { tab: string; row: number; message: string };
 
@@ -64,6 +74,7 @@ export type SheetState =
   | {
       status: "read";
       overrides: Override[];
+      unscoped: Unscoped[];
       ignored: Ignored[];
       /** null when the Labels tab is absent or empty: the defaults apply */
       labels: Label[] | null;
@@ -79,9 +90,11 @@ export async function readSheet(sheets: Sheets): Promise<SheetState> {
     const found = await sheets.read(Object.values(TABS));
     const problems: SheetProblem[] = [];
 
-    const overrides = table("overrides", found.get(TABS.overrides))
+    const read = table("overrides", found.get(TABS.overrides))
       .map((row) => toOverride(row, problems))
-      .filter((o): o is Override => o !== undefined);
+      .filter((o) => o !== undefined);
+    const overrides = read.filter((o): o is Override => "postId" in o);
+    const unscoped = read.filter((o): o is Unscoped => !("postId" in o));
     const ignored = table("ignored", found.get(TABS.ignored))
       .map((row) => toIgnored(row, problems))
       .filter((i): i is Ignored => i !== undefined);
@@ -92,6 +105,7 @@ export async function readSheet(sheets: Sheets): Promise<SheetState> {
     return {
       status: "read",
       overrides,
+      unscoped,
       ignored,
       labels: labels.length > 0 ? labels : null,
       problems,
@@ -152,7 +166,10 @@ function roleOf(raw: string): Role | null | undefined {
   return isRole(role) ? role : undefined;
 }
 
-function toOverride({ row, cells }: Row, problems: SheetProblem[]) {
+function toOverride(
+  { row, cells }: Row,
+  problems: SheetProblem[],
+): Override | Unscoped | undefined {
   const postId = postIdOf(cells.post_id ?? "");
   const role = roleOf(cells.role ?? "");
   const byline = cells.byline || null;
@@ -164,16 +181,24 @@ function toOverride({ row, cells }: Row, problems: SheetProblem[]) {
         ? `role must be blank or one of ${ROLES.join(", ")}, not "${cells.role}"`
         : !realName
           ? "real_name is empty"
-          : !byline && postId === null
-            ? "a row with no byline needs a post_id"
-            : undefined;
+          : postId === null && !byline
+            ? "the row needs a post_id"
+            : !byline && !role
+              ? "a row that adds someone needs a role"
+              : undefined;
   if (complaint) {
     problems.push({ tab: TABS.overrides, row, message: complaint });
     return undefined;
   }
+  if (postId === null)
+    return {
+      byline: byline!,
+      role: role as Role | null,
+      realName,
+      note: cells.note ?? "",
+    };
   return {
-    /* the checks above ruled out undefined; null is meaningful */
-    postId: postId as number | null,
+    postId: postId as number,
     role: role as Role | null,
     byline,
     realName,
@@ -254,54 +279,45 @@ async function rewrite(
 
 const blank = (cells: string[]) => cells.every((cell) => !cell.trim());
 
-/**
- * says who bylines really are on every article, one entry per pen name; an
- * entry with no real name removes that pen name. A pen name two people share
- * gets one entry per person
- */
-export async function setPenNames(
-  sheets: Sheets,
-  entries: { byline: string; realName: string }[],
-  note = "",
-) {
-  const bylines = entries.map((entry) => entry.byline);
-  await rewrite(sheets, "overrides", (rows) => [
-    ...rows.filter(
-      ([postId = "", , printed = ""]) =>
-        !(postId.trim() === "" && bylines.some((b) => same(printed, b))),
-    ),
-    ...entries
-      .filter((entry) => entry.realName.trim())
-      .map((entry) => [
-        "",
-        "",
-        entry.byline.trim(),
-        entry.realName.trim(),
-        note,
-      ]),
-  ]);
-}
+/* a post id as typed: "0123" and "123" are one article */
+const isPost = (cell: string, postId: number) =>
+  cell.trim() !== "" && Number(cell.trim()) === postId;
+
+/** the roles besides the one being saved that an article prints a byline in */
+export type PrintedElsewhere = { byline: string; roles: Role[] };
 
 /**
  * replaces what the Sheet says about one article's credits in one role. Each
  * entry is a printed byline and who it counts as, or a person with no byline
  * to add someone the article does not print. An empty list returns the role
- * to the everywhere rows and the printed credit line
+ * to its printed credit line.
+ *
+ * A row for any role covers this role too, so saving one would leave it
+ * standing beside the new rows. It is split instead: kept, as explicit rows,
+ * for the other roles `elsewhere` says the article prints its byline in.
  */
 export async function setArticleCredits(
   sheets: Sheets,
   postId: number,
   role: Role,
   entries: { byline: string | null; realName: string }[],
+  elsewhere: PrintedElsewhere[] = [],
   note = "",
 ) {
   await rewrite(sheets, "overrides", (rows) => [
-    ...rows.filter(
-      ([id = "", rowRole = ""]) =>
-        !(
-          id.trim() === String(postId) && rowRole.trim().toLowerCase() === role
-        ),
-    ),
+    ...rows.flatMap((cells) => {
+      const [id = "", rowRole = "", printed = ""] = cells;
+      if (!isPost(id, postId)) return [cells];
+      const r = rowRole.trim().toLowerCase();
+      if (r === role) return [];
+      if (r !== "" || !printed.trim()) return [cells];
+      const roles = elsewhere.find((e) => same(e.byline, printed))?.roles ?? [];
+      return roles.map((other) => {
+        const split = [...cells];
+        split[1] = other;
+        return split;
+      });
+    }),
     ...entries
       .filter((entry) => entry.realName.trim())
       .map((entry) => [
@@ -314,46 +330,53 @@ export async function setArticleCredits(
   ]);
 }
 
+/** who a byline is on one article and role: no names returns it to as printed */
+export type BylineOn = {
+  postId: number;
+  /** null for a row that holds in any role */
+  role: Role | null;
+  byline: string;
+  realNames: string[];
+  /** kept on the rows written, as a pasted note is; otherwise they are signed */
+  note?: string;
+};
+
 /**
- * says who one byline is, on every article and on particular ones, in one
- * write: the way a pen name passes from one person to another (the earlier
- * articles keep the first, new ones count as the second). `everywhere` left
- * out keeps the every-article rows as they are; an article entry replaces that
- * byline's rows on that article and role (a null role is a row for any role),
- * and an empty list of names returns it to `everywhere`
+ * says who bylines are on particular articles, in one write: each entry
+ * replaces that byline's rows on that article and role. `retire` removes rows
+ * with no post id for these bylines, and `restore` writes such rows back, so
+ * removing or converting them can be undone
  */
-export async function setByline(
+export async function setBylines(
   sheets: Sheets,
-  byline: string,
-  everywhere: string[] | undefined,
-  articles: { postId: number; role: Role | null; realNames: string[] }[],
+  entries: BylineOn[],
+  retire: string[] = [],
+  restore: Unscoped[] = [],
   note = "",
 ) {
-  const printedAs = byline.trim();
   await rewrite(sheets, "overrides", (rows) => [
     ...rows.filter(([postId = "", rowRole = "", printed = ""]) => {
-      if (!same(printed, printedAs)) return true;
-      const id = postId.trim();
+      if (postId.trim() === "") return !retire.some((b) => same(printed, b));
       const role = rowRole.trim().toLowerCase();
-      if (id === "") return everywhere === undefined;
-      return !articles.some(
-        (a) => String(a.postId) === id && (a.role ?? "") === role,
+      return !entries.some(
+        (e) =>
+          isPost(postId, e.postId) &&
+          (e.role ?? "") === role &&
+          same(printed, e.byline),
       );
     }),
-    ...(everywhere ?? [])
-      .filter((name) => name.trim())
-      .map((name) => ["", "", printedAs, name.trim(), note]),
-    ...articles.flatMap((a) =>
-      a.realNames
+    ...entries.flatMap((e) =>
+      e.realNames
         .filter((name) => name.trim())
         .map((name) => [
-          String(a.postId),
-          a.role ?? "",
-          printedAs,
+          String(e.postId),
+          e.role ?? "",
+          e.byline.trim(),
           name.trim(),
-          note,
+          e.note?.trim() || note,
         ]),
     ),
+    ...restore.map((u) => ["", u.role ?? "", u.byline, u.realName, u.note]),
   ]);
 }
 

@@ -6,13 +6,14 @@ import {
   UserRoundPlusIcon,
   XIcon,
 } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import { Fragment, useId, useMemo, useState } from "react";
 import { DataTable, sortable } from "~/components/data-table";
-import { FieldRow, FieldRows } from "~/components/field-row";
+import { FieldNote, FieldRow, FieldRows } from "~/components/field-row";
 import { SidePanel, useIsPhone } from "~/components/panel";
 import { Button, buttonVariants } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import {
+  pastUsesOn,
   PROBLEM_KINDS,
   type Archive,
   type ArchiveArticle,
@@ -24,7 +25,7 @@ import { same } from "~/lib/credits/sheet";
 import { applyFilters, easternDate } from "~/lib/credits/stats";
 import { ArchiveShell, type ViewProps } from "./archive-shell";
 import { formatDate } from "./dates";
-import { PersonPicker } from "./person-picker";
+import { PeoplePicker, PersonPicker } from "./person-picker";
 import { OpenRowProvider, RowDetails, RowOpener, useOpenRow } from "./open-row";
 import { SectionName } from "./section-name";
 import { ShellTableControls } from "./table-controls";
@@ -218,7 +219,7 @@ function Articles({ archive, filters, filterNote }: ViewProps) {
   );
 }
 
-function ArticlePanel({
+export function ArticlePanel({
   article,
   archive,
   onClose,
@@ -276,6 +277,7 @@ function ArticlePanel({
           article={article}
           role={role}
           everyone={everyone}
+          archive={archive}
         />
       ))}
     </SidePanel>
@@ -287,12 +289,14 @@ const entriesOf = ({
   renamed,
   added,
 }: {
-  renamed: Record<string, string>;
+  renamed: Record<string, string[]>;
   added: string[];
 }) => [
-  ...Object.entries(renamed)
-    .filter(([, name]) => name.trim())
-    .map(([byline, realName]) => ({ byline, realName })),
+  ...Object.entries(renamed).flatMap(([byline, names]) =>
+    names
+      .filter((name) => name.trim())
+      .map((realName) => ({ byline, realName })),
+  ),
   ...added
     .filter((name) => name.trim())
     .map((realName) => ({ byline: null, realName })),
@@ -301,16 +305,19 @@ const entriesOf = ({
 /**
  * One role's contributors on one article: each printed name, who it counts
  * as, and anyone added who is not printed. Saving writes this article's rows
- * for the role and nothing else.
+ * for the role and nothing else. A byline that was someone on other articles
+ * offers that person, but only says so: a pen name can change hands.
  */
 function RoleEditor({
   article,
   role,
   everyone,
+  archive,
 }: {
   article: ArchiveArticle;
   role: Role;
   everyone: string[];
+  archive: Archive;
 }) {
   const save = useEdit();
   const ids = useId();
@@ -323,33 +330,34 @@ function RoleEditor({
     renamed: Object.fromEntries(
       printed.map((byline) => [
         byline,
-        people.find(
-          (p) => p.source === "article" && p.byline && same(p.byline, byline),
-        )?.name ?? "",
+        people
+          .filter(
+            (p) => p.source === "article" && p.byline && same(p.byline, byline),
+          )
+          .map((p) => p.name),
       ]),
     ),
     added: people
       .filter((p) => p.source === "article" && !p.byline)
       .map((p) => p.name),
   };
-  const [renamed, setRenamed] = useState<Record<string, string>>(
+  const [renamed, setRenamed] = useState<Record<string, string[]>>(
     initial.renamed,
   );
+  /* where else the article prints each byline, so a save can split a row
+     that held for any role instead of leaving it beside the new ones */
+  const elsewhere = printed.map((byline) => ({
+    byline,
+    roles: article.credits
+      .filter((c) => c.role !== role && c.bylines.some((b) => same(b, byline)))
+      .map((c) => c.role),
+  }));
   const [added, setAdded] = useState<string[]>(initial.added);
   const changed =
     JSON.stringify({ renamed, added }) !== JSON.stringify(initial);
 
   if (printed.length === 0 && added.length === 0 && role === "other")
     return null;
-
-  /* who a printed name counts as without this article's own row */
-  const fallback = (byline: string) =>
-    people.find(
-      (p) =>
-        p.byline !== null &&
-        same(p.byline, byline) &&
-        p.source === "everywhere",
-    )?.name ?? byline;
 
   return (
     <section className="space-y-3 border-t pt-4">
@@ -368,35 +376,78 @@ function RoleEditor({
 
       <FieldRows>
         {printed.map((byline, index) => {
-          const unchanged = fallback(byline);
+          /* who the byline was on other articles, while nothing is chosen */
+          const chosen = renamed[byline] ?? [];
+          const before =
+            chosen.length > 0
+              ? []
+              : pastUsesOn(archive, byline, article.id).filter(
+                  (use) => !same(use.name, byline),
+                );
           return (
-            <FieldRow
-              key={byline}
-              icon={UserRoundIcon}
-              label={
-                <>
-                  Counts as
-                  {/* which printed name, where the line prints more than one */}
-                  {printed.length > 1 && (
-                    <span className="text-muted-foreground block text-xs font-normal break-words">
-                      {byline}
+            <Fragment key={byline}>
+              <FieldRow
+                icon={UserRoundIcon}
+                label={
+                  <>
+                    Counts as
+                    {/* which printed name, where the line prints more than one */}
+                    {printed.length > 1 && (
+                      <span className="text-muted-foreground block text-xs font-normal break-words">
+                        {byline}
+                      </span>
+                    )}
+                  </>
+                }
+                htmlFor={`${ids}-${index}`}
+                width="panel"
+                top={printed.length > 1}
+              >
+                <PeoplePicker
+                  id={`${ids}-${index}`}
+                  value={chosen}
+                  onChange={(names) =>
+                    setRenamed({ ...renamed, [byline]: names })
+                  }
+                  people={everyone}
+                  none="Themselves"
+                />
+              </FieldRow>
+              {before.length > 0 && (
+                <FieldNote width="panel">
+                  {/* the two it was most, as Problems words it: each fills
+                      the picker, and "not this time" says it is the byline */}
+                  Was{" "}
+                  {before.slice(0, 2).map((use, i) => (
+                    <span key={use.name}>
+                      {i > 0 && ", "}
+                      <button
+                        type="button"
+                        className="hover:text-foreground underline underline-offset-4"
+                        onClick={() =>
+                          setRenamed({ ...renamed, [byline]: [use.name] })
+                        }
+                      >
+                        {use.name}
+                      </button>{" "}
+                      on {use.postIds.length}
+                      {i === 0 &&
+                        (use.postIds.length === 1 ? " article" : " articles")}
                     </span>
-                  )}
-                </>
-              }
-              htmlFor={`${ids}-${index}`}
-              width="panel"
-              top={printed.length > 1}
-            >
-              <PersonPicker
-                id={`${ids}-${index}`}
-                value={renamed[byline] ?? ""}
-                onChange={(name) => setRenamed({ ...renamed, [byline]: name })}
-                /* unchanged is whoever the pen name is, offered once */
-                people={everyone.filter((name) => !same(name, unchanged))}
-                none={unchanged === byline ? "Themselves" : unchanged}
-              />
-            </FieldRow>
+                  ))}
+                  .{" "}
+                  <button
+                    type="button"
+                    className="hover:text-foreground underline underline-offset-4"
+                    onClick={() =>
+                      setRenamed({ ...renamed, [byline]: [byline] })
+                    }
+                  >
+                    Not a pen name here
+                  </button>
+                </FieldNote>
+              )}
+            </Fragment>
           );
         })}
         {added.map((name, index) => (
@@ -445,7 +496,9 @@ function RoleEditor({
         <span className="flex-1" />
         {!changed &&
           (initial.added.length > 0 ||
-            Object.values(initial.renamed).some(Boolean)) && (
+            Object.values(initial.renamed).some(
+              (names) => names.length > 0,
+            )) && (
             <Button
               variant="ghost"
               disabled={save.isPending}
@@ -456,6 +509,7 @@ function RoleEditor({
                     postId: article.id,
                     role,
                     entries: [],
+                    elsewhere,
                   },
                   done: `“${article.title}” is back to its printed bylines`,
                   undo: {
@@ -463,6 +517,7 @@ function RoleEditor({
                     postId: article.id,
                     role,
                     entries: entriesOf(initial),
+                    elsewhere,
                   },
                 })
               }
@@ -490,6 +545,7 @@ function RoleEditor({
                     postId: article.id,
                     role,
                     entries: entriesOf({ renamed, added }),
+                    elsewhere,
                   },
                   done: SAVED[role](article.title),
                   undo: {
@@ -497,6 +553,7 @@ function RoleEditor({
                     postId: article.id,
                     role,
                     entries: entriesOf(initial),
+                    elsewhere,
                   },
                 })
               }

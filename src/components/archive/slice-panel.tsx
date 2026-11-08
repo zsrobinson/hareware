@@ -8,15 +8,11 @@ import { easternDate, type Measure, type Member } from "~/lib/credits/stats";
 import { cn } from "~/lib/utils";
 import { counted } from "./chart-slice";
 import { formatDate } from "./dates";
+import { articleHref, personHref } from "./open-row";
 import { SectionName } from "./section-name";
 
 /* a long slice draws its first rows at once and the rest when asked */
 const FIRST = 100;
-
-const articleHref = (article: ArchiveArticle) =>
-  `/articles?article=${article.id}`;
-const personHref = (name: string) =>
-  `/people?person=${encodeURIComponent(name)}`;
 
 const newest = (a: ArchiveArticle, b: ArchiveArticle) =>
   Date.parse(b.publishedAt) - Date.parse(a.publishedAt);
@@ -165,7 +161,7 @@ function rowsOf(measure: Measure, members: Member[], roles: Role[]): Row[] {
             <div className="text-muted-foreground text-xs">
               First:{" "}
               <a
-                href={articleHref(unit.article)}
+                href={articleHref(unit.article.id)}
                 className="text-foreground underline-offset-4 hover:underline"
               >
                 {unit.article.title}
@@ -217,7 +213,7 @@ function rowsOf(measure: Measure, members: Member[], roles: Role[]): Row[] {
 function Title({ article }: { article: ArchiveArticle }) {
   return (
     <a
-      href={articleHref(article)}
+      href={articleHref(article.id)}
       className="block font-medium underline-offset-4 hover:underline"
     >
       {article.title}

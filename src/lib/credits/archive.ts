@@ -4,7 +4,7 @@
   tests build it the same way; ./load is where the reading happens.
 */
 
-import type { Label, Role } from "./labels";
+import { ROLES, type Label, type Role } from "./labels";
 import { creditLines, labelOf, unrecognisedLines } from "./parse";
 import { sortSections } from "./sections";
 import {
@@ -14,6 +14,7 @@ import {
   type Override,
   type SheetProblem,
   type SheetState,
+  type Unscoped,
 } from "./sheet";
 
 /** a post as the archive keeps it between reads: its body cut to the paragraphs a credit could be */
@@ -31,8 +32,8 @@ export type Contributor = {
   name: string;
   /** the name as printed, when the Sheet says it is someone else */
   byline: string | null;
-  /** where the name came from: the article, a Sheet row for every article, or one for this article */
-  source: "printed" | "everywhere" | "article";
+  /** where the name came from: the article as printed, or a Sheet row for it */
+  source: "printed" | "article";
 };
 
 export type Credit = {
@@ -53,6 +54,7 @@ export const PROBLEM_KINDS = {
   "no-colon": "Credit line without a colon",
   unparsed: "Credit line with no name",
   "odd-name": "Name reads like a sentence",
+  "pen-name-again": "Pen name used before",
   uncategorized: "No section",
 } as const;
 export type ProblemKind = keyof typeof PROBLEM_KINDS;
@@ -78,11 +80,25 @@ export type SimilarNames = {
   ignored?: string;
 };
 
-/** a pen name the Sheet resolves on every article */
-export type PenName = { byline: string; realName: string[]; articles: number };
-
-/** a Sheet row that holds for one article only */
+/** a Sheet row, with the title of the article it is for */
 export type ArticleOverride = Override & { title: string | null };
+
+/** someone a byline was, and on which articles */
+export type PastUse = { name: string; postIds: number[] };
+
+/**
+ * a byline's rows with no post id, which count nowhere (ADR 0013), with the
+ * articles they could be set on: those printing the byline, in the rows'
+ * roles, that have no row for it of their own
+ */
+export type UnscopedPenName = {
+  byline: string;
+  /** the rows' one role, or null for any or a mix */
+  role: Role | null;
+  realNames: string[];
+  rows: Unscoped[];
+  targets: { postId: number; title: string; roles: Role[] }[];
+};
 
 export type SheetSummary =
   | { status: "unconfigured"; missing: string[] }
@@ -100,8 +116,11 @@ export type Archive = {
   articles: ArchiveArticle[];
   sections: string[];
   labels: Label[];
-  penNames: PenName[];
-  articleOverrides: ArticleOverride[];
+  overrides: ArticleOverride[];
+  /** by `bylineKey`: who each byline has been, most often and latest first;
+      `pastUsesOn` leaves out the article being looked at */
+  pastUses: Record<string, PastUse[]>;
+  unscoped: UnscopedPenName[];
   /** pair keys of similar names marked different people, with their notes;
       `similarNames()` reads it, on the one page that shows the pairs */
   differentPeople: Record<string, string>;
@@ -129,11 +148,11 @@ export function buildArchive(input: {
   const ignoredRows = sheet.status === "read" ? sheet.ignored : [];
   const sheetProblems = sheet.status === "read" ? [...sheet.problems] : [];
 
-  const everywhere = overrides.filter((o) => o.postId === null);
   const byPost = new Map<number, Override[]>();
   for (const o of overrides)
-    if (o.postId !== null)
-      byPost.set(o.postId, [...(byPost.get(o.postId) ?? []), o]);
+    byPost.set(o.postId, [...(byPost.get(o.postId) ?? []), o]);
+  const publishedAt = new Map(posts.map((post) => [post.id, post.publishedAt]));
+  const answered = usesOf(overrides, publishedAt);
 
   const ignoredPosts = new Map(
     ignoredRows
@@ -143,7 +162,7 @@ export function buildArchive(input: {
 
   const titles = new Map(posts.map((post) => [post.id, post.title]));
   for (const o of overrides)
-    if (o.postId !== null && !titles.has(o.postId))
+    if (!titles.has(o.postId))
       sheetProblems.push({
         tab: "Overrides",
         row: 0,
@@ -162,7 +181,6 @@ export function buildArchive(input: {
         bylines: line.names,
       })),
       byPost.get(post.id) ?? [],
-      everywhere,
     );
 
     return {
@@ -173,9 +191,12 @@ export function buildArchive(input: {
       section,
       credits,
       problems: problemsOf(
+        post.id,
         section,
         credits,
         unrecognisedLines(post.paragraphs, labels),
+        answered,
+        post.publishedAt,
       ),
       ...(ignoredPosts.has(post.id)
         ? { ignored: ignoredPosts.get(post.id) }
@@ -187,10 +208,16 @@ export function buildArchive(input: {
     articles,
     sections: sortSections(new Set(articles.map((a) => a.section))),
     labels,
-    penNames: penNames(everywhere, articles),
-    articleOverrides: overrides
-      .filter((o) => o.postId !== null)
-      .map((o) => ({ ...o, title: titles.get(o.postId!) ?? null })),
+    overrides: overrides.map((o) => ({
+      ...o,
+      title: titles.get(o.postId) ?? null,
+    })),
+    ...withUnscoped(
+      answered,
+      sheet.status === "read" ? sheet.unscoped : [],
+      articles,
+      byPost,
+    ),
     differentPeople: Object.fromEntries(
       ignoredRows
         .filter((i) => i.names)
@@ -202,22 +229,23 @@ export function buildArchive(input: {
   };
 }
 
+/** a byline as the archive compares them: case and spacing do not count */
+export const bylineKey = (byline: string) =>
+  byline.trim().replace(/\s+/g, " ").toLowerCase();
+
 /**
- * Who each printed name counts as: a row for this article and role first,
- * then a row for every article, then the name as printed. Rows for this
- * article with no byline add people the article does not print.
+ * Who each printed name counts as: this article's row for the byline in this
+ * role, or else the name as printed. Rows for this article with no byline add
+ * people the article does not print.
  */
 function resolve(
   lines: Omit<Credit, "contributors">[],
   articleRows: Override[],
-  everywhere: Override[],
 ): Credit[] {
-  const forRole = (rows: Override[], role: Role) =>
-    rows.filter((o) => o.role === null || o.role === role);
-
   const credits: Credit[] = lines.map((line) => {
-    const local = forRole(articleRows, line.role);
-    const global = forRole(everywhere, line.role);
+    const local = articleRows.filter(
+      (o) => o.role === null || o.role === line.role,
+    );
     const contributors = line.bylines.flatMap((byline): Contributor[] => {
       const here = local.filter((o) => o.byline && same(o.byline, byline));
       if (here.length > 0)
@@ -225,13 +253,6 @@ function resolve(
           name: o.realName,
           byline,
           source: "article",
-        }));
-      const anywhere = global.filter((o) => o.byline && same(o.byline, byline));
-      if (anywhere.length > 0)
-        return anywhere.map((o) => ({
-          name: o.realName,
-          byline,
-          source: "everywhere",
         }));
       return [{ name: byline, byline: null, source: "printed" }];
     });
@@ -261,9 +282,12 @@ function resolve(
 }
 
 function problemsOf(
+  postId: number,
   section: string,
   credits: Credit[],
   unrecognised: string[],
+  answered: Map<string, Use[]>,
+  publishedAt: string,
 ): ArchiveArticle["problems"] {
   const problems: ArchiveArticle["problems"] = [];
   const has = (role: Role) =>
@@ -298,29 +322,155 @@ function problemsOf(
         problems.push({ kind: "odd-name", detail: byline });
   }
 
+  /* a byline that was someone else on another article, printed here with no
+     answer: most likely the same pen name again. Only after it was first a
+     pen name: a real person's earlier articles are not the question */
+  const flagged = new Set<string>();
+  for (const credit of credits)
+    for (const c of credit.contributors) {
+      const key = bylineKey(c.name);
+      if (c.source !== "printed" || flagged.has(key)) continue;
+      const elsewhere = (answered.get(key) ?? []).filter(
+        (use) => use.postId !== postId,
+      );
+      if (!elsewhere.some((use) => use.at < publishedAt)) continue;
+      flagged.add(key);
+      problems.push({
+        kind: "pen-name-again",
+        detail: `${c.name} was ${usesInWords(countUses(elsewhere))}`,
+      });
+    }
+
   if (section === UNCATEGORIZED)
     problems.push({ kind: "uncategorized", detail: "no category set" });
 
   return problems;
 }
 
-function penNames(everywhere: Override[], articles: ArchiveArticle[]) {
-  const grouped = new Map<string, PenName>();
-  for (const o of everywhere) {
-    const key = o.byline!.toLowerCase();
-    const entry = grouped.get(key) ?? {
-      byline: o.byline!,
-      realName: [],
-      articles: 0,
+/* one row naming who a byline was on one published article */
+type Use = { postId: number; name: string; at: string };
+
+function usesOf(overrides: Override[], publishedAt: Map<number, string>) {
+  const uses = new Map<string, Use[]>();
+  for (const o of overrides) {
+    const at = publishedAt.get(o.postId);
+    if (!o.byline || !at || same(o.byline, o.realName)) continue;
+    const key = bylineKey(o.byline);
+    const list = uses.get(key) ?? [];
+    if (!list.some((u) => u.postId === o.postId && same(u.name, o.realName)))
+      list.push({ postId: o.postId, name: o.realName, at });
+    uses.set(key, list);
+  }
+  return uses;
+}
+
+/** each person a byline was, on the most articles first, then most recently */
+function countUses(uses: Use[]): PastUse[] {
+  const people = new Map<string, { use: PastUse; latest: string }>();
+  for (const u of uses) {
+    const key = u.name.toLowerCase();
+    const entry = people.get(key) ?? {
+      use: { name: u.name, postIds: [] },
+      latest: "",
     };
-    entry.realName.push(o.realName);
+    if (!entry.use.postIds.includes(u.postId)) entry.use.postIds.push(u.postId);
+    if (u.at > entry.latest) entry.latest = u.at;
+    people.set(key, entry);
+  }
+  return [...people.values()]
+    .sort(
+      (a, b) =>
+        b.use.postIds.length - a.use.postIds.length ||
+        b.latest.localeCompare(a.latest),
+    )
+    .map(({ use }) => use);
+}
+
+/** "Riley Real on 2 articles, Sam Second on 1" */
+export function usesInWords(uses: PastUse[]) {
+  return uses
+    .map(
+      (u, i) =>
+        `${u.name} on ${u.postIds.length}${i === 0 ? (u.postIds.length === 1 ? " article" : " articles") : ""}`,
+    )
+    .join(", ");
+}
+
+/** who a byline was on articles other than this one */
+export function pastUsesOn(archive: Archive, byline: string, postId: number) {
+  return (archive.pastUses[bylineKey(byline)] ?? [])
+    .map((u) => ({ ...u, postIds: u.postIds.filter((id) => id !== postId) }))
+    .filter((u) => u.postIds.length > 0);
+}
+
+/*
+  Rows with no post id still say who a byline was, so they are offered as
+  suggestions, on the articles that print it, until they are set or removed.
+  They never credit anyone or raise a problem by themselves.
+*/
+function withUnscoped(
+  answered: Map<string, Use[]>,
+  rows: Unscoped[],
+  articles: ArchiveArticle[],
+  byPost: Map<number, Override[]>,
+) {
+  const suggested = new Map(answered);
+  const grouped = new Map<string, UnscopedPenName>();
+
+  for (const row of rows) {
+    const key = bylineKey(row.byline);
+    const printing = articles.filter((a) =>
+      a.credits.some((c) => c.bylines.some((b) => same(b, row.byline))),
+    );
+    suggested.set(key, [
+      ...(suggested.get(key) ?? []),
+      ...printing.map((a) => ({
+        postId: a.id,
+        name: row.realName,
+        at: a.publishedAt,
+      })),
+    ]);
+
+    const entry = grouped.get(key) ?? {
+      byline: row.byline,
+      role: row.role,
+      realNames: [],
+      rows: [],
+      targets: [],
+    };
+    entry.rows.push(row);
+    if (entry.role !== row.role) entry.role = null;
+    if (!entry.realNames.some((n) => same(n, row.realName)))
+      entry.realNames.push(row.realName);
+    /* the articles without a row of their own, in the roles a row applies to */
+    entry.targets = printing
+      .filter(
+        (a) =>
+          !(byPost.get(a.id) ?? []).some(
+            (o) => o.byline && same(o.byline, row.byline),
+          ),
+      )
+      .map((a) => ({
+        postId: a.id,
+        title: a.title,
+        roles: ROLES.filter(
+          (r) =>
+            entry.rows.some((x) => x.role === null || x.role === r) &&
+            a.credits.some(
+              (c) => c.role === r && c.bylines.some((b) => same(b, row.byline)),
+            ),
+        ),
+      }))
+      .filter((t) => t.roles.length > 0);
     grouped.set(key, entry);
   }
-  for (const entry of grouped.values())
-    entry.articles = articles.filter((a) =>
-      a.credits.some((c) => c.bylines.some((b) => same(b, entry.byline))),
-    ).length;
-  return [...grouped.values()].sort((a, b) => b.articles - a.articles);
+
+  return {
+    pastUses: Object.fromEntries(
+      [...suggested].map(([key, uses]) => [key, countUses(uses)]),
+    ),
+    unscoped: [...grouped.values()],
+  };
 }
 
 /* ---- names that are probably the same person ------------------------------ */

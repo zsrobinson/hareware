@@ -35,7 +35,7 @@ import { Input } from "~/components/ui/input";
 import type { Archive } from "~/lib/credits/archive";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import { sortSections } from "~/lib/credits/sections";
-import type { Filters } from "~/lib/credits/stats";
+import type { Filters, Period } from "~/lib/credits/stats";
 import { cn } from "~/lib/utils";
 import { FieldRow, FieldRows } from "~/components/field-row";
 import { DenialMessage } from "~/components/gated";
@@ -53,6 +53,7 @@ import {
   clearedState,
   PRESETS,
   readState,
+  roundedStart,
   toFilters,
   writeState,
   type FilterState,
@@ -180,7 +181,8 @@ export type ViewProps = {
       empty when nothing is set. A phone hides the filters in a sheet, so the
       caption is where the cut shows */
   filterNote: string;
-  /** sets the Time filter, as choosing a chart view does */
+  /** the Time filter, which choosing a chart view may set */
+  preset: Preset;
   setPreset: (preset: Preset) => void;
   /** a phone's Reload, on a page with no filter bar to end: the view puts it
       at the end of its first row. Null where the shell has placed it */
@@ -188,15 +190,18 @@ export type ViewProps = {
 };
 
 /** the filters that are set, in words, for a view's caption */
-export function describeFilters(state: FilterState): string {
+export function describeFilters(state: FilterState, period?: Period): string {
   const parts: string[] = [];
+  const rounded = roundedStart(state, period);
   /* named even when it is the page's own range, which is not all time and
      would otherwise go unsaid */
   if (state.preset !== "all")
     parts.push(
       state.preset === "custom"
         ? [state.from, state.to].filter(Boolean).join(" to ") || "Custom range"
-        : (PRESETS.find((p) => p.id === state.preset)?.label ?? ""),
+        : `${PRESETS.find((p) => p.id === state.preset)?.label ?? ""}${
+            rounded ? `, from ${rounded.label}` : ""
+          }`,
     );
   if (state.sections.length > 0)
     parts.push(
@@ -218,6 +223,7 @@ export function ArchiveShell({
   reload = "wordpress",
   /* without a filter bar there is no Time to see, so nothing is cut */
   defaultPreset = filters ? "3m" : "all",
+  period,
 }: {
   children: (props: ViewProps) => ReactNode;
   searchPlaceholder?: string;
@@ -229,6 +235,9 @@ export function ArchiveShell({
   reload?: Reload;
   /** the Time filter a page opens on and Clear goes back to */
   defaultPreset?: Preset;
+  /** the period a chart's axis is cut into, which a rolling Time range is
+      rounded to (see `roundedStart`) */
+  period?: Period;
 }) {
   return (
     <QueryClientProvider client={queryClient}>
@@ -238,6 +247,7 @@ export function ArchiveShell({
         roleFilter={roleFilter}
         reload={reload}
         defaultPreset={defaultPreset}
+        period={period}
       >
         {children}
       </Shell>
@@ -252,6 +262,7 @@ function Shell({
   roleFilter,
   reload,
   defaultPreset,
+  period,
 }: {
   children: (props: ViewProps) => ReactNode;
   searchPlaceholder: string;
@@ -259,6 +270,7 @@ function Shell({
   roleFilter: boolean;
   reload: Reload;
   defaultPreset: Preset;
+  period?: Period;
 }) {
   const state = useArchive();
   const hydrated = useHydrated();
@@ -289,6 +301,7 @@ function Shell({
       roleFilter={roleFilter}
       reload={reload}
       defaultPreset={defaultPreset}
+      period={period}
     >
       {children}
     </Ready>
@@ -303,6 +316,7 @@ function Ready({
   roleFilter,
   reload,
   defaultPreset,
+  period,
 }: {
   state: Extract<ArchiveState, { status: "ready" }>;
   children: (props: ViewProps) => ReactNode;
@@ -311,6 +325,7 @@ function Ready({
   roleFilter: boolean;
   reload: Reload;
   defaultPreset: Preset;
+  period?: Period;
 }) {
   /* asked for by a person, as against a read behind the page: only this one
      dims the page, since only here are they waiting on it */
@@ -329,7 +344,7 @@ function Ready({
     [],
   );
 
-  const filters = useMemo(() => toFilters(state), [state]);
+  const filters = useMemo(() => toFilters(state, period), [state, period]);
 
   /* stable, so a view that listens for something to refresh on (Problems,
      on coming back from WordPress) is not re-subscribed on every render */
@@ -443,7 +458,8 @@ function Ready({
               filters,
               refresh: refreshNow,
               refreshing,
-              filterNote: describeFilters(state),
+              filterNote: describeFilters(state, period),
+              preset: state.preset,
               setPreset,
               reloadButton: inView ? freshness(true) : null,
             })}
@@ -617,6 +633,10 @@ function FilterBar({
 }) {
   const phone = useIsPhone();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const { ref: searchInput, placeholder } = useFittingPlaceholder(
+    searchPlaceholder,
+    "Search",
+  );
   const clear = clearedState(defaultPreset);
   const changed = JSON.stringify(state) !== JSON.stringify(clear);
   /* what the phone hides in its sheet, counted on the button that opens it */
@@ -632,8 +652,9 @@ function FilterBar({
       <span className="sr-only">Search</span>
       <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
       <Input
+        ref={searchInput}
         type="search"
-        placeholder={searchPlaceholder}
+        placeholder={placeholder}
         className="bg-background pl-8"
         value={state.search}
         onChange={(event) => setState({ ...state, search: event.target.value })}
@@ -773,19 +794,27 @@ function FilterBar({
     <div className="@container">
       <section
         aria-label="Filters"
-        className="flex flex-wrap items-center gap-2 @max-2xl:gap-1.5"
+        className="flex flex-wrap items-center gap-2 @max-2xl:gap-1"
       >
         {search}
         {time}
         {range}
         {sections}
         {roles}
+        <div ref={filtersSlot} className="contents" />
+        {/* last of the filters, since it clears them all; beside a panel,
+            its icon alone, as Columns is */}
         {changed && (
-          <Button variant="ghost" onClick={() => setState(clear)}>
-            <XIcon /> Clear
+          <Button
+            variant="ghost"
+            className="@max-2xl:px-2"
+            title="Clear filters"
+            onClick={() => setState(clear)}
+          >
+            <XIcon />
+            <span className="@max-2xl:sr-only">Clear</span>
           </Button>
         )}
-        <div ref={filtersSlot} className="contents" />
         {/* the view's own controls, set apart from the filters */}
         <div
           ref={toolbarSlot}
@@ -794,6 +823,42 @@ function FilterBar({
       </section>
     </div>
   );
+}
+
+/**
+ * The placeholder while all of it shows, else the short one: an input cuts
+ * its placeholder off wherever the box ends, mid-word.
+ */
+function useFittingPlaceholder(full: string, short: string) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [fits, setFits] = useState(true);
+  useLayoutEffect(() => {
+    const input = ref.current;
+    if (!input || full === short) return;
+    let context: CanvasRenderingContext2D | null = null;
+    const check = () => {
+      /* nothing laid out (a test's document) has nothing to measure */
+      if (!input.clientWidth) return;
+      context ??= document.createElement("canvas").getContext("2d");
+      if (!context) return;
+      const style = getComputedStyle(input);
+      context.font = style.font;
+      /* less the room a search field keeps for its clear button */
+      const room =
+        input.clientWidth -
+        parseFloat(style.paddingLeft) -
+        parseFloat(style.paddingRight) -
+        20;
+      setFits(context.measureText(full).width <= room);
+    };
+    check();
+    /* measured in the fallback font, it would fit text the real one does not */
+    void document.fonts?.ready.then(check);
+    const observer = new ResizeObserver(check);
+    observer.observe(input);
+    return () => observer.disconnect();
+  }, [full, short]);
+  return { ref, placeholder: fits ? full : short };
 }
 
 function DateField({

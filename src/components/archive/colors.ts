@@ -6,6 +6,8 @@
   rank: a section keeps its hue however the filters cut the list, and series
   stack in slot order (the paper's section order, which ~/lib/credits/stats
   sorts them into) so neighbours are the pairs the palette was checked for.
+  Roles take a grey pair of their own (dark, mid, and Other faintest), so a
+  role is never read as a section.
 */
 
 import { ROLES } from "~/lib/credits/labels";
@@ -13,8 +15,8 @@ import { SECTION_ORDER } from "~/lib/credits/sections";
 
 export const SLOTS = 5;
 
-const orderFor = (dimension: string): readonly string[] =>
-  dimension === "section" ? SECTION_ORDER : dimension === "role" ? ROLES : [];
+/** a chart with one series, which names no entity by its colour */
+export const NEUTRAL = "var(--series-neutral)";
 
 /** `var(--series-n)` for a series key, or the neutral for anything past the slots */
 export function seriesColor(
@@ -22,9 +24,12 @@ export function seriesColor(
   allKeys: string[],
   dimension: string,
 ): string {
-  const fixed = orderFor(dimension);
-  if (fixed.length > 0) {
-    const index = fixed.indexOf(key);
+  if (dimension === "role") {
+    const index = (ROLES as readonly string[]).indexOf(key);
+    return index === -1 ? "var(--series-other)" : `var(--role-${index + 1})`;
+  }
+  if (dimension === "section") {
+    const index = (SECTION_ORDER as readonly string[]).indexOf(key);
     return index === -1 ? "var(--series-other)" : `var(--series-${index + 1})`;
   }
   const index = [...allKeys].sort().indexOf(key);

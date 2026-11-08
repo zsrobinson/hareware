@@ -17,12 +17,23 @@ export function Choice<T extends string>({
 }: {
   label: string;
   value: T;
-  options: { id: T; label: string; disabled?: boolean }[];
+  /** `short` is what the closed control says inside a narrow container */
+  options: { id: T; label: string; short?: string; disabled?: boolean }[];
   onChange: (value: T) => void;
   hideLabel?: boolean;
   /** a fixed width, so a long option does not move what sits beside it */
   width?: string;
 }) {
+  const shown = (id: T) => {
+    const option = options.find((o) => o.id === id);
+    if (!option?.short) return option?.label;
+    return (
+      <>
+        <span className="@max-2xl:hidden">{option.label}</span>
+        <span className="hidden @max-2xl:inline">{option.short}</span>
+      </>
+    );
+  };
   return (
     <div className="flex flex-col gap-1">
       <span
@@ -41,7 +52,7 @@ export function Choice<T extends string>({
         onValueChange={(next) => onChange(next as T)}
       >
         <SelectTrigger aria-label={label} className={width}>
-          <SelectValue />
+          <SelectValue>{(id: T) => shown(id)}</SelectValue>
         </SelectTrigger>
         <SelectContent>
           {options.map((option) => (

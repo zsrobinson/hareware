@@ -22,6 +22,7 @@ import {
   SPLITS,
   TOPS,
   VALUES,
+  VIEWS,
   type ChartConfig,
 } from "./chart-config";
 import { readSlice, sliceCount, sliceKey, sliceMembers } from "./chart-slice";
@@ -227,6 +228,23 @@ test("the builder makes charts of every kind, so all of them are checked", () =>
   expect(new Set(configs.map((c) => c.values)).size).toBe(VALUES.length);
   expect(new Set(configs.map((c) => c.draw)).size).toBe(DRAWS.length);
   expect(counting.length).toBeGreaterThan(50);
+  /* and the saved views among them */
+  for (const view of VIEWS) expect(configs).toContainEqual(view.config);
+});
+
+test("Headcount counts each person once a semester, whatever they did", () => {
+  const headcount = VIEWS.find((view) => view.id === "headcount")!.config;
+  const grouped = groupOf(headcount, archive, NO_FILTERS, archive);
+  /* Fall 2025: Ada wrote twice and illustrated once, beside Bo, Cy and Dee */
+  const fall = sliceMembers(grouped, { category: "2025-2", series: null }, []);
+  expect(fall.map((m) => m.id).sort()).toEqual([
+    "Ada Example",
+    "Bo Sample",
+    "Cy Placeholder",
+    "Dee Invented",
+  ]);
+  expect(grouped.values["2025-2"]?.all).toBe(4);
+  expect(fall.find((m) => m.id === "Ada Example")!.units).toHaveLength(3);
 });
 
 test.each(filterings)(

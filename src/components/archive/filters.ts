@@ -1,7 +1,13 @@
 /* The filter bar's state, kept in the url so a view can be linked to. */
 
 import { isRole, type Role } from "~/lib/credits/labels";
-import { easternDate, periodOf, type Filters } from "~/lib/credits/stats";
+import {
+  easternDate,
+  periodBounds,
+  periodOf,
+  type Filters,
+  type Period,
+} from "~/lib/credits/stats";
 
 export type Preset =
   | "all"
@@ -14,17 +20,21 @@ export type Preset =
   | "year"
   | "custom";
 
-export const PRESETS: { id: Preset; label: string }[] = [
+/* the calendar's own periods, then the rolling ranges; `short` is what a
+   narrow toolbar shows */
+export const PRESETS: { id: Preset; label: string; short?: string }[] = [
   { id: "all", label: "All time" },
   { id: "semester", label: "This semester" },
   { id: "last-semester", label: "Last semester" },
-  { id: "3m", label: "Last 3 months" },
-  { id: "6m", label: "Last 6 months" },
-  { id: "12m", label: "Last 12 months" },
-  { id: "2y", label: "Last 2 years" },
   { id: "year", label: "This year" },
-  { id: "custom", label: "Custom range" },
+  { id: "3m", label: "Last 3 months", short: "3 months" },
+  { id: "6m", label: "Last 6 months", short: "6 months" },
+  { id: "12m", label: "Last 12 months", short: "12 months" },
+  { id: "2y", label: "Last 2 years", short: "2 years" },
+  { id: "custom", label: "Custom range", short: "Custom" },
 ];
+
+const ROLLING: Preset[] = ["3m", "6m", "12m", "2y"];
 
 export type FilterState = {
   preset: Preset;
@@ -74,10 +84,38 @@ function monthsBack(today: string, months: number) {
   return new Date(Date.UTC(year, month - months, 1)).toISOString().slice(0, 10);
 }
 
-/** the dates a preset means today */
+/**
+ * Where a rolling range starts on a chart cut into semesters or school
+ * years: the first day of the period it begins in, so the first column is
+ * whole rather than a sliver. Null when nothing is rounded.
+ */
+export function roundedStart(
+  state: FilterState,
+  period: Period | undefined,
+  now = new Date(),
+): { from: string; label: string } | null {
+  if (period !== "semester" && period !== "school-year") return null;
+  if (!ROLLING.includes(state.preset)) return null;
+  const { from } = exactRange(state, now);
+  if (!from) return null;
+  const { key, label } = periodOf(from, period);
+  const start = periodBounds(key, period).from;
+  return start === from ? null : { from: start, label };
+}
+
+/** the dates a preset means today, with a chart's period rounding it */
 export function rangeOf(
   state: FilterState,
   now = new Date(),
+  period?: Period,
+): { from?: string; to?: string } {
+  const rounded = roundedStart(state, period, now);
+  return rounded ? { from: rounded.from } : exactRange(state, now);
+}
+
+function exactRange(
+  state: FilterState,
+  now: Date,
 ): { from?: string; to?: string } {
   const today = easternDate(now.toISOString());
   switch (state.preset) {
@@ -102,9 +140,9 @@ export function rangeOf(
   }
 }
 
-export function toFilters(state: FilterState): Filters {
+export function toFilters(state: FilterState, period?: Period): Filters {
   return {
-    ...rangeOf(state),
+    ...rangeOf(state, new Date(), period),
     sections: state.sections,
     roles: state.roles,
     search: state.search,

@@ -5,7 +5,8 @@
   range of the view it was made from. Every view is a configuration the
   builder can show, so choosing one and then changing a setting starts from
   exactly what was on screen. The range is only where Time starts: changing
-  it is a filter, and leaves the view as it is.
+  it is a filter, and leaves the view as it is. The series the legend has
+  off are kept too, so a link shows what was on screen.
 */
 
 import type { ArchiveArticle } from "~/lib/credits/archive";
@@ -115,16 +116,16 @@ export const VIEWS = [
     },
   },
   {
-    /* how the balance of sections has moved, semester to semester */
-    id: "mix",
-    label: "Mix",
-    range: "2y",
+    /* how many people the club has had at work, semester to semester */
+    id: "headcount",
+    label: "Headcount",
+    range: "all",
     config: {
-      count: "articles",
+      count: "people",
       by: "semester",
-      split: "section",
+      split: "none",
       draw: "stacked",
-      values: "share",
+      values: "number",
       order: "largest",
       top: 25,
     },
@@ -162,6 +163,8 @@ export type ChartState = {
   custom: ChartConfig | null;
   /** the saved view Custom was made from, which Reset goes back to */
   base: SavedId;
+  /** the series the legend has off */
+  hidden: string[];
 };
 
 const FIRST = VIEWS[0];
@@ -175,7 +178,7 @@ export function configOf(state: ChartState): ChartConfig {
 }
 
 /** the Time filter the chart opens on, which its link leaves out */
-export function rangeOfView(state: ChartState): Preset {
+export function rangeOfView(state: Pick<ChartState, "view" | "base">): Preset {
   return savedView(state.view === "custom" ? state.base : state.view).range;
 }
 
@@ -262,13 +265,16 @@ const savedId = (id: string | null): SavedId =>
 export function readChart(search: string): ChartState {
   const params = new URLSearchParams(search);
   const view = params.get("view");
+  const hidden = (params.get("hide") ?? "").split(",").filter(Boolean);
+  /* a view no longer offered (Mix, before Headcount) opens the first */
   if (view !== "custom")
-    return { view: savedId(view), custom: null, base: savedId(view) };
+    return { view: savedId(view), custom: null, base: savedId(view), hidden };
   const d = DEFAULT_CONFIG;
   const top = Number(params.get("top"));
   return {
     view: "custom",
     base: savedId(params.get("base")),
+    hidden,
     custom: settle({
       count: pick(
         params.get("count"),
@@ -313,4 +319,6 @@ export function writeChart(state: ChartState, params: URLSearchParams) {
     else params.delete(key);
   if (custom && state.base !== FIRST.id) params.set("base", state.base);
   else params.delete("base");
+  if (state.hidden.length > 0) params.set("hide", state.hidden.join(","));
+  else params.delete("hide");
 }

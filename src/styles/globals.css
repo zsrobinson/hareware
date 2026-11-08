@@ -107,6 +107,12 @@
   --series-4: #6250d6;
   --series-5: #e87ba4;
   --series-other: #898781;
+  /* roles are greys, so they never read as a section; one series alone is a
+     grey too. Other is the faintest, with the table beside it */
+  --role-1: #404040;
+  --role-2: #8a8a8a;
+  --role-3: #c4c4c4;
+  --series-neutral: #5c5c5c;
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -149,6 +155,10 @@
     --series-4: #9085e9;
     --series-5: #d55181;
     --series-other: #898781;
+    --role-1: #d9d9d9;
+    --role-2: #8f8f8f;
+    --role-3: #5a5a5a;
+    --series-neutral: #b8b8b8;
     --sidebar: oklch(0.205 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.488 0.243 264.376);

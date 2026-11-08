@@ -31,24 +31,50 @@ test("a link reproduces a custom chart, and keeps the filters' parameters", () =
     order: "largest",
     top: 25,
   };
-  const { params, state } = roundTrip({ view: "custom", custom, base: "mix" });
+  const { params, state } = roundTrip({
+    view: "custom",
+    custom,
+    base: "headcount",
+    hidden: [],
+  });
   expect(configOf(state)).toEqual(custom);
-  expect(state.base).toBe("mix");
+  expect(state.base).toBe("headcount");
   expect(params.get("range")).toBe("semester");
   expect(params.get("q")).toBe("ann");
 });
 
 test("a saved view links by name alone, and the default by nothing", () => {
-  const mix = roundTrip({ view: "mix", custom: VIEWS[0].config, base: "mix" });
-  expect([...mix.params.keys()].sort()).toEqual(["q", "range", "view"]);
-  expect(mix.state.view).toBe("mix");
+  const saved = roundTrip({
+    view: "headcount",
+    custom: VIEWS[0].config,
+    base: "headcount",
+    hidden: [],
+  });
+  expect([...saved.params.keys()].sort()).toEqual(["q", "range", "view"]);
+  expect(saved.state.view).toBe("headcount");
 
   const first = roundTrip({
     view: VIEWS[0].id,
     custom: null,
     base: VIEWS[0].id,
+    hidden: [],
   });
   expect(first.params.has("view")).toBe(false);
+
+  /* a view no longer offered opens the first one */
+  expect(readChart("?view=mix").view).toBe(VIEWS[0].id);
+});
+
+test("a link keeps the series the legend has off", () => {
+  const { params, state } = roundTrip({
+    view: "history",
+    custom: null,
+    base: "history",
+    hidden: ["News", "Sports"],
+  });
+  expect(params.get("hide")).toBe("News,Sports");
+  expect(state.hidden).toEqual(["News", "Sports"]);
+  expect(roundTrip({ ...state, hidden: [] }).params.has("hide")).toBe(false);
 });
 
 test("a link leaves out the view's own time range, and keeps any other", () => {
@@ -67,11 +93,13 @@ test("a link leaves out the view's own time range, and keeps any other", () => {
     view: "history",
     custom: null,
     base: "history",
+    hidden: [],
   };
   const contributors: ChartState = {
     view: "contributors",
     custom: null,
     base: "contributors",
+    hidden: [],
   };
 
   expect(link(history, "all")).toBe("?view=history");
@@ -87,11 +115,12 @@ test("a link leaves out the view's own time range, and keeps any other", () => {
   const custom: ChartState = {
     view: "custom",
     custom: { ...VIEWS[0].config, values: "share" },
-    base: "mix",
+    base: "headcount",
+    hidden: [],
   };
-  expect(rangeOfView(custom)).toBe(open("?view=mix").time.preset);
-  expect(new URLSearchParams(link(custom, "2y")).has("range")).toBe(false);
-  expect(open(link(custom, "all")).time.preset).toBe("all");
+  expect(rangeOfView(custom)).toBe(open("?view=headcount").time.preset);
+  expect(new URLSearchParams(link(custom, "all")).has("range")).toBe(false);
+  expect(open(link(custom, "12m")).time.preset).toBe("12m");
 });
 
 test("a hand-edited link is settled rather than drawn as asked", () => {

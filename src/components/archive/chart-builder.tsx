@@ -1,7 +1,7 @@
 import {
   ArrowDownWideNarrowIcon,
-  CalendarIcon,
   ChartColumnIcon,
+  GroupIcon,
   HashIcon,
   LayersIcon,
   PercentIcon,
@@ -80,7 +80,7 @@ export function ChartBuilder({
           onChange={(count) => set({ count })}
         />
       </Row>
-      <Row icon={CalendarIcon} label="Group by">
+      <Row icon={GroupIcon} label="Group by">
         <Choice
           label="Group by"
           hideLabel

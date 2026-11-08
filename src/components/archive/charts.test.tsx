@@ -116,3 +116,24 @@ test("a link to a slice opens it, and one to nothing opens nothing", async () =>
   await waitFor(() => expect(window.location.search).not.toContain("slice"));
   expect(screen.queryByRole("complementary")).toBeNull();
 });
+
+test("a view brings its own time range, unless Time was chosen", async () => {
+  const user = userEvent.setup();
+  const time = () => screen.getByRole("combobox", { name: "Time" }).textContent;
+  const range = () => new URLSearchParams(window.location.search).get("range");
+
+  const { unmount } = render(<ChartsPage />);
+  await user.click(await screen.findByRole("tab", { name: "History" }));
+  await waitFor(() => expect(time()).toContain("All time"));
+  await user.click(screen.getByRole("tab", { name: "Contributors" }));
+  await waitFor(() => expect(time()).toContain("Last 3 months"));
+  unmount();
+
+  /* a year chosen on Sections stays through the views, and in the link */
+  window.history.replaceState(null, "", "/charts?range=12m");
+  render(<ChartsPage />);
+  await user.click(await screen.findByRole("tab", { name: "History" }));
+  await user.click(screen.getByRole("tab", { name: "Contributors" }));
+  expect(time()).toContain("Last 12 months");
+  expect(range()).toBe("12m");
+});

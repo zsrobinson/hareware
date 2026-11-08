@@ -1,5 +1,5 @@
 import {
-  ChartPieIcon,
+  ActivityIcon,
   ChevronRightIcon,
   DownloadIcon,
   HistoryIcon,
@@ -87,7 +87,7 @@ import {
   unitOf,
   type Slice,
 } from "./chart-slice";
-import { seriesColor } from "./colors";
+import { NEUTRAL, seriesColor } from "./colors";
 import { RowDetails, useOpenRow } from "./open-row";
 import { SlicePanel } from "./slice-panel";
 
@@ -99,8 +99,12 @@ export function ChartsPage() {
   const [chart, setChart] = useState<ChartState>(() =>
     readChart(typeof window === "undefined" ? "" : window.location.search),
   );
+  const { by } = configOf(chart);
   return (
-    <ArchiveShell defaultPreset={rangeOfView(chart)}>
+    <ArchiveShell
+      defaultPreset={rangeOfView(chart)}
+      period={isPeriod(by) ? by : undefined}
+    >
       {(props) => <Charts {...props} chart={chart} setChart={setChart} />}
     </ArchiveShell>
   );
@@ -110,7 +114,7 @@ const ICONS: Record<ViewId, LucideIcon> = {
   sections: NewspaperIcon,
   contributors: UsersIcon,
   newcomers: UserPlusIcon,
-  mix: ChartPieIcon,
+  headcount: ActivityIcon,
   history: HistoryIcon,
   custom: SlidersHorizontalIcon,
 };
@@ -124,27 +128,13 @@ const TABS: { id: ViewId; label: string }[] = [
  * what the caption says was added up, so a number is never read as the wrong
  * unit, and which filters cut it
  */
-function unitLine(
-  grouped: Grouped,
-  config: ChartConfig,
-  inView: number,
-  filterNote: string,
-) {
-  const { measure } = grouped;
+function unitLine(grouped: Grouped, config: ChartConfig, filterNote: string) {
   const parts: string[] = [];
   if (config.by === "person" && grouped.categories.length < grouped.available)
     parts.push(
       `Top ${grouped.categories.length} of ${counted(grouped.available, "person", "people")}`,
     );
-  parts.push(
-    measure === "articles" || measure === "newcomers"
-      ? unitOf(grouped.total, measure)
-      : `${unitOf(grouped.total, measure)} on ${counted(grouped.articles, "article", "articles")}`,
-  );
-  if (inView > grouped.articles && measure === "contributions")
-    parts.push(
-      `${counted(inView - grouped.articles, "article has", "articles have")} no credits`,
-    );
+  parts.push(unitOf(grouped.total, grouped.measure));
   if (filterNote) parts.push(filterNote);
   return parts.join(" · ");
 }
@@ -195,6 +185,7 @@ function Charts({
   archive,
   filters,
   filterNote,
+  preset,
   setPreset,
   chart: state,
   setChart: setState,
@@ -209,16 +200,16 @@ function Charts({
   }, [state]);
 
   const config = configOf(state);
-  const [hidden, setHidden] = useState<string[]>([]);
+  const { hidden } = state;
+  const setHidden = (next: string[]) => setState({ ...state, hidden: next });
   const [customizing, setCustomizing] = useState(false);
   const phone = useIsPhone();
   /* the slice open beside the chart, kept in the address as `?slice=` */
   const opened = useOpenRow("slice");
 
-  const show = (next: ChartState) => {
-    setState(next);
-    setHidden([]);
-  };
+  /* another chart's series are other things, so all of them start on */
+  const show = (next: Omit<ChartState, "hidden">) =>
+    setState({ ...next, hidden: [] });
   /* changing a saved view makes a custom one from it; the saved one stays */
   const change = (next: ChartConfig) =>
     show({
@@ -227,17 +218,18 @@ function Charts({
       base: state.view === "custom" ? state.base : state.view,
     });
   /* Custom starts from what was on screen until the builder has made one.
-     a view brings its own time range; changing Time after is only a filter */
+     a view brings its own time range, unless Time has been chosen since the
+     last one brought its own: that choice stands until Clear */
   const choose = (view: ViewId) => {
     if (view === state.view) return;
     /* another view's marks count other things, whatever their keys */
     opened.close();
-    const next: ChartState =
+    const next =
       view === "custom" && !state.custom && state.view !== "custom"
         ? { view, custom: config, base: state.view }
-        : { ...state, view };
+        : { view, custom: state.custom, base: state.base };
     show(next);
-    setPreset(rangeOfView(next));
+    if (preset === rangeOfView(state)) setPreset(rangeOfView(next));
   };
 
   const shown = useMemo(
@@ -249,9 +241,12 @@ function Charts({
     const grouped = groupOf(config, shown, filters, archive.articles);
     return { grouped, partial: partialKeys(grouped, config.by, filters) };
   }, [shown, state, filters, archive]);
+  /* the one section the filters leave, whose colour one series takes */
+  const section =
+    filters.sections.length === 1 ? filters.sections[0] : undefined;
   const plot = useMemo(
-    () => plotOf(grouped, config, hidden, partial),
-    [grouped, config, hidden, partial],
+    () => plotOf(grouped, config, hidden, partial, section),
+    [grouped, config, hidden, partial, section],
   );
 
   const slice = opened.open === null ? null : readSlice(opened.open, grouped);
@@ -342,7 +337,6 @@ function Charts({
       )}
 
       {/* which chart outranks how it is cut, so the views come first */}
-      {/* which chart outranks how it is cut, so the views come first */}
       <AboveToolbar>
         <ViewTabs
           view={state.view}
@@ -352,20 +346,18 @@ function Charts({
         />
       </AboveToolbar>
 
-      <figure
-        id={panelId}
-        role="tabpanel"
-        data-sheet-anchor
-        className="space-y-4"
-      >
+      <figure id={panelId} role="tabpanel" className="space-y-4">
         <figcaption className="space-y-0.5">
           <div className="font-medium">{titleOf(config, grouped.measure)}</div>
           <div className="text-muted-foreground text-sm">
-            {unitLine(grouped, config, shown.length, filterNote)}
+            {unitLine(grouped, config, filterNote)}
           </div>
         </figcaption>
         {grouped.categories.length === 0 ? (
-          <p className="text-muted-foreground py-12 text-center text-sm">
+          <p
+            data-sheet-anchor
+            className="text-muted-foreground py-12 text-center text-sm"
+          >
             Nothing matches these filters.
           </p>
         ) : (
@@ -374,10 +366,10 @@ function Charts({
               plot={plot}
               hidden={hidden}
               onToggle={(key) =>
-                setHidden((now) =>
-                  now.includes(key)
-                    ? now.filter((k) => k !== key)
-                    : [...now, key],
+                setHidden(
+                  hidden.includes(key)
+                    ? hidden.filter((k) => k !== key)
+                    : [...hidden, key],
                 )
               }
             />
@@ -402,6 +394,7 @@ function Charts({
         grouped={grouped}
         config={config}
         partial={partial}
+        section={section}
         selected={slice}
         onOpen={(next) => openSlice(next, "table")}
       />
@@ -475,63 +468,100 @@ function ViewTabs({
   onClickCustom: () => void;
 }) {
   const list = useRef<HTMLDivElement>(null);
+  /* which ends have views scrolled past them, faded to say so */
+  const [past, setPast] = useState({ start: false, end: false });
 
-  /* a phone scrolls the views sideways, and a link may open on one past the edge */
+  /* a phone scrolls the views sideways, and a link may open on one past the
+     edge. Only the strip moves: scrollIntoView would also move where the
+     page's first Tab starts from */
   useEffect(() => {
-    list.current
-      ?.querySelector<HTMLElement>('[aria-selected="true"]')
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const strip = list.current;
+    const tab = strip?.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (!strip || !tab) return;
+    const left = tab.offsetLeft;
+    const right = left + tab.offsetWidth;
+    if (left < strip.scrollLeft) strip.scrollLeft = left;
+    else if (right > strip.scrollLeft + strip.clientWidth)
+      strip.scrollLeft = right - strip.clientWidth;
   }, [view]);
 
+  useEffect(() => {
+    const strip = list.current;
+    if (!strip) return;
+    const measure = () =>
+      setPast({
+        start: strip.scrollLeft > 1,
+        end: strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1,
+      });
+    measure();
+    strip.addEventListener("scroll", measure, { passive: true });
+    const observer = new ResizeObserver(measure);
+    observer.observe(strip);
+    return () => {
+      strip.removeEventListener("scroll", measure);
+      observer.disconnect();
+    };
+  }, []);
+  const fade =
+    past.start || past.end
+      ? `linear-gradient(to right, ${past.start ? "transparent" : "#000"}, #000 2rem, #000 calc(100% - 2rem), ${past.end ? "transparent" : "#000"})`
+      : undefined;
+
   return (
-    <div
-      ref={list}
-      role="tablist"
-      aria-label="Chart views"
-      className="flex gap-x-1 overflow-x-auto border-b"
-      onKeyDown={(event) => {
-        /* the tabs pattern: arrows move between the views, and choose */
-        const step =
-          event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-        if (!step) return;
-        event.preventDefault();
-        const at = TABS.findIndex((tab) => tab.id === view);
-        const next = TABS[(at + step + TABS.length) % TABS.length]!;
-        onChoose(next.id);
-        list.current
-          ?.querySelector<HTMLElement>(`[data-view="${next.id}"]`)
-          ?.focus();
-      }}
-    >
-      {TABS.map((tab) => {
-        const selected = view === tab.id;
-        const Icon = ICONS[tab.id];
-        return (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            data-view={tab.id}
-            aria-selected={selected}
-            aria-controls={panelId}
-            tabIndex={selected ? 0 : -1}
-            onClick={() => {
-              onChoose(tab.id);
-              if (tab.id === "custom") onClickCustom();
-            }}
-            className={cn(
-              /* the chosen view is underlined, so a hovered tab never looks chosen */
-              "-mb-px flex h-10 shrink-0 items-center gap-1.5 border-b-2 px-2 text-sm whitespace-nowrap transition-colors sm:px-3 [&_svg]:size-4 [&_svg]:shrink-0",
-              selected
-                ? "border-foreground text-foreground font-medium"
-                : "text-muted-foreground hover:text-foreground border-transparent",
-            )}
-          >
-            <Icon aria-hidden />
-            {tab.label}
-          </button>
-        );
-      })}
+    /* a container, so the icons go before the labels are cut off */
+    <div className="@container">
+      <div
+        ref={list}
+        role="tablist"
+        aria-label="Chart views"
+        /* the baseline is a shadow inside the strip, so the chosen tab's
+         underline covers it without overflowing, which would scroll */
+        className="relative flex [scrollbar-width:none] gap-x-1 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--color-border)]"
+        style={{ maskImage: fade }}
+        onKeyDown={(event) => {
+          /* the tabs pattern: arrows move between the views, and choose */
+          const step =
+            event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+          if (!step) return;
+          event.preventDefault();
+          const at = TABS.findIndex((tab) => tab.id === view);
+          const next = TABS[(at + step + TABS.length) % TABS.length]!;
+          onChoose(next.id);
+          list.current
+            ?.querySelector<HTMLElement>(`[data-view="${next.id}"]`)
+            ?.focus();
+        }}
+      >
+        {TABS.map((tab) => {
+          const selected = view === tab.id;
+          const Icon = ICONS[tab.id];
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              data-view={tab.id}
+              aria-selected={selected}
+              aria-controls={panelId}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => {
+                onChoose(tab.id);
+                if (tab.id === "custom") onClickCustom();
+              }}
+              className={cn(
+                /* the chosen view is underlined, so a hovered tab never looks chosen */
+                "focus-visible:ring-ring/50 flex h-10 shrink-0 items-center gap-1.5 rounded-t-md border-b-2 px-2.5 text-sm whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-inset @2xl:px-3 [&_svg]:size-4 [&_svg]:shrink-0 @max-2xl:[&_svg]:hidden",
+                selected
+                  ? "border-foreground text-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground border-transparent",
+              )}
+            >
+              <Icon aria-hidden />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -578,6 +608,8 @@ function plotOf(
   config: ChartConfig,
   hidden: string[],
   partial: Map<string, Incomplete>,
+  /** the one section the filters leave, if they leave one */
+  section: string | undefined,
 ): Plot {
   const { split, by } = config;
   const all = grouped.series.map((s) => ({
@@ -629,13 +661,16 @@ function plotOf(
     members,
     value: share ? percent : count,
     percent,
-    /* one series by section or role takes each bar's own colour */
+    /* one series by section or role takes each bar's own colour; else the
+       section it is cut to, or a grey that names nothing */
     color: (category, key) =>
       split !== "none"
         ? seriesColor(key, allKeys, split)
         : by === "section" || by === "role"
           ? seriesColor(category, [], by)
-          : "var(--series-1)",
+          : section
+            ? seriesColor(section, [], "section")
+            : NEUTRAL,
   };
 }
 
@@ -666,7 +701,9 @@ function Legend({
   const faded = plot.series.slice(0, 3).map((s) => plot.color("", s.key));
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+    /* a gap, not a rule, sets the partial periods apart: a rule is left
+       hanging when they wrap */
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
       {keyed && (
         <div
           ref={toggles}
@@ -711,13 +748,7 @@ function Legend({
                   off && "text-muted-foreground line-through opacity-60",
                 )}
               >
-                <span
-                  aria-hidden
-                  className={
-                    lines ? "h-0.5 w-3.5 rounded-full" : "size-3 rounded-sm"
-                  }
-                  style={{ background: plot.color("", series.key) }}
-                />
+                <Swatch lines={lines} color={plot.color("", series.key)} />
                 {series.label}
               </button>
             );
@@ -725,13 +756,7 @@ function Legend({
         </div>
       )}
       {plot.partial.size > 0 && (
-        <span
-          className={cn(
-            "text-muted-foreground flex items-center gap-1.5 px-1.5 py-0.5",
-            /* set apart from the series; on a phone it wraps, and a rule would open the line */
-            keyed && "sm:border-l sm:pl-3",
-          )}
-        >
+        <span className="text-muted-foreground flex items-center gap-1.5 px-1.5 py-0.5">
           {lines ? (
             <span
               aria-hidden
@@ -753,6 +778,20 @@ function Legend({
         </span>
       )}
     </div>
+  );
+}
+
+/** a series' mark in a legend or a card: a square, or a stroke for lines */
+function Swatch({ lines, color }: { lines: boolean; color: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "shrink-0",
+        lines ? "h-0.5 w-3.5 rounded-full" : "size-3 rounded-sm",
+      )}
+      style={{ background: color }}
+    />
   );
 }
 
@@ -1008,10 +1047,9 @@ function Card({
           const n = plot.count(category.key, s.key);
           const content = (
             <>
-              <span
-                aria-hidden
-                className="h-0.5 w-3 shrink-0 rounded-full"
-                style={{ background: plot.color(category.key, s.key) }}
+              <Swatch
+                lines={plot.config.draw === "lines"}
+                color={plot.color(category.key, s.key)}
               />
               <span className="text-muted-foreground min-w-0 flex-1 truncate">
                 {s.label}
@@ -1222,6 +1260,7 @@ function TimeChart({
   onOpen: (slice: Slice) => void;
 }) {
   const { ref, width } = useWidth();
+  const phone = useIsPhone();
   const { categories, series, partial, config } = plot;
   const lines = config.draw === "lines";
   const sideBySide = config.draw === "grouped" && series.length > 1;
@@ -1352,7 +1391,12 @@ function TimeChart({
     series.reduce((sum, s) => sum + plot.value(key, s.key), 0);
 
   return (
-    <div ref={ref} className="relative" onPointerLeave={inspect.leave}>
+    <div
+      ref={ref}
+      data-sheet-anchor
+      className="relative"
+      onPointerLeave={inspect.leave}
+    >
       <svg
         width={width}
         height={height}
@@ -1467,7 +1511,10 @@ function TimeChart({
                 textAnchor="middle"
                 className="fill-muted-foreground text-[11px] tabular-nums"
               >
-                n={plot.total(category.key)}
+                {/* what each share is of, in words where there is room */}
+                {band * every >= 72
+                  ? unitOf(plot.total(category.key), plot.grouped.measure)
+                  : plot.total(category.key).toLocaleString()}
               </text>
             )}
           </g>
@@ -1607,6 +1654,16 @@ function TimeChart({
           tapped={inspect.tapped}
           onOpen={(series) => onOpen(sliceAt(plot, active, series))}
           place={(card) => {
+            /* a phone's card is tapped open and stays: over the chart it
+               would hide the columns and their axis, so it sits above */
+            if (phone)
+              return {
+                left: Math.max(
+                  0,
+                  Math.min(width - CARD_WIDTH, cx(active) - CARD_WIDTH / 2),
+                ),
+                top: -card - 8,
+              };
             /* beside the column, clear of the neighbours' totals */
             const right = cx(active) + band / 2 + 8;
             const left = cx(active) - band / 2 - 8 - CARD_WIDTH;
@@ -1747,7 +1804,12 @@ function BarChart({
         : null;
 
   return (
-    <div ref={ref} className="relative" onPointerLeave={inspect.leave}>
+    <div
+      ref={ref}
+      data-sheet-anchor
+      className="relative"
+      onPointerLeave={inspect.leave}
+    >
       <svg
         width={width}
         height={height}
@@ -1936,12 +1998,14 @@ function NumbersTable({
   grouped,
   config,
   partial,
+  section,
   selected,
   onOpen,
 }: {
   grouped: Grouped;
   config: ChartConfig;
   partial: Map<string, Incomplete>;
+  section: string | undefined;
   /** the slice open beside the chart */
   selected: Slice | null;
   /** each count opens what it counts, as the chart's marks do */
@@ -1950,8 +2014,8 @@ function NumbersTable({
   const [open, setOpen] = useState(false);
   /* the full record: every series, whatever the legend has off */
   const plot = useMemo(
-    () => plotOf(grouped, config, [], partial),
-    [grouped, config, partial],
+    () => plotOf(grouped, config, [], partial, section),
+    [grouped, config, partial, section],
   );
   const split = plot.all.length > 1;
   const totalLabel = config.values === "running" ? "Total so far" : "Total";
@@ -2010,9 +2074,11 @@ function NumbersTable({
       className="overflow-hidden rounded-lg border"
     >
       <div className="flex items-center gap-2 pr-2">
-        <CollapsibleTrigger className="group hover:bg-muted/50 focus-visible:ring-ring/50 flex h-10 flex-1 items-center gap-2 px-3 text-left text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-inset">
-          <ChevronRightIcon className="text-muted-foreground size-4 transition-transform group-data-[panel-open]:rotate-90" />
-          Show as table
+        {/* one surface: the row is not painted, so it never shows as two
+            tones beside Download CSV */}
+        <CollapsibleTrigger className="group focus-visible:ring-ring/50 flex h-10 flex-1 items-center gap-2 px-3 text-left text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-inset">
+          <ChevronRightIcon className="text-muted-foreground group-hover:text-foreground size-4 transition-transform group-data-[panel-open]:rotate-90" />
+          {open ? "Hide table" : "Show as table"}
         </CollapsibleTrigger>
         {open && (
           <Button variant="ghost" size="sm" onClick={download}>

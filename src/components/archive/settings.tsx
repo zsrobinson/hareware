@@ -1,4 +1,5 @@
 import {
+  ClipboardPasteIcon,
   ExternalLinkIcon,
   IdCardIcon,
   PenLineIcon,
@@ -35,7 +36,7 @@ export function SettingsPage() {
   );
 }
 
-function Settings({ archive }: ViewProps) {
+function Settings({ archive, reloadButton }: ViewProps) {
   const everyone = useMemo(
     () =>
       [
@@ -59,6 +60,7 @@ function Settings({ archive }: ViewProps) {
         archive={archive}
         everyone={everyone}
         printedCount={printedCount}
+        reloadButton={reloadButton}
       />
       <ArticleRows archive={archive} />
       <Labels archive={archive} />
@@ -70,15 +72,21 @@ function Settings({ archive }: ViewProps) {
 function Section({
   id,
   title,
+  action,
   children,
 }: {
   id?: string;
   title: string;
+  /** at the end of the heading's row */
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section id={id} className="scroll-mt-6 space-y-4">
-      <h2 className="text-base font-semibold">{title}</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-base font-semibold">{title}</h2>
+        {action}
+      </div>
       {children}
     </section>
   );
@@ -134,15 +142,19 @@ function PenNames({
   archive,
   everyone,
   printedCount,
+  reloadButton,
 }: {
   archive: Archive;
   everyone: string[];
   printedCount: (byline: string) => number;
+  reloadButton: React.ReactNode;
 }) {
   const list = useId();
   const [open, setOpen] = useState<string | null>(null);
   const [handOverTo, setHandOverTo] = useState<string | undefined>();
   const [pasting, setPasting] = useState(false);
+  /* where focus goes once a pasted list is saved and its box has gone */
+  const pasteButton = useRef<HTMLButtonElement>(null);
   const removals = useRemovals(archive.penNames, (pen) =>
     pen.byline.toLowerCase(),
   );
@@ -166,7 +178,7 @@ function PenNames({
     });
 
   return (
-    <Section title="Pen names">
+    <Section title="Pen names" action={reloadButton}>
       <datalist id={list}>
         {everyone.map((name) => (
           <option key={name} value={name} />
@@ -179,6 +191,7 @@ function PenNames({
         printedCount={printedCount}
         penNames={archive.penNames}
         pasting={pasting}
+        pasteRef={pasteButton}
         onPaste={() => setPasting((on) => !on)}
         onHandOver={(byline, to) => {
           setHandOverTo(to);
@@ -190,7 +203,10 @@ function PenNames({
           everyone={everyone}
           printedCount={printedCount}
           penNames={archive.penNames}
-          onSaved={() => setPasting(false)}
+          onSaved={() => {
+            setPasting(false);
+            pasteButton.current?.focus();
+          }}
         />
       )}
 
@@ -289,6 +305,7 @@ function AddPenName({
   printedCount,
   penNames,
   pasting,
+  pasteRef,
   onPaste,
   onHandOver,
 }: {
@@ -297,12 +314,15 @@ function AddPenName({
   printedCount: (byline: string) => number;
   penNames: PenName[];
   pasting: boolean;
+  pasteRef: React.Ref<HTMLButtonElement>;
   onPaste: () => void;
   /** the pen name counts as someone else already: hand it over instead */
   onHandOver: (byline: string, to: string) => void;
 }) {
   const save = useEdit();
   const ids = { byline: useId(), realName: useId() };
+  /* Add disables as the fields clear, which would leave focus on the page */
+  const first = useRef<HTMLInputElement>(null);
   const [byline, setByline] = useState("");
   const [realName, setRealName] = useState("");
   const count = byline.trim() ? printedCount(byline) : null;
@@ -344,6 +364,7 @@ function AddPenName({
             onSuccess: () => {
               setByline("");
               setRealName("");
+              first.current?.focus();
             },
           },
         );
@@ -352,6 +373,7 @@ function AddPenName({
       <FieldRows>
         <FieldRow icon={PenLineIcon} label="Pen name" htmlFor={ids.byline}>
           <Input
+            ref={first}
             id={ids.byline}
             list={list}
             placeholder="As printed"
@@ -385,6 +407,7 @@ function AddPenName({
             {save.isPending ? "Adding…" : taken ? "Continue" : "Add"}
           </Button>
           <Button
+            ref={pasteRef}
             type="button"
             variant="ghost"
             aria-expanded={pasting}
@@ -411,6 +434,7 @@ function PasteSeveral({
   onSaved: () => void;
 }) {
   const save = useEdit();
+  const id = useId();
   const [text, setText] = useState("");
   const lines = text
     .split("\n")
@@ -428,106 +452,109 @@ function PasteSeveral({
   const valid = parsed.filter((p) => p.byline && p.realName && !header(p));
 
   return (
-    <div className="space-y-3">
-      <Textarea
-        autoFocus
-        rows={5}
-        aria-label="Pen names to add"
-        placeholder={
-          "Pen name = Real name, one per line\nPasting two columns from a spreadsheet works too."
-        }
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        className="font-mono text-sm"
-      />
-      {parsed.length > 0 && (
-        <ul className={LIST}>
-          {parsed.map((p, index) => {
-            const count = p.byline ? printedCount(p.byline) : 0;
-            const known = everyone.some((n) => same(n, p.realName));
-            const was = penNames.find((pen) => same(pen.byline, p.byline));
-            const replaces =
-              was && !was.realName.some((n) => same(n, p.realName))
-                ? was.realName.join(" and ")
-                : null;
-            return (
-              <li
-                key={index}
-                className="flex flex-wrap items-baseline gap-x-2 px-3 py-1.5"
-              >
-                {header(p) ? (
-                  <span className="text-muted-foreground">
-                    Skipped the header row
-                  </span>
-                ) : p.byline && p.realName ? (
-                  <>
-                    <span className="font-medium">{p.byline}</span>
-                    <span className="text-muted-foreground">counts as</span>
-                    <span>{p.realName}</span>
-                    <span className="text-muted-foreground ml-auto">
-                      {count === 0
-                        ? "Not printed yet"
-                        : `${count} ${count === 1 ? "article" : "articles"}`}
-                      {!known && " · not credited yet"}
-                      {replaces && ` · replaces ${replaces}`}
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-muted-foreground">
-                    Skipped “{p.line}”: use “Pen name = Real name”.
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      <Button
-        disabled={valid.length === 0 || save.isPending}
-        onClick={() =>
-          save.mutate(
-            {
-              edit: {
-                kind: "pen-names",
-                entries: valid.map(({ byline, realName }) => ({
-                  byline,
-                  realName,
-                })),
+    <FieldRows>
+      <FieldRow icon={ClipboardPasteIcon} label="List" htmlFor={id} top>
+        <div className="space-y-3">
+          <Textarea
+            id={id}
+            autoFocus
+            rows={5}
+            placeholder="Pen name = Real name, one per line"
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            className="font-mono text-sm placeholder:font-sans"
+          />
+          {parsed.length > 0 && (
+            <ul className={LIST}>
+              {parsed.map((p, index) => {
+                const count = p.byline ? printedCount(p.byline) : 0;
+                const known = everyone.some((n) => same(n, p.realName));
+                const was = penNames.find((pen) => same(pen.byline, p.byline));
+                const replaces =
+                  was && !was.realName.some((n) => same(n, p.realName))
+                    ? was.realName.join(" and ")
+                    : null;
+                return (
+                  <li
+                    key={index}
+                    className="flex flex-wrap items-baseline gap-x-2 px-3 py-1.5"
+                  >
+                    {header(p) ? (
+                      <span className="text-muted-foreground">
+                        Skipped the header row
+                      </span>
+                    ) : p.byline && p.realName ? (
+                      <>
+                        <span className="font-medium">{p.byline}</span>
+                        <span className="text-muted-foreground">counts as</span>
+                        <span>{p.realName}</span>
+                        <span className="text-muted-foreground ml-auto">
+                          {count === 0
+                            ? "Not printed yet"
+                            : `${count} ${count === 1 ? "article" : "articles"}`}
+                          {!known && " · not credited yet"}
+                          {replaces && ` · replaces ${replaces}`}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        Skipped “{p.line}”: use “Pen name = Real name”.
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </FieldRow>
+      <FieldActions>
+        <Button
+          variant="outline"
+          disabled={valid.length === 0 || save.isPending}
+          onClick={() =>
+            save.mutate(
+              {
+                edit: {
+                  kind: "pen-names",
+                  entries: valid.map(({ byline, realName }) => ({
+                    byline,
+                    realName,
+                  })),
+                },
+                done: `Added ${valid.length} pen ${valid.length === 1 ? "name" : "names"}`,
+                /* what those bylines counted as before, or nobody */
+                undo: {
+                  kind: "pen-names",
+                  entries: [
+                    ...new Set(valid.map((v) => v.byline.toLowerCase())),
+                  ].flatMap((key) => {
+                    const byline = valid.find(
+                      (v) => v.byline.toLowerCase() === key,
+                    )!.byline;
+                    const before = penNames.find((p) => same(p.byline, byline));
+                    return before
+                      ? before.realName.map((realName) => ({
+                          byline,
+                          realName,
+                        }))
+                      : [{ byline, realName: "" }];
+                  }),
+                },
               },
-              done: `Added ${valid.length} pen ${valid.length === 1 ? "name" : "names"}`,
-              /* what those bylines counted as before, or nobody */
-              undo: {
-                kind: "pen-names",
-                entries: [
-                  ...new Set(valid.map((v) => v.byline.toLowerCase())),
-                ].flatMap((key) => {
-                  const byline = valid.find(
-                    (v) => v.byline.toLowerCase() === key,
-                  )!.byline;
-                  const before = penNames.find((p) => same(p.byline, byline));
-                  return before
-                    ? before.realName.map((realName) => ({
-                        byline,
-                        realName,
-                      }))
-                    : [{ byline, realName: "" }];
-                }),
+              {
+                onSuccess: () => {
+                  setText("");
+                  onSaved();
+                },
               },
-            },
-            {
-              onSuccess: () => {
-                setText("");
-                onSaved();
-              },
-            },
-          )
-        }
-      >
-        {save.isPending
-          ? "Adding…"
-          : `Add ${valid.length || ""} pen ${valid.length === 1 ? "name" : "names"}`}
-      </Button>
-    </div>
+            )
+          }
+        >
+          {save.isPending ? "Adding…" : "Add pen names"}
+        </Button>
+      </FieldActions>
+    </FieldRows>
   );
 }
 
@@ -861,9 +888,12 @@ function AddLabel({
       onSubmit={(event) => {
         event.preventDefault();
         if (!label.trim()) return;
-        onAdd({ label: label.trim().replace(/:$/, ""), role }, () =>
-          setLabel(""),
-        );
+        /* Add disables as the field clears, which would leave focus on
+           the page */
+        onAdd({ label: label.trim().replace(/:$/, ""), role }, () => {
+          setLabel("");
+          input.current?.focus();
+        });
       }}
     >
       <FieldRows>

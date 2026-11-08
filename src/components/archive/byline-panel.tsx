@@ -1,13 +1,15 @@
 import { UserRoundIcon } from "lucide-react";
 import { useId, useState } from "react";
-import { FieldNote, FieldRow, FieldRows } from "~/components/field-row";
+import { FieldRow, FieldRows } from "~/components/field-row";
 import { SidePanel } from "~/components/panel";
 import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import type { Archive, ArchiveArticle } from "~/lib/credits/archive";
 import { ROLE_NAMES, type Role } from "~/lib/credits/labels";
 import { same } from "~/lib/credits/sheet";
 import { formatDate } from "./dates";
+import { PeoplePicker } from "./person-picker";
 import { useEdit } from "./use-edit";
 
 /* one article printing the byline, the roles it prints it in, and who it
@@ -19,11 +21,6 @@ type Use = {
   own: string[];
 };
 
-const list = (text: string) =>
-  text
-    .split(",")
-    .map((name) => name.trim())
-    .filter(Boolean);
 const sameList = (a: string[], b: string[]) =>
   a.length === b.length && a.every((name, i) => same(name, b[i]!));
 const key = (use: Use) => String(use.article.id);
@@ -78,28 +75,24 @@ export function BylinePanel({
   onClose: () => void;
 }) {
   const save = useEdit();
-  const names = useId();
   const field = useId();
   const uses = usesOf(archive, byline);
   const before =
     archive.penNames.find((pen) => same(pen.byline, byline))?.realName ?? [];
 
-  const [everywhere, setEverywhere] = useState(handOverTo ?? before.join(", "));
-  const [own, setOwn] = useState<Record<string, string>>(() =>
-    Object.fromEntries(uses.map((use) => [key(use), use.own.join(", ")])),
+  const [after, setAfter] = useState(handOverTo ? [handOverTo] : before);
+  const [own, setOwn] = useState<Record<string, string[]>>(() =>
+    Object.fromEntries(uses.map((use) => [key(use), use.own])),
   );
   const [keepEarlier, setKeepEarlier] = useState(true);
 
-  const after = list(everywhere);
   const handedOver = !sameList(after, before);
   /* the articles that would change hands with the pen name */
-  const following = uses.filter(
-    (use) => list(own[key(use)] ?? "").length === 0,
-  );
+  const following = uses.filter((use) => (own[key(use)] ?? []).length === 0);
   const asking = handedOver && before.length > 0 && following.length > 0;
 
   const wanted = (use: Use) => {
-    const typed = list(own[key(use)] ?? "");
+    const typed = own[key(use)] ?? [];
     if (typed.length > 0) return typed;
     return asking && keepEarlier ? before : [];
   };
@@ -107,7 +100,8 @@ export function BylinePanel({
   const changed = handedOver || changes.length > 0;
 
   const shown = (names: string[]) =>
-    names.length > 0 ? names.join(" and ") : "as printed";
+    names.length > 0 ? names.join(" and ") : "themselves";
+  const capital = (text: string) => text[0]!.toUpperCase() + text.slice(1);
 
   const submit = () =>
     save.mutate(
@@ -150,7 +144,9 @@ export function BylinePanel({
   return (
     <SidePanel key={byline} title={byline} back={back} onClose={onClose}>
       <p className="text-muted-foreground -mt-3 text-xs">
-        Printed on {uses.length} {uses.length === 1 ? "article" : "articles"}
+        {uses.length === 0
+          ? "Not printed yet"
+          : `Printed on ${uses.length} ${uses.length === 1 ? "article" : "articles"}`}
       </p>
 
       <form
@@ -160,94 +156,76 @@ export function BylinePanel({
           if (changed) submit();
         }}
       >
-        <datalist id={names}>
-          {everyone.map((name) => (
-            <option key={name} value={name} />
-          ))}
-        </datalist>
-
         <FieldRows>
           <FieldRow
             icon={UserRoundIcon}
             label="Counts as"
             htmlFor={field}
             width="panel"
+            top
           >
-            <Input
+            <PeoplePicker
               id={field}
-              list={names}
-              value={everywhere}
-              placeholder="As printed"
-              onChange={(event) => setEverywhere(event.target.value)}
+              value={after}
+              onChange={setAfter}
+              people={everyone}
+              none="Themselves"
             />
           </FieldRow>
-          <FieldNote width="panel">Separate two people with a comma.</FieldNote>
         </FieldRows>
 
         {asking && (
-          <fieldset className="space-y-1.5 text-sm">
-            <legend className="sr-only">The articles already published</legend>
-            <label className="flex items-start gap-2">
-              <input
-                type="radio"
-                className="accent-foreground mt-1"
-                checked={keepEarlier}
-                onChange={() => setKeepEarlier(true)}
-              />
-              <span>
-                Keep the {following.length} earlier{" "}
-                {following.length === 1 ? "article" : "articles"} as{" "}
-                {shown(before)}
-              </span>
-            </label>
-            <label className="flex items-start gap-2">
-              <input
-                type="radio"
-                className="accent-foreground mt-1"
-                checked={!keepEarlier}
-                onChange={() => setKeepEarlier(false)}
-              />
-              <span>
-                Count {following.length === 1 ? "it" : "them"} as {shown(after)}{" "}
-                too
-              </span>
-            </label>
-          </fieldset>
+          <RadioGroup
+            aria-label="The articles already published"
+            value={keepEarlier ? "keep" : "move"}
+            onValueChange={(value) => setKeepEarlier(value === "keep")}
+            className="gap-2.5"
+          >
+            <Label className="items-start leading-snug font-normal">
+              <RadioGroupItem value="keep" className="mt-0.5" />
+              Keep the {following.length} earlier{" "}
+              {following.length === 1 ? "article" : "articles"} as{" "}
+              {shown(before)}
+            </Label>
+            <Label className="items-start leading-snug font-normal">
+              <RadioGroupItem value="move" className="mt-0.5" />
+              Count {following.length === 1 ? "it" : "them"} as {shown(after)}{" "}
+              too
+            </Label>
+          </RadioGroup>
         )}
 
-        <section className="space-y-1">
-          <h3 className="text-muted-foreground text-xs font-medium">
-            Each article
-          </h3>
-          <ul className="divide-y">
-            {uses.map((use) => (
-              <li key={key(use)} className="space-y-1.5 py-2.5">
-                <div className="text-sm">
-                  <span className="font-medium">{use.article.title}</span>
-                  <span className="text-muted-foreground block text-xs">
-                    {formatDate(use.article.publishedAt)} ·{" "}
-                    {use.roles.map((role) => ROLE_NAMES[role]).join(", ")}
-                    {use.own.length > 0 && " · only this article"}
-                  </span>
-                </div>
-                <div className="grid grid-cols-[auto_1fr] items-center gap-2">
-                  <span className="text-muted-foreground text-xs">
-                    counts as
-                  </span>
-                  <Input
-                    list={names}
-                    value={own[key(use)] ?? ""}
-                    placeholder={shown(asking && keepEarlier ? before : after)}
-                    aria-label={`Who ${byline} is on ${use.article.title}`}
-                    onChange={(event) =>
-                      setOwn({ ...own, [key(use)]: event.target.value })
-                    }
+        {uses.length > 0 && (
+          <section className="space-y-1">
+            <h3 className="text-muted-foreground text-xs font-medium">
+              Each article
+            </h3>
+            <ul className="divide-y">
+              {uses.map((use) => (
+                <li key={key(use)} className="space-y-1.5 py-2.5">
+                  <div className="text-sm">
+                    <span className="font-medium">{use.article.title}</span>
+                    <span className="text-muted-foreground block text-xs">
+                      {formatDate(use.article.publishedAt)} ·{" "}
+                      {use.roles.map((role) => ROLE_NAMES[role]).join(", ")}
+                      {use.own.length > 0 && " · only this article"}
+                    </span>
+                  </div>
+                  <PeoplePicker
+                    value={own[key(use)] ?? []}
+                    onChange={(names) => setOwn({ ...own, [key(use)]: names })}
+                    people={everyone}
+                    /* nobody chosen here follows the pen name */
+                    none={capital(
+                      shown(asking && keepEarlier ? before : after),
+                    )}
+                    label={`Who ${byline} is on ${use.article.title}`}
                   />
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {changed && (
           <div className="flex gap-2">
@@ -258,11 +236,9 @@ export function BylinePanel({
               type="button"
               variant="ghost"
               onClick={() => {
-                setEverywhere(before.join(", "));
+                setAfter(before);
                 setOwn(
-                  Object.fromEntries(
-                    uses.map((use) => [key(use), use.own.join(", ")]),
-                  ),
+                  Object.fromEntries(uses.map((use) => [key(use), use.own])),
                 );
                 setKeepEarlier(true);
               }}

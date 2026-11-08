@@ -182,6 +182,9 @@ export type ViewProps = {
   filterNote: string;
   /** sets the Time filter, as choosing a chart view does */
   setPreset: (preset: Preset) => void;
+  /** a phone's Reload, on a page with no filter bar to end: the view puts it
+      at the end of its first row. Null where the shell has placed it */
+  reloadButton: ReactNode;
 };
 
 /** the filters that are set, in words, for a view's caption */
@@ -409,12 +412,13 @@ function Ready({
      end of the search row, where there is one */
   const phone = useIsPhone();
   const inToolbar = phone && showFilters;
+  const inView = phone && !showFilters;
 
   return (
     <SlotsContext.Provider value={slots}>
       <ResetContext.Provider value={addReset}>
         {/* page-wide, so in the title row beside the h1 */}
-        {!inToolbar && <PageActions>{freshness(false)}</PageActions>}
+        {!phone && <PageActions>{freshness(false)}</PageActions>}
         <div className="space-y-6">
           <div ref={setAbove} className="empty:hidden" />
           {showFilters && (
@@ -441,6 +445,7 @@ function Ready({
               refreshing,
               filterNote: describeFilters(state),
               setPreset,
+              reloadButton: inView ? freshness(true) : null,
             })}
           </div>
         </div>

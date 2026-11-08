@@ -1,23 +1,30 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { ExternalLinkIcon, PlusIcon, XIcon } from "lucide-react";
+import {
+  ExternalLinkIcon,
+  PlusIcon,
+  UserRoundIcon,
+  UserRoundPlusIcon,
+  XIcon,
+} from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { DataTable, sortable } from "~/components/data-table";
 import { FieldRow, FieldRows } from "~/components/field-row";
 import { SidePanel, useIsPhone } from "~/components/panel";
 import { Button, buttonVariants } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
-import { Input } from "~/components/ui/input";
 import {
   PROBLEM_KINDS,
   type Archive,
   type ArchiveArticle,
   type Credit,
+  type ProblemKind,
 } from "~/lib/credits/archive";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import { same } from "~/lib/credits/sheet";
 import { applyFilters, easternDate } from "~/lib/credits/stats";
 import { ArchiveShell, type ViewProps } from "./archive-shell";
 import { formatDate } from "./dates";
+import { PersonPicker } from "./person-picker";
 import { OpenRowProvider, RowDetails, RowOpener, useOpenRow } from "./open-row";
 import { SectionName } from "./section-name";
 import { ShellTableControls } from "./table-controls";
@@ -66,6 +73,12 @@ function Contributors({ credits }: { credits: Credit[] }) {
 /* what a narrower table leaves out until someone asks for it, so none of
    it is cut off at the edge: beside a panel, and on a phone */
 const BESIDE_PANEL = ["section", "image", "other"];
+
+/* the column whose "—" already says a credit is missing */
+const CREDIT_COLUMN: Partial<Record<ProblemKind, Role>> = {
+  "no-writer": "writer",
+  "no-image": "image",
+};
 const ON_PHONE = ["writer", ...BESIDE_PANEL];
 
 function Articles({ archive, filters, filterNote }: ViewProps) {
@@ -108,9 +121,16 @@ function Articles({ archive, filters, filterNote }: ViewProps) {
         accessorKey: "title",
         header: sortable("Title"),
         meta: { csvHeader: "Title" },
-        cell: ({ row }) => {
-          const open =
-            row.original.problems.length > 0 && !row.original.ignored;
+        cell: ({ row, table }) => {
+          /* a missing credit shows as "—" in its column; named here only
+             where that column is hidden (a phone, or beside a panel) */
+          const said = (kind: ProblemKind) => {
+            const column = CREDIT_COLUMN[kind];
+            return !column || !table.getColumn(column)?.getIsVisible();
+          };
+          const problems = row.original.ignored
+            ? []
+            : row.original.problems.filter((p) => said(p.kind));
           return (
             <div className="max-w-md min-w-56 whitespace-normal">
               <RowOpener
@@ -119,14 +139,12 @@ function Articles({ archive, filters, filterNote }: ViewProps) {
               >
                 {row.original.title}
               </RowOpener>
-              {open && (
+              {problems.length > 0 && (
                 <a
                   href={`/problems?q=${encodeURIComponent(row.original.title)}`}
                   className="text-muted-foreground block text-xs hover:underline"
                 >
-                  {row.original.problems
-                    .map((p) => PROBLEM_KINDS[p.kind])
-                    .join(" · ")}
+                  {problems.map((p) => PROBLEM_KINDS[p.kind]).join(" · ")}
                 </a>
               )}
             </div>
@@ -293,7 +311,6 @@ function RoleEditor({
   everyone: string[];
 }) {
   const save = useEdit();
-  const list = useId();
   const ids = useId();
   const credits = article.credits.filter((c) => c.role === role);
   const printed = credits.flatMap((c) => c.bylines);
@@ -348,30 +365,42 @@ function RoleEditor({
       )}
 
       <FieldRows>
-        {printed.map((byline, index) => (
-          <FieldRow
-            key={byline}
-            label={<span className="break-words">{byline}</span>}
-            htmlFor={`${ids}-${index}`}
-            width="panel"
-          >
-            <Input
-              id={`${ids}-${index}`}
-              list={list}
-              aria-label={`Who ${byline} counts as`}
-              value={renamed[byline] ?? ""}
-              placeholder={
-                fallback(byline) === byline ? "Unchanged" : fallback(byline)
+        {printed.map((byline, index) => {
+          const unchanged = fallback(byline);
+          return (
+            <FieldRow
+              key={byline}
+              icon={UserRoundIcon}
+              label={
+                <>
+                  Counts as
+                  {/* which printed name, where the line prints more than one */}
+                  {printed.length > 1 && (
+                    <span className="text-muted-foreground block text-xs font-normal break-words">
+                      {byline}
+                    </span>
+                  )}
+                </>
               }
-              onChange={(event) =>
-                setRenamed({ ...renamed, [byline]: event.target.value })
-              }
-            />
-          </FieldRow>
-        ))}
+              htmlFor={`${ids}-${index}`}
+              width="panel"
+              top={printed.length > 1}
+            >
+              <PersonPicker
+                id={`${ids}-${index}`}
+                value={renamed[byline] ?? ""}
+                onChange={(name) => setRenamed({ ...renamed, [byline]: name })}
+                /* unchanged is whoever the pen name is, offered once */
+                people={everyone.filter((name) => !same(name, unchanged))}
+                none={unchanged === byline ? "Themselves" : unchanged}
+              />
+            </FieldRow>
+          );
+        })}
         {added.map((name, index) => (
           <FieldRow
             key={index}
+            icon={UserRoundPlusIcon}
             label={
               <span className="text-muted-foreground font-normal italic">
                 Not printed
@@ -391,25 +420,17 @@ function RoleEditor({
               </Button>
             }
           >
-            <Input
+            <PersonPicker
               id={`${ids}-added-${index}`}
-              list={list}
               value={name}
-              placeholder="Name"
-              onChange={(event) =>
-                setAdded(
-                  added.map((n, i) => (i === index ? event.target.value : n)),
-                )
+              onChange={(next) =>
+                setAdded(added.map((n, i) => (i === index ? next : n)))
               }
+              people={everyone}
             />
           </FieldRow>
         ))}
       </FieldRows>
-      <datalist id={list}>
-        {everyone.map((name) => (
-          <option key={name} value={name} />
-        ))}
-      </datalist>
 
       <div className="flex flex-wrap items-center gap-2">
         <Button

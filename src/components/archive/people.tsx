@@ -1,11 +1,12 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  CheckIcon,
   PenLineIcon,
   UserRoundIcon,
   UsersRoundIcon,
   XIcon,
 } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { DataTable, sortable } from "~/components/data-table";
 import {
   FieldActions,
@@ -16,15 +17,16 @@ import {
 import { SidePanel, useIsPhone } from "~/components/panel";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { cn } from "~/lib/utils";
 import type { Archive, ArchiveArticle } from "~/lib/credits/archive";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
+import { sortSections } from "~/lib/credits/sections";
 import { same } from "~/lib/credits/sheet";
 import {
   applyFilters,
   NO_FILTERS,
   people,
   searchable,
+  type Filters,
   type PersonRow,
 } from "~/lib/credits/stats";
 import { ArchiveShell, ToolbarFilters, type ViewProps } from "./archive-shell";
@@ -135,6 +137,31 @@ const COLUMNS: ColumnDef<PersonRow, unknown>[] = [
 const BESIDE_PANEL = ["other", "first", "last"];
 const ON_PHONE = ["writer", "image", ...BESIDE_PANEL];
 
+/**
+ * what the filters narrow a count to, as words after it: "in News in the last
+ * 3 months". Empty when only a role is chosen, which the count's breakdown
+ * names, and when nothing is
+ */
+function scopeOf(filters: Filters, filterNote: string): string {
+  const parts: string[] = [];
+  const { sections, from, to } = filters;
+  if (sections.length > 0)
+    parts.push(
+      sections.length <= 2
+        ? `in ${sortSections(sections).join(" and ")}`
+        : `in ${sections.length} sections`,
+    );
+  /* the Time filter's own name leads the caption's note */
+  const time = from || to ? filterNote.split(" · ")[0]! : "";
+  if (/^Last \d/.test(time)) parts.push(`in the ${time.toLowerCase()}`);
+  else if (/^(This|Last) /.test(time)) parts.push(time.toLowerCase());
+  else if (from && to)
+    parts.push(`from ${formatDate(from)} to ${formatDate(to)}`);
+  else if (from) parts.push(`since ${formatDate(from)}`);
+  else if (to) parts.push(`until ${formatDate(to)}`);
+  return parts.join(" ");
+}
+
 function People({ archive, filters, filterNote }: ViewProps) {
   const phone = useIsPhone();
   const [minimum, setMinimum] = useState("1");
@@ -173,10 +200,14 @@ function People({ archive, filters, filterNote }: ViewProps) {
     );
   }, [all, filters.search, minimum]);
 
-  const selected = open
-    ? (all.find((row) => row.name === open) ??
-      everybody.find((row) => row.name === open))
-    : undefined;
+  /* the panel counts what the filters leave, and says so, beside the whole */
+  const inRange = open ? all.find((row) => row.name === open) : undefined;
+  const whole = open ? everybody.find((row) => row.name === open) : undefined;
+  const selected = inRange ?? whole;
+  const narrowed =
+    Boolean(filters.from || filters.to) ||
+    filters.sections.length > 0 ||
+    filters.roles.length > 0;
 
   const show = (
     <Choice
@@ -222,6 +253,15 @@ function People({ archive, filters, filterNote }: ViewProps) {
           <PersonPanel
             key={selected.name}
             person={selected}
+            counted={
+              narrowed
+                ? {
+                    inRange: inRange?.contributions ?? 0,
+                    scope: scopeOf(filters, filterNote),
+                    inAll: whole?.contributions ?? selected.contributions,
+                  }
+                : null
+            }
             archive={archive}
             everyone={everybody.map((row) => row.name)}
             onClose={openRow.close}
@@ -234,11 +274,14 @@ function People({ archive, filters, filterNote }: ViewProps) {
 
 function PersonPanel({
   person,
+  counted,
   archive,
   everyone,
   onClose,
 }: {
   person: PersonRow;
+  /** under filters: the count they leave, in what words, and the whole */
+  counted: { inRange: number; scope: string; inAll: number } | null;
   archive: Archive;
   everyone: string[];
   onClose: () => void;
@@ -267,9 +310,25 @@ function PersonPanel({
     ),
   ).length;
 
-  const summary = ROLES.filter((role) => person.counts[role] > 0)
-    .map((role) => `${person.counts[role]} ${ROLE_NAMES[role].toLowerCase()}`)
-    .join(", ");
+  const contributions = counted ? counted.inRange : person.contributions;
+  /* someone the filters leave out still opens, on their whole record */
+  const summary =
+    contributions === 0
+      ? ""
+      : ROLES.filter((role) => person.counts[role] > 0)
+          .map(
+            (role) =>
+              `${person.counts[role]} ${ROLE_NAMES[role].toLowerCase()}`,
+          )
+          .join(", ");
+  const span = (
+    <>
+      {formatMonth(person.first)}
+      {person.first.slice(0, 7) !== person.last.slice(0, 7) && (
+        <> – {formatMonth(person.last)}</>
+      )}
+    </>
+  );
 
   if (byline)
     return (
@@ -289,14 +348,13 @@ function PersonPanel({
   return (
     <SidePanel title={person.name} back="All people" onClose={onClose}>
       <p className="text-muted-foreground -mt-3 text-xs">
-        {person.contributions}{" "}
-        {person.contributions === 1 ? "contribution" : "contributions"}
+        {contributions === 0 ? "No" : contributions}{" "}
+        {contributions === 1 ? "contribution" : "contributions"}
+        {counted?.scope && <> {counted.scope}</>}
         {summary && <> ({summary})</>}
         <span className="block">
-          {formatMonth(person.first)}
-          {person.first.slice(0, 7) !== person.last.slice(0, 7) && (
-            <> – {formatMonth(person.last)}</>
-          )}
+          {counted && <>{counted.inAll} in all · </>}
+          {span}
         </span>
       </p>
 
@@ -472,10 +530,7 @@ function PenNames({
           return (
             <li
               key={key}
-              className={cn(
-                "flex min-h-11 items-center gap-2 py-1.5 pr-1.5 pl-3 transition-colors duration-700",
-                added !== null && same(added, item.byline) && "bg-muted/60",
-              )}
+              className="flex min-h-11 items-center gap-2 py-1.5 pr-1.5 pl-3"
             >
               <span className="min-w-0 flex-1">
                 <button
@@ -493,6 +548,12 @@ function PenNames({
                       : `Only on ${item.articles} ${item.articles === 1 ? "article" : "articles"}`}
                 </span>
               </span>
+              {/* marked in words: a muted fill is what a removed row wears */}
+              {added !== null && same(added, item.byline) && (
+                <span className="text-muted-foreground flex items-center gap-1 text-xs">
+                  <CheckIcon className="size-3.5" /> Added
+                </span>
+              )}
               <Button
                 ref={removals.focusBack(key)}
                 variant="ghost"
@@ -529,6 +590,8 @@ function AddOwnPenName({
   const save = useEdit();
   const id = useId();
   const list = useId();
+  /* Add disables as the field clears, which would leave focus on the page */
+  const input = useRef<HTMLInputElement>(null);
   const [byline, setByline] = useState("");
   const [said, setSaid] = useState("");
   const printed = useMemo(
@@ -578,6 +641,7 @@ function AddOwnPenName({
               setByline("");
               setSaid(`${typed} now counts as ${person.name}`);
               onAdded(typed);
+              input.current?.focus();
             },
           },
         );
@@ -591,6 +655,7 @@ function AddOwnPenName({
           width="panel"
         >
           <Input
+            ref={input}
             id={id}
             list={list}
             value={byline}
@@ -609,7 +674,7 @@ function AddOwnPenName({
               ? `Counts as ${taken.realName.join(" and ")} now. Continue to choose which articles stay theirs.`
               : count === 0
                 ? "Not printed yet."
-                : `${count} ${count === 1 ? "article" : "articles"} and later ones.`}
+                : `${count} ${count === 1 ? "article" : "articles"} in all, and later ones.`}
           </FieldNote>
         )}
         <FieldActions width="panel">
@@ -683,8 +748,8 @@ function PenNameOf({
           />
         </FieldRow>
         <FieldNote width="panel">
-          {articles === 1 ? "1 article" : `${articles} articles`} and later
-          ones.
+          {articles === 1 ? "1 article" : `${articles} articles`} in all, and
+          later ones.
           {realName && !known && " Not credited yet."}
           {articles > 1 && (
             <>

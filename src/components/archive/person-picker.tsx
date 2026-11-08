@@ -1,12 +1,20 @@
 /*
   "Counts as": who a printed name is, picked from everyone credited, or typed
   when they have not been credited yet. It looks like a select, so it reads as
-  a choice already made ("Themselves") rather than a box still to fill.
+  a choice already made ("Themselves") rather than a box still to fill. Every
+  "Counts as" is one of these, or a few for a byline two people share.
 */
 
 import { Combobox } from "@base-ui/react/combobox";
-import { CheckIcon, ChevronDownIcon, SearchIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  PlusIcon,
+  SearchIcon,
+  XIcon,
+} from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Button } from "~/components/ui/button";
 import { same } from "~/lib/credits/sheet";
 import { searchable } from "~/lib/credits/stats";
 import { cn } from "~/lib/utils";
@@ -130,5 +138,103 @@ export function PersonPicker({
         </Combobox.Positioner>
       </Combobox.Portal>
     </Combobox.Root>
+  );
+}
+
+/**
+ * Several people, as a byline two people write under: a picker each, and
+ * "Add another person". Nobody is `none`, as a single picker shows it.
+ */
+export function PeoplePicker({
+  id,
+  value,
+  onChange,
+  people,
+  none,
+  label,
+}: {
+  /** for the row's label, on the first picker */
+  id?: string;
+  value: string[];
+  onChange: (names: string[]) => void;
+  people: string[];
+  none: string;
+  /** what the pickers choose, for a screen reader, where no label says it */
+  label?: string;
+}) {
+  /* a picker just added starts on nobody, which `value` cannot hold */
+  const [adding, setAdding] = useState(false);
+  /* the row to focus once drawn: the button that was pressed is gone */
+  const focusRow = useRef<number | null>(null);
+  const list = adding ? [...value, ""] : value.length > 0 ? value : [""];
+  const change = (next: string[]) => {
+    setAdding(false);
+    onChange(next.filter(Boolean));
+  };
+
+  return (
+    <div
+      className="space-y-2"
+      role={label ? "group" : undefined}
+      aria-label={label}
+    >
+      {list.map((name, index) => (
+        <div
+          key={index}
+          className="flex items-center gap-1"
+          ref={(row) => {
+            if (row && focusRow.current === index) {
+              focusRow.current = null;
+              row.querySelector("button")?.focus();
+            }
+          }}
+        >
+          <div className="min-w-0 flex-1">
+            <PersonPicker
+              id={index === 0 ? id : undefined}
+              value={name}
+              onChange={(next) =>
+                change(list.map((n, i) => (i === index ? next : n)))
+              }
+              /* someone chosen in another picker is not offered twice */
+              people={people.filter(
+                (person) =>
+                  same(person, name) || !list.some((n) => same(n, person)),
+              )}
+              none={list.length === 1 ? none : undefined}
+            />
+          </div>
+          {list.length > 1 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground"
+              aria-label={name ? `Remove ${name}` : "Remove this person"}
+              onClick={() => {
+                focusRow.current = Math.max(0, index - 1);
+                change(list.filter((_, i) => i !== index));
+              }}
+            >
+              <XIcon />
+            </Button>
+          )}
+        </div>
+      ))}
+      {value.length > 0 && !adding && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground -ml-2"
+          onClick={() => {
+            focusRow.current = list.length;
+            setAdding(true);
+          }}
+        >
+          <PlusIcon /> Add another person
+        </Button>
+      )}
+    </div>
   );
 }

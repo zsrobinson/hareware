@@ -1,4 +1,15 @@
-import { ChevronRightIcon, DownloadIcon } from "lucide-react";
+import {
+  ChartPieIcon,
+  ChevronRightIcon,
+  DownloadIcon,
+  HistoryIcon,
+  LinkIcon,
+  NewspaperIcon,
+  SlidersHorizontalIcon,
+  UserPlusIcon,
+  UsersIcon,
+  type LucideIcon,
+} from "lucide-react";
 import {
   useEffect,
   useId,
@@ -11,6 +22,8 @@ import {
   type PointerEvent,
   type RefObject,
 } from "react";
+import { CopyTextButton } from "~/components/copy-button";
+import { PageActions } from "~/components/page-actions";
 import { PanelGroup, SidePanel, useIsPhone } from "~/components/panel";
 import { Button } from "~/components/ui/button";
 import {
@@ -41,6 +54,7 @@ import { toCsv } from "~/lib/csv";
 import { saveFile } from "~/lib/save-file";
 import { cn } from "~/lib/utils";
 import {
+  AboveToolbar,
   ArchiveShell,
   SheetGroup,
   ToolbarEnd,
@@ -51,6 +65,7 @@ import {
   configOf,
   COUNTS,
   GROUPINGS,
+  rangeOfView,
   readChart,
   SPLITS,
   VIEWS,
@@ -61,9 +76,29 @@ import {
 } from "./chart-config";
 import { seriesColor } from "./colors";
 
+/* the shell's Time filter starts from the view's range, so the view is kept
+   here, over the shell, rather than in the chart */
 export function ChartsPage() {
-  return <ArchiveShell>{(props) => <Charts {...props} />}</ArchiveShell>;
+  /* the shell draws nothing from it until hydrated, so reading the address
+     in the browser's first render does not disagree with the built page */
+  const [chart, setChart] = useState<ChartState>(() =>
+    readChart(typeof window === "undefined" ? "" : window.location.search),
+  );
+  return (
+    <ArchiveShell defaultPreset={rangeOfView(chart)}>
+      {(props) => <Charts {...props} chart={chart} setChart={setChart} />}
+    </ArchiveShell>
+  );
 }
+
+const ICONS: Record<ViewId, LucideIcon> = {
+  sections: NewspaperIcon,
+  contributors: UsersIcon,
+  newcomers: UserPlusIcon,
+  mix: ChartPieIcon,
+  history: HistoryIcon,
+  custom: SlidersHorizontalIcon,
+};
 
 const TABS: { id: ViewId; label: string }[] = [
   ...VIEWS,
@@ -153,11 +188,17 @@ function partialKeys(
   return partial;
 }
 
-function Charts({ archive, filters, filterNote }: ViewProps) {
-  /* drawn only once hydrated (ArchiveShell), so the address is there */
-  const [state, setState] = useState<ChartState>(() =>
-    readChart(window.location.search),
-  );
+function Charts({
+  archive,
+  filters,
+  filterNote,
+  setPreset,
+  chart: state,
+  setChart: setState,
+}: ViewProps & {
+  chart: ChartState;
+  setChart: (state: ChartState) => void;
+}) {
   useEffect(() => {
     const url = new URL(window.location.href);
     writeChart(state, url.searchParams);
@@ -180,13 +221,17 @@ function Charts({ archive, filters, filterNote }: ViewProps) {
       custom: next,
       base: state.view === "custom" ? state.base : state.view,
     });
-  /* Custom starts from what was on screen until the builder has made one */
-  const choose = (view: ViewId) =>
-    show(
+  /* Custom starts from what was on screen until the builder has made one.
+     a view brings its own time range; changing Time after is only a filter */
+  const choose = (view: ViewId) => {
+    if (view === state.view) return;
+    const next: ChartState =
       view === "custom" && !state.custom && state.view !== "custom"
         ? { view, custom: config, base: state.view }
-        : { ...state, view },
-    );
+        : { ...state, view };
+    show(next);
+    setPreset(rangeOfView(next));
+  };
 
   const shown = useMemo(
     () => applyFilters(archive.articles, filters),
@@ -209,11 +254,24 @@ function Charts({ archive, filters, filterNote }: ViewProps) {
   const plot = plotOf(grouped, config, hidden, partial);
 
   const builder = <ChartBuilder config={config} onChange={change} />;
-  const tabs = useRef<HTMLDivElement>(null);
   const panelId = useId();
+  /* the address holds the whole chart, which a button says out loud */
+  const copyLink = (
+    <CopyTextButton
+      text={() => window.location.href}
+      label="Copy link"
+      what="the link to this chart"
+      icon={LinkIcon}
+      failed="Copy it from the address bar."
+    />
+  );
 
   return (
     <div className="space-y-4">
+      {/* in the title row, as a table's Download CSV is */}
+      <PageActions>
+        <span className="contents max-md:hidden">{copyLink}</span>
+      </PageActions>
       {!phone && (
         <ToolbarEnd>
           <Button
@@ -254,57 +312,23 @@ function Charts({ archive, filters, filterNote }: ViewProps) {
               : undefined
           }
         >
-          <PanelGroup label="Chart">{builder}</PanelGroup>
+          <PanelGroup label="Chart">
+            {builder}
+            <div className="flex flex-wrap gap-2">{copyLink}</div>
+          </PanelGroup>
         </SheetGroup>
       )}
 
-      <div
-        ref={tabs}
-        role="tablist"
-        aria-label="Chart views"
-        className="flex gap-x-1 overflow-x-auto border-b"
-        onKeyDown={(event) => {
-          /* the tabs pattern: arrows move between the views, and choose */
-          const step =
-            event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-          if (!step) return;
-          event.preventDefault();
-          const at = TABS.findIndex((tab) => tab.id === state.view);
-          const next = TABS[(at + step + TABS.length) % TABS.length]!;
-          choose(next.id);
-          tabs.current
-            ?.querySelector<HTMLElement>(`[data-view="${next.id}"]`)
-            ?.focus();
-        }}
-      >
-        {TABS.map((tab) => {
-          const selected = state.view === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              data-view={tab.id}
-              aria-selected={selected}
-              aria-controls={panelId}
-              tabIndex={selected ? 0 : -1}
-              onClick={() => {
-                choose(tab.id);
-                if (tab.id === "custom" && !phone) setCustomizing(true);
-              }}
-              className={cn(
-                /* the chosen view is underlined, so a hovered tab never looks chosen */
-                "-mb-px h-10 shrink-0 border-b-2 px-2 text-sm whitespace-nowrap transition-colors sm:px-3",
-                selected
-                  ? "border-foreground text-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground border-transparent",
-              )}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      {/* which chart outranks how it is cut, so the views come first */}
+      {/* which chart outranks how it is cut, so the views come first */}
+      <AboveToolbar>
+        <ViewTabs
+          view={state.view}
+          panelId={panelId}
+          onChoose={choose}
+          onClickCustom={() => !phone && setCustomizing(true)}
+        />
+      </AboveToolbar>
 
       <figure
         id={panelId}
@@ -341,6 +365,81 @@ function Charts({ archive, filters, filterNote }: ViewProps) {
       </figure>
 
       <NumbersTable grouped={grouped} config={config} partial={partial} />
+    </div>
+  );
+}
+
+function ViewTabs({
+  view,
+  panelId,
+  onChoose,
+  onClickCustom,
+}: {
+  view: ViewId;
+  panelId: string;
+  onChoose: (view: ViewId) => void;
+  /** a click on Custom opens the builder; arriving by arrow key does not,
+      or the panel would take focus from the tabs */
+  onClickCustom: () => void;
+}) {
+  const list = useRef<HTMLDivElement>(null);
+
+  /* a phone scrolls the views sideways, and a link may open on one past the edge */
+  useEffect(() => {
+    list.current
+      ?.querySelector<HTMLElement>('[aria-selected="true"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [view]);
+
+  return (
+    <div
+      ref={list}
+      role="tablist"
+      aria-label="Chart views"
+      className="flex gap-x-1 overflow-x-auto border-b"
+      onKeyDown={(event) => {
+        /* the tabs pattern: arrows move between the views, and choose */
+        const step =
+          event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+        if (!step) return;
+        event.preventDefault();
+        const at = TABS.findIndex((tab) => tab.id === view);
+        const next = TABS[(at + step + TABS.length) % TABS.length]!;
+        onChoose(next.id);
+        list.current
+          ?.querySelector<HTMLElement>(`[data-view="${next.id}"]`)
+          ?.focus();
+      }}
+    >
+      {TABS.map((tab) => {
+        const selected = view === tab.id;
+        const Icon = ICONS[tab.id];
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            data-view={tab.id}
+            aria-selected={selected}
+            aria-controls={panelId}
+            tabIndex={selected ? 0 : -1}
+            onClick={() => {
+              onChoose(tab.id);
+              if (tab.id === "custom") onClickCustom();
+            }}
+            className={cn(
+              /* the chosen view is underlined, so a hovered tab never looks chosen */
+              "-mb-px flex h-10 shrink-0 items-center gap-1.5 border-b-2 px-2 text-sm whitespace-nowrap transition-colors sm:px-3 [&_svg]:size-4 [&_svg]:shrink-0",
+              selected
+                ? "border-foreground text-foreground font-medium"
+                : "text-muted-foreground hover:text-foreground border-transparent",
+            )}
+          >
+            <Icon aria-hidden />
+            {tab.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

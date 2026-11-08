@@ -1,9 +1,11 @@
 /*
   What the Charts page draws, kept in the url beside the filters so a link
-  reproduces the chart. A saved view is a name for one configuration; Custom
-  is whatever the builder last made. Every view is a configuration the builder
-  can show, so choosing one and then changing a setting starts from exactly
-  what was on screen.
+  reproduces the chart. A saved view is a name for one configuration and the
+  time range it opens on; Custom is whatever the builder last made, on the
+  range of the view it was made from. Every view is a configuration the
+  builder can show, so choosing one and then changing a setting starts from
+  exactly what was on screen. The range is only where Time starts: changing
+  it is a filter, and leaves the view as it is.
 */
 
 import {
@@ -12,6 +14,7 @@ import {
   type Measure,
   type Order,
 } from "~/lib/credits/stats";
+import type { Preset } from "./filters";
 
 export type Split = "none" | "section" | "role";
 export type Draw = "stacked" | "grouped" | "lines";
@@ -57,36 +60,31 @@ export const VALUES: Values[] = ["number", "share", "running"];
 export const ORDERS: Order[] = ["largest", "natural"];
 export const TOPS = [10, 25, 50, 0];
 
+/*
+  the questions an editor asks most, most of them about the last three months;
+  the long-run views keep a range where three months would be a sliver
+*/
 export const VIEWS = [
   {
-    id: "over-time",
-    label: "Over time",
+    /* what we have published lately, and where */
+    id: "sections",
+    label: "Sections",
+    range: "3m",
     config: {
       count: "articles",
-      by: "semester",
-      split: "section",
+      by: "section",
+      split: "none",
       draw: "stacked",
       values: "number",
-      order: "largest",
+      order: "natural",
       top: 25,
     },
   },
   {
-    id: "mix",
-    label: "Mix",
-    config: {
-      count: "articles",
-      by: "semester",
-      split: "section",
-      draw: "stacked",
-      values: "share",
-      order: "largest",
-      top: 25,
-    },
-  },
-  {
+    /* who has been doing the work, and what work */
     id: "contributors",
     label: "Contributors",
+    range: "3m",
     config: {
       count: "contributions",
       by: "person",
@@ -98,19 +96,57 @@ export const VIEWS = [
     },
   },
   {
-    id: "totals",
-    label: "Totals",
+    /* who joined lately, where they started, and as what */
+    id: "newcomers",
+    label: "Newcomers",
+    range: "3m",
     config: {
-      count: "articles",
+      count: "newcomers",
       by: "section",
-      split: "none",
+      split: "role",
       draw: "stacked",
       values: "number",
       order: "natural",
       top: 25,
     },
   },
-] as const satisfies { id: string; label: string; config: ChartConfig }[];
+  {
+    /* how the balance of sections has moved, semester to semester */
+    id: "mix",
+    label: "Mix",
+    range: "2y",
+    config: {
+      count: "articles",
+      by: "semester",
+      split: "section",
+      draw: "stacked",
+      values: "share",
+      order: "largest",
+      top: 25,
+    },
+  },
+  {
+    /* the paper's output since the archive begins */
+    id: "history",
+    label: "History",
+    range: "all",
+    config: {
+      count: "articles",
+      by: "semester",
+      split: "section",
+      draw: "stacked",
+      values: "number",
+      order: "largest",
+      top: 25,
+    },
+  },
+] as const satisfies {
+  id: string;
+  label: string;
+  /** the Time filter the view opens on */
+  range: Preset;
+  config: ChartConfig;
+}[];
 
 export type ViewId = (typeof VIEWS)[number]["id"] | "custom";
 
@@ -124,11 +160,19 @@ export type ChartState = {
   base: SavedId;
 };
 
-const DEFAULT_CONFIG: ChartConfig = VIEWS[0].config;
+const FIRST = VIEWS[0];
+const DEFAULT_CONFIG: ChartConfig = FIRST.config;
+
+const savedView = (id: SavedId) => VIEWS.find((view) => view.id === id)!;
 
 export function configOf(state: ChartState): ChartConfig {
   if (state.view === "custom") return state.custom ?? DEFAULT_CONFIG;
-  return VIEWS.find((view) => view.id === state.view)!.config;
+  return savedView(state.view).config;
+}
+
+/** the Time filter the chart opens on, which its link leaves out */
+export function rangeOfView(state: ChartState): Preset {
+  return savedView(state.view === "custom" ? state.base : state.view).range;
 }
 
 /** what the options mean for one another, as the builder offers them */
@@ -188,7 +232,7 @@ const pick = <T extends string>(
 ): T => (options.includes(value as T) ? (value as T) : fallback);
 
 const savedId = (id: string | null): SavedId =>
-  VIEWS.find((v) => v.id === id)?.id ?? "over-time";
+  VIEWS.find((v) => v.id === id)?.id ?? FIRST.id;
 
 export function readChart(search: string): ChartState {
   const params = new URLSearchParams(search);
@@ -236,12 +280,12 @@ const KEYS = [
 
 /** writes the chart into `params`, leaving the filters' own parameters alone */
 export function writeChart(state: ChartState, params: URLSearchParams) {
-  if (state.view === "over-time") params.delete("view");
+  if (state.view === FIRST.id) params.delete("view");
   else params.set("view", state.view);
   const custom = state.view === "custom" ? configOf(state) : null;
   for (const key of KEYS)
     if (custom) params.set(key, String(custom[key]));
     else params.delete(key);
-  if (custom && state.base !== "over-time") params.set("base", state.base);
+  if (custom && state.base !== FIRST.id) params.set("base", state.base);
   else params.delete("base");
 }

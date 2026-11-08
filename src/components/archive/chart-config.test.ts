@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import {
   configOf,
+  rangeOfView,
   readChart,
   settle,
   VIEWS,
@@ -8,6 +9,7 @@ import {
   type ChartConfig,
   type ChartState,
 } from "./chart-config";
+import { clearedState, readState, writeState, type Preset } from "./filters";
 
 const roundTrip = (state: ChartState) => {
   const params = new URLSearchParams("range=semester&q=ann");
@@ -42,16 +44,59 @@ test("a saved view links by name alone, and the default by nothing", () => {
   expect(mix.state.view).toBe("mix");
 
   const first = roundTrip({
-    view: "over-time",
+    view: VIEWS[0].id,
     custom: null,
-    base: "over-time",
+    base: VIEWS[0].id,
   });
   expect(first.params.has("view")).toBe(false);
 });
 
+test("a link leaves out the view's own time range, and keeps any other", () => {
+  const link = (chart: ChartState, preset: Preset) => {
+    const params = new URLSearchParams();
+    writeChart(chart, params);
+    writeState(clearedState(preset), params, rangeOfView(chart));
+    return `?${params}`;
+  };
+  /* as the page opens one: the chart first, then Time from its view */
+  const open = (search: string) => {
+    const chart = readChart(search);
+    return { view: chart.view, time: readState(search, rangeOfView(chart)) };
+  };
+  const history: ChartState = {
+    view: "history",
+    custom: null,
+    base: "history",
+  };
+  const contributors: ChartState = {
+    view: "contributors",
+    custom: null,
+    base: "contributors",
+  };
+
+  expect(link(history, "all")).toBe("?view=history");
+  expect(open("?view=history").time.preset).toBe("all");
+  expect(link(contributors, "3m")).toBe("?view=contributors");
+  expect(open("?view=contributors").time.preset).toBe("3m");
+
+  /* Time changed after choosing a view is a filter, and the view stays */
+  const narrowed = open(link(history, "12m"));
+  expect(narrowed).toMatchObject({ view: "history", time: { preset: "12m" } });
+
+  /* Custom keeps the range of the view it was made from */
+  const custom: ChartState = {
+    view: "custom",
+    custom: { ...VIEWS[0].config, values: "share" },
+    base: "mix",
+  };
+  expect(rangeOfView(custom)).toBe(open("?view=mix").time.preset);
+  expect(new URLSearchParams(link(custom, "2y")).has("range")).toBe(false);
+  expect(open(link(custom, "all")).time.preset).toBe("all");
+});
+
 test("a hand-edited link is settled rather than drawn as asked", () => {
   const state = readChart(
-    "?view=custom&count=people&by=section&split=section&draw=lines&values=share&top=7",
+    "?view=custom&count=people&by=section&split=section&draw=lines&values=share&order=largest&top=7",
   );
   expect(configOf(state)).toEqual({
     count: "people",
@@ -62,11 +107,19 @@ test("a hand-edited link is settled rather than drawn as asked", () => {
     order: "largest",
     top: 25,
   });
-  expect(readChart("?view=nonsense").view).toBe("over-time");
+  expect(readChart("?view=nonsense").view).toBe(VIEWS[0].id);
 });
 
 test("a choice that rules another out moves it", () => {
-  const base = VIEWS[0].config;
+  const base: ChartConfig = {
+    count: "articles",
+    by: "semester",
+    split: "section",
+    draw: "stacked",
+    values: "number",
+    order: "largest",
+    top: 25,
+  };
   /* people overlap across sections, so they are not stacked or shared out */
   expect(settle({ ...base, count: "people" }).draw).toBe("grouped");
   expect(settle({ ...base, count: "people", values: "share" }).values).toBe(

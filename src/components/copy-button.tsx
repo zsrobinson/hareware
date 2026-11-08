@@ -1,17 +1,26 @@
 import { useRef, useState } from "react";
-import { CheckIcon, CopyIcon, XIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, XIcon, type LucideIcon } from "lucide-react";
+import { cn } from "~/lib/utils";
 import { Button } from "./ui/button";
 
-/** a field's copy button: the icon says what happened, and a screen reader
-    hears it, while focus stays on the button */
-export function CopyButton({ id, what }: { id: string; what: string }) {
-  const [result, setResult] = useState<"copied" | "failed" | null>(null);
+type Outcome = "copied" | "failed";
+
+/* what the last copy did, for as long as a glance takes */
+function useOutcome() {
+  const [result, setResult] = useState<Outcome | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const show = (outcome: "copied" | "failed") => {
+  const show = (outcome: Outcome) => {
     clearTimeout(timer.current);
     setResult(outcome);
     timer.current = setTimeout(() => setResult(null), 1600);
   };
+  return [result, show] as const;
+}
+
+/** a field's copy button: the icon says what happened, and a screen reader
+    hears it, while focus stays on the button */
+export function CopyButton({ id, what }: { id: string; what: string }) {
+  const [result, show] = useOutcome();
 
   return (
     <>
@@ -57,6 +66,70 @@ export function CopyButton({ id, what }: { id: string; what: string }) {
           ? `Copied ${what}`
           : result === "failed"
             ? `Couldn't copy ${what}; it's selected to copy by hand`
+            : ""}
+      </span>
+    </>
+  );
+}
+
+/** a copy button that says what it copies ("Copy link"): it reads "Copied"
+    for a moment, at the width it already had, so nothing beside it moves */
+export function CopyTextButton({
+  text,
+  label,
+  what,
+  icon: Icon,
+  failed,
+}: {
+  /** read on the click, so it is what is on screen then */
+  text: () => string;
+  label: string;
+  /** what a screen reader hears was copied ("the link") */
+  what: string;
+  icon: LucideIcon;
+  /** where to copy it by hand instead */
+  failed: string;
+}) {
+  const [result, show] = useOutcome();
+  const shown = result === "copied" ? "Copied" : label;
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        className="bg-background"
+        title={result === "failed" ? `Couldn't copy. ${failed}` : undefined}
+        onClick={() => {
+          navigator.clipboard
+            .writeText(text())
+            .then(() => show("copied"))
+            .catch((error: unknown) => {
+              console.error("could not write to the clipboard", error);
+              show("failed");
+            });
+        }}
+      >
+        {result === "copied" ? (
+          <CheckIcon />
+        ) : result === "failed" ? (
+          <XIcon />
+        ) : (
+          <Icon />
+        )}
+        {/* both words in one cell, the other hidden, so the width holds */}
+        <span className="grid *:col-start-1 *:row-start-1">
+          {[label, "Copied"].map((word) => (
+            <span key={word} className={cn(word !== shown && "invisible")}>
+              {word}
+            </span>
+          ))}
+        </span>
+      </Button>
+      <span className="sr-only" role="status">
+        {result === "copied"
+          ? `Copied ${what}`
+          : result === "failed"
+            ? `Couldn't copy ${what}. ${failed}`
             : ""}
       </span>
     </>

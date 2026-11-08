@@ -274,3 +274,22 @@ test("a series under one pen name counts each part as whoever wrote it", () => {
   expect(names(archive, 1)).toEqual(["Sam Second"]);
   expect(names(archive, 2)).toEqual(["Sam Second"]);
 });
+
+test("the archive lists its sections in the paper's order, not alphabetically", () => {
+  const archive = buildArchive({
+    posts: [post(1, [], [2]), post(2, [], [1]), post(3, [], [3])],
+    categories: new Map([
+      [1, "Entertainment"],
+      [2, "Uncategorized"],
+      [3, "Features"],
+    ]),
+    sheet: read(),
+    labels: DEFAULT_LABELS,
+    fetchedAt: "now",
+  });
+  expect(archive.sections).toEqual([
+    "Features",
+    "Entertainment",
+    "Uncategorized",
+  ]);
+});

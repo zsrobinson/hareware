@@ -4,27 +4,17 @@
   which read as a second orange beside Features. Light mode's aqua and magenta
   sit under 3:1, so every chart carries its table. A color follows its entity, never its
   rank: a section keeps its hue however the filters cut the list, and series
-  stack in slot order so neighbours are the pairs the palette was checked for.
+  stack in slot order (the paper's section order, which ~/lib/credits/stats
+  sorts them into) so neighbours are the pairs the palette was checked for.
 */
+
+import { ROLES } from "~/lib/credits/labels";
+import { SECTION_ORDER } from "~/lib/credits/sections";
 
 export const SLOTS = 5;
 
-/** sections in slot order, biggest desk first, so News sits on the baseline */
-const SECTION_ORDER = [
-  "News",
-  "Features",
-  "Sports",
-  "Entertainment",
-  "Rabbithole",
-];
-const ROLE_ORDER = ["writer", "image", "other"];
-
-const orderFor = (dimension: string) =>
-  dimension === "section"
-    ? SECTION_ORDER
-    : dimension === "role"
-      ? ROLE_ORDER
-      : [];
+const orderFor = (dimension: string): readonly string[] =>
+  dimension === "section" ? SECTION_ORDER : dimension === "role" ? ROLES : [];
 
 /** `var(--series-n)` for a series key, or the neutral for anything past the slots */
 export function seriesColor(
@@ -41,16 +31,4 @@ export function seriesColor(
   return index >= 0 && index < SLOTS
     ? `var(--series-${index + 1})`
     : "var(--series-other)";
-}
-
-/** series in the order they stack and list: slot order, anything unknown last */
-export function seriesOrder<T extends { key: string }>(
-  series: T[],
-  dimension: string,
-): T[] {
-  const fixed = orderFor(dimension);
-  if (fixed.length === 0) return series;
-  const rank = (key: string) =>
-    fixed.includes(key) ? fixed.indexOf(key) : fixed.length;
-  return [...series].sort((a, b) => rank(a.key) - rank(b.key));
 }

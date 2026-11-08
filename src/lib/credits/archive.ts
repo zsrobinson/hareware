@@ -6,6 +6,7 @@
 
 import type { Label, Role } from "./labels";
 import { creditLines, labelOf, unrecognisedLines } from "./parse";
+import { sortSections } from "./sections";
 import {
   pairKey,
   same,
@@ -184,7 +185,7 @@ export function buildArchive(input: {
 
   return {
     articles,
-    sections: [...new Set(articles.map((a) => a.section))].sort(),
+    sections: sortSections(new Set(articles.map((a) => a.section))),
     labels,
     penNames: penNames(everywhere, articles),
     articleOverrides: overrides

@@ -21,7 +21,7 @@ import {
 import { cn } from "~/lib/utils";
 import { ArchiveShell, type ViewProps } from "./archive-shell";
 import { Choice } from "./choice";
-import { seriesColor, seriesOrder } from "./colors";
+import { seriesColor } from "./colors";
 
 type Breakdown = "none" | "section" | "role";
 type Kind = "bars" | "lines";
@@ -156,7 +156,7 @@ function Charts({ archive, filters }: ViewProps) {
       filters,
       limit: isPeriod(by) ? undefined : limit,
     });
-    return { ...raw, series: seriesOrder(raw.series, split) };
+    return raw;
   }, [shown, measure, by, split, filters, limit]);
 
   const visible = useMemo(

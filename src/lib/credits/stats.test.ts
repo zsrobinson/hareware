@@ -171,6 +171,124 @@ test("summer belongs to Fall, so the semester axis has no near-empty summers", (
   });
 });
 
+test("a school year is a Fall and the Spring after it", () => {
+  expect(periodOf("2025-09-10", "school-year")).toEqual({
+    key: "2025",
+    label: "2025–26",
+  });
+  expect(periodOf("2026-05-31", "school-year").key).toBe("2025");
+  expect(periodBounds("2025", "school-year")).toEqual({
+    from: "2025-06-01",
+    to: "2026-05-31",
+  });
+  const grouped = group(archive, {
+    measure: "articles",
+    by: "school-year",
+    breakdown: "none",
+    filters: NO_FILTERS,
+  });
+  expect(grouped.categories.map((c) => c.label)).toEqual([
+    "2025–26",
+    "2026–27",
+  ]);
+  expect(grouped.totals).toEqual({ "2025": 2, "2026": 1 });
+});
+
+test("sections stack and list in the paper's order, not alphabetically", () => {
+  const sections = ["Rabbithole", "Sports", "Entertainment", "News"].map(
+    (section, i) => article(10 + i, "2026-01-10T15:00:00Z", section, []),
+  );
+  const grouped = group(sections, {
+    measure: "articles",
+    by: "semester",
+    breakdown: "section",
+    filters: NO_FILTERS,
+  });
+  expect(grouped.series.map((s) => s.key)).toEqual([
+    "News",
+    "Entertainment",
+    "Sports",
+    "Rabbithole",
+  ]);
+
+  const totals = group(sections, {
+    measure: "articles",
+    by: "section",
+    breakdown: "none",
+    filters: NO_FILTERS,
+    order: "natural",
+  });
+  expect(totals.categories.map((c) => c.key)).toEqual([
+    "News",
+    "Entertainment",
+    "Sports",
+    "Rabbithole",
+  ]);
+});
+
+test("the biggest are kept before a natural order sorts them", () => {
+  const grouped = group(archive, {
+    measure: "contributions",
+    by: "person",
+    breakdown: "none",
+    filters: NO_FILTERS,
+    limit: 2,
+    order: "natural",
+  });
+  /* Ann has three, then Bo, Cy and Riley one each, of whom Bo is first by name */
+  expect(grouped.categories.map((c) => c.key)).toEqual(["Ann", "Bo"]);
+});
+
+test("people count each name once, in a cell and in its total", () => {
+  const grouped = group(archive, {
+    measure: "people",
+    by: "semester",
+    breakdown: "role",
+    filters: NO_FILTERS,
+  });
+  /* Spring: Ann wrote twice and illustrated once, Bo illustrated, Cy wrote */
+  expect(grouped.values["2026-1"]).toEqual({ writer: 2, image: 2 });
+  expect(grouped.totals["2026-1"]).toBe(3);
+  expect(grouped.total).toBe(4);
+});
+
+test("a newcomer is counted where they first appear in the whole archive", () => {
+  const options = {
+    measure: "newcomers" as const,
+    by: "semester" as const,
+    breakdown: "none" as const,
+    filters: { ...NO_FILTERS, from: "2026-03-01" },
+  };
+  const shown = applyFilters(archive, options.filters);
+  /* from March, only Cy and Riley are new: Ann started in January */
+  const grouped = group(shown, { ...options, history: archive });
+  expect(grouped.totals).toEqual({ "2026-1": 1, "2026-2": 1 });
+  expect(grouped.total).toBe(2);
+});
+
+test("a running total carries through empty periods and counts a person once", () => {
+  const articles = group(archive, {
+    measure: "articles",
+    by: "month",
+    breakdown: "section",
+    filters: NO_FILTERS,
+    running: true,
+  });
+  expect(articles.values["2026-02"]).toEqual({ News: 1 });
+  expect(articles.values["2026-09"]).toEqual({ News: 2, Sports: 1 });
+
+  const people = group(archive, {
+    measure: "people",
+    by: "month",
+    breakdown: "none",
+    filters: NO_FILTERS,
+    running: true,
+  });
+  /* Ann is in January and March; she is one of four people, not five */
+  expect(people.totals["2026-03"]).toBe(3);
+  expect(people.totals["2026-09"]).toBe(4);
+});
+
 test("an empty semester still has a column, so a gap is not hidden", () => {
   const grouped = group(
     [

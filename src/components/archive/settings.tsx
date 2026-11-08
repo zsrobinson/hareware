@@ -287,7 +287,9 @@ function PenNameRow({
         </span>
       </span>
       <span className="text-muted-foreground tabular-nums max-sm:hidden">
-        {pen.articles} {pen.articles === 1 ? "article" : "articles"}
+        {pen.articles === 0
+          ? "Not printed yet"
+          : `${pen.articles} ${pen.articles === 1 ? "article" : "articles"}`}
       </span>
       <RowButtons
         name={pen.byline}
@@ -381,7 +383,12 @@ function AddPenName({
             onChange={(event) => setByline(event.target.value)}
           />
         </FieldRow>
-        <FieldRow icon={UserRoundIcon} label="Counts as" htmlFor={ids.realName}>
+        <FieldRow
+          icon={UserRoundIcon}
+          label="Counts as"
+          htmlFor={ids.realName}
+          inline
+        >
           <PersonPicker
             id={ids.realName}
             value={realName}

@@ -826,15 +826,16 @@ function FilterBar({
 }
 
 /**
- * The placeholder while all of it shows, else the short one: an input cuts
- * its placeholder off wherever the box ends, mid-word.
+ * The placeholder while all of it shows, else the short one, else none (the
+ * icon and the field's name still say what it is): an input cuts its
+ * placeholder off wherever the box ends, mid-word.
  */
 function useFittingPlaceholder(full: string, short: string) {
   const ref = useRef<HTMLInputElement>(null);
-  const [fits, setFits] = useState(true);
+  const [placeholder, setPlaceholder] = useState(full);
   useLayoutEffect(() => {
     const input = ref.current;
-    if (!input || full === short) return;
+    if (!input) return;
     let context: CanvasRenderingContext2D | null = null;
     const check = () => {
       /* nothing laid out (a test's document) has nothing to measure */
@@ -849,7 +850,11 @@ function useFittingPlaceholder(full: string, short: string) {
         parseFloat(style.paddingLeft) -
         parseFloat(style.paddingRight) -
         20;
-      setFits(context.measureText(full).width <= room);
+      const measure = context;
+      setPlaceholder(
+        [full, short].find((text) => measure.measureText(text).width <= room) ??
+          "",
+      );
     };
     check();
     /* measured in the fallback font, it would fit text the real one does not */
@@ -858,7 +863,7 @@ function useFittingPlaceholder(full: string, short: string) {
     observer.observe(input);
     return () => observer.disconnect();
   }, [full, short]);
-  return { ref, placeholder: fits ? full : short };
+  return { ref, placeholder };
 }
 
 function DateField({

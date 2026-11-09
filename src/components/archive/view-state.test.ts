@@ -54,6 +54,7 @@ vi.mock("./views", async (importOriginal) => {
           values: "number",
           order: "largest",
           top: 25,
+          compare: "none",
         },
         hidden: ["Sports"],
       },
@@ -152,6 +153,7 @@ test("a link reproduces a custom chart or table, and keeps the filters' paramete
     values: "running",
     order: "largest",
     top: 25,
+    compare: "none",
   };
   const people = changeView(
     readView("?view=headcount", "people"),
@@ -282,6 +284,7 @@ const SETTINGS: (keyof ChartConfig)[] = [
   "count",
   "by",
   "split",
+  "compare",
 ];
 
 /* the same for a pivot's */
@@ -302,6 +305,7 @@ const PIVOT_SETTINGS: (keyof PivotConfig)[] = [
   "count",
   "rows",
   "columns",
+  "compare",
 ];
 
 /* the declaration's settings made one at a time, each as the builder offers

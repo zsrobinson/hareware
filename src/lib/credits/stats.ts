@@ -546,6 +546,71 @@ export function group(
   };
 }
 
+/**
+ * The same count over two ranges, side by side: each category's series are
+ * `now` and `then`, each the category's own members in that range. A
+ * category only the earlier range has is kept, unless `now` kept only its
+ * top few, which it alone decides.
+ */
+export function paired(
+  now: Grouped,
+  then: Grouped,
+  options: { by: Dimension; order?: Order },
+): Grouped {
+  const cut = now.categories.length < now.available;
+  const sizeOf = (grouped: Grouped, key: string) => grouped.totals[key] ?? 0;
+  const categories = [
+    ...now.categories,
+    ...(cut
+      ? []
+      : then.categories.filter(
+          (c) => !now.categories.some((own) => own.key === c.key),
+        )),
+  ];
+  if (options.order === "natural" || inTime(options.by))
+    categories.sort(naturalOrder(options.by));
+  else
+    categories.sort(
+      (a, b) =>
+        sizeOf(now, b.key) - sizeOf(now, a.key) ||
+        sizeOf(then, b.key) - sizeOf(then, a.key) ||
+        a.label.localeCompare(b.label),
+    );
+  const series = [
+    { key: "now", label: "now" },
+    { key: "then", label: "then" },
+  ];
+  const cells: Grouped["cells"] = {};
+  const values: Grouped["values"] = {};
+  const totals: Grouped["totals"] = {};
+  for (const { key } of categories) {
+    const own = { now: now.cells[key]?.[ALL], then: then.cells[key]?.[ALL] };
+    cells[key] = Object.fromEntries(
+      Object.entries(own).filter(([, list]) => list && list.length > 0),
+    ) as Record<string, Member[]>;
+    values[key] = Object.fromEntries(
+      Object.entries(cells[key]).map(([s, list]) => [s, list.length]),
+    );
+    totals[key] = membersOf(
+      { categories, series, cells, running: false },
+      key,
+    ).length;
+  }
+  return {
+    measure: now.measure,
+    breakdown: "none",
+    categories,
+    series,
+    values,
+    totals,
+    total: now.total,
+    articles: now.articles,
+    available: cut ? now.available : categories.length,
+    cells,
+    running: false,
+  };
+}
+
 export type PersonRow = {
   name: string;
   /** contributions per role */

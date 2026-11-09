@@ -5,6 +5,7 @@
 */
 
 import type { ArchiveArticle } from "~/lib/credits/archive";
+import { COMPARES, type Compare } from "./compare";
 import {
   group,
   isPeriod,
@@ -29,6 +30,8 @@ export type ChartConfig = {
   order: Order;
   /** the biggest this many people, or 0 for everyone */
   top: number;
+  /** each category against an earlier range, as paired bars */
+  compare: Compare;
 };
 
 export const COUNTS: { id: Measure; label: string }[] = [
@@ -66,8 +69,13 @@ export const TOPS = [10, 25, 50, 0];
  * so no choice moves a setting it was not made in.
  */
 export function allows(config: ChartConfig) {
-  const { count, by, split } = config;
+  const { count, by, split, compare } = config;
   const time = isPeriod(by);
+  /* two ranges of a category side by side: across time, the axis is
+     already the comparison, and a split's stack of two ranges would add
+     up to a total of neither */
+  const comparable = !time && split === "none" && config.values === "number";
+  const comparing = compare !== "none";
   /* an article has no one role, person or intake; and by person, every
      person is one */
   const articles =
@@ -89,28 +97,32 @@ export function allows(config: ChartConfig) {
           ? count === "contributions"
           : id === "role"
             ? count !== "articles" && split !== "role"
-            : id !== "section" || split !== "section",
+            : (id !== "section" || split !== "section") &&
+              !(comparing && isPeriod(id)),
       ]),
     ) as Record<Dimension, boolean>,
     split: {
       none: true,
-      section: by !== "section",
-      role: by !== "role" && count !== "articles",
-      joined: count !== "articles",
+      section: by !== "section" && !comparing,
+      role: by !== "role" && count !== "articles" && !comparing,
+      joined: count !== "articles" && !comparing,
     } satisfies Record<Split, boolean>,
     draw: {
       /* one person in two sections would be drawn twice in one column */
-      stacked: count !== "people" || parts,
-      grouped: split !== "none",
+      stacked: (count !== "people" || parts) && !comparing,
+      grouped: split !== "none" || comparing,
       lines: time,
     } satisfies Record<Draw, boolean>,
     values: {
       number: true,
       /* distinct people do not add up to a whole to take a share of,
          except split by when they joined */
-      share: count !== "people" || split === "joined",
+      share: (count !== "people" || split === "joined") && !comparing,
       running: time,
     } satisfies Record<Values, boolean>,
+    compare: Object.fromEntries(
+      COMPARES.map(({ id }) => [id, id === "none" || comparable]),
+    ) as Record<Compare, boolean>,
     order: !time,
     top: by === "person",
   };
@@ -143,6 +155,8 @@ export function settle(config: ChartConfig): ChartConfig {
   if (next.split === next.by) next.split = "none";
   let ok = allows(next);
   if (!ok.count[next.count]) next.count = "contributions";
+  ok = allows(next);
+  if (!ok.compare[next.compare]) next.compare = "none";
   ok = allows(next);
   if (!ok.draw[next.draw])
     next.draw = DRAWS.find((draw) => ok.draw[draw]) ?? "stacked";
@@ -184,6 +198,11 @@ export function readChart(
     values: pick(params.get("values"), VALUES, d.values),
     order: pick(params.get("order"), ORDERS, d.order),
     top: params.has("top") && TOPS.includes(top) ? top : d.top,
+    compare: pick(
+      params.get("compare"),
+      COMPARES.map((c) => c.id),
+      d.compare,
+    ),
   });
 }
 
@@ -195,6 +214,7 @@ const KEYS = [
   "values",
   "order",
   "top",
+  "compare",
 ] as const;
 
 /** writes a chart into `params`, or takes one out (null) */

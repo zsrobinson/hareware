@@ -153,3 +153,97 @@ test("the builder makes a pivot, and the address keeps it", async () => {
     }),
   ).toBeTruthy();
 });
+
+test("a pivot against the period before pairs each row, and opens either range", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    "/articles?view=custom&base=section-share&layout=pivot&count=articles&rows=section&cols=none&values=number&top=25&compare=previous&range=custom&from=2026-01-01&to=2026-05-31",
+  );
+  const user = userEvent.setup();
+  render(<ArticlesPage />);
+  const table = await screen.findByRole("table");
+  expect(
+    within(table)
+      .getAllByRole("columnheader")
+      .map((cell) => cell.textContent),
+  ).toEqual([
+    "Section",
+    "Spring 2026",
+    "Aug 3, 2025 to Dec 31, 2025",
+    "Difference",
+  ]);
+  const news = within(table).getByRole("row", { name: /^News/ });
+  expect(
+    within(news)
+      .getAllByRole("cell")
+      .map((cell) => cell.textContent),
+  ).toEqual(["1", "2", "−1"]);
+
+  await user.click(
+    within(table).getByRole("button", {
+      name: "News, Aug 3, 2025 to Dec 31, 2025: see 2 articles",
+    }),
+  );
+  const panel = await screen.findByRole("complementary", {
+    name: "News · Aug 3, 2025 to Dec 31, 2025",
+  });
+  const articles = new URL(
+    within(panel)
+      .getByRole("link", { name: "See in Articles" })
+      .getAttribute("href")!,
+    "https://x.test",
+  );
+  expect(articles.searchParams.get("from")).toBe("2025-08-03");
+  expect(articles.searchParams.get("to")).toBe("2025-12-31");
+  expect(articles.searchParams.get("sections")).toBe("News");
+});
+
+test("a chart against what came before all time says there is nothing, and draws one range", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    "/articles?view=custom&base=sections&layout=chart&count=articles&by=section&split=none&draw=grouped&values=number&order=natural&top=25&compare=previous&range=all",
+  );
+  const user = userEvent.setup();
+  render(<ArticlesPage />);
+  expect(
+    await screen.findByText(/^All time has nothing before it to compare with/),
+  ).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "Show as table" }));
+  expect(
+    screen.getAllByRole("columnheader").map((cell) => cell.textContent),
+  ).toEqual(["Section", "Articles"]);
+});
+
+test("a chart against the period before draws each category's pair, and their difference", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    "/articles?view=custom&base=sections&layout=chart&count=articles&by=section&split=none&draw=grouped&values=number&order=natural&top=25&compare=previous&range=custom&from=2026-01-01&to=2026-05-31",
+  );
+  const user = userEvent.setup();
+  render(<ArticlesPage />);
+  const table = await screen.findByRole("button", { name: "Show as table" });
+  expect(document.querySelector("figcaption")!.textContent).toContain(
+    "Articles by section, against the period before",
+  );
+  await user.click(table);
+  expect(
+    screen.getAllByRole("columnheader").map((cell) => cell.textContent),
+  ).toEqual([
+    "Section",
+    "Spring 2026",
+    "Aug 3, 2025 to Dec 31, 2025",
+    "Difference",
+  ]);
+  await user.click(
+    screen.getByRole("button", {
+      name: "Aug 3, 2025 to Dec 31, 2025, News: see 2 articles",
+    }),
+  );
+  const panel = await screen.findByRole("complementary", {
+    name: "Aug 3, 2025 to Dec 31, 2025 · News",
+  });
+  expect(within(panel).getAllByRole("listitem")).toHaveLength(2);
+});

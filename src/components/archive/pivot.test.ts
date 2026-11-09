@@ -32,6 +32,7 @@ import {
   type Pivot,
   type PivotSlice,
 } from "./pivot";
+import { COMPARES } from "./compare";
 import { VIEWS } from "./views";
 
 /*
@@ -53,7 +54,16 @@ const configs: PivotConfig[] = COUNTS.flatMap(({ id: count }) =>
   DIMENSIONS.flatMap(({ id: rows }) =>
     [{ id: "none" as const }, ...DIMENSIONS].flatMap(({ id: columns }) =>
       PIVOT_VALUES.flatMap(({ id: values }) =>
-        TOPS.map((top) => ({ count, rows, columns, values, top })),
+        TOPS.flatMap((top) =>
+          COMPARES.map(({ id: compare }) => ({
+            count,
+            rows,
+            columns,
+            values,
+            top,
+            compare,
+          })),
+        ),
       ),
     ),
   ),
@@ -64,18 +74,21 @@ const configs: PivotConfig[] = COUNTS.flatMap(({ id: count }) =>
   );
 });
 
-/* values do not change what is counted, nor does a top without people */
+/* values do not change what is counted, nor does a top without people;
+   the first of each, which compares with nothing (compare.test has those) */
 const counting = [
   ...new Map(
-    configs.map((config) => [
-      JSON.stringify([
-        config.count,
-        config.rows,
-        config.columns,
-        [config.rows, config.columns].includes("person") ? config.top : null,
+    configs
+      .reverse()
+      .map((config) => [
+        JSON.stringify([
+          config.count,
+          config.rows,
+          config.columns,
+          [config.rows, config.columns].includes("person") ? config.top : null,
+        ]),
+        config,
       ]),
-      config,
-    ]),
   ).values(),
 ];
 
@@ -114,7 +127,11 @@ const ids = (members: Member[]) => members.map((m) => m.id).sort();
 /** every number the pivot shows, as the slice it opens */
 function slicesOf(pivot: Pivot): PivotSlice[] {
   const rows = [null, ...pivot.rows.map((r) => r.key)];
-  const columns = [null, ...pivot.columns.map((c) => c.key)];
+  /* two ranges have no total across them */
+  const columns = [
+    ...(pivot.ranges ? [] : [null]),
+    ...pivot.columns.map((c) => c.key),
+  ];
   return rows.flatMap((row) => columns.map((column) => ({ row, column })));
 }
 
@@ -367,6 +384,7 @@ test("a pivot of people keeps the top few, and its totals are theirs", () => {
       columns: "role",
       values: "number",
       top: 10,
+      compare: "none",
     },
     archive,
     NO_FILTERS,
@@ -395,6 +413,7 @@ test("a pivot of people keeps the top few, and its totals are theirs", () => {
       columns: "person",
       values: "number",
       top: 10,
+      compare: "none",
     },
     archive,
     NO_FILTERS,

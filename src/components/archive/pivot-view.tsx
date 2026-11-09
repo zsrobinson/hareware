@@ -17,10 +17,12 @@ import type { ViewProps } from "./archive-shell";
 import { COUNTS } from "./chart-config";
 import { percentText, sliceCount, unitOf } from "./chart-slice";
 import { partialKeys, type Incomplete } from "./charts";
+import { filtersFor } from "./compare";
 import { RowDetails, type OpenRow } from "./open-row";
 import { dimensionName, type PivotConfig } from "./pivot-config";
 import {
   cellValue,
+  differenceText,
   pivotCount,
   pivotFilters,
   pivotKey,
@@ -114,6 +116,11 @@ export function PivotView({
             {[pivotCount(pivot), filterNote].filter(Boolean).join(" · ")}
           </div>
         </figcaption>
+        {pivot.note && (
+          <p className="bg-muted/50 rounded-lg border px-3 py-2 text-sm">
+            {pivot.note}
+          </p>
+        )}
         {pivot.rows.length === 0 ? (
           <p
             data-sheet-anchor
@@ -164,14 +171,15 @@ export function PivotView({
                   ? undefined
                   : pivot.count(pivot.base(slice)!),
               ),
-              filterNote,
+              /* the earlier range's dates are in the title, and are not the filters' */
+              slice.column !== "then" && filterNote,
             ]
               .filter(Boolean)
               .join(" · ")}
             back={back}
             measure={pivot.grouped.measure}
             members={pivot.members(slice)}
-            filters={filters}
+            filters={filtersFor(filters, pivot.ranges, slice.column)}
             seeing={pivotFilters(pivot, slice, filterState)}
             onClose={opened.close}
             restoreFocus={() =>
@@ -227,6 +235,8 @@ function PivotTable({
 }) {
   const { config, rows, columns } = pivot;
   const split = config.columns !== "none";
+  /* two ranges side by side: no totals across them, but their difference */
+  const pairs = pivot.ranges !== null;
   /* where each button is: a row, -1 for the header and rows.length for the
      totals; a column, -1 for the row's header and columns.length for its total */
   const last = { row: rows.length, column: columns.length };
@@ -240,16 +250,16 @@ function PivotTable({
   };
   columns.forEach((column, c) => add(-1, c, { row: null, column: column.key }));
   rows.forEach((row, r) => {
-    add(r, -1, { row: row.key, column: null });
+    if (!pairs) add(r, -1, { row: row.key, column: null });
     columns.forEach((column, c) =>
       add(r, c, { row: row.key, column: column.key }),
     );
-    add(r, last.column, { row: row.key, column: null });
+    if (!pairs) add(r, last.column, { row: row.key, column: null });
   });
   columns.forEach((column, c) =>
     add(last.row, c, { row: null, column: column.key }),
   );
-  add(last.row, last.column, { row: null, column: null });
+  if (!pairs) add(last.row, last.column, { row: null, column: null });
   const tabStop = order.some((o) => o.at === stop) ? stop : order[0]?.at;
 
   const move = (event: KeyboardEvent<HTMLTableElement>) => {
@@ -378,7 +388,7 @@ function PivotTable({
               </th>
             ))}
             <th scope="col" className={cn(cell, "font-medium")}>
-              {split ? "Total" : measureName}
+              {pairs ? "Difference" : split ? "Total" : measureName}
             </th>
           </tr>
         </thead>
@@ -386,13 +396,15 @@ function PivotTable({
           {rows.map((row, r) => (
             <tr key={row.key} className="hover:bg-muted/40 border-b">
               <th scope="row" className={cn(sticky, "font-normal")}>
-                {button(
-                  r,
-                  -1,
-                  { row: row.key, column: null },
-                  `${rowName(row)}, all`,
-                  label(config.rows, row, partial.rows.get(row.key)),
-                )}
+                {pairs
+                  ? label(config.rows, row)
+                  : button(
+                      r,
+                      -1,
+                      { row: row.key, column: null },
+                      `${rowName(row)}, all`,
+                      label(config.rows, row, partial.rows.get(row.key)),
+                    )}
               </th>
               {columns.map((column, c) => (
                 <td key={column.key} className={cell}>
@@ -405,11 +417,17 @@ function PivotTable({
                 </td>
               ))}
               <td className={cn(cell, split && "font-medium")}>
-                {number(
-                  r,
-                  last.column,
-                  { row: row.key, column: null },
-                  split ? `${rowName(row)}, total` : rowName(row),
+                {pairs ? (
+                  <span className="tabular-nums">
+                    {differenceText(pivot, row.key)}
+                  </span>
+                ) : (
+                  number(
+                    r,
+                    last.column,
+                    { row: row.key, column: null },
+                    split ? `${rowName(row)}, total` : rowName(row),
+                  )
                 )}
               </td>
             </tr>
@@ -431,11 +449,17 @@ function PivotTable({
               </td>
             ))}
             <td className={cell}>
-              {number(
-                last.row,
-                last.column,
-                { row: null, column: null },
-                "Total",
+              {pairs ? (
+                <span className="tabular-nums">
+                  {differenceText(pivot, null)}
+                </span>
+              ) : (
+                number(
+                  last.row,
+                  last.column,
+                  { row: null, column: null },
+                  "Total",
+                )
               )}
             </td>
           </tr>

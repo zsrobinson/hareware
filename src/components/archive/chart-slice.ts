@@ -140,6 +140,15 @@ export function chartCount(grouped: Grouped, hidden: readonly string[]) {
   return parts.join(" · ");
 }
 
+/** two ranges' count in words: "64 articles, against 58" */
+export function pairCount(grouped: Grouped): string {
+  const keys = grouped.categories.map((c) => c.key);
+  const [now, then] = ["now", "then"].map(
+    (series) => membersAcross(grouped, keys, [series]).length,
+  ) as [number, number];
+  return `${unitOf(now, grouped.measure)}, against ${then.toLocaleString()}`;
+}
+
 /**
  * The slice's count in words: "12 articles", "18 contributions on 12
  * articles", or, on a chart of shares, "12 of 40 articles · 30%".

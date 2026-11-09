@@ -1,6 +1,7 @@
 import {
   ArrowDownWideNarrowIcon,
   ChartColumnIcon,
+  GitCompareArrowsIcon,
   GroupIcon,
   HashIcon,
   LayersIcon,
@@ -26,6 +27,7 @@ import {
   type Values,
 } from "./chart-config";
 import { Choice } from "./choice";
+import { COMPARES, type Compare } from "./compare";
 
 /**
  * The Customize panel's rows. What is counted, grouped and split never moves
@@ -65,9 +67,10 @@ export function ChartBuilder({
         : "A to Z";
 
   /* a choice with one option is no choice: draw is only offered where it varies */
-  const draws = DRAWS.filter((draw) => draw !== "grouped" || split).filter(
-    (draw) => draw !== "lines" || time,
-  );
+  const comparing = config.compare !== "none";
+  const draws = DRAWS.filter((draw) => draw !== "grouped" || split || comparing)
+    .filter((draw) => draw !== "lines" || time)
+    .filter((draw) => draw !== "stacked" || !comparing);
 
   return (
     <FieldRows>
@@ -133,6 +136,11 @@ export function ChartBuilder({
           onChange={(values) => set({ values })}
         />
       </BuilderRow>
+      <CompareRow
+        value={config.compare}
+        allowed={ok.compare}
+        onChange={(compare) => set({ compare })}
+      />
       {ok.order && (
         <BuilderRow icon={ArrowDownWideNarrowIcon} label="Order">
           <Choice
@@ -164,6 +172,30 @@ export function ChartBuilder({
         </BuilderRow>
       )}
     </FieldRows>
+  );
+}
+
+/** Compare with, for a chart or a pivot: what each category is set beside */
+export function CompareRow({
+  value,
+  allowed,
+  onChange,
+}: {
+  value: Compare;
+  allowed: Record<Compare, boolean>;
+  onChange: (compare: Compare) => void;
+}) {
+  return (
+    <BuilderRow icon={GitCompareArrowsIcon} label="Compare with">
+      <Choice
+        label="Compare with"
+        hideLabel
+        width="w-full"
+        value={value}
+        options={COMPARES.map((c) => ({ ...c, disabled: !allowed[c.id] }))}
+        onChange={onChange}
+      />
+    </BuilderRow>
   );
 }
 

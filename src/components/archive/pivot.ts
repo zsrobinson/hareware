@@ -16,6 +16,14 @@ import {
 } from "~/lib/credits/stats";
 import { COUNTS } from "./chart-config";
 import {
+  againstName,
+  compared,
+  signed,
+  spanLabel,
+  stateFor,
+  type Compared,
+} from "./compare";
+import {
   counted,
   sliceFilters,
   unitOf,
@@ -43,6 +51,10 @@ export type Pivot = {
   base: (slice: PivotSlice) => PivotSlice | null;
   /** the share as a percentage, or null when cells are numbers */
   share: (slice: PivotSlice) => number | null;
+  /** the two ranges, when the columns are the range on screen and an earlier one */
+  ranges: Compared["ranges"];
+  /** what is said of the earlier range: why it is not drawn, or that it is short */
+  note: string | null;
 };
 
 const ALL = "*";
@@ -74,8 +86,10 @@ export function readPivotSlice(key: string, pivot: Pivot): PivotSlice | null {
     return null;
   }
   const row = slice.row === null || pivot.rows.some((r) => r.key === slice.row);
+  /* two ranges have no total: their difference is no list */
   const column =
-    slice.column === null || pivot.columns.some((c) => c.key === slice.column);
+    (slice.column === null && !pivot.ranges) ||
+    pivot.columns.some((c) => c.key === slice.column);
   return row && column ? slice : null;
 }
 
@@ -91,20 +105,42 @@ export function pivotOf(
   filters: Filters,
   /** the whole archive, where someone's first contribution is looked for */
   history: ArchiveArticle[],
+  today?: string,
 ): Pivot {
-  const { count, rows, columns, values, top } = config;
-  const grouped = group(shown, {
-    measure: count,
-    by: rows,
-    breakdown: columns,
-    filters,
-    /* people the most first, as the top few are; anything else in its own order */
-    order: rows === "person" ? "largest" : "natural",
-    limit: rows === "person" ? top || undefined : undefined,
-    history,
-  });
+  const { count, rows, columns, values, top, compare } = config;
+  /* people the most first, as the top few are; anything else in its own order */
+  const order = rows === "person" ? "largest" : "natural";
+  const counting = (articles: ArchiveArticle[], on: Filters) =>
+    group(articles, {
+      measure: count,
+      by: rows,
+      breakdown: columns,
+      filters: on,
+      order,
+      limit: rows === "person" ? top || undefined : undefined,
+      history,
+    });
+  const { grouped, ranges, note } =
+    compare === "none"
+      ? { grouped: counting(shown, filters), ranges: null, note: null }
+      : compared(
+          counting,
+          shown,
+          filters,
+          history,
+          compare,
+          { by: rows, order },
+          today,
+        );
   const rowKeys = grouped.categories.map((c) => c.key);
-  let shownColumns = columns === "none" ? [] : grouped.series;
+  let shownColumns: Header[] = ranges
+    ? [
+        { key: "now", label: spanLabel(ranges.now) },
+        { key: "then", label: spanLabel(ranges.then) },
+      ]
+    : columns === "none"
+      ? []
+      : grouped.series;
   if (columns === "person") {
     const sizes = new Map(
       grouped.series.map((s) => [
@@ -119,7 +155,7 @@ export function pivotOf(
     if (top) shownColumns = shownColumns.slice(0, top);
   }
   const columnKeys =
-    columns === "none"
+    columns === "none" && !ranges
       ? grouped.series.map((s) => s.key)
       : shownColumns.map((c) => c.key);
 
@@ -144,18 +180,23 @@ export function pivotOf(
       : values === "column"
         ? { row: null, column: slice.column }
         : values === "total"
-          ? { row: null, column: null }
+          ? /* each range's share is of its own total */
+            { row: null, column: ranges ? slice.column : null }
           : null;
 
   return {
     config,
     grouped,
     rows: grouped.categories.map((c) => nameOf(rows, c)),
-    columns: shownColumns.map((c) => nameOf(columns, c)),
+    columns: ranges
+      ? shownColumns
+      : shownColumns.map((c) => nameOf(columns, c)),
     available: {
       rows: grouped.available,
       columns: columns === "none" ? 0 : grouped.series.length,
     },
+    ranges,
+    note,
     members,
     count: size,
     base,
@@ -169,8 +210,8 @@ export function pivotOf(
 }
 
 /** the people a top few left out of the columns, as a chart's legend hides series */
-const hiddenOf = ({ grouped, columns, config }: Pivot) =>
-  config.columns === "none"
+const hiddenOf = ({ grouped, columns, config, ranges }: Pivot) =>
+  config.columns === "none" || ranges
     ? []
     : grouped.series
         .map((s) => s.key)
@@ -182,17 +223,27 @@ export const pivotFilters = (
   slice: PivotSlice,
   state: FilterState,
 ): SliceFilters =>
-  sliceFilters(
-    pivot.grouped,
-    { by: pivot.config.rows, split: pivot.config.columns },
-    { category: slice.row, series: slice.column },
-    pivot.members(slice),
-    hiddenOf(pivot),
-    state,
-  );
+  pivot.ranges
+    ? /* a range's cell is its row, on that range's dates */
+      sliceFilters(
+        pivot.grouped,
+        { by: pivot.config.rows, split: "none" },
+        { category: slice.row, series: null },
+        pivot.members(slice),
+        [],
+        stateFor(state, pivot.ranges, slice.column),
+      )
+    : sliceFilters(
+        pivot.grouped,
+        { by: pivot.config.rows, split: pivot.config.columns },
+        { category: slice.row, series: slice.column },
+        pivot.members(slice),
+        hiddenOf(pivot),
+        state,
+      );
 
 /** "People by joined in and semester", in the order the table reads */
-export function pivotTitle({ config, grouped }: Pivot): string {
+export function pivotTitle({ config, grouped, ranges }: Pivot): string {
   const what = COUNTS.find((c) => c.id === grouped.measure)!.label;
   const by = dimensionName(config.rows).toLowerCase();
   const across =
@@ -207,7 +258,11 @@ export function pivotTitle({ config, grouped }: Pivot): string {
         : config.values === "total"
           ? ", as a share of the total"
           : "";
-  return `${what} by ${by}${across}${values}`;
+  const versus =
+    ranges && config.compare !== "none"
+      ? `, against ${againstName(config.compare)}`
+      : "";
+  return `${what} by ${by}${across}${values}${versus}`;
 }
 
 /** the pivot's count in words, of what it shows: "Top 25 of 60 people · 300 of 340 contributions" */
@@ -217,6 +272,12 @@ export function pivotCount(pivot: Pivot): string {
     grouped.measure === "people"
       ? counted(n, "person", "different people")
       : unitOf(n, grouped.measure);
+  if (pivot.ranges) {
+    const [now, then] = ["now", "then"].map((column) =>
+      pivot.count({ row: null, column }),
+    ) as [number, number];
+    return `${unit(now)}, against ${then.toLocaleString()}`;
+  }
   const shown = pivot.count({ row: null, column: null });
   const whole = membersAcross(
     grouped,
@@ -257,6 +318,25 @@ export function cellValue(
 }
 
 /**
+ * What a row of two ranges has changed by: in points where its cells are
+ * shares, else in number.
+ */
+export function differenceOf(pivot: Pivot, row: string | null) {
+  const [now, then] = ["now", "then"].map((column) =>
+    cellValue(pivot, { row, column }),
+  ) as [ReturnType<typeof cellValue>, ReturnType<typeof cellValue>];
+  return now.share !== null && then.share !== null
+    ? { by: now.share - then.share, points: true }
+    : { by: now.count - then.count, points: false };
+}
+
+/** "+4", or for shares "+5 pts", to `digits` places of a point */
+export function differenceText(pivot: Pivot, row: string | null, digits = 0) {
+  const { by, points } = differenceOf(pivot, row);
+  return signed(by, points, points ? digits : 0);
+}
+
+/**
  * The pivot as rows of text, as it reads: its header, a row each, and the
  * totals, for a CSV or a paste into a sheet. Shares keep one decimal.
  */
@@ -270,12 +350,12 @@ export function pivotMatrix(pivot: Pivot): string[][] {
   const header = [
     dimensionName(pivot.config.rows),
     ...pivot.columns.map((c) => c.label),
-    split ? "Total" : measure,
+    pivot.ranges ? "Difference" : split ? "Total" : measure,
   ];
   const line = (row: string | null, label: string) => [
     label,
     ...pivot.columns.map((c) => text({ row, column: c.key })),
-    text({ row, column: null }),
+    pivot.ranges ? differenceText(pivot, row, 1) : text({ row, column: null }),
   ];
   return [
     header,

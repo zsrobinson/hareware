@@ -37,6 +37,7 @@ import {
   type Measure,
   type Member,
 } from "~/lib/credits/stats";
+import type { ArchiveArticle } from "~/lib/credits/archive";
 import { toCsv } from "~/lib/csv";
 import { saveFile } from "~/lib/save-file";
 import { cn } from "~/lib/utils";
@@ -51,6 +52,7 @@ import {
 import {
   chartCount,
   columnSeries,
+  pairCount,
   percentText,
   readSlice,
   sliceCount,
@@ -61,6 +63,15 @@ import {
   type Slice,
 } from "./chart-slice";
 import { NEUTRAL, seriesColor } from "./colors";
+import {
+  againstName,
+  compared,
+  filtersFor,
+  signed,
+  spanLabel,
+  stateFor,
+  type Compared,
+} from "./compare";
 import { RowDetails, type OpenRow } from "./open-row";
 import { SlicePanel } from "./slice-panel";
 
@@ -69,7 +80,8 @@ const measureName = (measure: Measure) =>
   COUNTS.find((c) => c.id === measure)!.label;
 
 /* the chart's title: one series drawn is named in it, as a legend would */
-function titleOf({ config, grouped, series }: Plot) {
+function titleOf(plot: Plot) {
+  const { config, grouped, series } = plot;
   const what = measureName(grouped.measure);
   const by = GROUPINGS.find((g) => g.id === config.by)!.label.toLowerCase();
   const one =
@@ -85,7 +97,9 @@ function titleOf({ config, grouped, series }: Plot) {
         : ", as a share of each"
       : config.values === "running"
         ? ", as a running total"
-        : "";
+        : plot.ranges && config.compare !== "none"
+          ? `, against ${againstName(config.compare)}`
+          : "";
   return one
     ? `${one.label} ${what.toLowerCase()} by ${by}${values}`
     : `${what} by ${by}${split}${values}`;
@@ -145,10 +159,20 @@ export function ChartView({
     () => applyFilters(archive.articles, filters),
     [archive, filters],
   );
-  const { grouped, partial } = useMemo(() => {
-    const grouped = groupOf(config, shown, filters, archive.articles);
+  const { grouped, ranges, note, partial } = useMemo(() => {
+    const counting = (articles: ArchiveArticle[], on: Filters) =>
+      groupOf(config, articles, on, archive.articles);
+    const { grouped, ranges, note }: Compared =
+      config.compare === "none"
+        ? { grouped: counting(shown, filters), ranges: null, note: null }
+        : compared(counting, shown, filters, archive.articles, config.compare, {
+            by: config.by,
+            order: config.order,
+          });
     return {
       grouped,
+      ranges,
+      note,
       partial: partialKeys(grouped.categories, config.by, filters),
     };
   }, [shown, config, filters, archive]);
@@ -156,11 +180,13 @@ export function ChartView({
   const section =
     filters.sections.length === 1 ? filters.sections[0] : undefined;
   const plot = useMemo(
-    () => plotOf(grouped, config, hidden, partial, section),
-    [grouped, config, hidden, partial, section],
+    () => plotOf(grouped, config, hidden, partial, section, ranges),
+    [grouped, config, hidden, partial, section, ranges],
   );
 
-  const slice = opened.open === null ? null : readSlice(opened.open, grouped);
+  const read = opened.open === null ? null : readSlice(opened.open, grouped);
+  /* two ranges have no total: a mark is one of them */
+  const slice = ranges && read?.series === null ? null : read;
   /* a link to a mark this chart does not have, or a filter that took it away */
   const missing = opened.open !== null && slice === null;
   useEffect(() => {
@@ -185,11 +211,19 @@ export function ChartView({
           )}
           {/* what is drawn, and which filters cut it */}
           <div className="text-muted-foreground text-sm">
-            {[chartCount(grouped, hidden), filterNote]
+            {[
+              ranges ? pairCount(grouped) : chartCount(grouped, hidden),
+              filterNote,
+            ]
               .filter(Boolean)
               .join(" · ")}
           </div>
         </figcaption>
+        {note && (
+          <p className="bg-muted/50 rounded-lg border px-3 py-2 text-sm">
+            {note}
+          </p>
+        )}
         {grouped.categories.length === 0 ? (
           <p
             data-sheet-anchor
@@ -232,6 +266,7 @@ export function ChartView({
         config={config}
         partial={partial}
         section={section}
+        ranges={ranges}
         selected={slice}
         onOpen={(next) => openSlice(next, "table")}
       />
@@ -244,15 +279,27 @@ export function ChartView({
             back={back}
             measure={grouped.measure}
             members={plot.members(slice)}
-            filters={filters}
-            seeing={sliceFilters(
-              grouped,
-              config,
-              slice,
-              plot.members(slice),
-              hidden,
-              filterState,
-            )}
+            filters={filtersFor(filters, ranges, slice.series)}
+            seeing={
+              ranges
+                ? /* a range's bar is its category, on that range's dates */
+                  sliceFilters(
+                    grouped,
+                    { by: config.by, split: "none" },
+                    { category: slice.category, series: null },
+                    plot.members(slice),
+                    [],
+                    stateFor(filterState, ranges, slice.series),
+                  )
+                : sliceFilters(
+                    grouped,
+                    config,
+                    slice,
+                    plot.members(slice),
+                    hidden,
+                    filterState,
+                  )
+            }
             onClose={opened.close}
             restoreFocus={() =>
               document.querySelector<HTMLElement>(
@@ -293,7 +340,8 @@ function sliceText(plot: Plot, slice: Slice, filterNote: string) {
     title,
     caption: [
       sliceCount(plot.grouped.measure, plot.members(slice), whole),
-      filterNote,
+      /* the earlier range's dates are in the title, and are not the filters' */
+      slice.series !== "then" && filterNote,
     ]
       .filter(Boolean)
       .join(" · "),
@@ -337,6 +385,8 @@ type Plot = {
   /** a line drawn dashed: the second of the roles' grey pair, which is
       too near the first in tone to tell apart at a line's width */
   dashed: (series: string) => boolean;
+  /** the two ranges, when each category is the range on screen against an earlier one */
+  ranges: Compared["ranges"];
 };
 
 const nameOf = (dimension: string, key: string, label: string) =>
@@ -349,12 +399,14 @@ function plotOf(
   partial: Map<string, Incomplete>,
   /** the one section the filters leave, if they leave one */
   section: string | undefined,
+  ranges: Compared["ranges"] = null,
 ): Plot {
   const { split, by } = config;
   const all = grouped.series.map((s) => ({
     key: s.key,
-    label:
-      split === "none"
+    label: ranges
+      ? spanLabel(s.key === "then" ? ranges.then : ranges.now)
+      : split === "none"
         ? COUNTS.find((c) => c.id === grouped.measure)!.label
         : nameOf(split, s.key, s.label),
   }));
@@ -403,16 +455,26 @@ function plotOf(
       total(category) > 0 && series.some((s) => count(category, s.key) > 0),
     percent,
     /* one series by section or role takes each bar's own colour; else the
-       section it is cut to, or a grey that names nothing */
-    color: (category, key) =>
-      split !== "none"
-        ? seriesColor(key, allKeys, split)
-        : by === "section" || by === "role"
-          ? seriesColor(category, [], by)
-          : section
-            ? seriesColor(section, [], "section")
-            : NEUTRAL,
+       section it is cut to, or a grey that names nothing. The earlier of
+       two ranges is the same, fainter, and the legend's grey stands for
+       every bar's colour */
+    color: (category, key) => {
+      const own =
+        split !== "none"
+          ? seriesColor(key, allKeys, split)
+          : by === "section" || by === "role"
+            ? category
+              ? seriesColor(category, [], by)
+              : NEUTRAL
+            : section
+              ? seriesColor(section, [], "section")
+              : NEUTRAL;
+      return ranges && key === "then"
+        ? `color-mix(in oklab, ${own} 40%, transparent)`
+        : own;
+    },
     dashed: (key) => split === "role" && key === ROLES[1],
+    ranges,
   };
 }
 
@@ -581,6 +643,7 @@ function reading(plot: Plot, category: Series) {
     ? ` (${plot.partial.get(category.key)})`
     : "";
   const sofar = plot.config.values === "running" ? " so far" : "";
+  if (plot.ranges) return `${category.label}: ${parts.join(", ")}`;
   return `${category.label}${partly}: ${unitOf(total, plot.grouped.measure)}${sofar}${
     plot.series.length > 1 || plot.share ? `. ${parts.join(", ")}` : ""
   }`;
@@ -867,15 +930,19 @@ function Card({
           )}
         >
           <span className="text-muted-foreground flex-1">
-            {totalName(plot.config, many ? null : plot.grouped.measure)}
+            {plot.ranges
+              ? "Difference"
+              : totalName(plot.config, many ? null : plot.grouped.measure)}
           </span>
           <span className="font-semibold tabular-nums">
-            {total.toLocaleString()}
+            {plot.ranges
+              ? signed(difference(plot, category.key))
+              : total.toLocaleString()}
           </span>
           {plot.share && <span className="w-9" />}
         </div>
       )}
-      {tapped && (
+      {tapped && !plot.ranges && (
         <Button
           variant="outline"
           size="sm"
@@ -889,6 +956,10 @@ function Card({
     </div>
   );
 }
+
+/** what a category of two ranges has changed by */
+const difference = (plot: Plot, category: string) =>
+  plot.count(category, "now") - plot.count(category, "then");
 
 /** a column's total, named by what it counts where there is one series */
 const totalName = (config: ChartConfig, single: Measure | null) =>
@@ -976,8 +1047,13 @@ function segmentAt(segments: Segment[], at: Point): string | null {
 function sliceAt(plot: Plot, index: number, series: string | null): Slice {
   return {
     category: plot.categories[index]!.key,
-    /* with nothing split, the one series is the whole category */
-    series: plot.config.split === "none" ? null : series,
+    /* with nothing split, the one series is the whole category; of two
+       ranges, a category is the one on screen */
+    series: plot.ranges
+      ? (series ?? "now")
+      : plot.config.split === "none"
+        ? null
+        : series,
   };
 }
 
@@ -1817,6 +1893,7 @@ function NumbersTable({
   config,
   partial,
   section,
+  ranges,
   selected,
   onOpen,
 }: {
@@ -1824,6 +1901,7 @@ function NumbersTable({
   config: ChartConfig;
   partial: Map<string, Incomplete>;
   section: string | undefined;
+  ranges: Compared["ranges"];
   /** the slice open beside the chart */
   selected: Slice | null;
   /** each count opens what it counts, as the chart's marks do */
@@ -1832,8 +1910,8 @@ function NumbersTable({
   const [open, setOpen] = useState(false);
   /* the full record: every series, whatever the legend has off */
   const plot = useMemo(
-    () => plotOf(grouped, config, [], partial, section),
-    [grouped, config, partial, section],
+    () => plotOf(grouped, config, [], partial, section, ranges),
+    [grouped, config, partial, section, ranges],
   );
   const split = plot.all.length > 1;
   const totalLabel = totalName(config, split ? null : grouped.measure);
@@ -1845,6 +1923,8 @@ function NumbersTable({
     count: (category: string) => number;
     /** the share shown beside the count, when the chart is of shares */
     share?: (category: string) => number;
+    /** a number that is no list, so opens nothing: two ranges' difference */
+    text?: (category: string) => string;
   }[] = [
     ...(split
       ? plot.all.map((s) => ({
@@ -1856,15 +1936,22 @@ function NumbersTable({
             : undefined,
         }))
       : []),
-    {
-      label: totalLabel,
-      series: null,
-      count: plot.total,
-      share:
-        plot.share && !split
-          ? (category: string) => plot.percent(category, plot.all[0]!.key)
-          : undefined,
-    },
+    plot.ranges
+      ? {
+          label: "Difference",
+          series: null,
+          count: (category: string) => difference(plot, category),
+          text: (category: string) => signed(difference(plot, category)),
+        }
+      : {
+          label: totalLabel,
+          series: null,
+          count: plot.total,
+          share:
+            plot.share && !split
+              ? (category: string) => plot.percent(category, plot.all[0]!.key)
+              : undefined,
+        },
   ];
   const by = GROUPINGS.find((g) => g.id === config.by)!.label;
 
@@ -1872,7 +1959,9 @@ function NumbersTable({
     const day = new Date().toISOString().slice(0, 10);
     const body = plot.categories.map((c) => [
       c.label,
-      ...columns.map((column) => column.count(c.key)),
+      ...columns.map((column) =>
+        column.text ? column.text(c.key) : column.count(c.key),
+      ),
     ]);
     saveFile(
       /* the BOM makes excel read utf-8 */
@@ -1937,14 +2026,21 @@ function NumbersTable({
                     key={column.label}
                     className="pr-3 text-right tabular-nums"
                   >
-                    <CountButton
-                      plot={plot}
-                      slice={{ category: category.key, series: column.series }}
-                      label={column.label}
-                      n={column.count(category.key)}
-                      selected={selected}
-                      onOpen={onOpen}
-                    />
+                    {column.text ? (
+                      column.text(category.key)
+                    ) : (
+                      <CountButton
+                        plot={plot}
+                        slice={{
+                          category: category.key,
+                          series: column.series,
+                        }}
+                        label={column.label}
+                        n={column.count(category.key)}
+                        selected={selected}
+                        onOpen={onOpen}
+                      />
+                    )}
                     {column.share && (
                       <span className="text-muted-foreground ml-1.5 inline-block w-9">
                         {percentText(column.share(category.key))}

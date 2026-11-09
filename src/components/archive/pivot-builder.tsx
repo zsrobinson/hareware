@@ -6,7 +6,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { FieldRows } from "~/components/field-row";
-import { BuilderRow } from "./chart-builder";
+import { BuilderRow, CompareRow } from "./chart-builder";
 import { COUNTS, TOPS } from "./chart-config";
 import { Choice } from "./choice";
 import {
@@ -81,6 +81,11 @@ export function PivotBuilder({
           onChange={(values) => set({ values })}
         />
       </BuilderRow>
+      <CompareRow
+        value={config.compare}
+        allowed={ok.compare}
+        onChange={(compare) => set({ compare })}
+      />
       {ok.top && (
         <BuilderRow icon={UsersIcon} label="Show">
           <Choice

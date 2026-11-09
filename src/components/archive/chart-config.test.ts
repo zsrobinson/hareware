@@ -38,6 +38,7 @@ test("a hand-edited link is settled rather than drawn as asked", () => {
     values: "number",
     order: "largest",
     top: 25,
+    compare: "none",
   });
 });
 
@@ -50,6 +51,7 @@ test("a choice that rules another out moves it", () => {
     values: "number",
     order: "largest",
     top: 25,
+    compare: "none",
   };
   /* people overlap across sections, so they are not stacked or shared out */
   expect(settle({ ...base, count: "people" }).draw).toBe("grouped");

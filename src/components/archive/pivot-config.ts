@@ -4,8 +4,9 @@
   one as its layout; ./view-state keeps the one on screen in the address.
 */
 
-import type { Dimension, Measure } from "~/lib/credits/stats";
+import { isPeriod, type Dimension, type Measure } from "~/lib/credits/stats";
 import { COUNTS, GROUPINGS, TOPS } from "./chart-config";
+import { COMPARES, type Compare } from "./compare";
 
 /** a cell as a number, or as a share of its row, its column or everything */
 export type PivotValues = "number" | "row" | "column" | "total";
@@ -18,6 +19,8 @@ export type PivotConfig = {
   values: PivotValues;
   /** where people are rows or columns, the biggest this many, or 0 for everyone */
   top: number;
+  /** each row against an earlier range, as a pair of columns and their difference */
+  compare: Compare;
 };
 
 export const DIMENSIONS: { id: Dimension; label: string }[] = [
@@ -40,8 +43,22 @@ export const PIVOT_VALUES: { id: PivotValues; label: string }[] = [
  * What the options mean for one another, as the builder offers them: an
  * option that would have to change another is off until that one changes.
  */
-export function allowsPivot({ count, rows, columns }: PivotConfig) {
+export function allowsPivot({
+  count,
+  rows,
+  columns,
+  values,
+  compare,
+}: PivotConfig) {
   const axes: string[] = [rows, columns];
+  /* two ranges side by side are the columns, of rows that are not in time:
+     an intake or a period is a range of its own */
+  const comparing = compare !== "none";
+  const comparable =
+    columns === "none" &&
+    !isPeriod(rows) &&
+    rows !== "joined" &&
+    (values === "number" || values === "total");
   /* an article has no one role, person or intake; and by person, every
      person is one */
   const articles = !axes.some(
@@ -50,6 +67,7 @@ export function allowsPivot({ count, rows, columns }: PivotConfig) {
   const people = !axes.includes("person");
   const axis = (id: Dimension, other: string) =>
     id !== other &&
+    !(comparing && (isPeriod(id) || id === "joined")) &&
     (id === "person"
       ? count === "contributions"
       : id === "role" || id === "joined"
@@ -68,7 +86,9 @@ export function allowsPivot({ count, rows, columns }: PivotConfig) {
     ) as Record<Dimension, boolean>,
     columns: {
       none: true,
-      ...Object.fromEntries(DIMENSIONS.map(({ id }) => [id, axis(id, rows)])),
+      ...Object.fromEntries(
+        DIMENSIONS.map(({ id }) => [id, axis(id, rows) && !comparing]),
+      ),
     } as Record<Dimension | "none", boolean>,
     /* one column is its own row: a share of a row or a column is all of it */
     values: {
@@ -78,6 +98,9 @@ export function allowsPivot({ count, rows, columns }: PivotConfig) {
       total: true,
     } satisfies Record<PivotValues, boolean>,
     top: axes.includes("person"),
+    compare: Object.fromEntries(
+      COMPARES.map(({ id }) => [id, id === "none" || comparable]),
+    ) as Record<Compare, boolean>,
   };
 }
 
@@ -87,6 +110,7 @@ export function settlePivot(config: PivotConfig): PivotConfig {
   if (next.columns === next.rows) next.columns = "none";
   if (!allowsPivot(next).count[next.count]) next.count = "contributions";
   if (!allowsPivot(next).values[next.values]) next.values = "number";
+  if (!allowsPivot(next).compare[next.compare]) next.compare = "none";
   if (!TOPS.includes(next.top)) next.top = 25;
   return next;
 }
@@ -120,6 +144,11 @@ export function readPivot(
       d.values,
     ),
     top: params.has("top") && TOPS.includes(top) ? top : d.top,
+    compare: pick(
+      params.get("compare"),
+      COMPARES.map((c) => c.id),
+      d.compare,
+    ),
   });
 }
 
@@ -130,6 +159,7 @@ const KEYS = {
   columns: "cols",
   values: "values",
   top: "top",
+  compare: "compare",
 } as const satisfies Record<keyof PivotConfig, string>;
 
 /** writes a pivot into `params`, or takes one out (null) */

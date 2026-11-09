@@ -29,6 +29,7 @@ import {
 } from "./chart-config";
 import type { ArchiveArticle } from "~/lib/credits/archive";
 import { archive, credit, listed, post } from "./invented-archive";
+import { COMPARES } from "./compare";
 import { VIEWS } from "./views";
 
 import {
@@ -62,7 +63,18 @@ const configs: ChartConfig[] = COUNTS.flatMap(({ id: count }) =>
       DRAWS.flatMap((draw) =>
         VALUES.flatMap((values) =>
           ORDERS.flatMap((order) =>
-            TOPS.map((top) => ({ count, by, split, draw, values, order, top })),
+            TOPS.flatMap((top) =>
+              COMPARES.map(({ id: compare }) => ({
+                count,
+                by,
+                split,
+                draw,
+                values,
+                order,
+                top,
+                compare,
+              })),
+            ),
           ),
         ),
       ),
@@ -325,6 +337,7 @@ test("a person in two series is one of a column's people, with both", () => {
       values: "number",
       order: "largest",
       top: 25,
+      compare: "none",
     },
     archive,
     NO_FILTERS,
@@ -353,6 +366,7 @@ test("a running total's slice is everything up to its period", () => {
       values: "running",
       order: "largest",
       top: 25,
+      compare: "none",
     },
     archive,
     NO_FILTERS,
@@ -376,6 +390,7 @@ test("a link to a mark the chart does not have opens nothing", () => {
       values: "number",
       order: "natural",
       top: 25,
+      compare: "none",
     },
     archive,
     NO_FILTERS,

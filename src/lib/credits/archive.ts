@@ -22,6 +22,7 @@ import {
   type SheetState,
   type Unscoped,
 } from "./sheet";
+import type { ArticleViews, ViewsSummary } from "./views";
 
 /** a post as the archive keeps it between reads: its body cut to the paragraphs a credit could be */
 export type SourcePost = {
@@ -75,6 +76,8 @@ export type ArchiveArticle = {
   section: string;
   /** the words of its prose, less its credit lines (`bodyWords()`) */
   words: number;
+  /** what Jetpack counted, merged on by `withViews()` once it is read */
+  views: ArticleViews;
   credits: Credit[];
   /* `label` is what an unknown credit line starts with, to add as a label */
   problems: { kind: ProblemKind; detail: string; label?: string }[];
@@ -136,6 +139,8 @@ export type Archive = {
   differentPeople: Record<string, string>;
   sheet: SheetSummary;
   sheetProblems: SheetProblem[];
+  /** whether views were read; each article's `views` says what they were */
+  views: ViewsSummary;
   /** when WordPress was read, which may be before this archive was built */
   fetchedAt: string;
 };
@@ -202,6 +207,7 @@ export function buildArchive(input: {
       words:
         post.words -
         countWords(creditParagraphs(post.paragraphs, labels).join(" ")),
+      views: { status: "unavailable" },
       credits,
       problems: problemsOf(
         post.id,
@@ -238,6 +244,7 @@ export function buildArchive(input: {
     ),
     sheet: summarize(sheet),
     sheetProblems,
+    views: { status: "reading" },
     fetchedAt: input.fetchedAt,
   };
 }

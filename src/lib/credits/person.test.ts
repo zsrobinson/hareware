@@ -32,6 +32,7 @@ const article = (
   publishedAt,
   section,
   words: 0,
+  views: { status: "unavailable" },
   credits,
   problems: [],
 });

@@ -12,6 +12,11 @@
   is used as it is; older, up to a day, it is shown at once while the query
   reads WordPress behind it, which is TanStack's own stale-while-revalidate.
   The pages say which is happening.
+
+  Views are a third read, of Jetpack's counts through the gated /api/stats,
+  kept the same way. They are merged onto the archive when they arrive, and
+  never hold it up: until then, and when they fail, every article's views
+  are unavailable, not zero (~/lib/credits/views).
 */
 
 import {
@@ -30,25 +35,37 @@ import {
 import type { SheetPayload } from "~/lib/credits/load";
 import { bodyWords, paragraphs } from "~/lib/credits/parse";
 import { labelsIn } from "~/lib/credits/sheet";
+import { withViews } from "~/lib/credits/views";
 import { allPosts, categories } from "~/lib/services/wordpress/posts";
+import {
+  postViewsOf,
+  postViewsUrl,
+  type PostViews,
+} from "~/lib/services/wordpress/stats";
 
 /* younger than this, the read is used without asking WordPress */
 const FRESH_MS = 10 * 60_000;
 /* older than this, a stored read is not shown at all */
 const STALE_MS = 24 * 60 * 60_000;
-/* bump when Snapshot changes shape, so a stored copy of the old one is not read */
+/* bump when Snapshot or Views changes shape, so a stored copy of the old one
+   is not read */
 const CACHE = "hareware-wordpress";
-const KEY = "/wordpress-snapshot-v2";
+const SNAPSHOT_STORED = "/wordpress-snapshot-v2";
+const VIEWS_STORED = "/wordpress-views-v1";
 
 export const SHEET_KEY = ["sheet"] as const;
 const WORDPRESS_KEY = ["wordpress"] as const;
+const VIEWS_KEY = ["views"] as const;
 const RESTORED_KEY = ["wordpress", "restored"] as const;
 
-type Snapshot = {
+type Stored = { fetchedAt: string };
+
+type Snapshot = Stored & {
   posts: SourcePost[];
   categories: [number, string][];
-  fetchedAt: string;
 };
+
+type Views = Stored & { posts: PostViews };
 
 /* ------------------------------------------------------------------------ */
 /* the read in flight, page by page, for the first load's message */
@@ -96,42 +113,59 @@ async function readSnapshot(fresh = false): Promise<Snapshot> {
     categories: sections.map((category) => [category.id, category.name]),
     fetchedAt: new Date().toISOString(),
   };
-  void toStorage(snapshot);
+  void toStorage(SNAPSHOT_STORED, snapshot);
   return snapshot;
+}
+
+/* every post's views, by month; never asked past a cache, since WordPress
+   answers a signed-in read from its server anyway */
+async function readViews(): Promise<Views> {
+  const views: Views = {
+    posts: postViewsOf(await fetchGated<unknown>(postViewsUrl())),
+    fetchedAt: new Date().toISOString(),
+  };
+  void toStorage(VIEWS_STORED, views);
+  return views;
 }
 
 /* Cache Storage exists only on https and localhost; without it, the read is
    simply not kept between visits */
-async function fromStorage(): Promise<Snapshot | undefined> {
+async function fromStorage(key: string): Promise<Stored | undefined> {
   try {
-    const hit = await (await caches.open(CACHE)).match(KEY);
+    const hit = await (await caches.open(CACHE)).match(key);
     if (!hit) return undefined;
-    const snapshot = (await hit.json()) as Snapshot;
-    return Date.now() - Date.parse(snapshot.fetchedAt) < STALE_MS
-      ? snapshot
+    const stored = (await hit.json()) as Stored;
+    return Date.now() - Date.parse(stored.fetchedAt) < STALE_MS
+      ? stored
       : undefined;
   } catch {
     return undefined;
   }
 }
 
-async function toStorage(snapshot: Snapshot) {
+async function toStorage(key: string, read: Stored) {
   try {
-    await (await caches.open(CACHE)).put(KEY, Response.json(snapshot));
+    await (await caches.open(CACHE)).put(key, Response.json(read));
   } catch (error) {
-    console.warn("[archive] could not keep the wordpress read", error);
+    console.warn(`[archive] could not keep ${key}`, error);
   }
 }
 
-/* the stored read, handed to the query as of when it was made, so the query's
-   own staleness decides whether to read again */
+/* the stored reads, handed to their queries as of when they were made, so
+   each query's own staleness decides whether to read again */
 async function restore(queryClient: QueryClient): Promise<true> {
-  if (queryClient.getQueryData(WORDPRESS_KEY)) return true;
-  const stored = await fromStorage();
-  if (stored && !queryClient.getQueryData(WORDPRESS_KEY))
-    queryClient.setQueryData(WORDPRESS_KEY, stored, {
-      updatedAt: Date.parse(stored.fetchedAt),
-    });
+  const into = async (queryKey: readonly string[], key: string) => {
+    if (queryClient.getQueryData(queryKey)) return;
+    const stored = await fromStorage(key);
+    if (stored && !queryClient.getQueryData(queryKey))
+      queryClient.setQueryData(queryKey, stored, {
+        updatedAt: Date.parse(stored.fetchedAt),
+      });
+  };
+  await Promise.all([
+    into(WORDPRESS_KEY, SNAPSHOT_STORED),
+    into(VIEWS_KEY, VIEWS_STORED),
+  ]);
   return true;
 }
 
@@ -156,6 +190,25 @@ function build(snapshot: Snapshot, payload: SheetPayload): Archive {
   return archive;
 }
 
+/* views merged on, once per archive and read of them, or failure to read */
+const viewed = new WeakMap<Archive, WeakMap<Views | Error, Archive>>();
+function withRead(archive: Archive, read: Views | Error | null): Archive {
+  if (!read) return archive;
+  let byRead = viewed.get(archive);
+  if (!byRead) viewed.set(archive, (byRead = new WeakMap()));
+  let merged = byRead.get(read);
+  if (!merged) {
+    merged = withViews(
+      archive,
+      read instanceof Error
+        ? { status: "unavailable", reason: read.message }
+        : { status: "read", ...read },
+    );
+    byRead.set(read, merged);
+  }
+  return merged;
+}
+
 /* ------------------------------------------------------------------------ */
 
 export type ArchiveState =
@@ -175,6 +228,9 @@ export type ArchiveState =
       checking: boolean;
       /** the last read behind failed, so what is shown is older */
       checkFailed: Error | null;
+      /** the same two for views, whose own state is `archive.views` */
+      viewsChecking: boolean;
+      viewsCheckFailed: Error | null;
       /** reads the Sheet and WordPress again; rejects if either fails */
       refresh: () => Promise<void>;
     };
@@ -205,6 +261,15 @@ export function useArchive(): ArchiveState {
     /* the posts are large and never compared piece by piece */
     structuralSharing: false,
   });
+  const views = useQuery({
+    queryKey: VIEWS_KEY,
+    queryFn: readViews,
+    enabled: restored.isSuccess,
+    staleTime: FRESH_MS,
+    gcTime: Infinity,
+    /* a failure says so, and Refresh asks again */
+    retry: false,
+  });
 
   /* a read behind the page that found new articles says so */
   const previous = useRef<Snapshot | undefined>(undefined);
@@ -223,6 +288,8 @@ export function useArchive(): ArchiveState {
      so a view can listen for something to refresh on. A read already running
      behind the page is cancelled first: joined, it would be a cached one */
   const refresh = useCallback(async () => {
+    /* not waited for: views failing is shown on them, not as a failed Refresh */
+    void queryClient.refetchQueries({ queryKey: VIEWS_KEY, exact: true });
     await queryClient.cancelQueries({ queryKey: WORDPRESS_KEY, exact: true });
     await Promise.all([
       queryClient.refetchQueries(
@@ -240,6 +307,8 @@ export function useArchive(): ArchiveState {
   /* a refusal wins over anything already held, as when a session ends */
   if (sheet.error instanceof Refused)
     return { status: "refused", refusal: sheet.error };
+  if (views.error instanceof Refused)
+    return { status: "refused", refusal: views.error };
   if (!sheet.data) {
     if (sheet.error)
       return {
@@ -263,10 +332,15 @@ export function useArchive(): ArchiveState {
 
   return {
     status: "ready",
-    archive: build(wordpress.data, sheet.data),
+    archive: withRead(
+      build(wordpress.data, sheet.data),
+      views.data ?? views.error,
+    ),
     sheetReadAt: new Date(sheet.dataUpdatedAt).toISOString(),
     checking: wordpress.isFetching,
     checkFailed: wordpress.isRefetchError ? wordpress.error : null,
+    viewsChecking: views.isFetching,
+    viewsCheckFailed: views.isRefetchError ? views.error : null,
     refresh,
   };
 }

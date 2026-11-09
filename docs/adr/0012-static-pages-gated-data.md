@@ -71,7 +71,10 @@ since moved to a custom domain with the cache on).
    needs a secret: the Sheet, behind the gate. The archive page asks it first,
    so someone it refuses never downloads WordPress; it then reads WordPress,
    keeps the parsed read in the browser's Cache Storage, and
-   builds the archive. The label pattern is compiled once per build rather
+   builds the archive. Views are read the same way after the gate, from
+   Jetpack through `/api/stats`, which needs a secret and is answered before
+   Astro like `/api/wordpress`, and merged on when they arrive; the archive
+   never waits for them. The label pattern is compiled once per build rather
    than twice per post, and the pairwise similar-names check, nearly half the
    build, runs only on Problems and compares only names close in length.
 

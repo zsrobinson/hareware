@@ -17,6 +17,14 @@ represents it. "Post" is a WordPress word: it is fine in code that talks to the
 WordPress API, and never appears in language a club member reads, except in
 "post id", the number the Sheet is keyed by.
 
+## Words and views
+
+An Article's **words** are its prose: paragraphs, subheadings and list items,
+less its credit lines. Captions are not counted.
+
+Its **views** are how often Jetpack counted it read, by month, from January 2023. Views that could not be read are _unavailable_, never zero: zero means
+Jetpack has counted nobody reading it.
+
 ## Section
 
 Which desk an Article belongs to: News, Features, Entertainment, Sports or

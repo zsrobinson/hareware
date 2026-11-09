@@ -33,6 +33,7 @@ export const post = (
   publishedAt: `${date}T16:00:00Z`,
   section,
   words: 0,
+  views: { status: "unavailable" },
   credits,
   problems: [],
 });

@@ -463,9 +463,10 @@ export function pivotMatrix(pivot: Pivot): string[][] {
     if (read.counted === 0 && read.missing > 0) return "";
     if (pivot.config.values === "per-article" && split)
       return String(average ?? 0);
-    return share === null ? String(count) : `${share.toFixed(1)}%`;
+    return shareBeside || share === null ? String(count) : `${share.toFixed(1)}%`;
   };
   const split = pivot.config.columns !== "none";
+  const shareBeside = !split && !pivot.ranges && ["total", "row", "column"].includes(pivot.config.values);
   /* one column of sums: each, and what it is per article */
   const beside =
     pivot.config.values === "per-article" && !split && !pivot.ranges;
@@ -521,6 +522,7 @@ export function pivotMatrix(pivot: Pivot): string[][] {
       ...(c.beside?.header ?? []),
     ]),
     ...(beside ? ["Per article"] : []),
+    ...(shareBeside ? ["Share"] : []),
   ];
   const line = (row: string | null, label: string) => [
     label,
@@ -529,6 +531,7 @@ export function pivotMatrix(pivot: Pivot): string[][] {
       ...(c.beside?.cells(row) ?? []),
     ]),
     ...per(row),
+    ...(shareBeside ? [`${(pivot.share({ row, column: null }) ?? 100).toFixed(1)}%`] : []),
   ];
   return [
     header,

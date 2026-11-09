@@ -260,6 +260,22 @@ test("a section with nothing is a row of zeros, which opens nothing", async () =
     within(rabbithole)
       .getAllByRole("cell")
       .map((cell) => cell.textContent),
-  ).toEqual(["0%"]);
+  ).toEqual(["0", "0%"]);
   expect(within(rabbithole).queryByRole("button")).toBeNull();
 });
+
+ test("one-column shares show a count and a share, both opening the same slice", async () => {
+ window.history.replaceState(null, "", "/articles?view=section-share&range=all");
+ const user = userEvent.setup(); render(<ArticlesPage />);
+ const table = await screen.findByRole("table");
+ expect(within(table).getAllByRole("columnheader").map(c => c.textContent)).toEqual(["Section", "Articles", "Share"]);
+ expect(within(table).getByRole("row", {name: /^Total/}).textContent).toBe("Total4100%");
+ const row = within(table).getByRole("row", {name: /^News/});
+ const cells = within(row).getAllByRole("cell");
+ expect(cells.map(c => c.textContent)).toEqual(["3", "75%"]);
+ for (const cell of cells) {
+ await user.click(within(cell).getByRole("button"));
+ expect(within(await screen.findByRole("complementary", {name: "News"})).getAllByRole("listitem")).toHaveLength(3);
+ await user.keyboard("{Escape}");
+ }
+ });

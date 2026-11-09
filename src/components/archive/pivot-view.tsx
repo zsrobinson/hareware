@@ -133,6 +133,9 @@ export function PivotView({
 
   return (
     <div className="space-y-4">
+      {config.columns === "none" && config.compare === "none" && ["total", "row", "column"].includes(config.values) && (
+        <p className="text-muted-foreground text-xs">Share is of the {pivot.count({ row: null, column: null }).toLocaleString()} {COUNTS.find((c) => c.id === pivot.grouped.measure)!.label.toLowerCase()} matching the filters, rounded.</p>
+      )}
       <figure className="space-y-3">
         <ViewHeading
           figure
@@ -301,7 +304,8 @@ function PivotTable({
   const pairs = pivot.ranges !== null;
   /* one column of sums per article: each sum, and beside it what it is per
      article, which opens the same list as the sum */
-  const beside = config.values === "per-article" && !split && !pairs;
+  const shareBeside = !split && !pairs && ["total", "row", "column"].includes(config.values);
+  const beside = (config.values === "per-article" || shareBeside) && !split && !pairs;
   /* where each button is: a row, -1 for the header and rows.length for the
      totals; a column, -1 for the row's header and columns.length for its total */
   const last = { row: rows.length, column: columns.length };
@@ -320,11 +324,13 @@ function PivotTable({
       add(r, c, { row: row.key, column: column.key }),
     );
     if (!pairs) add(r, last.column, { row: row.key, column: null });
+    if (beside) add(r, last.column + 1, { row: row.key, column: null });
   });
   columns.forEach((column, c) =>
     add(last.row, c, { row: null, column: column.key }),
   );
   if (!pairs) add(last.row, last.column, { row: null, column: null });
+  if (beside) add(last.row, last.column + 1, { row: null, column: null });
   const tabStop = order.some((o) => o.at === stop) ? stop : order[0]?.at;
 
   const move = (event: KeyboardEvent<HTMLTableElement>) => {
@@ -342,7 +348,7 @@ function PivotTable({
     let target: HTMLElement | null | undefined = null;
     if (event.key === "Home" || event.key === "End") {
       const ends =
-        event.key === "Home" ? [-1, last.column + 1, 1] : [last.column, -2, -1];
+        event.key === "Home" ? [-1, last.column + 2, 1] : [last.column + 1, -2, -1];
       for (let column = ends[0]!; column !== ends[1]; column += ends[2]!)
         if ((target = find(r, column))) break;
     } else if (steps[event.key]) {
@@ -350,7 +356,7 @@ function PivotTable({
       /* the next button that way, past any empty cell */
       for (
         let row = r + dr, column = c + dc;
-        row >= -1 && row <= last.row && column >= -1 && column <= last.column;
+        row >= -1 && row <= last.row && column >= -1 && column <= last.column + (beside ? 1 : 0);
         row += dr, column += dc
       )
         if ((target = find(row, column))) break;
@@ -450,7 +456,10 @@ function PivotTable({
   };
 
   const number = (r: number, c: number, slice: PivotSlice, name: string) =>
-    button(r, c, slice, name, null, "tabular-nums");
+    button(r, c, slice, name, shareBeside ? pivot.count(slice).toLocaleString() : null, "tabular-nums");
+  const companion = (r: number, slice: PivotSlice, name: string) => shareBeside
+    ? button(r, last.column + 1, slice, `${name}, share`, percentText(pivot.share(slice) ?? 100), "tabular-nums")
+    : averageText(slice);
 
   const label = (
     dimension: string,
@@ -515,7 +524,7 @@ function PivotTable({
             </th>
             {beside && (
               <th scope="col" className={cn(cell, "font-medium")}>
-                Per article
+                {shareBeside ? "Share" : "Per article"}
               </th>
             )}
           </tr>
@@ -560,7 +569,7 @@ function PivotTable({
               </td>
               {beside && (
                 <td className={cn(cell, "tabular-nums")}>
-                  {averageText({ row: row.key, column: null })}
+                  {companion(r, { row: row.key, column: null }, rowName(row))}
                 </td>
               )}
             </tr>
@@ -597,7 +606,7 @@ function PivotTable({
             </td>
             {beside && (
               <td className={cn(cell, "tabular-nums")}>
-                {averageText({ row: null, column: null })}
+                {companion(last.row, { row: null, column: null }, "Total")}
               </td>
             )}
           </tr>

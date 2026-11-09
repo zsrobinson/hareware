@@ -98,10 +98,11 @@ test("every API that hands out board data asks the gate first", () => {
   }
 });
 
-/* /api/stats is answered in src/worker.ts ahead of Astro, so not under
-   src/pages, and with an administrator's password: only the gated route may
-   read it */
-test("the stats credentials are read behind the gate, and nowhere else", () => {
+/* /api/stats is answered ahead of Astro, so not under src/pages, and with an
+   administrator's password. That it asks the gate first, for GETs only, is
+   held by stats-api.test and ahead-of-astro.test; this holds that nothing
+   else reads the password */
+test("no module but the stats route reads the stats credentials", () => {
   const files = (dir: string): string[] =>
     readdirSync(new URL(`../${dir}`, import.meta.url), {
       withFileTypes: true,
@@ -120,14 +121,6 @@ test("the stats credentials are read behind the gate, and nowhere else", () => {
       ),
     );
   expect(reading).toEqual(["./lib/stats-api.ts"]);
-
-  const route = readFileSync(
-    new URL("./stats-api.ts", import.meta.url),
-    "utf8",
-  );
-  expect(route).toContain("adminAccess(request)");
-  const worker = readFileSync(new URL("../worker.ts", import.meta.url), "utf8");
-  expect(worker).toContain("return answerStats(request)");
 });
 
 test("no public tool is listed among the board's", () => {

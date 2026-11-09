@@ -1,9 +1,6 @@
 import { handle } from "@astrojs/cloudflare/handler";
+import { aheadOfAstro } from "~/lib/ahead-of-astro";
 import { runScheduled } from "~/lib/automations/run";
-import { passThrough } from "~/lib/services/wordpress/pass-through";
-import { STATS_THROUGH } from "~/lib/services/wordpress/stats";
-import { PASS_THROUGH } from "~/lib/services/wordpress/urls";
-import { answerStats } from "~/lib/stats-api";
 import "./middleware";
 
 /*
@@ -32,16 +29,7 @@ import.meta.glob(["./pages/api/**/*.ts", "./pages/auth/**/*.ts", "!**/_*"], {
 */
 export default {
   fetch(request, env, ctx) {
-    /* WordPress's cached answers for the browser, ahead of Astro: the
-       pipeline is not needed to forward a GET, and every request here is
-       held to 10 ms of CPU (ADR 0012) */
-    const url = new URL(request.url);
-    if (request.method === "GET" && url.pathname.startsWith(PASS_THROUGH))
-      return passThrough(url);
-    /* the same for Jetpack's view counts, behind the gate */
-    if (request.method === "GET" && url.pathname.startsWith(STATS_THROUGH))
-      return answerStats(request);
-    return handle(request, env, ctx);
+    return aheadOfAstro(request) ?? handle(request, env, ctx);
   },
 
   /*

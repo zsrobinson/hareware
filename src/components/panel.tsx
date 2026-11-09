@@ -1,6 +1,7 @@
 /*
   The two non-modal panels the tools open: a side panel beside the content on a
-  laptop (Customize, a person), which narrows the page rather than covering it,
+  laptop (Customize, a person), which narrows the page rather than covering it
+  and folds the sidebar to make room,
   and a bottom sheet on a phone that leaves the chart or table above it in view.
   Neither dims anything. Both take focus on opening and give it back to
   whatever opened them, and Escape closes either.
@@ -84,6 +85,52 @@ function useFocusLoop(
   return heading;
 }
 
+/* below this a panel beside the page would squeeze it into another layout,
+   so the sidebar folds to its icons while one is open */
+const ROOMY = "(min-width: 1600px)";
+
+/**
+ * Folds the sidebar to its icons while a side panel is open on a laptop
+ * narrower than `ROOMY`, and unfolds it on closing, unless it was folded
+ * already or someone has used its toggle since. The cookie is left alone:
+ * it is the sidebar as someone chose it.
+ */
+function useFoldedSidebar() {
+  useLayoutEffect(() => {
+    const shell = document.getElementById("shell");
+    if (
+      !shell ||
+      shell.dataset.state !== "expanded" ||
+      window.matchMedia(PHONE).matches ||
+      window.matchMedia(ROOMY).matches
+    )
+      return;
+    shell.dataset.state = "collapsed";
+    /* the layout's toggle takes this away, and with it the unfolding */
+    shell.dataset.folded = "panel";
+    return () => {
+      if (shell.dataset.folded !== "panel") return;
+      delete shell.dataset.folded;
+      shell.dataset.state = "expanded";
+    };
+  }, []);
+}
+
+/** whether a table beside a side panel keeps all its columns: past the
+    width where the folded sidebar leaves it its usual room */
+export function useRoomBesidePanel(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia(WIDE);
+      query.addEventListener("change", onChange);
+      return () => query.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia(WIDE).matches,
+    () => false,
+  );
+}
+const WIDE = "(min-width: 1280px)";
+
 /* the layout's slot beside <main>; null on a page without the layout. It is
    static html, so it never changes under a mounted island */
 const noSubscription = () => () => {};
@@ -121,6 +168,7 @@ export function SidePanel({
 }) {
   const slot = useSlot("side-panel");
   const heading = useFocusLoop(onClose, restoreFocus);
+  useFoldedSidebar();
 
   const panel = (
     <aside

@@ -17,3 +17,23 @@ export function pageScroller(): { element: Element; top: number } {
     top: bar ? bar.getBoundingClientRect().bottom : 0,
   };
 }
+
+/**
+ * Keeps what `find` gives at the same height on the screen while the page
+ * around it changes shape (a side panel opening, the sidebar folding), for
+ * as long as that takes. Looked for afresh each frame, since a row can be
+ * redrawn as the table narrows.
+ */
+export function holdInPlace(find: () => Element | null, ms = 400) {
+  const start = find()?.getBoundingClientRect().top;
+  if (start === undefined) return;
+  const until = performance.now() + ms;
+  const step = () => {
+    const now = find()?.getBoundingClientRect().top;
+    if (now === undefined) return;
+    if (Math.abs(now - start) >= 1)
+      pageScroller().element.scrollTop += now - start;
+    if (performance.now() < until) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}

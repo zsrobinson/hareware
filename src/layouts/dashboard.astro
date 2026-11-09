@@ -196,6 +196,8 @@ const collapsed = false;
 
           const open = shell.dataset.state !== "collapsed";
           shell.dataset.state = open ? "collapsed" : "expanded";
+          /* chosen now, so a side panel closing leaves it as it is */
+          delete shell.dataset.folded;
 
           /* read back by the server on the next full load */
           document.cookie = `sidebar_state=${!open}; path=/; max-age=${

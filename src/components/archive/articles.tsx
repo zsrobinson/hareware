@@ -9,7 +9,7 @@ import {
 import { Fragment, useId, useMemo, useState, type ReactNode } from "react";
 import { DataTable, sortable } from "~/components/data-table";
 import { FieldNote, FieldRow, FieldRows } from "~/components/field-row";
-import { SidePanel, useIsPhone } from "~/components/panel";
+import { SidePanel, useIsPhone, useRoomBesidePanel } from "~/components/panel";
 import { Button, buttonVariants } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import {
@@ -112,7 +112,8 @@ function ProblemsLink({
 }
 
 /* what a narrower table leaves out until someone asks for it, so none of
-   it is cut off at the edge: beside a panel, and on a phone */
+   it is cut off at the edge: beside a panel on a smaller laptop, and on a
+   phone */
 const BESIDE_PANEL = ["section", "image", "other", "words"];
 
 /* the column whose "—" already says a credit is missing */
@@ -244,6 +245,7 @@ function Articles({
   setPicked,
 }: TableViewProps) {
   const phone = useIsPhone();
+  const roomy = useRoomBesidePanel();
   const editing = openRow.open === null ? null : Number(openRow.open);
 
   const rows = useMemo(
@@ -289,7 +291,7 @@ function Articles({
         onPickedChange={setPicked}
         controls={(controls) => <ShellTableControls {...controls} />}
         selected={(row) => row.id === editing}
-        hidden={phone ? ON_PHONE : article ? BESIDE_PANEL : []}
+        hidden={phone ? ON_PHONE : article && !roomy ? BESIDE_PANEL : []}
         caption={
           <ViewHeading
             title={heading.title}

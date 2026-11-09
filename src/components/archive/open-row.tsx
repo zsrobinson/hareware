@@ -24,6 +24,7 @@ import {
   type ReactNode,
 } from "react";
 import { useIsPhone } from "~/components/panel";
+import { holdInPlace } from "~/lib/page-scroll";
 import { cn } from "~/lib/utils";
 import { writeState, type FilterState, type Searching } from "./filters";
 
@@ -127,6 +128,17 @@ export function useOpenRow(param: string, legacy?: string): OpenRow {
     open,
     show: (key) => {
       if (key === open) return;
+      /* the page narrows beside the panel: what was clicked stays put */
+      if (!phone && open === null) {
+        const clicked = document.activeElement;
+        holdInPlace(() =>
+          clicked?.isConnected && clicked !== document.body
+            ? clicked
+            : document.querySelector(
+                `[data-row-key="${CSS.escape(key)}"], [data-pivot="${CSS.escape(key)}"]`,
+              ),
+        );
+      }
       const url = address(param, key);
       if (phone && open === null) {
         window.history.replaceState(null, "");

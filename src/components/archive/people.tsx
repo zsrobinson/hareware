@@ -2,7 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { UsersRoundIcon } from "lucide-react";
 import { useMemo } from "react";
 import { DataTable, sortable } from "~/components/data-table";
-import { SidePanel, useIsPhone } from "~/components/panel";
+import { SidePanel, useIsPhone, useRoomBesidePanel } from "~/components/panel";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import { peopleOf, type Contribution, type Person } from "~/lib/credits/person";
 import { sortSections } from "~/lib/credits/sections";
@@ -149,7 +149,8 @@ const EVERY_COLUMN: ColumnDef<PersonRow, unknown>[] = [
 ];
 
 /* what a narrower table leaves out until someone asks for it, so none of
-   it is cut off at the edge: beside a panel, and on a phone */
+   it is cut off at the edge: beside a panel on a smaller laptop, and on a
+   phone */
 const BESIDE_PANEL = ["other", "sections", "roles", "first", "last"];
 const ON_PHONE = ["writer", "image", ...BESIDE_PANEL];
 
@@ -201,6 +202,7 @@ function People({
   setPicked,
 }: TableViewProps) {
   const phone = useIsPhone();
+  const roomy = useRoomBesidePanel();
   const { open } = openRow;
   const columns = useMemo(
     () =>
@@ -277,7 +279,7 @@ function People({
         onPickedChange={setPicked}
         controls={(controls) => <ShellTableControls {...controls} />}
         selected={(row) => row.name === open}
-        hidden={phone ? ON_PHONE : person ? BESIDE_PANEL : []}
+        hidden={phone ? ON_PHONE : person && !roomy ? BESIDE_PANEL : []}
         caption={
           <ViewHeading
             title={heading.title}

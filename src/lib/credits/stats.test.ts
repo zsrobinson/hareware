@@ -266,6 +266,24 @@ test("a newcomer is counted where they first appear in the whole archive", () =>
   expect(grouped.total).toBe(2);
 });
 
+test("a newcomer is new once, at their first contribution in any role", () => {
+  /* Ann wrote in January and drew her first image in March */
+  const options = {
+    measure: "newcomers" as const,
+    by: "semester" as const,
+    breakdown: "role" as const,
+    filters: { ...NO_FILTERS, roles: ["image" as const] },
+    history: archive,
+  };
+  const grouped = group(applyFilters(archive, options.filters), options);
+  /* Bo's first contribution was an image; Ann's was writing, so a filter
+     to images does not make her new in March */
+  expect(grouped.values["2026-1"]).toEqual({ image: 1 });
+  expect(
+    grouped.cells["2026-1"]!.image!.map((m) => m.units[0]!.person),
+  ).toEqual(["Bo"]);
+});
+
 test("a running total carries through empty periods and counts a person once", () => {
   const articles = group(archive, {
     measure: "articles",

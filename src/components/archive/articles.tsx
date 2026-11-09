@@ -21,6 +21,7 @@ import {
   type ProblemKind,
 } from "~/lib/credits/archive";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
+import { peopleOf } from "~/lib/credits/person";
 import { same } from "~/lib/credits/sheet";
 import { applyFilters, easternDate } from "~/lib/credits/stats";
 import { ArchiveShell, type ViewProps } from "./archive-shell";
@@ -229,14 +230,7 @@ export function ArticlePanel({
   onClose: () => void;
 }) {
   const everyone = useMemo(
-    () =>
-      [
-        ...new Set(
-          archive.articles.flatMap((a) =>
-            a.credits.flatMap((c) => c.contributors.map((p) => p.name)),
-          ),
-        ),
-      ].sort(),
+    () => [...peopleOf(archive.articles).keys()].sort(),
     [archive],
   );
 

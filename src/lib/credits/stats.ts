@@ -6,6 +6,12 @@
 
 import type { ArchiveArticle } from "./archive";
 import { ROLES, type Role } from "./labels";
+import {
+  contributionsOn,
+  peopleOf,
+  type Contribution,
+  type Person,
+} from "./person";
 import { compareSections } from "./sections";
 
 export type Filters = {
@@ -59,6 +65,18 @@ export function searchable(text: string) {
     .replace(/[‘’]/g, "'")
     .replace(/[“”]/g, '"')
     .toLowerCase();
+}
+
+/** whether the filters count a contribution: in a role picked */
+const counts =
+  ({ roles }: Filters) =>
+  ({ role }: { role: Role }) =>
+    roles.length === 0 || roles.includes(role);
+
+/** an article stays under a role filter only with a contribution in it */
+function hasCounted(article: ArchiveArticle, filters: Filters) {
+  if (filters.roles.length === 0) return true;
+  return contributionsOn(article).some(counts(filters));
 }
 
 export function applyFilters(
@@ -213,23 +231,13 @@ export type Unit = { article: ArchiveArticle; role?: Role; person?: string };
  */
 export type Member = { id: string | number; units: Unit[] };
 
-function contributions(articles: ArchiveArticle[], filters: Filters): Unit[] {
-  const roles = filters.roles;
-  const out: Unit[] = [];
-  for (const article of articles) {
-    const seen = new Set<string>();
-    for (const credit of article.credits) {
-      if (roles.length > 0 && !roles.includes(credit.role)) continue;
-      for (const { name } of credit.contributors) {
-        /* one person, one role, one article: one contribution */
-        const key = `${credit.role}\u0000${name}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push({ article, role: credit.role, person: name });
-      }
-    }
-  }
-  return out;
+function contributions(
+  articles: ArchiveArticle[],
+  filters: Filters,
+): Contribution[] {
+  return articles.flatMap((article) =>
+    contributionsOn(article).filter(counts(filters)),
+  );
 }
 
 function units(
@@ -238,36 +246,41 @@ function units(
   filters: Filters,
   history: ArchiveArticle[],
 ): Unit[] {
-  const roles = filters.roles;
-
   if (measure === "articles")
     /* every article counts once; with a role picked, only those with a
        contribution in it */
     return articles
-      .filter(
-        (article) =>
-          roles.length === 0 ||
-          article.credits.some(
-            (credit) =>
-              roles.includes(credit.role) && credit.contributors.length > 0,
-          ),
-      )
+      .filter((article) => hasCounted(article, filters))
       .map((article) => ({ article }));
 
   if (measure === "newcomers") {
-    /* first in the whole archive, not in the filtered slice of it: a period
-       filter must not make everyone in its first month new */
+    /* new once, at their first contribution in the whole archive in any
+       role: a period filter must not make everyone in its first month new,
+       nor a role filter make someone new at their first image */
     const shown = new Set(articles.map((article) => article.id));
-    const first = new Map<string, Unit>();
-    const ordered = [...history].sort(
-      (a, b) => Date.parse(a.publishedAt) - Date.parse(b.publishedAt),
+    const counted = counts(filters);
+    return [...peopleOf(history).values()].flatMap(
+      ({ first, contributions }) => {
+        if (!shown.has(first.article.id)) return [];
+        const unit = contributions.find(
+          (c) => c.article === first.article && counted(c),
+        );
+        return unit ? [unit] : [];
+      },
     );
-    for (const unit of contributions(ordered, filters))
-      if (!first.has(unit.person!)) first.set(unit.person!, unit);
-    return [...first.values()].filter((unit) => shown.has(unit.article.id));
   }
 
   return contributions(articles, filters);
+}
+
+/** how many contributions someone made in each period they made any */
+export function periodsOf(person: Person, period: Period): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const { article } of person.contributions) {
+    const { key } = periodOf(easternDate(article.publishedAt), period);
+    out.set(key, (out.get(key) ?? 0) + 1);
+  }
+  return out;
 }
 
 export type Grouped = {
@@ -490,6 +503,7 @@ export type PersonRow = {
   /** contributions per role */
   counts: Record<Role, number>;
   contributions: number;
+  /** their first and latest contribution in the whole archive, whatever the filters */
   first: string;
   last: string;
   /** printed bylines the Sheet counts as this person */
@@ -497,44 +511,37 @@ export type PersonRow = {
   articleIds: number[];
 };
 
+/** each person's contributions the filters count, with their whole span */
 export function people(
   articles: ArchiveArticle[],
   filters: Filters,
+  /** the whole archive, where a person's first and latest are looked for */
+  history: ArchiveArticle[] = articles,
 ): PersonRow[] {
+  const everyone = peopleOf(history);
   const rows = new Map<string, PersonRow>();
 
-  for (const article of articles) {
-    const date = easternDate(article.publishedAt);
-    for (const credit of article.credits) {
-      if (filters.roles.length > 0 && !filters.roles.includes(credit.role))
-        continue;
-      const counted = new Set<string>();
-      for (const contributor of credit.contributors) {
-        const { name } = contributor;
-        if (counted.has(name)) continue;
-        counted.add(name);
-        const row =
-          rows.get(name) ??
-          ({
-            name,
-            counts: { writer: 0, image: 0, other: 0 },
-            contributions: 0,
-            first: date,
-            last: date,
-            bylines: [],
-            articleIds: [],
-          } satisfies PersonRow);
-        row.counts[credit.role]++;
-        row.contributions++;
-        if (!row.articleIds.includes(article.id))
-          row.articleIds.push(article.id);
-        if (date < row.first) row.first = date;
-        if (date > row.last) row.last = date;
-        if (contributor.byline && !row.bylines.includes(contributor.byline))
-          row.bylines.push(contributor.byline);
-        rows.set(name, row);
-      }
+  for (const unit of contributions(articles, filters)) {
+    const { article, role, person: name, byline } = unit;
+    let row = rows.get(name);
+    if (!row) {
+      const own = everyone.get(name);
+      const date = easternDate(article.publishedAt);
+      row = {
+        name,
+        counts: { writer: 0, image: 0, other: 0 },
+        contributions: 0,
+        first: own ? easternDate(own.first.article.publishedAt) : date,
+        last: own ? easternDate(own.latest.article.publishedAt) : date,
+        bylines: [],
+        articleIds: [],
+      };
+      rows.set(name, row);
     }
+    row.counts[role]++;
+    row.contributions++;
+    if (!row.articleIds.includes(article.id)) row.articleIds.push(article.id);
+    if (byline && !row.bylines.includes(byline)) row.bylines.push(byline);
   }
 
   return [...rows.values()].sort(

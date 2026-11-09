@@ -14,6 +14,7 @@ import {
   type ArchiveArticle,
   type SimilarNames,
 } from "~/lib/credits/archive";
+import { peopleOf } from "~/lib/credits/person";
 import { applyFilters, NO_FILTERS } from "~/lib/credits/stats";
 import { ArchiveShell, type ViewProps } from "./archive-shell";
 import { formatDate } from "./dates";
@@ -191,34 +192,28 @@ function NewNames({ archive }: { archive: ViewProps["archive"] }) {
     /* counted from the read, so the list holds still while the page is open */
     const since =
       Date.parse(archive.fetchedAt) - NEW_FOR_DAYS * 24 * 60 * 60 * 1000;
-    /* a name's first article, however it was credited: someone who wrote
-       under a pen name before is not new when they sign their own */
-    const first = new Map<string, { name: string; article: ArchiveArticle }>();
-    const answered = new Set<string>();
-    const oldest = [...archive.articles].sort((a, b) =>
-      a.publishedAt.localeCompare(b.publishedAt),
+    const people = [...peopleOf(archive.articles).values()];
+    /* a name someone has been said to write under is a known pen name */
+    const answered = new Set(
+      people.flatMap((person) =>
+        person.penNames.map((use) => bylineKey(use.byline)),
+      ),
     );
-    for (const article of oldest)
-      for (const c of article.credits.flatMap(
-        (credit) => credit.contributors,
-      )) {
-        const key = bylineKey(c.name);
-        if (!first.has(key)) first.set(key, { name: c.name, article });
-        if (c.source === "article" && c.byline)
-          answered.add(bylineKey(c.byline));
-      }
-    return [...first]
+    /* new is a person's first contribution, however it was credited:
+       someone who wrote under a pen name before is not new when they sign
+       their own */
+    return people
       .filter(
-        ([key, { article }]) =>
+        ({ name, first: { article } }) =>
           Date.parse(article.publishedAt) >= since &&
-          !answered.has(key) &&
+          !answered.has(bylineKey(name)) &&
           article.credits.some((c) =>
             c.contributors.some(
-              (p) => p.source === "printed" && bylineKey(p.name) === key,
+              (p) => p.source === "printed" && p.name === name,
             ),
           ),
       )
-      .map(([, found]) => [found.name, found.article] as const)
+      .map(({ name, first }) => [name, first.article] as const)
       .sort(([, a], [, b]) => b.publishedAt.localeCompare(a.publishedAt));
   }, [archive]);
 

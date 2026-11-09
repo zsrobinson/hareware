@@ -50,6 +50,18 @@ One person in one role on one Article. Someone who writes an Article and also
 draws its image has made two contributions. It is the only unit people are
 counted in: never "credits", never "articles" for a person.
 
+## Person
+
+Everyone credited is a person, and two credits are one person when they count
+as the same name exactly: the printed byline, or who the Sheet says it is on
+that Article. Nothing joins two spellings; a misspelling is fixed in
+WordPress, and Problems points out names a letter apart.
+
+A person is **new** at their first contribution, in any role, whatever the
+filters: someone who has written for a year is not new when they draw their
+first image. A person is **active** in a period when they made at least one
+contribution in it.
+
 ## The Sheet
 
 The club's Google Sheet, owned by the club's account, holding the only facts

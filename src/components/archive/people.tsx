@@ -166,19 +166,16 @@ function People({ archive, filters, filterNote }: ViewProps) {
     [archive],
   );
 
-  /* the search box here looks for a person or a byline they use. First and
-     Latest are a person's own, whatever the filters: under "Last 3 months"
-     the first credit in range would read as when they joined */
-  const all = useMemo(() => {
-    const span = new Map(everybody.map((row) => [row.name, row]));
-    return people(
-      applyFilters(archive.articles, { ...filters, search: undefined }),
-      filters,
-    ).map((row) => {
-      const own = span.get(row.name);
-      return own ? { ...row, first: own.first, last: own.last } : row;
-    });
-  }, [archive, filters, everybody]);
+  /* the search box here looks for a person or a byline they use */
+  const all = useMemo(
+    () =>
+      people(
+        applyFilters(archive.articles, { ...filters, search: undefined }),
+        filters,
+        archive.articles,
+      ),
+    [archive, filters],
+  );
   const rows = useMemo(() => {
     const search = filters.search?.trim() ? searchable(filters.search) : "";
     return all.filter(

@@ -6,8 +6,9 @@
   rank: a section keeps its hue however the filters cut the list, and series
   stack in slot order (the paper's section order, which ~/lib/credits/stats
   sorts them into) so neighbours are the pairs the palette was checked for.
-  Roles take a grey pair of their own (dark, mid, and Other faintest), so a
-  role is never read as a section.
+  Roles take three steps of one quiet slate of their own (Writing darkest,
+  Other faintest, each at least 3:1 from the next in both modes), so a role
+  is never read as a section.
 */
 
 import { ROLES } from "~/lib/credits/labels";

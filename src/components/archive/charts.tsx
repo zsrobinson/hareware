@@ -44,7 +44,7 @@ import type { ViewsSummary } from "~/lib/credits/views";
 import { toCsv } from "~/lib/csv";
 import { saveFile } from "~/lib/save-file";
 import { cn } from "~/lib/utils";
-import type { ViewProps } from "./archive-shell";
+import { useShowsViews, type ViewProps } from "./archive-shell";
 import {
   COUNTS,
   GROUPINGS,
@@ -166,6 +166,7 @@ export function ChartView({
   opened,
   back,
 }: ChartViewProps) {
+  useShowsViews(config.count === "views");
   const shown = useMemo(
     () => applyFilters(archive.articles, filters),
     [archive, filters],

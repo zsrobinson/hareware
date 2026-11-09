@@ -99,6 +99,19 @@ const TrailContext = createContext<Trail>({
 /** the filters on screen, for a link to another archive page to take along */
 export const useTrail = () => useContext(TrailContext);
 
+/* how many views on screen count views, each adding itself while it does */
+const ViewsShownContext = createContext<() => () => void>(() => () => {});
+
+/**
+ * Says that the view on screen counts views, so the page says how old they
+ * are and when they could not be read; a page none of whose views counts
+ * them (People's table, Problems) says nothing of a read it has no use for
+ */
+export function useShowsViews(shows: boolean) {
+  const add = useContext(ViewsShownContext);
+  useEffect(() => (shows ? add() : undefined), [shows, add]);
+}
+
 /** a view's controls at the end of the toolbar, after a divider (laptop) */
 export function ToolbarEnd({ children }: { children: ReactNode }) {
   const { toolbar } = useContext(SlotsContext);
@@ -486,6 +499,12 @@ function Ready({
       });
   }, []);
 
+  const [viewsShown, setViewsShown] = useState(0);
+  const showViews = useCallback(() => {
+    setViewsShown((n) => n + 1);
+    return () => setViewsShown((n) => n - 1);
+  }, []);
+
   const freshness = (compact: boolean) =>
     reload === "sheet" ? (
       /* Reload rereads WordPress with the Sheet, but the Sheet is what
@@ -506,11 +525,15 @@ function Ready({
         checkFailed={!refreshing && checkFailed !== null}
         onRefresh={refreshNow}
         compact={compact}
-        views={{
-          summary: archive.views,
-          checking: viewsChecking,
-          failed: viewsCheckFailed !== null,
-        }}
+        views={
+          viewsShown > 0
+            ? {
+                summary: archive.views,
+                checking: viewsChecking,
+                failed: viewsCheckFailed !== null,
+              }
+            : undefined
+        }
       />
     );
   /* a phone keeps the title row for the h1 alone, so the reload sits at the
@@ -522,53 +545,57 @@ function Ready({
   return (
     <SlotsContext.Provider value={slots}>
       <ResetContext.Provider value={addReset}>
-        <TrailContext.Provider value={trail}>
-          {/* page-wide, so in the title row beside the h1 */}
-          {!phone && <PageActions>{freshness(false)}</PageActions>}
-          <div className="space-y-6">
-            <div ref={setAbove} className="empty:hidden" />
-            {showFilters && (
-              <FilterBar
-                archive={archive}
-                state={state}
-                setState={setState}
-                searchPlaceholder={SEARCHES[searching].placeholder}
-                roleFilter={roleFilter}
-                opening={opening}
-                reloadButton={inToolbar && freshness(true)}
-                resets={resets}
-                toolbarSlot={setToolbar}
-                sheetSlot={setSheet}
-                filtersSlot={setFilters}
-                rowSlot={setRow}
-              />
-            )}
-            {showFilters && (
-              <PeopleFilter
-                archive={archive}
-                state={state}
-                setState={setState}
-                suggest={searching === "articles"}
-              />
-            )}
-            {showFilters && <SheetNotice archive={archive} />}
-            {showFilters && <ViewsNotice archive={archive} />}
-            <div
-              className={cn("transition-opacity", refreshing && "opacity-60")}
-            >
-              {children({
-                archive,
-                filters,
-                refresh: refreshNow,
-                refreshing,
-                filterNote: describeFilters(state, period, searching),
-                filterState: state,
-                setFilterState: setState,
-                reloadButton: inView ? freshness(true) : null,
-              })}
+        <ViewsShownContext.Provider value={showViews}>
+          <TrailContext.Provider value={trail}>
+            {/* page-wide, so in the title row beside the h1 */}
+            {!phone && <PageActions>{freshness(false)}</PageActions>}
+            <div className="space-y-6">
+              <div ref={setAbove} className="empty:hidden" />
+              {showFilters && (
+                <FilterBar
+                  archive={archive}
+                  state={state}
+                  setState={setState}
+                  searchPlaceholder={SEARCHES[searching].placeholder}
+                  roleFilter={roleFilter}
+                  opening={opening}
+                  reloadButton={inToolbar && freshness(true)}
+                  resets={resets}
+                  toolbarSlot={setToolbar}
+                  sheetSlot={setSheet}
+                  filtersSlot={setFilters}
+                  rowSlot={setRow}
+                />
+              )}
+              {showFilters && (
+                <PeopleFilter
+                  archive={archive}
+                  state={state}
+                  setState={setState}
+                  suggest={searching === "articles"}
+                />
+              )}
+              {showFilters && <SheetNotice archive={archive} />}
+              {showFilters && viewsShown > 0 && (
+                <ViewsNotice archive={archive} />
+              )}
+              <div
+                className={cn("transition-opacity", refreshing && "opacity-60")}
+              >
+                {children({
+                  archive,
+                  filters,
+                  refresh: refreshNow,
+                  refreshing,
+                  filterNote: describeFilters(state, period, searching),
+                  filterState: state,
+                  setFilterState: setState,
+                  reloadButton: inView ? freshness(true) : null,
+                })}
+              </div>
             </div>
-          </div>
-        </TrailContext.Provider>
+          </TrailContext.Provider>
+        </ViewsShownContext.Provider>
       </ResetContext.Provider>
     </SlotsContext.Provider>
   );

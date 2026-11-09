@@ -24,7 +24,7 @@ import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import { contributionsOn, peopleOf } from "~/lib/credits/person";
 import { same } from "~/lib/credits/sheet";
 import { applyFilters, easternDate } from "~/lib/credits/stats";
-import { useTrail } from "./archive-shell";
+import { useShowsViews, useTrail } from "./archive-shell";
 import { ExplorerPage, type TableViewProps } from "./explorer";
 import { formatDate } from "./dates";
 import { PeoplePicker, PersonPicker } from "./person-picker";
@@ -259,6 +259,7 @@ function Articles({
         .map((id) => DEFS[id]),
     [shown, anyOther],
   );
+  useShowsViews(columns.some((column) => column.id === "views"));
   /* a sort on a column this table does not show now is held, and comes
      back with it; so is one by views until there are views to sort by,
      the newest first meanwhile, which the caption says */

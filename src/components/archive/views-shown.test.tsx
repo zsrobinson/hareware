@@ -73,7 +73,7 @@ afterEach(() => {
 
 test("views that could not be read are said to be unavailable, beside the articles' age", async () => {
   stubArchive({ posts });
-  window.history.replaceState(null, "", "/articles");
+  window.history.replaceState(null, "", "/articles?view=most-read");
   render(<ArticlesPage />);
 
   const notice = await screen.findByText(
@@ -98,6 +98,18 @@ test("views that could not be read are said to be unavailable, beside the articl
   ];
   expect(articles!.className).not.toMatch(/amber/);
   expect(views!.className).toMatch(/amber/);
+});
+
+/* All shows no views, so says nothing of a read it has no use for, even
+   one that failed */
+test("a view that counts no views says nothing of them", async () => {
+  stubArchive({ posts });
+  window.history.replaceState(null, "", "/articles");
+  render(<ArticlesPage />);
+
+  await waitFor(() => expect(status()).toMatch(/^Updated /), WAIT);
+  expect(status()).not.toMatch(/Views/);
+  expect(screen.queryByText(/^Views couldn't be read/)).toBeNull();
 });
 
 test("Most read sorts by date until views load, and says so", async () => {
@@ -126,7 +138,7 @@ test("Most read sorts by date until views load, and says so", async () => {
 
 test("views read are dated beside the articles, with no notice", async () => {
   stubArchive({ posts, views: VIEWS });
-  window.history.replaceState(null, "", "/articles");
+  window.history.replaceState(null, "", "/articles?view=most-read");
   render(<ArticlesPage />);
 
   await waitFor(() => expect(status()).toMatch(/ · Views just now$/), WAIT);

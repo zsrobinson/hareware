@@ -21,7 +21,7 @@ import {
   type ProblemKind,
 } from "~/lib/credits/archive";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
-import { peopleOf } from "~/lib/credits/person";
+import { contributionsOn, peopleOf } from "~/lib/credits/person";
 import { same } from "~/lib/credits/sheet";
 import { applyFilters, easternDate } from "~/lib/credits/stats";
 import { useTrail } from "./archive-shell";
@@ -31,6 +31,7 @@ import { PeoplePicker, PersonPicker } from "./person-picker";
 import {
   archiveHref,
   OpenRowProvider,
+  personHref,
   RowDetails,
   RowOpener,
 } from "./open-row";
@@ -60,6 +61,7 @@ const namesFor = (article: ArchiveArticle, role: Role) =>
 
 /** who counts, with the printed name beneath when it is someone else */
 function Contributors({ credits }: { credits: Credit[] }) {
+  const trail = useTrail();
   const people = credits.flatMap((credit) => credit.contributors);
   if (people.length === 0)
     return <span className="text-muted-foreground/50">—</span>;
@@ -67,7 +69,12 @@ function Contributors({ credits }: { credits: Credit[] }) {
     <div className="space-y-0.5">
       {people.map((person, index) => (
         <div key={index}>
-          {person.name}
+          <a
+            href={personHref(person.name, trail)}
+            className="underline-offset-4 hover:underline"
+          >
+            {person.name}
+          </a>
           {person.byline && (
             <span className="text-muted-foreground block text-xs">
               as {person.byline}
@@ -279,6 +286,7 @@ export function ArticlePanel({
           {formatDate(article.publishedAt)} ·{" "}
           <SectionName section={article.section} />
         </p>
+        <Credited article={article} />
         <div className="flex flex-wrap gap-2">
           <a
             href={article.link}
@@ -313,6 +321,44 @@ export function ArticlePanel({
         />
       ))}
     </SidePanel>
+  );
+}
+
+/** who the article counts, by role, each a link to their record */
+function Credited({ article }: { article: ArchiveArticle }) {
+  const trail = useTrail();
+  const roles = ROLES.map((role) => ({
+    role,
+    names: [
+      ...new Set(
+        contributionsOn(article)
+          .filter((c) => c.role === role)
+          .map((c) => c.person),
+      ),
+    ],
+  })).filter(({ names }) => names.length > 0);
+  if (roles.length === 0) return null;
+  return (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+      {roles.map(({ role, names }) => (
+        <Fragment key={role}>
+          <dt className="text-muted-foreground">{ROLE_NAMES[role]}</dt>
+          <dd>
+            {names.map((name, index) => (
+              <Fragment key={name}>
+                {index > 0 && ", "}
+                <a
+                  href={personHref(name, trail)}
+                  className="font-medium underline-offset-4 hover:underline"
+                >
+                  {name}
+                </a>
+              </Fragment>
+            ))}
+          </dd>
+        </Fragment>
+      ))}
+    </dl>
   );
 }
 

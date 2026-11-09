@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -130,4 +136,21 @@ test("a link from before opens the person it names, under the new name", async (
   const params = new URLSearchParams(window.location.search);
   expect(params.get("open")).toBe("Ben Sample");
   expect(params.has("person")).toBe(false);
+});
+
+test("a name in an article's panel opens the person, on these filters", async () => {
+  window.history.replaceState(null, "", "/articles?range=12m&open=2");
+  render(<ArticlesPage />);
+  const panel = await screen.findByRole("complementary", {
+    name: "Another invented headline",
+  });
+  const person = new URL(
+    within(panel)
+      .getByRole("link", { name: "Ben Sample" })
+      .getAttribute("href")!,
+    "https://x.test",
+  );
+  expect(person.pathname).toBe("/people");
+  expect(person.searchParams.get("open")).toBe("Ben Sample");
+  expect(person.searchParams.get("range")).toBe("12m");
 });

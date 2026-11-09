@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { SidePanel } from "~/components/panel";
-import { Button } from "~/components/ui/button";
+import { NewspaperIcon, UsersIcon } from "lucide-react";
+import { Button, buttonVariants } from "~/components/ui/button";
 import type { ArchiveArticle } from "~/lib/credits/archive";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import { compareSections } from "~/lib/credits/sections";
@@ -13,10 +14,10 @@ import {
   type Member,
 } from "~/lib/credits/stats";
 import { cn } from "~/lib/utils";
-import { counted } from "./chart-slice";
+import { counted, type SliceFilters } from "./chart-slice";
 import { formatDate } from "./dates";
 import { useTrail } from "./archive-shell";
-import { articleHref, personHref, type Trail } from "./open-row";
+import { archiveHref, articleHref, personHref, type Trail } from "./open-row";
 import { SectionName } from "./section-name";
 
 /* a long slice draws its first rows at once and the rest when asked */
@@ -37,6 +38,7 @@ export function SlicePanel({
   measure,
   members,
   filters,
+  seeing,
   onClose,
   restoreFocus,
 }: {
@@ -48,6 +50,8 @@ export function SlicePanel({
   members: Member[];
   /** whose contributions count, which says whose names an article's row shows */
   filters: Filters;
+  /** the slice as each table's filters, for the links to them; none in a test of the rows alone */
+  seeing?: SliceFilters;
   onClose: () => void;
   restoreFocus: () => HTMLElement | null;
 }) {
@@ -60,9 +64,40 @@ export function SlicePanel({
     >
       <div className="-mt-3 space-y-3">
         <p className="text-muted-foreground text-sm">{caption}</p>
+        {seeing && <SeeIn seeing={seeing} />}
         <Rows measure={measure} members={members} filters={filters} />
       </div>
     </SidePanel>
+  );
+}
+
+/* the same slice as a table to sort, read through and download: a chart's
+   search is of articles, which People's is not, so it goes only to Articles */
+function SeeIn({ seeing }: { seeing: SliceFilters }) {
+  const link = cn(buttonVariants({ variant: "outline", size: "sm" }));
+  return (
+    <div className="flex flex-wrap gap-2">
+      <a
+        className={link}
+        href={archiveHref("articles", {
+          state: seeing.articles,
+          searching: "articles",
+        })}
+      >
+        <NewspaperIcon />
+        See in Articles
+      </a>
+      <a
+        className={link}
+        href={archiveHref("people", {
+          state: seeing.people,
+          searching: "articles",
+        })}
+      >
+        <UsersIcon />
+        See the people
+      </a>
+    </div>
   );
 }
 

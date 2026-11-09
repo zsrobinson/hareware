@@ -226,6 +226,30 @@ test("a name searched for says what it matched, and can count that person alone"
   expect(new URLSearchParams(window.location.search).has("people")).toBe(false);
 });
 
+test("what a mark counts opens as filters on either table", async () => {
+  window.history.replaceState(null, "", "/articles?view=sections");
+  const user = userEvent.setup();
+  render(<ArticlesPage />);
+  await user.click(
+    await screen.findByRole("button", { name: "Show as table" }),
+  );
+  await user.click(
+    screen.getByRole("button", { name: "News: see 2 articles" }),
+  );
+  const panel = await screen.findByRole("complementary", { name: "News" });
+  const to = (name: string) =>
+    new URL(
+      within(panel).getByRole("link", { name }).getAttribute("href")!,
+      "https://x.test",
+    );
+  const articles = to("See in Articles");
+  expect(articles.pathname).toBe("/articles");
+  expect(articles.searchParams.get("sections")).toBe("News");
+  expect(articles.searchParams.get("range")).toBe("3m");
+  expect(articles.searchParams.has("view")).toBe(false);
+  expect(to("See the people").pathname).toBe("/people");
+});
+
 test("the builder turns a table into a chart, as Custom, and Reset brings the table back", async () => {
   window.history.replaceState(null, "", "/people");
   const user = userEvent.setup();

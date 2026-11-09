@@ -54,6 +54,7 @@ import {
   percentText,
   readSlice,
   sliceCount,
+  sliceFilters,
   sliceKey,
   sliceMembers,
   unitOf,
@@ -132,6 +133,7 @@ export function ChartView({
   archive,
   filters,
   filterNote,
+  filterState,
   config,
   question,
   hidden,
@@ -240,6 +242,14 @@ export function ChartView({
             measure={grouped.measure}
             members={plot.members(slice)}
             filters={filters}
+            seeing={sliceFilters(
+              grouped,
+              config,
+              slice,
+              plot.members(slice),
+              hidden,
+              filterState,
+            )}
             onClose={opened.close}
             restoreFocus={() =>
               document.querySelector<HTMLElement>(

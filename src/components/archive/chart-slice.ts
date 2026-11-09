@@ -6,13 +6,21 @@
   as long as the number it was opened from.
 */
 
+import { isRole } from "~/lib/credits/labels";
+import { contributionsOn } from "~/lib/credits/person";
 import {
+  isCounted,
+  isPeriod,
   membersAcross,
   membersOf,
+  periodBounds,
+  type Dimension,
   type Grouped,
   type Measure,
   type Member,
 } from "~/lib/credits/stats";
+import type { ChartConfig } from "./chart-config";
+import { rangeOf, toFilters, type FilterState } from "./filters";
 
 export type Slice = {
   category: string;
@@ -152,4 +160,76 @@ export function sliceCount(
     members.flatMap((m) => m.units.map((unit) => unit.article.id)),
   ).size;
   return `${unitOf(n, measure)} on ${counted(articles, "article", "articles")}`;
+}
+
+/** a slice as filters, for each table to list it */
+export type SliceFilters = { articles: FilterState; people: FilterState };
+
+/**
+ * What a slice counts, as the filters a table would need to list it: a
+ * period is the part of it the range covers, and a section, role or person
+ * is that filter, so the table counts what the mark did (Articles lists an
+ * article nobody is credited on too, which no count of people has). New people are not
+ * a filter, so they are named in the people filter; and so, for People, is
+ * everyone a search found, since People's own search looks at names.
+ */
+export function sliceFilters(
+  grouped: Grouped,
+  config: Pick<ChartConfig, "by" | "split">,
+  slice: Slice,
+  members: Member[],
+  hidden: readonly string[],
+  state: FilterState,
+  now = new Date(),
+): SliceFilters {
+  let next: FilterState = { ...state };
+  const narrow = (dimension: Dimension, keys: string[]) => {
+    if (dimension === "section") next = { ...next, sections: keys };
+    else if (dimension === "role")
+      next = { ...next, roles: keys.filter(isRole) };
+    else if (dimension === "person") next = { ...next, people: keys };
+  };
+
+  if (isPeriod(config.by)) {
+    const period = periodBounds(slice.category, config.by);
+    /* as the chart cut it: a rolling range from its first whole period */
+    const range = rangeOf(state, now, config.by);
+    const later = (a: string, b?: string) => (b && b > a ? b : a);
+    const earlier = (a: string, b?: string) => (b && b < a ? b : a);
+    next = {
+      ...next,
+      preset: "custom",
+      /* a running total is everything up to the period */
+      from: grouped.running ? range.from : later(period.from, range.from),
+      to: earlier(period.to, range.to),
+    };
+  } else narrow(config.by, [slice.category]);
+
+  if (config.split !== "none") {
+    const keys =
+      slice.series !== null ? [slice.series] : columnSeries(grouped, hidden);
+    if (keys.length < grouped.series.length) narrow(config.split, keys);
+  }
+
+  /* an article counted is everyone the filters count on it */
+  const counted = isCounted(toFilters(state));
+  const names = [
+    ...new Set(
+      members.flatMap((m) =>
+        m.units.flatMap((unit) =>
+          unit.person
+            ? [unit.person]
+            : contributionsOn(unit.article)
+                .filter(counted)
+                .map((c) => c.person),
+        ),
+      ),
+    ),
+  ];
+  const named = { ...next, people: names, search: "" };
+  const newcomers = grouped.measure === "newcomers";
+  return {
+    articles: newcomers ? named : next,
+    people: newcomers || state.search.trim() ? named : next,
+  };
 }

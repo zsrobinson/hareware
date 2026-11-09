@@ -1,8 +1,10 @@
 import { expect, test } from "vitest";
 import type { ArchiveArticle, Credit } from "~/lib/credits/archive";
+import { contributionsOn } from "~/lib/credits/person";
 import {
   applyFilters,
   easternDate,
+  isCounted,
   isPeriod,
   NO_FILTERS,
   periodOf,
@@ -26,19 +28,22 @@ import {
 } from "./chart-config";
 import { VIEWS } from "./views";
 
-const chartOf = (id: string) => {
-  const { layout } = VIEWS.find((view) => view.id === id)!;
-  if (layout.type !== "chart") throw new Error(`${id} is not a chart`);
-  return layout.chart;
-};
 import {
   chartCount,
   drawnMembers,
   readSlice,
   sliceCount,
+  sliceFilters,
   sliceKey,
   sliceMembers,
 } from "./chart-slice";
+import { clearedState, toFilters, type FilterState } from "./filters";
+
+const chartOf = (id: string) => {
+  const { layout } = VIEWS.find((view) => view.id === id)!;
+  if (layout.type !== "chart") throw new Error(`${id} is not a chart`);
+  return layout.chart;
+};
 
 /*
   A slice lists what its mark counts. These go through every chart the
@@ -455,4 +460,163 @@ test("Headcount's caption counts each person once, which its columns do not", ()
   const columns = Object.values(grouped.totals).reduce((a, b) => a + b, 0);
   expect(chartCount(grouped, [])).toBe("13 different people");
   expect(columns).toBeGreaterThan(13);
+});
+
+/* what a table on these filters lists: its articles, and the contributions
+   on them the filters count */
+function listed(state: FilterState) {
+  const filters = toFilters(state);
+  const articles = applyFilters(archive, filters);
+  return {
+    articles: articles.map((a) => a.id).sort((a, b) => a - b),
+    contributions: articles
+      .flatMap((a) => contributionsOn(a).filter(isCounted(filters)))
+      .map((c) => `${c.article.id} ${c.role} ${c.person}`)
+      .sort(),
+  };
+}
+
+test("every mark, as filters, lists on a table exactly what it counts", () => {
+  const state = clearedState("all");
+  const filters = toFilters(state);
+  const shown = applyFilters(archive, filters);
+  /* Articles lists an article nobody is credited on, which no count of
+     people has */
+  const credited = new Set(
+    archive.filter((a) => contributionsOn(a).length > 0).map((a) => a.id),
+  );
+  const ids = (units: Unit[]) =>
+    [...new Set(units.map((u) => u.article.id))].sort((a, b) => a - b);
+  const wrong: string[] = [];
+  let checked = 0;
+  for (const config of counting) {
+    const grouped = groupOf(config, shown, filters, archive);
+    /* one series is its column, and hiding it leaves nothing to open */
+    const keys =
+      config.split === "none" ? [] : grouped.series.map((s) => s.key);
+    for (const hidden of keys.length > 0 ? [[], keys.slice(0, 1)] : [[]])
+      for (const { key: category } of grouped.categories)
+        for (const series of [null, ...keys]) {
+          const slice = { category, series };
+          const members = sliceMembers(grouped, slice, hidden);
+          if (members.length === 0) continue;
+          const units = members.flatMap((m) => m.units);
+          const seeing = sliceFilters(
+            grouped,
+            config,
+            slice,
+            members,
+            hidden,
+            state,
+          );
+          const same = (a: unknown, b: unknown) =>
+            JSON.stringify(a) === JSON.stringify(b);
+          let ok: boolean;
+          if (grouped.measure === "newcomers")
+            /* new people are named, so only they are on People */
+            ok = same(
+              [...seeing.people.people].sort(),
+              [...new Set(units.map((u) => u.person!))].sort(),
+            );
+          else {
+            const table = listed(seeing.articles);
+            ok =
+              same(
+                table.articles.filter(
+                  (id) => grouped.measure === "articles" || credited.has(id),
+                ),
+                ids(units),
+              ) &&
+              (grouped.measure === "articles" ||
+                same(
+                  table.contributions,
+                  units
+                    .map((u) => `${u.article.id} ${u.role} ${u.person}`)
+                    .sort(),
+                ));
+          }
+          if (!ok)
+            wrong.push(
+              `${JSON.stringify(config)} ${sliceKey(slice)} hiding ${hidden.join()}`,
+            );
+          checked++;
+        }
+  }
+  expect(wrong).toEqual([]);
+  expect(checked).toBeGreaterThan(300);
+});
+
+test("a period as filters is the part of it the range covers, and a running total all of it so far", () => {
+  const config = chartOf("history");
+  const state: FilterState = {
+    ...clearedState("custom"),
+    from: "2025-10-01",
+  };
+  const grouped = groupOf(
+    config,
+    applyFilters(archive, toFilters(state)),
+    toFilters(state),
+    archive,
+  );
+  const slice = { category: "2025-2", series: null };
+  const seeing = sliceFilters(
+    grouped,
+    config,
+    slice,
+    sliceMembers(grouped, slice, []),
+    [],
+    state,
+  );
+  expect(seeing.articles).toMatchObject({
+    preset: "custom",
+    from: "2025-10-01",
+    to: "2025-12-31",
+  });
+
+  const running = groupOf(
+    { ...config, values: "running" },
+    archive,
+    NO_FILTERS,
+    archive,
+  );
+  const spring = { category: "2026-1", series: "News" };
+  const through = sliceFilters(
+    running,
+    config,
+    spring,
+    sliceMembers(running, spring, []),
+    [],
+    clearedState("all"),
+  );
+  expect(through.articles).toMatchObject({
+    preset: "custom",
+    from: undefined,
+    to: "2026-05-31",
+    sections: ["News"],
+  });
+});
+
+test("a search goes to People as the people it found, whose own search is of names", () => {
+  const config = chartOf("sections");
+  const state = { ...clearedState("all"), search: "headline 9" };
+  const grouped = groupOf(
+    config,
+    applyFilters(archive, toFilters(state)),
+    toFilters(state),
+    archive,
+  );
+  const slice = { category: "News", series: null };
+  const seeing = sliceFilters(
+    grouped,
+    config,
+    slice,
+    sliceMembers(grouped, slice, []),
+    [],
+    state,
+  );
+  expect(seeing.articles.search).toBe("headline 9");
+  expect(seeing.people).toMatchObject({
+    search: "",
+    people: ["Ada Example", "Mo Newname"],
+  });
 });

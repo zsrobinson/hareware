@@ -2,6 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   ExternalLinkIcon,
   PlusIcon,
+  RotateCcwIcon,
   UserRoundIcon,
   UserRoundPlusIcon,
   XIcon,
@@ -28,7 +29,7 @@ import { useShowsViews, useTrail } from "./archive-shell";
 import { ExplorerPage, type TableViewProps } from "./explorer";
 import { ViewHeading } from "./view-heading";
 import { formatDate } from "./dates";
-import { PeoplePicker, PersonPicker } from "./person-picker";
+import { PeoplePicker, PersonPicker, QUIET } from "./person-picker";
 import {
   archiveHref,
   OpenRowProvider,
@@ -591,13 +592,11 @@ function RoleEditor({
           <FieldRow
             key={index}
             icon={UserRoundPlusIcon}
-            label={
-              <span className="text-muted-foreground font-normal italic">
-                Not printed
-              </span>
-            }
+            label="Not printed"
             htmlFor={`${ids}-added-${index}`}
             width="panel"
+            /* the name is what matters, so it has the room the label had */
+            wide
             action={
               <Button
                 variant="ghost"
@@ -617,51 +616,25 @@ function RoleEditor({
                 setAdded(added.map((n, i) => (i === index ? next : n)))
               }
               people={everyone}
+              placeholder="Someone not printed"
             />
           </FieldRow>
         ))}
       </FieldRows>
 
+      {/* the panel's actions are one quiet kind, their icons on the
+          rows' icon column; Reset, which undoes the Sheet's, is quieter
+          still and has a line of its own */}
       <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="ghost"
-          className="-ml-2.5"
+          size="sm"
+          className={QUIET}
           onClick={() => setAdded([...added, ""])}
         >
           <PlusIcon /> Add someone not printed
         </Button>
         <span className="flex-1" />
-        {!changed &&
-          (initial.added.length > 0 ||
-            Object.values(initial.renamed).some(
-              (names) => names.length > 0,
-            )) && (
-            <Button
-              variant="ghost"
-              disabled={save.isPending}
-              onClick={() =>
-                save.mutate({
-                  edit: {
-                    kind: "article-credits",
-                    postId: article.id,
-                    role,
-                    entries: [],
-                    elsewhere,
-                  },
-                  done: `“${article.title}” is back to its printed bylines`,
-                  undo: {
-                    kind: "article-credits",
-                    postId: article.id,
-                    role,
-                    entries: entriesOf(initial),
-                    elsewhere,
-                  },
-                })
-              }
-            >
-              Reset to printed
-            </Button>
-          )}
         {changed && (
           <>
             <Button
@@ -700,6 +673,39 @@ function RoleEditor({
           </>
         )}
       </div>
+      {!changed &&
+        (initial.added.length > 0 ||
+          Object.values(initial.renamed).some((names) => names.length > 0)) && (
+          <div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(QUIET, "text-muted-foreground/80")}
+              disabled={save.isPending}
+              onClick={() =>
+                save.mutate({
+                  edit: {
+                    kind: "article-credits",
+                    postId: article.id,
+                    role,
+                    entries: [],
+                    elsewhere,
+                  },
+                  done: `“${article.title}” is back to its printed bylines`,
+                  undo: {
+                    kind: "article-credits",
+                    postId: article.id,
+                    role,
+                    entries: entriesOf(initial),
+                    elsewhere,
+                  },
+                })
+              }
+            >
+              <RotateCcwIcon /> Reset to printed
+            </Button>
+          </div>
+        )}
     </section>
   );
 }

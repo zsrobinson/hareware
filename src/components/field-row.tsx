@@ -45,6 +45,7 @@ export function FieldRow({
   action,
   inline = false,
   top = false,
+  wide = false,
   width = "page",
 }: {
   icon?: LucideIcon;
@@ -58,6 +59,9 @@ export function FieldRow({
   inline?: boolean;
   /** for a tall control (a textarea, an image): label at its top */
   top?: boolean;
+  /** the control takes the label's column too, where the icon says what it
+      is; the label is for a screen reader */
+  wide?: boolean;
   width?: Width;
 }) {
   return (
@@ -79,7 +83,11 @@ export function FieldRow({
       </span>
       <label
         htmlFor={htmlFor}
-        className={cn("text-sm font-medium", top && "sm:pt-1.5")}
+        className={cn(
+          "text-sm font-medium",
+          top && "sm:pt-1.5",
+          wide && "sr-only",
+        )}
       >
         {label}
       </label>
@@ -87,9 +95,11 @@ export function FieldRow({
         className={cn(
           "min-w-0",
           /* a phone puts the control on its own line, under the label */
-          inline
-            ? "max-sm:w-40 max-sm:justify-self-end"
-            : "max-sm:col-span-full max-sm:row-start-2",
+          wide
+            ? "sm:col-span-2"
+            : inline
+              ? "max-sm:w-40 max-sm:justify-self-end"
+              : "max-sm:col-span-full max-sm:row-start-2",
         )}
       >
         {children}

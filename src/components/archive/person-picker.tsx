@@ -19,6 +19,9 @@ import { same } from "~/lib/credits/sheet";
 import { searchable } from "~/lib/credits/stats";
 import { cn } from "~/lib/utils";
 
+/* the credit editor's actions: quiet, their icon on the rows' icon column */
+export const QUIET = "text-muted-foreground hover:text-foreground -ml-2.5";
+
 /* enough to find someone by typing; the full list is hundreds long */
 const SHOWN = 60;
 
@@ -226,7 +229,7 @@ export function PeoplePicker({
           type="button"
           variant="ghost"
           size="sm"
-          className="text-muted-foreground -ml-2"
+          className={QUIET}
           onClick={() => {
             focusRow.current = list.length;
             setAdding(true);

@@ -82,6 +82,9 @@ test("refuses any other stat, path or query, without asking WordPress", async ()
   expect(await refused("/api/stats/top-posts?period=forever")).toBe(400);
   expect(await refused("/api/stats/top-posts?num=1;2")).toBe(400);
   expect(await refused("/api/stats/top-posts?period=month&period=x")).toBe(400);
+  /* every object has these; none is a key HareWare passes */
+  for (const key of ["constructor", "__proto__", "toString", "hasOwnProperty"])
+    expect(await refused(`/api/stats/top-posts?${key}=1`)).toBe(400);
 
   expect(asked).toEqual([]);
 });

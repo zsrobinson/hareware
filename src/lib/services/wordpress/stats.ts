@@ -28,12 +28,13 @@ export const STATS_THROUGH = "/api/stats/";
 
 const RESOURCES = new Set(["top-posts"]);
 /* each key a read may send, and what its value may be */
-const KEYS: Record<string, RegExp> = {
-  period: /^(day|week|month|year)$/,
-  num: /^\d{1,3}$/,
-  max: /^\d{1,4}$/,
-  date: /^\d{4}-\d{2}-\d{2}$/,
-};
+/* a Map, not an object: `constructor` is a key of every object */
+const KEYS = new Map<string, RegExp>([
+  ["period", /^(day|week|month|year)$/],
+  ["num", /^\d{1,3}$/],
+  ["max", /^\d{1,4}$/],
+  ["date", /^\d{4}-\d{2}-\d{2}$/],
+]);
 /* as in ./pass-through: Content-Encoding kept, so the compressed bytes are
    forwarded as they are */
 const PASSED = ["content-type", "content-encoding", "vary"];
@@ -58,7 +59,7 @@ export async function passStats(
   if (!url.pathname.startsWith(STATS_THROUGH) || !RESOURCES.has(resource))
     return answer("not a stat HareWare reads", 404);
   for (const [key, value] of url.searchParams)
-    if (!KEYS[key]?.test(value))
+    if (!KEYS.get(key)?.test(value))
       return answer(`not a query HareWare passes: ${key}`, 400);
 
   let upstream: Response;

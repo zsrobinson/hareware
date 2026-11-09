@@ -6,6 +6,7 @@
 
 import { vi } from "vitest";
 import type { Override } from "~/lib/credits/sheet";
+import { queryClient } from "~/lib/query-client";
 
 export type StubPost = {
   id: number;
@@ -25,6 +26,9 @@ export function stubArchive({
   /** the Sheet's Overrides tab; without it the Sheet is not connected */
   overrides?: Override[];
 }) {
+  /* the client outlives a page, as it does between pages: a read another
+     test left in it would be drawn instead */
+  queryClient.clear();
   const snapshot = {
     posts: posts.map((post) => ({
       categoryIds: [],

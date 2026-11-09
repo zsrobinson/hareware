@@ -11,6 +11,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { ArticlesPage } from "./articles";
 import { PeoplePage } from "./people";
 import { stubArchive } from "./stub-archive";
+import { queryClient } from "~/lib/query-client";
 
 /*
   A count in the chart's table opens what it counts beside the chart: the
@@ -75,6 +76,8 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  /* each test's archive is its own */
+  queryClient.clear();
   vi.unstubAllGlobals();
   window.history.replaceState(null, "", "/");
 });

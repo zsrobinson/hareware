@@ -5,7 +5,13 @@
 */
 
 import { ROLES, type Label, type Role } from "./labels";
-import { creditLines, labelOf, unrecognisedLines } from "./parse";
+import { countWords } from "~/lib/get-word-count";
+import {
+  creditLines,
+  creditParagraphs,
+  labelOf,
+  unrecognisedLines,
+} from "./parse";
 import { sortSections } from "./sections";
 import {
   pairKey,
@@ -25,6 +31,8 @@ export type SourcePost = {
   title: string;
   categoryIds: number[];
   paragraphs: string[];
+  /** `bodyWords()` of the body: its prose, credit lines included */
+  words: number;
 };
 
 /** someone counted for a credit, and why they count as who they do */
@@ -65,6 +73,8 @@ export type ArchiveArticle = {
   link: string;
   publishedAt: string;
   section: string;
+  /** the words of its prose, less its credit lines (`bodyWords()`) */
+  words: number;
   credits: Credit[];
   /* `label` is what an unknown credit line starts with, to add as a label */
   problems: { kind: ProblemKind; detail: string; label?: string }[];
@@ -189,6 +199,9 @@ export function buildArchive(input: {
       link: post.link,
       publishedAt: post.publishedAt,
       section,
+      words:
+        post.words -
+        countWords(creditParagraphs(post.paragraphs, labels).join(" ")),
       credits,
       problems: problemsOf(
         post.id,

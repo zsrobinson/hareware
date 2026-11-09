@@ -31,6 +31,7 @@ const article = (
   link: "",
   publishedAt,
   section,
+  words: 0,
   credits,
   problems: [],
 });

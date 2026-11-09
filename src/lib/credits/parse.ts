@@ -5,6 +5,7 @@
   because the joke is in it.
 */
 
+import { countWords } from "~/lib/get-word-count";
 import { decodeEntities } from "~/lib/services/wordpress/posts";
 import type { Label, Role } from "./labels";
 
@@ -71,20 +72,44 @@ export function unrecognisedLines(texts: string[], labels: Label[]): string[] {
   );
 }
 
-/**
- * the text of each `<p>` short enough to be a credit, tags dropped and
- * whitespace collapsed
- */
+/* a block's text, tags dropped and whitespace collapsed */
+const textOf = (markup: string) =>
+  decodeEntities(markup.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, ""))
+    .replace(/[\s\u00a0]+/g, " ")
+    .trim();
+
+/** the text of each `<p>` short enough to be a credit */
 export function paragraphs(html: string): string[] {
   return [...html.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
-    .map((match) =>
-      decodeEntities(
-        match[1]!.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, ""),
-      )
-        .replace(/[\s\u00a0]+/g, " ")
-        .trim(),
-    )
+    .map((match) => textOf(match[1]!))
     .filter((text) => text && text.length <= MAX_CREDIT_LENGTH);
+}
+
+/**
+ * the words of a post's prose: its paragraphs, subheadings and list items, the
+ * blocks the Word Counter counts. Captions, embeds and the theme's date line
+ * are not prose. Credit lines are counted here, since which lines are credits
+ * depends on the labels: `creditParagraphs()` is what to take off
+ */
+export function bodyWords(html: string): number {
+  let words = 0;
+  /* a block inside another, as a paragraph in a list item, is in the outer
+     one's match and counted once */
+  for (const match of html.matchAll(/<(p|h2|h3|li)\b[^>]*>([\s\S]*?)<\/\1>/gi))
+    words += countWords(textOf(match[2]!));
+  return words;
+}
+
+/**
+ * the paragraphs that say who made the article rather than being part of it:
+ * credit lines, and lines shaped like one that no label matched
+ */
+export function creditParagraphs(texts: string[], labels: Label[]): string[] {
+  const matcher = labelMatcher(labels);
+  const unrecognised = new Set(unrecognisedLines(texts, labels));
+  return texts.filter(
+    (text) => matcher?.pattern.test(text) || unrecognised.has(text),
+  );
 }
 
 /* one build reads every post with the same labels, so the pattern is compiled

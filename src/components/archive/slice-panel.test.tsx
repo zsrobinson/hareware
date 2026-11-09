@@ -14,6 +14,7 @@ const article: ArchiveArticle = {
   link: "",
   publishedAt: "2026-10-08T16:00:00Z",
   section: "News",
+  words: 0,
   credits: [],
   problems: [],
 };

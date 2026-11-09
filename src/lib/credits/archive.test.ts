@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { buildArchive, similarNames, type SourcePost } from "./archive";
 import { DEFAULT_LABELS } from "./labels";
+import { bodyWords, paragraphs } from "./parse";
 import type { Ignored, Override, SheetState, Unscoped } from "./sheet";
 
 /* invented names only: what the Sheet maps is private, so no test may pair a
@@ -18,6 +19,7 @@ const post = (
   title: `Post ${id}`,
   categoryIds,
   paragraphs,
+  words: 0,
 });
 
 const categories = new Map([
@@ -405,4 +407,42 @@ test("the archive lists its sections in the paper's order, not alphabetically", 
     "Entertainment",
     "Uncategorized",
   ]);
+});
+
+/* a post as the archive's loader makes one out of WordPress's markup */
+const fromHtml = (id: number, html: string): SourcePost => ({
+  ...post(id, paragraphs(html)),
+  words: bodyWords(html),
+});
+
+test("counts an article's prose: paragraphs, subheadings and list items, not its credits", () => {
+  const html = `
+    <div class="wp-block-post-date"><time>November 8, 2026</time></div>
+    <figure><img src="x.webp" alt=""><figcaption>A caption here</figcaption></figure>
+    <p><strong>Article by:</strong> Penn Name</p>
+    <p>Four words of&nbsp;prose.</p>
+    <h3>A subheading</h3>
+    <ol><li>One <em>item</em></li><li><p>A nested paragraph</p></li></ol>
+    <p>Line one<br>line two</p>
+    <p><em>Image Credits: Ida Imager</em></p>
+    <p>Photo by Someone Unlabelled</p>`;
+
+  expect(build([fromHtml(1, html)]).articles[0]!.words).toBe(4 + 2 + 2 + 3 + 4);
+});
+
+test("a credit line counts as prose until a label makes it one", () => {
+  const html = `<p>Article by: Penn Name</p><p>Squirrel wrangling: Sam Squirrel</p><p>Five words of real prose.</p>`;
+  const words = (labels = DEFAULT_LABELS) =>
+    buildArchive({
+      posts: [fromHtml(1, html)],
+      categories,
+      sheet: read(),
+      labels,
+      fetchedAt: "now",
+    }).articles[0]!.words;
+
+  expect(words()).toBe(5 + 4);
+  expect(
+    words([...DEFAULT_LABELS, { label: "Squirrel wrangling", role: "other" }]),
+  ).toBe(5);
 });

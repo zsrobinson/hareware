@@ -1,13 +1,13 @@
+/** the words in some text: whatever whitespace separates */
+export function countWords(text: string) {
+  return text.split(/\s+/).filter((word) => word !== "").length;
+}
+
 /**
  * the number of words in an article
  * @param body the body elements from `scrapeArticle`, already trimmed of the
  * byline and image credits
  */
 export function getWordCount(body: Element[]) {
-  const words = body
-    .map((el) => el.textContent)
-    .join(" ")
-    .split(" ")
-    .filter((word) => word !== "");
-  return words.length;
+  return countWords(body.map((el) => el.textContent).join(" "));
 }

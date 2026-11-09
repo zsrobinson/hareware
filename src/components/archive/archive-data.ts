@@ -28,7 +28,7 @@ import {
   type SourcePost,
 } from "~/lib/credits/archive";
 import type { SheetPayload } from "~/lib/credits/load";
-import { paragraphs } from "~/lib/credits/parse";
+import { bodyWords, paragraphs } from "~/lib/credits/parse";
 import { labelsIn } from "~/lib/credits/sheet";
 import { allPosts, categories } from "~/lib/services/wordpress/posts";
 
@@ -38,7 +38,7 @@ const FRESH_MS = 10 * 60_000;
 const STALE_MS = 24 * 60 * 60_000;
 /* bump when Snapshot changes shape, so a stored copy of the old one is not read */
 const CACHE = "hareware-wordpress";
-const KEY = "/wordpress-snapshot-v1";
+const KEY = "/wordpress-snapshot-v2";
 
 export const SHEET_KEY = ["sheet"] as const;
 const WORDPRESS_KEY = ["wordpress"] as const;
@@ -91,6 +91,7 @@ async function readSnapshot(fresh = false): Promise<Snapshot> {
       title: post.title,
       categoryIds: post.categoryIds,
       paragraphs: paragraphs(post.html),
+      words: bodyWords(post.html),
     })),
     categories: sections.map((category) => [category.id, category.name]),
     fetchedAt: new Date().toISOString(),

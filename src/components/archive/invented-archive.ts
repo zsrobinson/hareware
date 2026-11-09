@@ -32,6 +32,7 @@ export const post = (
   link: "",
   publishedAt: `${date}T16:00:00Z`,
   section,
+  words: 0,
   credits,
   problems: [],
 });

@@ -9,14 +9,14 @@ import {
 } from "react";
 import { CopyTextButton } from "~/components/copy-button";
 import { Button } from "~/components/ui/button";
-import { applyFilters } from "~/lib/credits/stats";
+import { amountOf, applyFilters } from "~/lib/credits/stats";
 import { toCsv } from "~/lib/csv";
 import { saveFile } from "~/lib/save-file";
 import { cn } from "~/lib/utils";
 import type { ViewProps } from "./archive-shell";
 import { COUNTS } from "./chart-config";
-import { percentText, sliceCount, unitOf } from "./chart-slice";
-import { partialKeys, type Incomplete } from "./charts";
+import { measureNote, percentText, sliceCount, unitOf } from "./chart-slice";
+import { partialKeys, ViewsUnavailable, type Incomplete } from "./charts";
 import { filtersFor } from "./compare";
 import { RowDetails, type OpenRow } from "./open-row";
 import { dimensionName, type PivotConfig } from "./pivot-config";
@@ -80,7 +80,8 @@ export function PivotView({
     opened.open === null ? null : readPivotSlice(opened.open, pivot);
   /* a link to a cell this pivot does not have, or one the filters emptied */
   const missing =
-    opened.open !== null && (slice === null || pivot.count(slice) === 0);
+    opened.open !== null &&
+    (slice === null || pivot.members(slice).length === 0);
   useEffect(() => {
     if (missing) opened.close();
   });
@@ -91,6 +92,8 @@ export function PivotView({
     opened.show(pivotKey(next));
   };
 
+  if (config.count === "views" && archive.views.status !== "read")
+    return <ViewsUnavailable views={archive.views} />;
   const title = pivotTitle(pivot);
   const download = () => {
     const [header, ...body] = pivotMatrix(pivot);
@@ -113,7 +116,13 @@ export function PivotView({
             <div className="text-muted-foreground text-sm">{question}</div>
           )}
           <div className="text-muted-foreground text-sm">
-            {[pivotCount(pivot), filterNote].filter(Boolean).join(" · ")}
+            {[
+              pivotCount(pivot),
+              filterNote,
+              measureNote(pivot.grouped.measure, [config.rows, config.columns]),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </div>
         </figcaption>
         {pivot.note && (
@@ -303,12 +312,15 @@ function PivotTable({
     className?: string,
   ) => {
     const { count, share } = cellValue(pivot, slice);
-    if (count === 0)
+    if (pivot.members(slice).length === 0)
       return (
         <span className="text-muted-foreground/40 tabular-nums">
           {content ?? (share === null ? 0 : percentText(0))}
         </span>
       );
+    /* articles none of whose views could be read: not a zero */
+    const unread = amountOf(pivot.members(slice), pivot.grouped.measure);
+    const none = unread.counted === 0 && unread.missing > 0;
     const at = `${r},${c}`;
     const open = selected !== null && sameSlice(selected, slice);
     const what = unitOf(count, pivot.grouped.measure);
@@ -330,7 +342,11 @@ function PivotTable({
         )}
       >
         {content ??
-          (share === null ? count.toLocaleString() : percentText(share))}
+          (none
+            ? "–"
+            : share === null
+              ? count.toLocaleString()
+              : percentText(share))}
       </button>
     );
   };

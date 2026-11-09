@@ -9,8 +9,10 @@
 import { isRole } from "~/lib/credits/labels";
 import { contributionsOn } from "~/lib/credits/person";
 import {
+  amountOf,
   isCounted,
   isPeriod,
+  isQuantity,
   membersAcross,
   membersOf,
   periodBounds,
@@ -32,6 +34,8 @@ const UNITS: Record<Measure, [string, string]> = {
   contributions: ["contribution", "contributions"],
   people: ["person", "people"],
   newcomers: ["new person", "new people"],
+  words: ["word", "words"],
+  views: ["view", "views"],
 };
 
 export const counted = (n: number, one: string, many: string) =>
@@ -39,6 +43,39 @@ export const counted = (n: number, one: string, many: string) =>
 
 export const unitOf = (n: number, measure: Measure) =>
   counted(n, ...UNITS[measure]);
+
+/** "3 articles without views", where views were left out of a sum */
+const missingText = (members: readonly Member[], measure: Measure) => {
+  const { missing } = amountOf(members, measure);
+  return missing > 0
+    ? counted(missing, "article without views", "articles without views")
+    : "";
+};
+
+/**
+ * What words or views mean wherever they are counted, said once in a
+ * caption as a search is: an article's words count once, however many
+ * people it credits, and views are lifetime views of the articles the range
+ * published. Nothing for a count
+ */
+export function measureNote(
+  measure: Measure,
+  dimensions: readonly string[],
+): string {
+  const people = dimensions.some((d) => d === "person" || d === "role");
+  if (measure === "words")
+    return people
+      ? "Each article's words once, under everyone credited on it"
+      : "";
+  if (measure === "views")
+    return [
+      "Lifetime views of the articles published in the range, counted since January 2023",
+      people && "each article once, under everyone credited on it",
+    ]
+      .filter(Boolean)
+      .join(", ");
+  return "";
+}
 
 export const percentText = (value: number) =>
   value > 0 && value < 1 ? "<1%" : `${Math.round(value)}%`;
@@ -120,12 +157,16 @@ export function chartCount(grouped: Grouped, hidden: readonly string[]) {
     grouped.measure === "people"
       ? counted(n, "person", "different people")
       : unitOf(n, grouped.measure);
-  const drawn = drawnMembers(grouped, hidden).length;
-  const whole = membersAcross(
-    grouped,
-    Object.keys(grouped.cells),
-    grouped.series.map((s) => s.key),
-  ).length;
+  const drawnList = drawnMembers(grouped, hidden);
+  const drawn = amountOf(drawnList, grouped.measure).value;
+  const whole = amountOf(
+    membersAcross(
+      grouped,
+      Object.keys(grouped.cells),
+      grouped.series.map((s) => s.key),
+    ),
+    grouped.measure,
+  ).value;
   const parts: string[] = [];
   /* only grouping by person keeps the biggest few */
   if (grouped.categories.length < grouped.available)
@@ -137,14 +178,16 @@ export function chartCount(grouped: Grouped, hidden: readonly string[]) {
       ? unit(whole)
       : `${drawn.toLocaleString()} of ${unit(whole)}`,
   );
-  return parts.join(" · ");
+  parts.push(missingText(drawnList, grouped.measure));
+  return parts.filter(Boolean).join(" · ");
 }
 
 /** two ranges' count in words: "64 articles, against 58", or of a top few, "Top 25 of 40 people · 60 contributions, against 75" */
 export function pairCount(grouped: Grouped): string {
   const keys = grouped.categories.map((c) => c.key);
   const [now, then] = ["now", "then"].map(
-    (series) => membersAcross(grouped, keys, [series]).length,
+    (series) =>
+      amountOf(membersAcross(grouped, keys, [series]), grouped.measure).value,
   ) as [number, number];
   const pair = `${unitOf(now, grouped.measure)}, against ${then.toLocaleString()}`;
   /* only people are ever cut to a top few */
@@ -155,7 +198,9 @@ export function pairCount(grouped: Grouped): string {
 
 /**
  * The slice's count in words: "12 articles", "18 contributions on 12
- * articles", or, on a chart of shares, "12 of 40 articles · 30%".
+ * articles", "4,210 words on 9 articles", "980 views on 9 articles · 2
+ * articles without views", or, on a chart of shares, "12 of 40 articles ·
+ * 30%".
  */
 export function sliceCount(
   measure: Measure,
@@ -163,11 +208,24 @@ export function sliceCount(
   /** what a share is taken of, on a chart of shares */
   whole?: number,
 ): string {
-  const n = members.length;
+  const { value: n, counted: on } = amountOf(members, measure);
+  const missing = missingText(members, measure);
   if (whole !== undefined && whole !== n)
-    return `${n.toLocaleString()} of ${unitOf(whole, measure)} · ${percentText(
-      whole ? (n / whole) * 100 : 0,
-    )}`;
+    return [
+      `${n.toLocaleString()} of ${unitOf(whole, measure)} · ${percentText(
+        whole ? (n / whole) * 100 : 0,
+      )}`,
+      missing,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  if (isQuantity(measure))
+    return [
+      `${unitOf(n, measure)} on ${counted(on, "article", "articles")}`,
+      missing,
+    ]
+      .filter(Boolean)
+      .join(" · ");
   if (measure !== "contributions") return unitOf(n, measure);
   const articles = new Set(
     members.flatMap((m) => m.units.map((unit) => unit.article.id)),

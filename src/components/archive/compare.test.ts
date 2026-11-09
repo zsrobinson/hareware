@@ -21,7 +21,14 @@ import {
 import { sliceFilters, type SliceFilters } from "./chart-slice";
 import { against, compared, stateFor, type Compare } from "./compare";
 import { clearedState, type FilterState } from "./filters";
-import { archive, credit, listed, onPeople, post } from "./invented-archive";
+import {
+  archive,
+  credit,
+  listed,
+  onPeople,
+  post,
+  summed,
+} from "./invented-archive";
 import { DIMENSIONS, settlePivot, type PivotConfig } from "./pivot-config";
 import { differenceOf, pivotCount, pivotFilters, pivotOf } from "./pivot";
 
@@ -104,6 +111,10 @@ test("a chart compares only where the pair reads true", () => {
   /* across time, the axis is the comparison already */
   expect(allows(semester).compare.previous).toBe(false);
   expect(settle(semester).compare).toBe("none");
+  /* an earlier range's articles have had longer to be read, and none were
+     counted before January 2023: views are never compared */
+  expect(charts.some((c) => c.count === "views")).toBe(false);
+  expect(charts.some((c) => c.count === "words")).toBe(true);
   /* and two ranges' shares or splits would add up to neither */
   expect(
     allows({ ...charts[0]!, compare: "none", values: "share" }).compare
@@ -137,7 +148,9 @@ test("each of a chart's pair lists exactly what it counts, on its own dates", ()
     for (const { key: category } of grouped.categories)
       for (const series of ["now", "then"] as const) {
         const members = grouped.cells[category]?.[series] ?? [];
-        expect(members.length).toBe(grouped.values[category]?.[series] ?? 0);
+        expect(summed(grouped.measure, members)).toBe(
+          grouped.values[category]?.[series] ?? 0,
+        );
         const span = series === "now" ? ranges!.now : ranges!.then;
         for (const { units } of members)
           for (const unit of units)
@@ -158,7 +171,7 @@ test("each of a chart's pair lists exactly what it counts, on its own dates", ()
           grouped.measure === "newcomers"
             ? JSON.stringify([...seeing.people.people].sort()) ===
               JSON.stringify([...new Set(units.map((u) => u.person))].sort())
-            : grouped.measure === "articles"
+            : grouped.measure === "articles" || grouped.measure === "words"
               ? JSON.stringify(table.articles) ===
                 JSON.stringify(
                   [...new Set(units.map((u) => u.article.id))].sort(
@@ -201,6 +214,7 @@ test("each of a pivot's pair is its row on its own dates, and their difference",
   expect(pivots.some((p) => p.rows === "joined" || p.rows === "semester")).toBe(
     false,
   );
+  expect(pivots.some((p) => p.count === "views")).toBe(false);
   for (const config of pivots.filter((c) => c.compare === "previous")) {
     const pivot = pivotOf(
       config,
@@ -328,15 +342,19 @@ function exact(
       same(table.articles, ids) &&
       same(onTable.map((row) => row.name).sort(), names)
     );
+  /* words not cut by anyone are of articles, as articles are; cut by a
+     person or a role, of their contributions' */
+  const ofArticles =
+    measure === "articles" || units.every((u) => u.person === undefined);
   if (
     !same(
-      table.articles.filter((id) => measure === "articles" || credited.has(id)),
+      table.articles.filter((id) => ofArticles || credited.has(id)),
       ids,
     )
   )
     return false;
   return (
-    measure === "articles" ||
+    ofArticles ||
     (same(onTable.map((row) => row.name).sort(), names) &&
       onTable.reduce((n, row) => n + row.contributions, 0) === units.length &&
       same(
@@ -375,6 +393,38 @@ test("a top few is chosen once over both ranges, so each total is its list", () 
   const some = pivotFilters(ten, before, SPRING_STATE);
   expect(onPeople(some.people, crowd)).toHaveLength(9);
   expect(exact("contributions", ten.members(before), some, crowd)).toBe(true);
+});
+
+/* words are 100 and 53 a post id: Now Example and Old Example 0 share post
+   100 now, and before, the later an Old Example the longer their article */
+test("a top few of words is chosen once over both ranges, by words", () => {
+  const ten = pivotOf(
+    {
+      count: "words",
+      rows: "person",
+      columns: "none",
+      values: "number",
+      top: 10,
+      compare: "previous",
+    },
+    applyFilters(crowd, SPRING),
+    SPRING,
+    crowd,
+    TODAY,
+  );
+
+  expect(ten.rows.map((r) => r.key).sort()).toEqual(
+    [
+      "Now Example",
+      "Old Example 0",
+      ...[7, 8, 9, 10, 11, 12, 13, 14].map((i) => `Old Example ${i}`),
+    ].sort(),
+  );
+  const before = ten.members({ row: null, column: "then" });
+  expect(ten.count({ row: null, column: "then" })).toBe(
+    summed("words", before),
+  );
+  expect(pivotCount(ten)).toMatch(/^Top 10 of 16 people · /);
 });
 
 test.each([

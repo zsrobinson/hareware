@@ -4,7 +4,12 @@
   one as its layout; ./view-state keeps the one on screen in the address.
 */
 
-import { isPeriod, type Dimension, type Measure } from "~/lib/credits/stats";
+import {
+  isPeriod,
+  isQuantity,
+  type Dimension,
+  type Measure,
+} from "~/lib/credits/stats";
 import { COUNTS, GROUPINGS, TOPS } from "./chart-config";
 import { COMPARES, type Compare } from "./compare";
 
@@ -51,14 +56,17 @@ export function allowsPivot({
   compare,
 }: PivotConfig) {
   const axes: string[] = [rows, columns];
+  const quantity = isQuantity(count);
   /* two ranges side by side are the columns, of rows that are not in time:
-     an intake or a period is a range of its own */
+     an intake or a period is a range of its own. Views are lifetime views,
+     which an earlier range has had longer to gather */
   const comparing = compare !== "none";
   const comparable =
     columns === "none" &&
     !isPeriod(rows) &&
     rows !== "joined" &&
-    (values === "number" || values === "total");
+    (values === "number" || values === "total") &&
+    count !== "views";
   /* an article has no one role, person or intake; and by person, every
      person is one */
   const articles = !axes.some(
@@ -69,17 +77,27 @@ export function allowsPivot({
     id !== other &&
     !(comparing && (isPeriod(id) || id === "joined")) &&
     (id === "person"
-      ? count === "contributions"
-      : id === "role" || id === "joined"
+      ? count === "contributions" || quantity
+      : id === "role"
         ? count !== "articles"
-        : true);
+        : id === "joined"
+          ? count !== "articles" && !quantity
+          : true);
   const split = columns !== "none";
+  /* an article credited in two roles, or to two people, is in both: shares
+     of words across them add up past the whole they are taken of */
+  const overlaps = (id: string) =>
+    quantity && (id === "person" || id === "role");
+  /* an intake is people's, not articles' */
+  const ofArticles = !axes.includes("joined");
   return {
     count: {
       articles,
       contributions: true,
       people,
       newcomers: people,
+      words: ofArticles,
+      views: ofArticles && !comparing,
     } satisfies Record<Measure, boolean>,
     rows: Object.fromEntries(
       DIMENSIONS.map(({ id }) => [id, axis(id, columns)]),
@@ -93,9 +111,9 @@ export function allowsPivot({
     /* one column is its own row: a share of a row or a column is all of it */
     values: {
       number: true,
-      row: split,
-      column: split,
-      total: true,
+      row: split && !overlaps(columns),
+      column: split && !overlaps(rows),
+      total: !overlaps(rows) && !overlaps(columns),
     } satisfies Record<PivotValues, boolean>,
     top: axes.includes("person"),
     compare: Object.fromEntries(

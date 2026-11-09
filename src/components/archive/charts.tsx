@@ -28,6 +28,7 @@ import {
 import { useIsPhone } from "~/components/panel";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import {
+  amountOf,
   applyFilters,
   easternDate,
   isPeriod,
@@ -38,6 +39,7 @@ import {
   type Member,
 } from "~/lib/credits/stats";
 import type { ArchiveArticle } from "~/lib/credits/archive";
+import type { ViewsSummary } from "~/lib/credits/views";
 import { toCsv } from "~/lib/csv";
 import { saveFile } from "~/lib/save-file";
 import { cn } from "~/lib/utils";
@@ -52,6 +54,7 @@ import {
 import {
   chartCount,
   columnSeries,
+  measureNote,
   pairCount,
   percentText,
   readSlice,
@@ -198,6 +201,8 @@ export function ChartView({
   useEffect(() => {
     if (missing) opened.close();
   });
+  if (config.count === "views" && archive.views.status !== "read")
+    return <ViewsUnavailable views={archive.views} />;
   const openSlice = (next: Slice, from: "chart" | "table") => {
     /* the table has every series, so the chart shows them all to match it */
     const drawn = from === "table" ? [] : hidden;
@@ -220,6 +225,7 @@ export function ChartView({
             {[
               ranges ? pairCount(grouped) : chartCount(grouped, hidden),
               filterNote,
+              measureNote(grouped.measure, [config.by, config.split]),
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -319,6 +325,26 @@ export function ChartView({
   );
 }
 
+/**
+ * In place of a count of views when there are none to count: still being
+ * read, or unreadable. Never drawn as zeros (~/lib/credits/views)
+ */
+export function ViewsUnavailable({ views }: { views: ViewsSummary }) {
+  return (
+    <p
+      data-sheet-anchor
+      role="status"
+      className="text-muted-foreground py-12 text-center text-sm"
+    >
+      {views.status === "reading"
+        ? "Reading views from Jetpack…"
+        : `Views are unavailable, so none are counted here.${
+            views.status === "unavailable" ? ` ${views.reason}` : ""
+          }`}
+    </p>
+  );
+}
+
 /** a slice's title ("News · Fall 2026") and caption: its count, and the filters */
 function sliceText(plot: Plot, slice: Slice, filterNote: string) {
   const category = plot.categories.find((c) => c.key === slice.category)!;
@@ -376,7 +402,7 @@ type Plot = {
   count: (category: string, series: string) => number;
   /** the series a category's total covers (see chart-slice) */
   columnSeries: string[];
-  /** the category's total: how many members its whole column has */
+  /** the category's total: what its whole column's members come to */
   total: (category: string) => number;
   /** what a share in the category is taken of */
   whole: (category: string) => number;
@@ -422,12 +448,15 @@ function plotOf(
     grouped.values[category]?.[key] ?? 0;
   const columns = columnSeries(grouped, hidden);
   const members = (slice: Slice) => sliceMembers(grouped, slice, hidden);
-  /* a total is the length of the list its column opens, worked out once */
+  /* a total is what the list its column opens comes to, worked out once */
   const totals = new Map<string, number>();
   const total = (category: string) => {
     const known = totals.get(category);
     if (known !== undefined) return known;
-    const n = members({ category, series: null }).length;
+    const n = amountOf(
+      members({ category, series: null }),
+      grouped.measure,
+    ).value;
     totals.set(category, n);
     return n;
   };
@@ -1963,10 +1992,22 @@ function NumbersTable({
 
   function download() {
     const day = new Date().toISOString().slice(0, 10);
+    /* a count none of whose views could be read is blank, never 0 */
+    const unread = (category: string, series: string | null) => {
+      const { counted, missing } = amountOf(
+        plot.members({ category, series }),
+        grouped.measure,
+      );
+      return counted === 0 && missing > 0;
+    };
     const body = plot.categories.map((c) => [
       c.label,
       ...columns.map((column) =>
-        column.text ? column.text(c.key) : column.count(c.key),
+        column.text
+          ? column.text(c.key)
+          : unread(c.key, column.series)
+            ? ""
+            : column.count(c.key),
       ),
     ]);
     saveFile(
@@ -2079,7 +2120,11 @@ function CountButton({
   selected: Slice | null;
   onOpen: (slice: Slice) => void;
 }) {
-  if (n === 0) return <span className="text-muted-foreground">0</span>;
+  const members = plot.members(slice);
+  if (members.length === 0)
+    return <span className="text-muted-foreground">0</span>;
+  /* articles none of whose views could be read: not a zero */
+  const { counted, missing } = amountOf(members, plot.grouped.measure);
   const key = sliceKey(slice);
   const category = plot.categories.find((c) => c.key === slice.category)!;
   const open = selected !== null && sliceKey(selected) === key;
@@ -2095,7 +2140,7 @@ function CountButton({
       )}
       onClick={() => onOpen(slice)}
     >
-      {n.toLocaleString()}
+      {counted === 0 && missing > 0 ? "–" : n.toLocaleString()}
     </button>
   );
 }

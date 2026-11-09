@@ -1,8 +1,8 @@
 /*
   A pivot's cells and totals: rows by columns, each number the members it
   counts, as a chart's marks are (./chart-slice). A total is a slice with
-  its row or column left open, so every number shown is the length of the
-  list it opens, and the two cannot disagree.
+  its row or column left open, so every number shown is what the list it
+  opens comes to (`amountOf`), and the two cannot disagree.
 */
 
 import type { ArchiveArticle } from "~/lib/credits/archive";
@@ -10,6 +10,7 @@ import { ROLE_NAMES, type Role } from "~/lib/credits/labels";
 import { SECTION_ORDER, sortSections } from "~/lib/credits/sections";
 import { spreadsheetCell } from "~/lib/csv";
 import {
+  amountOf,
   group,
   membersAcross,
   type Filters,
@@ -51,6 +52,7 @@ export type Pivot = {
   /** nothing counted anywhere, though every section is a row of nothing */
   empty: boolean;
   members: (slice: PivotSlice) => Member[];
+  /** what a cell's members come to: how many, or their words or views */
   count: (slice: PivotSlice) => number;
   /** what a share is taken of, or null when cells are numbers */
   base: (slice: PivotSlice) => PivotSlice | null;
@@ -164,7 +166,7 @@ export function pivotOf(
     const sizes = new Map(
       grouped.series.map((s) => [
         s.key,
-        membersAcross(grouped, rowKeys, [s.key]).length,
+        amountOf(membersAcross(grouped, rowKeys, [s.key]), count).value,
       ]),
     );
     shownColumns = [...shownColumns].sort(
@@ -192,7 +194,8 @@ export function pivotOf(
     }
     return list;
   };
-  const size = (slice: PivotSlice) => members(slice).length;
+  const size = (slice: PivotSlice) =>
+    amountOf(members(slice), grouped.measure).value;
   const base = (slice: PivotSlice): PivotSlice | null =>
     values === "row"
       ? { row: slice.row, column: null }
@@ -296,11 +299,14 @@ export function pivotCount(pivot: Pivot): string {
       : unitOf(n, grouped.measure);
   if (pivot.ranges) return pairCount(grouped);
   const shown = pivot.count({ row: null, column: null });
-  const whole = membersAcross(
-    grouped,
-    Object.keys(grouped.cells),
-    grouped.series.map((s) => s.key),
-  ).length;
+  const whole = amountOf(
+    membersAcross(
+      grouped,
+      Object.keys(grouped.cells),
+      grouped.series.map((s) => s.key),
+    ),
+    grouped.measure,
+  ).value;
   const parts: string[] = [];
   /* only people are ever cut to a top few */
   if (pivot.rows.length < available.rows)
@@ -319,6 +325,14 @@ export function pivotCount(pivot: Pivot): string {
       ? unit(whole)
       : `${shown.toLocaleString()} of ${unit(whole)}`,
   );
+  const { missing } = amountOf(
+    pivot.members({ row: null, column: null }),
+    grouped.measure,
+  );
+  if (missing > 0)
+    parts.push(
+      counted(missing, "article without views", "articles without views"),
+    );
   return parts.join(" · ");
 }
 
@@ -355,11 +369,14 @@ export function differenceText(pivot: Pivot, row: string | null, digits = 0) {
 
 /**
  * The pivot as rows of text, as it reads: its header, a row each, and the
- * totals, for a CSV or a paste into a sheet. Shares keep one decimal.
+ * totals, for a CSV or a paste into a sheet. Shares keep one decimal, and a
+ * cell none of whose views could be read is blank, never 0.
  */
 export function pivotMatrix(pivot: Pivot): string[][] {
   const text = (slice: PivotSlice) => {
     const { count, share } = cellValue(pivot, slice);
+    const read = amountOf(pivot.members(slice), pivot.grouped.measure);
+    if (read.counted === 0 && read.missing > 0) return "";
     return share === null ? String(count) : `${share.toFixed(1)}%`;
   };
   const split = pivot.config.columns !== "none";

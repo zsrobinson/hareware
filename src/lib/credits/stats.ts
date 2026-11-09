@@ -61,8 +61,60 @@ export const grainOf = (...dimensions: string[]): Period =>
  * contributions, so one person writing in two sections is one person in each
  * and still one in the total. A newcomer is a person counted once, where
  * their first contribution falls.
+ *
+ * Words and views are quantities of articles: a number's members are the
+ * articles `articles` would list, each once however many people are credited
+ * on it, and the number is the sum of theirs (`amountOf`). Grouped by person,
+ * someone's are the words of the articles they are credited on. Views are an
+ * article's lifetime views, so views by period are of the articles published
+ * in it, not views received in it.
  */
-export type Measure = "articles" | "contributions" | "people" | "newcomers";
+export type Measure =
+  "articles" | "contributions" | "people" | "newcomers" | "words" | "views";
+
+const QUANTITIES = ["words", "views"] as const;
+export type Quantity = (typeof QUANTITIES)[number];
+
+/** whether a measure sums its articles' words or views rather than counting */
+export const isQuantity = (measure: string): measure is Quantity =>
+  (QUANTITIES as readonly string[]).includes(measure);
+
+/** an article's words or views, or null when its views are unavailable */
+export function quantityOf(
+  article: ArchiveArticle,
+  measure: Quantity,
+): number | null {
+  if (measure === "words") return article.words;
+  return article.views.status === "counted" ? article.views.total : null;
+}
+
+/** what a number adds up to */
+export type Amount = {
+  value: number;
+  /** the members in `value`: all of them, but for articles without views */
+  counted: number;
+  /** articles whose views are unavailable, left out of `value`, never zero */
+  missing: number;
+};
+
+/**
+ * What a list of members comes to: how many there are, or for words and
+ * views, the sum of their articles'. Every number a chart or a pivot shows
+ * is this of the list it opens, so the two cannot disagree.
+ */
+export function amountOf(members: readonly Member[], measure: Measure): Amount {
+  if (!isQuantity(measure))
+    return { value: members.length, counted: members.length, missing: 0 };
+  let value = 0;
+  let counted = 0;
+  for (const member of members) {
+    const own = quantityOf(member.units[0]!.article, measure);
+    if (own === null) continue;
+    value += own;
+    counted++;
+  }
+  return { value, counted, missing: members.length - counted };
+}
 
 const day = new Intl.DateTimeFormat("en-CA", {
   timeZone: "America/New_York",
@@ -315,11 +367,13 @@ export type Grouped = {
   breakdown: Dimension | "none";
   categories: { key: string; label: string }[];
   series: { key: string; label: string }[];
-  /** value[categoryKey][seriesKey]: how many members the cell has */
+  /** value[categoryKey][seriesKey]: what the cell's members come to (`amountOf`) */
   values: Record<string, Record<string, number>>;
   /**
-   * each category's own total. The sum of its values, except for people:
-   * someone in two sections is one person in each and one in the total
+   * each category's own total. The sum of its values, except where one
+   * member is in two series: someone in two sections is one person in each
+   * and one in the total, and an article credited in two roles is one
+   * article's words in each and in the total
    */
   totals: Record<string, number>;
   /** what was counted, across every category */
@@ -336,7 +390,7 @@ export type Grouped = {
 
 /**
  * What a category's number counts, in the series given (every series if
- * none are): its members. Every value and total is the length of this list,
+ * none are): its members. Every value and total is `amountOf` this list,
  * so a list and the number it explains cannot disagree.
  */
 export function membersOf(
@@ -411,16 +465,23 @@ export function group(
   const touchesPeople = [by, breakdown].some(
     (d) => d === "person" || d === "role" || d === "joined",
   );
+  const quantity = isQuantity(options.measure);
   /* an article has no one role, person or intake, so those count
-     contributions; and by person, every person would be one person */
-  const measure: Measure =
-    options.measure === "articles" && touchesPeople
+     contributions; and by person, every person would be one person. Words
+     and views stay theirs: an article is counted once in each cell, from
+     whichever of its contributions put it there */
+  const measure: Measure = quantity
+    ? options.measure
+    : options.measure === "articles" && touchesPeople
       ? "contributions"
       : options.measure !== "articles" &&
           (by === "person" || breakdown === "person")
         ? "contributions"
         : options.measure;
-  const list = units(articles, measure, filters, history);
+  const list =
+    quantity && touchesPeople
+      ? contributions(articles, filters)
+      : units(articles, quantity ? "articles" : measure, filters, history);
   const grain = grainOf(by, breakdown);
   const everyone = peopleOf(history);
 
@@ -446,9 +507,11 @@ export function group(
     }
   };
 
-  /* what makes two units one member: the same person, when people are counted */
+  /* what makes two units one member: the same person, when people are
+     counted; the same article, for its words or views */
   const identity = (unit: Unit, index: number): string | number =>
-    measure === "people" ? unit.person! : index;
+    measure === "people" ? unit.person! : quantity ? unit.article.id : index;
+  const amount = (members: Member[]) => amountOf(members, measure).value;
 
   const cells = new Map<string, Map<string, Map<string | number, Unit[]>>>();
   const categoryLabels = new Map<string, string>();
@@ -502,9 +565,9 @@ export function group(
       isPeriod(by) ? by : grain,
     );
   } else {
-    /* the biggest first, by the members each has */
+    /* the biggest first, by what each comes to */
     const sizes = new Map(
-      [...cells.keys()].map((key) => [key, membersOf(own, key).length]),
+      [...cells.keys()].map((key) => [key, amount(membersOf(own, key))]),
     );
     const sizeOf = (key: string) => sizes.get(key) ?? 0;
     categories = [...categoryLabels].map(([key, label]) => ({ key, label }));
@@ -515,21 +578,27 @@ export function group(
     if (options.order === "natural") categories.sort(naturalOrder(by));
   }
 
-  /* every number here is the length of a list `membersOf` gives */
+  /* every number here is `amount` of a list `membersOf` gives; a cell
+     with members is there even at zero, which words and views can be */
   const shape = { categories, series, cells: members, running };
   const values: Record<string, Record<string, number>> = {};
   const totals: Record<string, number> = {};
   for (const key of running ? categories.map((c) => c.key) : cells.keys()) {
-    const total = membersOf(shape, key).length;
-    if (total === 0) continue;
-    totals[key] = total;
+    const all = membersOf(shape, key);
+    if (all.length === 0) continue;
+    totals[key] = amount(all);
     values[key] = Object.fromEntries(
       series.flatMap(({ key: s }) => {
-        const n = membersOf(shape, key, [s]).length;
-        return n > 0 ? [[s, n] as const] : [];
+        const cell = membersOf(shape, key, [s]);
+        return cell.length > 0 ? [[s, amount(cell)] as const] : [];
       }),
     );
   }
+  const distinct = new Map<string | number, Unit[]>();
+  list.forEach((unit, index) => {
+    const id = identity(unit, index);
+    distinct.set(id, [...(distinct.get(id) ?? []), unit]);
+  });
 
   return {
     measure,
@@ -538,7 +607,7 @@ export function group(
     series,
     values,
     totals,
-    total: new Set(list.map(identity)).size,
+    total: amount([...distinct].map(([id, units]) => ({ id, units }))),
     articles: new Set(list.map((unit) => unit.article.id)).size,
     available: categoryLabels.size,
     cells: members,
@@ -588,12 +657,15 @@ export function paired(
       Object.entries(own).filter(([, list]) => list && list.length > 0),
     ) as Record<string, Member[]>;
     values[key] = Object.fromEntries(
-      Object.entries(cells[key]).map(([s, list]) => [s, list.length]),
+      Object.entries(cells[key]).map(([s, list]) => [
+        s,
+        amountOf(list, now.measure).value,
+      ]),
     );
-    totals[key] = membersOf(
-      { categories, series, cells, running: false },
-      key,
-    ).length;
+    totals[key] = amountOf(
+      membersOf({ categories, series, cells, running: false }, key),
+      now.measure,
+    ).value;
   }
   return {
     measure: now.measure,

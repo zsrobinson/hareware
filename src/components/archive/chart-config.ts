@@ -9,6 +9,7 @@ import { COMPARES, type Compare } from "./compare";
 import {
   group,
   isPeriod,
+  isQuantity,
   type Dimension,
   type Filters,
   type Grouped,
@@ -39,6 +40,8 @@ export const COUNTS: { id: Measure; label: string }[] = [
   { id: "contributions", label: "Contributions" },
   { id: "people", label: "People" },
   { id: "newcomers", label: "New people" },
+  { id: "words", label: "Words" },
+  { id: "views", label: "Views" },
 ];
 
 export const GROUPINGS: { id: Dimension; label: string }[] = [
@@ -71,10 +74,16 @@ export const TOPS = [10, 25, 50, 0];
 export function allows(config: ChartConfig) {
   const { count, by, split, compare } = config;
   const time = isPeriod(by);
+  const quantity = isQuantity(count);
   /* two ranges of a category side by side: across time, the axis is
      already the comparison, and a split's stack of two ranges would add
-     up to a total of neither */
-  const comparable = !time && split === "none" && config.values === "number";
+     up to a total of neither. Views are lifetime views, which an earlier
+     range has had longer to gather, and none before January 2023 */
+  const comparable =
+    !time &&
+    split === "none" &&
+    config.values === "number" &&
+    count !== "views";
   const comparing = compare !== "none";
   /* an article has no one role, person or intake; and by person, every
      person is one */
@@ -83,18 +92,25 @@ export function allows(config: ChartConfig) {
   /* someone has one intake, so people split by it add up to the whole */
   const parts = split === "none" || split === "joined";
   const people = by !== "person";
+  /* an article credited in two roles, or to two people, is in both: its
+     words counted twice in a stack, and shares that add up past the whole */
+  const overlapping = by === "person" || by === "role" || split === "role";
+  /* an intake is people's, not articles' */
+  const ofArticles = split !== "joined";
   return {
     count: {
       articles,
       contributions: true,
       people,
       newcomers: people,
+      words: ofArticles,
+      views: ofArticles && !comparing,
     } satisfies Record<Measure, boolean>,
     by: Object.fromEntries(
       GROUPINGS.map(({ id }) => [
         id,
         id === "person"
-          ? count === "contributions"
+          ? count === "contributions" || quantity
           : id === "role"
             ? count !== "articles" && split !== "role"
             : (id !== "section" || split !== "section") &&
@@ -105,11 +121,14 @@ export function allows(config: ChartConfig) {
       none: true,
       section: by !== "section" && !comparing,
       role: by !== "role" && count !== "articles" && !comparing,
-      joined: count !== "articles" && !comparing,
+      joined: count !== "articles" && !quantity && !comparing,
     } satisfies Record<Split, boolean>,
     draw: {
       /* one person in two sections would be drawn twice in one column */
-      stacked: (count !== "people" || parts) && !comparing,
+      stacked:
+        (count !== "people" || parts) &&
+        !(quantity && split === "role") &&
+        !comparing,
       grouped: split !== "none" || comparing,
       lines: time,
     } satisfies Record<Draw, boolean>,
@@ -117,7 +136,10 @@ export function allows(config: ChartConfig) {
       number: true,
       /* distinct people do not add up to a whole to take a share of,
          except split by when they joined */
-      share: (count !== "people" || split === "joined") && !comparing,
+      share:
+        (count !== "people" || split === "joined") &&
+        !(quantity && overlapping) &&
+        !comparing,
       running: time,
     } satisfies Record<Values, boolean>,
     compare: Object.fromEntries(

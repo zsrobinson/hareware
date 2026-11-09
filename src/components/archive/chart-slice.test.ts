@@ -27,13 +27,22 @@ import {
   type ChartConfig,
 } from "./chart-config";
 import type { ArchiveArticle } from "~/lib/credits/archive";
-import { archive, credit, listed, onPeople, post } from "./invented-archive";
+import {
+  archive,
+  credit,
+  listed,
+  onPeople,
+  overlaps,
+  post,
+  summed,
+} from "./invented-archive";
 import { COMPARES } from "./compare";
 import { VIEWS } from "./views";
 
 import {
   chartCount,
   drawnMembers,
+  measureNote,
   readSlice,
   sliceCount,
   MOST_ARTICLES,
@@ -141,13 +150,17 @@ function check(grouped: Grouped, config: ChartConfig, filters: Filters) {
   const grain = grainOf(config.by);
   const keys = grouped.series.map((s) => s.key);
   const hiddens = [[], ...keys.slice(0, 1).map((key) => [key])];
+  const quantity = measure === "words" || measure === "views";
+  /* an article whose words count under two people or roles */
+  const twice = quantity && [config.by, config.split].some(overlaps);
+  const amount = (members: Member[]) => summed(measure, members);
 
   for (const { key: category } of grouped.categories) {
     for (const series of keys) {
       const slice = { category, series };
       const members = sliceMembers(grouped, slice, []);
-      /* as long as the segment it was opened from */
-      expect(members.length).toBe(grouped.values[category]?.[series] ?? 0);
+      /* what the segment it was opened from says */
+      expect(amount(members)).toBe(grouped.values[category]?.[series] ?? 0);
       expect(new Set(members.map((m) => m.id)).size).toBe(members.length);
       expect(readSlice(sliceKey(slice), grouped)).toEqual(slice);
 
@@ -164,6 +177,11 @@ function check(grouped: Grouped, config: ChartConfig, filters: Filters) {
         }
         if (measure === "people")
           expect(member.units.every((u) => u.person === member.id)).toBe(true);
+        else if (quantity)
+          /* an article once, from whichever contributions put it here */
+          expect(member.units.every((u) => u.article.id === member.id)).toBe(
+            true,
+          );
         else expect(member.units).toHaveLength(1);
       }
       if (measure === "newcomers")
@@ -192,16 +210,18 @@ function check(grouped: Grouped, config: ChartConfig, filters: Filters) {
          leaves on, or for people, the distinct people across every series,
          unless the series are when they joined, which nobody is in two of */
       const drawn = keys.filter((key) => !hidden.includes(key));
-      expect(column.length).toBe(
-        measure === "people" && config.split !== "joined"
-          ? (grouped.totals[category] ?? 0)
-          : drawn.reduce(
-              (sum, s) => sum + (grouped.values[category]?.[s] ?? 0),
-              0,
-            ),
+      const stack = drawn.reduce(
+        (sum, s) => sum + (grouped.values[category]?.[s] ?? 0),
+        0,
       );
-      if (hidden.length === 0)
+      if (measure === "people" && config.split !== "joined")
         expect(column.length).toBe(grouped.totals[category] ?? 0);
+      /* an article in two roles is once in the column, which no stack draws */
+      else if (twice && config.split === "role")
+        expect(amount(column)).toBeLessThanOrEqual(stack);
+      else expect(amount(column)).toBe(stack);
+      if (hidden.length === 0)
+        expect(amount(column)).toBe(grouped.totals[category] ?? 0);
     }
     expect(readSlice(category, grouped)).toEqual({ category, series: null });
   }
@@ -220,19 +240,19 @@ function check(grouped: Grouped, config: ChartConfig, filters: Filters) {
     );
     expect(new Set(drawn.map((m) => m.id))).toEqual(listed);
     expect(drawn).toHaveLength(listed.size);
-    if (measure !== "people" && !grouped.running)
-      expect(drawn.length).toBe(
+    if (measure !== "people" && !twice && !grouped.running)
+      expect(amount(drawn)).toBe(
         grouped.categories.reduce(
           (sum, { key: category }) =>
             sum +
-            sliceMembers(grouped, { category, series: null }, hidden).length,
+            amount(sliceMembers(grouped, { category, series: null }, hidden)),
           0,
         ),
       );
   }
   /* with every series on and nobody cut, the chart draws all it counted */
   if (grouped.categories.length >= grouped.available)
-    expect(drawnMembers(grouped, [])).toHaveLength(grouped.total);
+    expect(amount(drawnMembers(grouped, []))).toBe(grouped.total);
 }
 
 test("the builder makes charts of every kind, so all of them are checked", () => {
@@ -513,14 +533,18 @@ test.each(COUNTS.map(({ id }) => id))(
                 );
             else {
               const table = listed(seeing.articles);
+              /* words or views not cut by anyone are of articles, as
+                 articles are; cut by a person or a role, of their
+                 contributions' */
+              const ofArticles =
+                grouped.measure === "articles" ||
+                units.every((u) => u.person === undefined);
               ok =
                 same(
-                  table.articles.filter(
-                    (id) => grouped.measure === "articles" || credited.has(id),
-                  ),
+                  table.articles.filter((id) => ofArticles || credited.has(id)),
                   ids(units),
                 ) &&
-                (grouped.measure === "articles" ||
+                (ofArticles ||
                   (onPeople(seeing.people).reduce(
                     (n, row) => n + row.contributions,
                     0,
@@ -668,4 +692,45 @@ test("too many articles for a link open on the people's whole record, and say so
     articles: [],
   });
   expect(searched(articles.slice(1), "headline").seeing.broader).toBe(false);
+});
+
+/* Ada writes and draws article 2: two contributions, one article's words */
+test("a person's words are those of the articles they are credited on, each once", () => {
+  const grouped = groupOf(
+    { ...chartOf("sections"), count: "words", by: "person", top: 0 },
+    archive,
+    NO_FILTERS,
+    archive,
+  );
+  const ada = sliceMembers(
+    grouped,
+    { category: "Ada Example", series: null },
+    [],
+  );
+
+  expect(ada.map((m) => m.id).sort()).toEqual([1, 2, 6, 9]);
+  expect(grouped.totals["Ada Example"]).toBe(153 + 206 + 418 + 577);
+  expect(sliceCount("words", ada)).toBe("1,354 words on 4 articles");
+  expect(measureNote("words", ["person", "none"])).toMatch(/once/);
+  expect(measureNote("words", ["section", "none"])).toBe("");
+});
+
+/* News is articles 1, 4, 7 and 9: 4 and 9 have no views to read, and 7 was
+   read by nobody */
+test("views unavailable are left out of a sum and counted beside it, never as zero", () => {
+  const grouped = groupOf(
+    { ...chartOf("sections"), count: "views" },
+    archive,
+    NO_FILTERS,
+    archive,
+  );
+  const news = sliceMembers(grouped, { category: "News", series: null }, []);
+
+  expect(news).toHaveLength(4);
+  expect(grouped.totals.News).toBe(37);
+  expect(sliceCount("views", news)).toBe(
+    "37 views on 2 articles · 2 articles without views",
+  );
+  expect(chartCount(grouped, [])).toMatch(/· 2 articles without views$/);
+  expect(measureNote("views", ["section", "none"])).toMatch(/^Lifetime views/);
 });

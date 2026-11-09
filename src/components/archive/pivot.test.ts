@@ -15,7 +15,15 @@ import {
 } from "~/lib/credits/stats";
 import { COUNTS, TOPS } from "./chart-config";
 import { clearedState } from "./filters";
-import { archive, credit, listed, onPeople, post } from "./invented-archive";
+import {
+  archive,
+  credit,
+  listed,
+  onPeople,
+  overlaps,
+  post,
+  summed,
+} from "./invented-archive";
 import {
   DIMENSIONS,
   PIVOT_VALUES,
@@ -144,10 +152,18 @@ function check(pivot: Pivot, filters: Filters) {
   const rows = pivot.rows.map((r) => r.key);
   const columns = pivot.columns.map((c) => c.key);
 
+  const quantity = grouped.measure === "words" || grouped.measure === "views";
   for (const slice of slicesOf(pivot)) {
     const members = pivot.members(slice);
-    expect(pivot.count(slice), name).toBe(members.length);
+    expect(pivot.count(slice), name).toBe(summed(grouped.measure, members));
     expect(new Set(ids(members)).size, name).toBe(members.length);
+    /* words and views are an article's, once in a cell */
+    if (quantity)
+      for (const member of members)
+        expect(
+          member.units.every((u) => u.article.id === member.id),
+          name,
+        ).toBe(true);
     expect(readPivotSlice(pivotKey(slice), pivot), name).toEqual(slice);
     for (const { units } of members)
       for (const unit of units) {
@@ -188,24 +204,35 @@ function check(pivot: Pivot, filters: Filters) {
     const cells = covered.map((cell) => ids(pivot.members(cell)));
     expect(ids(members), name).toEqual([...new Set(cells.flat())].sort());
     /* and their sum, unless it counts people, who can be in two of what it
-       adds up, but never in two intakes */
-    const summed = [
+       adds up, but never in two intakes; or words or views, whose article
+       can be under two people or roles */
+    const across = [
       slice.row === null ? config.rows : null,
       slice.column === null ? config.columns : null,
     ].filter((d) => d !== null && d !== "none");
     if (
-      grouped.measure !== "people" ||
-      summed.every((dimension) => dimension === "joined")
+      (grouped.measure !== "people" ||
+        across.every((dimension) => dimension === "joined")) &&
+      !(quantity && across.some(overlaps))
     )
       expect(members.length, name).toBe(
         cells.reduce((sum, cell) => sum + cell.length, 0),
+      );
+    /* and what they come to, unless an article can be in two of them */
+    if (quantity && !across.some(overlaps))
+      expect(pivot.count(slice), name).toBe(
+        covered.reduce(
+          (sum, cell) => sum + summed(grouped.measure, pivot.members(cell)),
+          0,
+        ),
       );
 
     const { share } = cellValue(pivot, slice);
     const base = pivot.base(slice);
     if (base && share !== null) {
+      const of = pivot.count(base);
       expect(pivot.share(slice)).toBeCloseTo(
-        (members.length / pivot.count(base)) * 100,
+        of ? (summed(grouped.measure, members) / of) * 100 : 0,
       );
       expect(share).toBeLessThanOrEqual(100);
     }
@@ -281,15 +308,17 @@ test.each(COUNTS.map(({ id }) => id))(
             );
         else {
           const table = listed(seeing.articles);
+          /* words or views not cut by anyone are of articles, as articles
+             are; cut by a person or a role, of their contributions' */
+          const ofArticles =
+            pivot.grouped.measure === "articles" ||
+            units.every((u) => u.person === undefined);
           ok =
             same(
-              table.articles.filter(
-                (id) =>
-                  pivot.grouped.measure === "articles" || credited.has(id),
-              ),
+              table.articles.filter((id) => ofArticles || credited.has(id)),
               articleIds(units),
             ) &&
-            (pivot.grouped.measure === "articles" ||
+            (ofArticles ||
               /* and People has exactly its people, with exactly its contributions */
               (same(
                 onPeople(seeing.people)
@@ -662,4 +691,38 @@ test("exact people, roles and sections together open each cell as it counts, pen
     }
   }
   expect(wrong).toEqual([]);
+});
+
+/* from October 2026: News is post 9, whose views are unread; Sports is
+   post 10, 370 views; nothing else published */
+test("a pivot of views has every section, an empty one 0 and an unread one blank", () => {
+  const filters = { ...NO_FILTERS, from: "2026-10-01" };
+  const pivot = pivotOf(
+    {
+      count: "views",
+      rows: "section",
+      columns: "none",
+      values: "number",
+      top: 25,
+      compare: "none",
+    },
+    applyFilters(archive, filters),
+    filters,
+    archive,
+  );
+  const rows = Object.fromEntries(
+    pivotMatrix(pivot)
+      .slice(1)
+      .map(([label, value]) => [label, value]),
+  );
+
+  expect(rows).toEqual({
+    News: "",
+    Features: "0",
+    Entertainment: "0",
+    Sports: "370",
+    Rabbithole: "0",
+    Total: "370",
+  });
+  expect(pivotCount(pivot)).toBe("370 views · 1 article without views");
 });

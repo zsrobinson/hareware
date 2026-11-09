@@ -9,6 +9,8 @@ import { contributionsOn } from "~/lib/credits/person";
 import {
   easternDate,
   isCounted,
+  isQuantity,
+  quantityOf,
   type Filters,
   type Measure,
   type Member,
@@ -28,8 +30,9 @@ const newest = (a: ArchiveArticle, b: ArchiveArticle) =>
 
 /**
  * What a chart's mark counts, beside the chart: the articles, the
- * contributions by article, the people with their count, or the newcomers
- * with where they started.
+ * contributions by article, the people with their count, the newcomers
+ * with where they started, or the articles with their words or views, the
+ * most first, which the mark's number is the sum of.
  */
 export function SlicePanel({
   title,
@@ -167,6 +170,38 @@ function rowsOf(
         ),
       }));
 
+  if (isQuantity(measure)) {
+    const unit = measure === "words" ? "word" : "view";
+    return members
+      .map((member) => member.units[0]!.article)
+      .map((article) => ({ article, own: quantityOf(article, measure) }))
+      .sort(
+        (a, b) => (b.own ?? -1) - (a.own ?? -1) || newest(a.article, b.article),
+      )
+      .map(({ article, own }) => ({
+        key: String(article.id),
+        content: (
+          <>
+            <div className="flex items-baseline gap-2">
+              <Title article={article} className="min-w-0 flex-1" />
+              <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
+                {own === null
+                  ? "views unavailable"
+                  : counted(own, unit, `${unit}s`)}
+              </span>
+            </div>
+            <Meta article={article}>
+              <Names
+                names={contributionsOn(article)
+                  .filter(isCounted(filters))
+                  .map((c) => ({ name: c.person }))}
+              />
+            </Meta>
+          </>
+        ),
+      }));
+  }
+
   if (measure === "contributions") {
     /* one row an article, with who did what on it */
     const byArticle = new Map<
@@ -258,11 +293,20 @@ function rowsOf(
     });
 }
 
-function Title({ article }: { article: ArchiveArticle }) {
+function Title({
+  article,
+  className,
+}: {
+  article: ArchiveArticle;
+  className?: string;
+}) {
   return (
     <a
       href={articleHref(article.id, useTrail())}
-      className="block font-medium underline-offset-4 hover:underline"
+      className={cn(
+        "block font-medium underline-offset-4 hover:underline",
+        className,
+      )}
     >
       {article.title}
     </a>

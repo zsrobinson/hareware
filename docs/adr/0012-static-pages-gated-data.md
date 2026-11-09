@@ -2,6 +2,7 @@
 
 **Status:** Accepted — 2026-11-07. Amends ADR 0007: the gate moves from the
 admin pages to the APIs that hold their data. Supersedes ADR 0005 (deleted).
+Amended by ADR 0014: Charts is no longer a page, and `/charts` forwards.
 
 ## Context
 
@@ -30,7 +31,8 @@ since moved to a custom domain with the cache on).
 **No request does heavy work in the Worker.**
 
 1. **Every page is a static file.** 404, sign-in, access-denied, generate,
-   words, magazine, email, random, custom and the admin pages are prerendered
+   words, magazine, email, random, custom, charts (which forwards, ADR 0014)
+   and the admin pages are prerendered
    and served from the asset server without waking the Worker. Only `/api/*`
    and `/auth/*` reach it (`run_worker_first`); an address that is neither and
    matches no file gets `404.html` from the asset server

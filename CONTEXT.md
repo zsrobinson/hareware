@@ -62,6 +62,18 @@ filters: someone who has written for a year is not new when they draw their
 first image. A person is **active** in a period when they made at least one
 contribution in it.
 
+## View
+
+One way of looking at a table, Articles or People: as a table or a chart, on
+a range and filters it opens on. Each table is a page, and its views are its
+tabs; the defaults are declared in `src/components/archive/views.ts`
+([ADR 0014](docs/adr/0014-views-are-declarations.md)). **Custom** is whatever
+the builder made from one, and a view of one's own is its link. Say "view",
+never "report", "dashboard" or "saved view": nothing is saved.
+
+A **slice** is what one mark of a chart counts, which opens beside it and, as
+filters, on either table.
+
 ## The Sheet
 
 The club's Google Sheet, owned by the club's account, holding the only facts

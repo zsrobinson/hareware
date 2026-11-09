@@ -2,7 +2,7 @@
 
 **Status:** Accepted — 2026-11-07. Revised the same day: HareWare writes the
 Sheet and people are counted in contributions; folded in below. How a pen name
-is recorded was changed by ADR 0013.
+is recorded was changed by ADR 0013, and the open panel's address by ADR 0014.
 
 Supersedes ADRs 0001, 0002, 0004, 0006, 0009 and 0010, which were deleted with
 the code they described; they are in the history before this commit.

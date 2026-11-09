@@ -6,8 +6,9 @@ The in-house tooling for [The Hare](https://theumdhare.com):
   copy and newsletter content. Open to anyone, no account needed.
 - **A social reminder** that posts each morning's new articles to
   `#instagram-posting` and pings that day's poster.
-- **An archive viewer** for the Editorial Board: charts, people, articles and
-  problems over every published post, with real names in place of pseudonyms.
+- **An archive viewer** for the Editorial Board: Articles and People, each with
+  its views as tabs (tables and charts), and Problems, over every published
+  post, with real names in place of pseudonyms.
 
 WordPress is the record of what the club published. HareWare reads it and keeps
 no copy. The one fact WordPress does not hold, who is really behind a
@@ -67,7 +68,7 @@ a terminal when you need it.
 
 ## The archive
 
-`/charts`, `/people`, `/articles`, `/problems` and `/settings` read every published post from
+`/articles`, `/people`, `/problems` and `/settings` read every published post from
 the public REST API, parse the credit lines out of each one, and apply the
 Sheet, all in the browser (ADR 0012). The server keeps nothing: the browser
 keeps its read of WordPress for up to a day and checks it for new articles

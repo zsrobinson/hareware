@@ -36,6 +36,9 @@ export const PRESETS: { id: Preset; label: string; short?: string }[] = [
 
 const ROLLING: Preset[] = ["3m", "6m", "12m", "2y"];
 
+/** a range counted back from today ("Last 3 months"), as against a calendar one */
+export const isRolling = (preset: Preset) => ROLLING.includes(preset);
+
 export type FilterState = {
   preset: Preset;
   /** used only by the custom preset */
@@ -127,6 +130,17 @@ export function roundedStart(
   const { key, label } = periodOf(from, period);
   const start = periodBounds(key, period).from;
   return start === from ? null : { from: start, label };
+}
+
+/** the one period a range is exactly ("Fall 2025"), if it is one */
+export function periodNamed(from?: string, to?: string): string | null {
+  if (!from || !to) return null;
+  for (const period of ["semester", "school-year", "year", "month"] as const) {
+    const { key, label } = periodOf(from, period);
+    const bounds = periodBounds(key, period);
+    if (bounds.from === from && bounds.to === to) return label;
+  }
+  return null;
 }
 
 /** the dates a preset means today, with a chart's period rounding it */

@@ -50,9 +50,10 @@ import { Throttled } from "~/lib/services/wordpress/request";
 import { queryClient } from "~/lib/query-client";
 import { useHydrated } from "~/lib/use-hydrated";
 import { useArchive, useReadProgress, type ArchiveState } from "./archive-data";
-import { formatDateTime } from "./dates";
+import { formatDate, formatDateTime } from "./dates";
 import {
   clearedState,
+  periodNamed,
   PRESETS,
   readState,
   roundedStart,
@@ -221,6 +222,16 @@ const SEARCHES: Record<Searching, { placeholder: string; note: string }> = {
   },
 };
 
+/* "Fall 2025" for a range that is one, else its dates */
+function customRange({ from, to }: FilterState): string {
+  const named = periodNamed(from, to);
+  if (named) return named;
+  if (from && to) return `${formatDate(from)} to ${formatDate(to)}`;
+  if (from) return `From ${formatDate(from)}`;
+  if (to) return `Until ${formatDate(to)}`;
+  return "Custom range";
+}
+
 /** the filters that are set, in words, for a view's caption */
 export function describeFilters(
   state: FilterState,
@@ -234,7 +245,7 @@ export function describeFilters(
   if (state.preset !== "all")
     parts.push(
       state.preset === "custom"
-        ? [state.from, state.to].filter(Boolean).join(" to ") || "Custom range"
+        ? customRange(state)
         : `${PRESETS.find((p) => p.id === state.preset)?.label ?? ""}${
             rounded ? `, from ${rounded.label}` : ""
           }`,

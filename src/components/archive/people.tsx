@@ -3,19 +3,17 @@ import { UsersRoundIcon } from "lucide-react";
 import { useMemo } from "react";
 import { DataTable, sortable } from "~/components/data-table";
 import { SidePanel, useIsPhone } from "~/components/panel";
-import {
-  bylineKey,
-  type Archive,
-  type ArchiveArticle,
-} from "~/lib/credits/archive";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
+import { peopleOf, type Contribution, type Person } from "~/lib/credits/person";
 import { sortSections } from "~/lib/credits/sections";
 import {
   applyFilters,
-  NO_FILTERS,
+  easternDate,
   people,
+  periodBounds,
+  periodOf,
+  periodsOf,
   searchable,
-  type Filters,
   type PersonRow,
 } from "~/lib/credits/stats";
 import {
@@ -24,8 +22,10 @@ import {
   useTrail,
   type ViewProps,
 } from "./archive-shell";
+import { counted } from "./chart-slice";
 import { Choice } from "./choice";
 import { formatDate, formatMonth } from "./dates";
+import { isRolling, periodNamed, PRESETS, type FilterState } from "./filters";
 import {
   articleHref,
   OpenRowProvider,
@@ -140,19 +140,21 @@ const ON_PHONE = ["writer", "image", ...BESIDE_PANEL];
  * 3 months". Empty when only a role is chosen, which the count's breakdown
  * names, and when nothing is
  */
-function scopeOf(filters: Filters, filterNote: string): string {
+function scopeOf({ sections, preset, from, to }: FilterState): string {
   const parts: string[] = [];
-  const { sections, from, to } = filters;
   if (sections.length > 0)
     parts.push(
       sections.length <= 2
         ? `in ${sortSections(sections).join(" and ")}`
         : `in ${sections.length} sections`,
     );
-  /* the Time filter's own name leads the caption's note */
-  const time = from || to ? filterNote.split(" · ")[0]! : "";
-  if (/^Last \d/.test(time)) parts.push(`in the ${time.toLowerCase()}`);
-  else if (/^(This|Last) /.test(time)) parts.push(time.toLowerCase());
+  const time = PRESETS.find((p) => p.id === preset)!.label.toLowerCase();
+  const named = preset === "custom" ? periodNamed(from, to) : null;
+  if (preset === "all") {
+    /* nothing to say */
+  } else if (preset !== "custom")
+    parts.push(isRolling(preset) ? `in the ${time}` : time);
+  else if (named) parts.push(`in ${named}`);
   else if (from && to)
     parts.push(`from ${formatDate(from)} to ${formatDate(to)}`);
   else if (from) parts.push(`since ${formatDate(from)}`);
@@ -160,19 +162,12 @@ function scopeOf(filters: Filters, filterNote: string): string {
   return parts.join(" ");
 }
 
-function People({ archive, filters, filterNote }: ViewProps) {
+function People({ archive, filters, filterNote, filterState }: ViewProps) {
   const phone = useIsPhone();
   const [minimum, setMinimum] = useChoice("min", MINIMUM_IDS, "1");
   const [sorting, setSorting] = useSort(COLUMNS);
   const openRow = useOpenRow("open", "person");
   const { open } = openRow;
-
-  /* names to suggest and check against ignore the filters: a person is
-     still credited when this semester or section leaves them out */
-  const everybody = useMemo(
-    () => people(archive.articles, NO_FILTERS),
-    [archive],
-  );
 
   /* the search box here looks for a person or a byline they use */
   const all = useMemo(
@@ -196,10 +191,10 @@ function People({ archive, filters, filterNote }: ViewProps) {
     );
   }, [all, filters.search, minimum]);
 
-  /* the panel counts what the filters leave, and says so, beside the whole */
+  /* the panel counts what the filters leave, and says so, beside their
+     whole record, which someone the filters leave out still opens on */
+  const person = open ? peopleOf(archive.articles).get(open) : undefined;
   const inRange = open ? all.find((row) => row.name === open) : undefined;
-  const whole = open ? everybody.find((row) => row.name === open) : undefined;
-  const selected = inRange ?? whole;
   const narrowed =
     Boolean(filters.from || filters.to) ||
     filters.sections.length > 0 ||
@@ -232,7 +227,7 @@ function People({ archive, filters, filterNote }: ViewProps) {
         onSortingChange={setSorting}
         controls={(controls) => <ShellTableControls {...controls} />}
         selected={(row) => row.name === open}
-        hidden={phone ? ON_PHONE : selected ? BESIDE_PANEL : []}
+        hidden={phone ? ON_PHONE : person ? BESIDE_PANEL : []}
         caption={
           <span className="text-muted-foreground text-sm tabular-nums">
             {[
@@ -246,21 +241,14 @@ function People({ archive, filters, filterNote }: ViewProps) {
         }
       />
 
-      {selected && (
+      {person && (
         <RowDetails>
           <PersonPanel
-            key={selected.name}
-            person={selected}
-            counted={
-              narrowed
-                ? {
-                    inRange: inRange?.contributions ?? 0,
-                    scope: scopeOf(filters, filterNote),
-                    inAll: whole?.contributions ?? selected.contributions,
-                  }
-                : null
+            key={person.name}
+            person={person}
+            inRange={
+              narrowed ? { row: inRange, scope: scopeOf(filterState) } : null
             }
-            archive={archive}
             onClose={openRow.close}
           />
         </RowDetails>
@@ -269,85 +257,93 @@ function People({ archive, filters, filterNote }: ViewProps) {
   );
 }
 
+const semesterName = (key: string) =>
+  periodOf(periodBounds(key, "semester").from, "semester").label;
+
 function PersonPanel({
   person,
-  counted,
-  archive,
+  inRange,
   onClose,
 }: {
-  person: PersonRow;
-  /** under filters: the count they leave, in what words, and the whole */
-  counted: { inRange: number; scope: string; inAll: number } | null;
-  archive: Archive;
+  person: Person;
+  /** under filters: what they leave of this person's (nothing, if they
+      leave them out), and in what words */
+  inRange: { row: PersonRow | undefined; scope: string } | null;
   onClose: () => void;
 }) {
   const trail = useTrail();
-  const byId = new Map(archive.articles.map((a) => [a.id, a]));
-  const articles = person.articleIds
-    .map((id) => byId.get(id))
-    .filter((a): a is ArchiveArticle => Boolean(a))
-    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
-
-  /* the bylines an article's own row credits them through, in contributions */
-  const bylines = new Map<string, { byline: string; contributions: number }>();
-  for (const article of articles)
-    for (const credit of article.credits)
-      for (const c of credit.contributors)
-        if (c.name === person.name && c.byline) {
-          const key = bylineKey(c.byline);
-          const entry = bylines.get(key) ?? {
-            byline: c.byline,
-            contributions: 0,
-          };
-          entry.contributions += 1;
-          bylines.set(key, entry);
-        }
-  const creditedAs = [...bylines.values()].sort(
-    (a, b) =>
-      b.contributions - a.contributions || a.byline.localeCompare(b.byline),
+  /* the count leads with what the filters leave, and the list is of that,
+     unless they leave nothing */
+  const contributions = inRange
+    ? (inRange.row?.contributions ?? 0)
+    : person.contributions.length;
+  const roles = inRange ? inRange.row?.counts : person.roles;
+  const shown = new Set(inRange?.row?.articleIds);
+  const own = person.contributions.filter(
+    (c) => shown.size === 0 || shown.has(c.article.id),
   );
-
-  const contributions = counted ? counted.inRange : person.contributions;
-  /* someone the filters leave out still opens, on their whole record */
+  /* one row an article, newest first, with every role of theirs on it */
+  const byArticle = new Map<number, Contribution[]>();
+  for (const c of own)
+    byArticle.set(c.article.id, [...(byArticle.get(c.article.id) ?? []), c]);
+  const articles = [...byArticle.values()].reverse();
+  const semesters = [...periodsOf(person, "semester")];
   const summary =
-    contributions === 0
+    contributions === 0 || !roles
       ? ""
-      : ROLES.filter((role) => person.counts[role] > 0)
-          .map(
-            (role) =>
-              `${person.counts[role]} ${ROLE_NAMES[role].toLowerCase()}`,
-          )
+      : ROLES.filter((role) => roles[role] > 0)
+          .map((role) => `${roles[role]} ${ROLE_NAMES[role].toLowerCase()}`)
           .join(", ");
+  const first = easternDate(person.first.article.publishedAt);
+  const latest = easternDate(person.latest.article.publishedAt);
 
   return (
     <SidePanel title={person.name} back="All people" onClose={onClose}>
       <p className="text-muted-foreground -mt-3 text-xs">
         {contributions === 0 ? "No" : contributions}{" "}
         {contributions === 1 ? "contribution" : "contributions"}
-        {counted?.scope && <> {counted.scope}</>}
+        {inRange?.scope && <> {inRange.scope}</>}
         {summary && <> ({summary})</>}
         <span className="block">
-          {counted && (
+          {inRange && (
             <>
-              {counted.inAll}{" "}
-              {counted.inAll === 1 ? "contribution" : "contributions"} in all
-              ·{" "}
+              {counted(
+                person.contributions.length,
+                "contribution",
+                "contributions",
+              )}{" "}
+              in all ·{" "}
             </>
           )}
-          {formatMonth(person.first)}
-          {person.first.slice(0, 7) !== person.last.slice(0, 7) && (
-            <> – {formatMonth(person.last)}</>
+          {formatMonth(first)}
+          {first.slice(0, 7) !== latest.slice(0, 7) && (
+            <> – {formatMonth(latest)}</>
           )}
         </span>
       </p>
 
-      {creditedAs.length > 0 && (
+      <section className="space-y-1">
+        <h3 className="text-muted-foreground text-xs font-medium">
+          By semester
+        </h3>
+        <p className="text-sm">
+          {semesters.map(([key, n], index) => (
+            <span key={key} className="whitespace-nowrap">
+              {index > 0 && <span className="text-muted-foreground"> · </span>}
+              {semesterName(key)}{" "}
+              <span className="text-muted-foreground tabular-nums">{n}</span>
+            </span>
+          ))}
+        </p>
+      </section>
+
+      {person.penNames.length > 0 && (
         <section className="space-y-1">
           <h3 className="text-muted-foreground text-xs font-medium">
             Credited as
           </h3>
           <ul className="text-sm">
-            {creditedAs.map((use) => (
+            {person.penNames.map((use) => (
               <li key={use.byline}>
                 {use.byline}
                 <span className="text-muted-foreground tabular-nums">
@@ -363,13 +359,11 @@ function PersonPanel({
       <section className="space-y-1">
         <h3 className="text-muted-foreground text-xs font-medium">Latest</h3>
         <ul className="divide-y text-sm">
-          {articles.map((article) => {
-            const roles = article.credits
-              .filter((c) => c.contributors.some((p) => p.name === person.name))
-              .map((c) => ROLE_NAMES[c.role]);
-            const as = article.credits
-              .flatMap((c) => c.contributors)
-              .find((p) => p.name === person.name && p.byline)?.byline;
+          {articles.map((theirs) => {
+            const { article } = theirs[0]!;
+            const as = [...new Set(theirs.flatMap((c) => c.bylines))].join(
+              ", ",
+            );
             return (
               <li key={article.id} className="space-y-0.5 py-2.5">
                 {/* the article's panel, where its credits are set */}
@@ -382,7 +376,7 @@ function PersonPanel({
                 <p className="text-muted-foreground text-xs">
                   {formatDate(article.publishedAt)} ·{" "}
                   <SectionName section={article.section} /> ·{" "}
-                  {[...new Set(roles)].join(", ")}
+                  {theirs.map((c) => ROLE_NAMES[c.role]).join(", ")}
                   {as && <> · as {as}</>}
                 </p>
               </li>

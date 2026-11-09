@@ -78,9 +78,9 @@ export const archive: ArchiveArticle[] = [
 
 /* what a table on these filters lists: its articles, and the contributions
    on them the filters count */
-export function listed(state: FilterState) {
+export function listed(state: FilterState, from = archive) {
   const filters = toFilters(state);
-  const articles = applyFilters(archive, filters);
+  const articles = applyFilters(from, filters);
   return {
     articles: articles.map((a) => a.id).sort((a, b) => a - b),
     contributions: articles

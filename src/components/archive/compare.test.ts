@@ -1,10 +1,12 @@
 import { expect, test } from "vitest";
+import type { ArchiveArticle } from "~/lib/credits/archive";
 import { contributionsOn } from "~/lib/credits/person";
 import {
   applyFilters,
   easternDate,
   NO_FILTERS,
   type Filters,
+  type Member,
 } from "~/lib/credits/stats";
 import {
   allows,
@@ -16,12 +18,12 @@ import {
   TOPS,
   type ChartConfig,
 } from "./chart-config";
-import { sliceFilters } from "./chart-slice";
+import { sliceFilters, type SliceFilters } from "./chart-slice";
 import { against, compared, stateFor, type Compare } from "./compare";
 import { clearedState, type FilterState } from "./filters";
-import { archive, listed } from "./invented-archive";
+import { archive, credit, listed, onPeople, post } from "./invented-archive";
 import { DIMENSIONS, settlePivot, type PivotConfig } from "./pivot-config";
-import { differenceOf, pivotFilters, pivotOf } from "./pivot";
+import { differenceOf, pivotCount, pivotFilters, pivotOf } from "./pivot";
 
 /*
   Compare sets what the range on screen counts beside the same count over
@@ -120,8 +122,8 @@ test("a chart compares only where the pair reads true", () => {
 test("each of a chart's pair lists exactly what it counts, on its own dates", () => {
   const wrong: string[] = [];
   for (const config of charts.filter((c) => c.compare === "previous")) {
-    const counting = (articles: typeof archive, on: Filters) =>
-      groupOf(config, articles, on, archive);
+    const counting = (articles: typeof archive, on: Filters, whole: boolean) =>
+      groupOf(whole ? { ...config, top: 0 } : config, articles, on, archive);
     const { grouped, ranges } = compared(
       counting,
       applyFilters(archive, SPRING),
@@ -281,3 +283,160 @@ test("a range with nothing to compare with says so, and draws nothing for it", (
       short.count({ row: null, column: "then" }),
   ).toBe(1);
 });
+
+/* one person now, Old Example 0 among them, and fifteen before: more than
+   a top ten, which the earlier range must not cut on its own */
+const crowd = [
+  post(100, "2026-03-01", "News", [
+    credit("writer", ["Now Example"]),
+    credit("image", ["Old Example 0"]),
+  ]),
+  ...Array.from({ length: 15 }, (_, i) =>
+    post(
+      i + 1,
+      `2025-${String(9 + (i % 3)).padStart(2, "0")}-${String(i + 1).padStart(2, "0")}`,
+      ["News", "Features", "Sports"][i % 3]!,
+      [credit("writer", [`Old Example ${i}`])],
+    ),
+  ),
+];
+
+/**
+ * Whether a slice, as filters, lists on both tables exactly what it
+ * counts: its articles, and on People its people with its contributions.
+ */
+function exact(
+  measure: string,
+  members: Member[],
+  seeing: SliceFilters,
+  history: ArchiveArticle[],
+) {
+  const same = (a: unknown, b: unknown) =>
+    JSON.stringify(a) === JSON.stringify(b);
+  const units = members.flatMap((m) => m.units);
+  const ids = [...new Set(units.map((u) => u.article.id))].sort(
+    (a, b) => a - b,
+  );
+  const names = [...new Set(units.map((u) => u.person!))].sort();
+  const credited = new Set(
+    history.filter((a) => contributionsOn(a).length > 0).map((a) => a.id),
+  );
+  const table = listed(seeing.articles, history);
+  const onTable = onPeople(seeing.people, history);
+  if (measure === "newcomers")
+    return (
+      same(table.articles, ids) &&
+      same(onTable.map((row) => row.name).sort(), names)
+    );
+  if (
+    !same(
+      table.articles.filter((id) => measure === "articles" || credited.has(id)),
+      ids,
+    )
+  )
+    return false;
+  return (
+    measure === "articles" ||
+    (same(onTable.map((row) => row.name).sort(), names) &&
+      onTable.reduce((n, row) => n + row.contributions, 0) === units.length &&
+      same(
+        table.contributions,
+        units.map((u) => `${u.article.id} ${u.role} ${u.person}`).sort(),
+      ))
+  );
+}
+
+test("a top few is chosen once over both ranges, so each total is its list", () => {
+  const config: PivotConfig = {
+    count: "contributions",
+    rows: "person",
+    columns: "none",
+    values: "number",
+    top: 25,
+    compare: "previous",
+  };
+  const shown = applyFilters(crowd, SPRING);
+  const everyone = pivotOf(config, shown, SPRING, crowd, TODAY);
+  const before = { row: null, column: "then" };
+  /* everyone before, though the range on screen has two */
+  expect(everyone.rows).toHaveLength(16);
+  expect(everyone.count(before)).toBe(15);
+  expect(differenceOf(everyone, null).by).toBe(2 - 15);
+  const all = pivotFilters(everyone, before, SPRING_STATE);
+  expect(onPeople(all.people, crowd)).toHaveLength(15);
+
+  /* a top ten is the two now and the eight biggest before */
+  const ten = pivotOf({ ...config, top: 10 }, shown, SPRING, crowd, TODAY);
+  expect(ten.rows).toHaveLength(10);
+  expect(pivotCount(ten)).toBe(
+    "Top 10 of 16 people · 2 contributions, against 9",
+  );
+  expect(ten.count(before)).toBe(9);
+  const some = pivotFilters(ten, before, SPRING_STATE);
+  expect(onPeople(some.people, crowd)).toHaveLength(9);
+  expect(exact("contributions", ten.members(before), some, crowd)).toBe(true);
+});
+
+test.each([
+  ["the invented archive", archive],
+  ["an earlier range bigger than the top few", crowd],
+] as const)(
+  "every compared cell, total and bar lists on both tables exactly what it counts, in %s",
+  (_, history) => {
+    const wrong: string[] = [];
+    const shown = applyFilters([...history], SPRING);
+    for (const config of pivots.filter((c) => c.compare === "previous")) {
+      const pivot = pivotOf(config, shown, SPRING, [...history], TODAY);
+      if (!pivot.ranges) continue;
+      for (const row of [null, ...pivot.rows.map((r) => r.key)])
+        for (const column of ["now", "then"]) {
+          const slice = { row, column };
+          const members = pivot.members(slice);
+          if (members.length === 0) continue;
+          const seeing = pivotFilters(pivot, slice, SPRING_STATE);
+          if (!exact(pivot.grouped.measure, members, seeing, [...history]))
+            wrong.push(`${JSON.stringify(config)} ${row} ${column}`);
+        }
+    }
+    for (const config of charts.filter((c) => c.compare === "previous")) {
+      const counting = (
+        articles: ArchiveArticle[],
+        on: Filters,
+        whole: boolean,
+      ) =>
+        groupOf(whole ? { ...config, top: 0 } : config, articles, on, [
+          ...history,
+        ]);
+      const { grouped, ranges } = compared(
+        counting,
+        shown,
+        SPRING,
+        [...history],
+        config.compare,
+        {
+          by: config.by,
+          order: config.order,
+          limit: config.by === "person" ? config.top || undefined : undefined,
+        },
+        TODAY,
+      );
+      if (!ranges) continue;
+      for (const { key: category } of grouped.categories)
+        for (const series of ["now", "then"]) {
+          const members = grouped.cells[category]?.[series] ?? [];
+          if (members.length === 0) continue;
+          const seeing = sliceFilters(
+            grouped,
+            { by: config.by, split: "none" },
+            { category, series: null },
+            members,
+            [],
+            stateFor(SPRING_STATE, ranges, series),
+          );
+          if (!exact(grouped.measure, members, seeing, [...history]))
+            wrong.push(`${JSON.stringify(config)} ${category} ${series}`);
+        }
+    }
+    expect(wrong).toEqual([]);
+  },
+);

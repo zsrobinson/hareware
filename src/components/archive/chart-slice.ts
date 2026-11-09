@@ -140,13 +140,17 @@ export function chartCount(grouped: Grouped, hidden: readonly string[]) {
   return parts.join(" · ");
 }
 
-/** two ranges' count in words: "64 articles, against 58" */
+/** two ranges' count in words: "64 articles, against 58", or of a top few, "Top 25 of 40 people · 60 contributions, against 75" */
 export function pairCount(grouped: Grouped): string {
   const keys = grouped.categories.map((c) => c.key);
   const [now, then] = ["now", "then"].map(
     (series) => membersAcross(grouped, keys, [series]).length,
   ) as [number, number];
-  return `${unitOf(now, grouped.measure)}, against ${then.toLocaleString()}`;
+  const pair = `${unitOf(now, grouped.measure)}, against ${then.toLocaleString()}`;
+  /* only people are ever cut to a top few */
+  return keys.length < grouped.available
+    ? `Top ${keys.length} of ${counted(grouped.available, "person", "people")} · ${pair}`
+    : pair;
 }
 
 /**

@@ -548,34 +548,33 @@ export function group(
 
 /**
  * The same count over two ranges, side by side: each category's series are
- * `now` and `then`, each the category's own members in that range. A
- * category only the earlier range has is kept, unless `now` kept only its
- * top few, which it alone decides.
+ * `now` and `then`, each the category's own members in that range. Both
+ * come whole, and the top few are chosen once, over the two together: the
+ * biggest now, then the biggest before, so someone only the earlier range
+ * has is cut only where the pair is.
  */
 export function paired(
   now: Grouped,
   then: Grouped,
-  options: { by: Dimension; order?: Order },
+  options: { by: Dimension; order?: Order; limit?: number },
 ): Grouped {
-  const cut = now.categories.length < now.available;
   const sizeOf = (grouped: Grouped, key: string) => grouped.totals[key] ?? 0;
-  const categories = [
+  let categories = [
     ...now.categories,
-    ...(cut
-      ? []
-      : then.categories.filter(
-          (c) => !now.categories.some((own) => own.key === c.key),
-        )),
+    ...then.categories.filter(
+      (c) => !now.categories.some((own) => own.key === c.key),
+    ),
   ];
+  categories.sort(
+    (a, b) =>
+      sizeOf(now, b.key) - sizeOf(now, a.key) ||
+      sizeOf(then, b.key) - sizeOf(then, a.key) ||
+      a.label.localeCompare(b.label),
+  );
+  const available = categories.length;
+  if (options.limit) categories = categories.slice(0, options.limit);
   if (options.order === "natural" || inTime(options.by))
     categories.sort(naturalOrder(options.by));
-  else
-    categories.sort(
-      (a, b) =>
-        sizeOf(now, b.key) - sizeOf(now, a.key) ||
-        sizeOf(then, b.key) - sizeOf(then, a.key) ||
-        a.label.localeCompare(b.label),
-    );
   const series = [
     { key: "now", label: "now" },
     { key: "then", label: "then" },
@@ -605,7 +604,7 @@ export function paired(
     totals,
     total: now.total,
     articles: now.articles,
-    available: cut ? now.available : categories.length,
+    available,
     cells,
     running: false,
   };

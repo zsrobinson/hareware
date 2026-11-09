@@ -132,32 +132,40 @@ export type Compared = {
 /**
  * A count over the range on screen, paired with the same count over the
  * earlier range when there is one to draw (`paired`): each category's
- * series are then `now` and `then`.
+ * series are then `now` and `then`. `count` counts `whole`, without its top
+ * few, so the pair can choose them once over both.
  */
 export function compared(
-  count: (articles: ArchiveArticle[], filters: Filters) => Grouped,
+  count: (
+    articles: ArchiveArticle[],
+    filters: Filters,
+    whole: boolean,
+  ) => Grouped,
   shown: ArchiveArticle[],
   filters: Filters,
   /** the whole archive, where the earlier range is read from */
   history: ArchiveArticle[],
   compare: Compare,
-  options: { by: Dimension; order?: Order },
+  options: { by: Dimension; order?: Order; limit?: number },
   today = easternDate(new Date().toISOString()),
 ): Compared {
-  const own = count(shown, filters);
   const state = against(filters, compare, today);
   if (state.status !== "ready")
-    return { grouped: own, ranges: null, ...thenNote(state, 0, history) };
+    return {
+      grouped: count(shown, filters, false),
+      ranges: null,
+      ...thenNote(state, 0, history),
+    };
   const earlier = { ...filters, ...state.then };
-  const then = count(applyFilters(history, earlier), earlier);
+  const then = count(applyFilters(history, earlier), earlier, true);
   const { draw, note } = thenNote(state, then.total, history);
   return draw
     ? {
-        grouped: paired(own, then, options),
+        grouped: paired(count(shown, filters, true), then, options),
         ranges: { now: state.now, then: state.then },
         note,
       }
-    : { grouped: own, ranges: null, note };
+    : { grouped: count(shown, filters, false), ranges: null, note };
 }
 
 /** the filters a range of the two is counted on: the earlier one's dates, or the filters as they are */

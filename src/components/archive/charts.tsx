@@ -160,14 +160,20 @@ export function ChartView({
     [archive, filters],
   );
   const { grouped, ranges, note, partial } = useMemo(() => {
-    const counting = (articles: ArchiveArticle[], on: Filters) =>
-      groupOf(config, articles, on, archive.articles);
+    const counting = (articles: ArchiveArticle[], on: Filters, whole = false) =>
+      groupOf(
+        whole ? { ...config, top: 0 } : config,
+        articles,
+        on,
+        archive.articles,
+      );
     const { grouped, ranges, note }: Compared =
       config.compare === "none"
         ? { grouped: counting(shown, filters), ranges: null, note: null }
         : compared(counting, shown, filters, archive.articles, config.compare, {
             by: config.by,
             order: config.order,
+            limit: config.by === "person" ? config.top || undefined : undefined,
           });
     return {
       grouped,

@@ -25,6 +25,7 @@ import {
 } from "./compare";
 import {
   counted,
+  pairCount,
   sliceFilters,
   unitOf,
   type SliceFilters,
@@ -110,14 +111,15 @@ export function pivotOf(
   const { count, rows, columns, values, top, compare } = config;
   /* people the most first, as the top few are; anything else in its own order */
   const order = rows === "person" ? "largest" : "natural";
-  const counting = (articles: ArchiveArticle[], on: Filters) =>
+  const limit = rows === "person" ? top || undefined : undefined;
+  const counting = (articles: ArchiveArticle[], on: Filters, whole = false) =>
     group(articles, {
       measure: count,
       by: rows,
       breakdown: columns,
       filters: on,
       order,
-      limit: rows === "person" ? top || undefined : undefined,
+      limit: whole ? undefined : limit,
       history,
     });
   const { grouped, ranges, note } =
@@ -129,7 +131,7 @@ export function pivotOf(
           filters,
           history,
           compare,
-          { by: rows, order },
+          { by: rows, order, limit },
           today,
         );
   const rowKeys = grouped.categories.map((c) => c.key);
@@ -272,12 +274,7 @@ export function pivotCount(pivot: Pivot): string {
     grouped.measure === "people"
       ? counted(n, "person", "different people")
       : unitOf(n, grouped.measure);
-  if (pivot.ranges) {
-    const [now, then] = ["now", "then"].map((column) =>
-      pivot.count({ row: null, column }),
-    ) as [number, number];
-    return `${unit(now)}, against ${then.toLocaleString()}`;
-  }
+  if (pivot.ranges) return pairCount(grouped);
   const shown = pivot.count({ row: null, column: null });
   const whole = membersAcross(
     grouped,

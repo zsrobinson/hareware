@@ -529,7 +529,7 @@ export function people(
   const rows = new Map<string, PersonRow>();
 
   for (const unit of contributions(articles, filters)) {
-    const { article, role, person: name, byline } = unit;
+    const { article, role, person: name, bylines } = unit;
     let row = rows.get(name);
     if (!row) {
       const own = everyone.get(name);
@@ -548,7 +548,8 @@ export function people(
     row.counts[role]++;
     row.contributions++;
     if (!row.articleIds.includes(article.id)) row.articleIds.push(article.id);
-    if (byline && !row.bylines.includes(byline)) row.bylines.push(byline);
+    for (const byline of bylines)
+      if (!row.bylines.includes(byline)) row.bylines.push(byline);
   }
 
   return [...rows.values()].sort(

@@ -14,8 +14,9 @@ export type Contribution = {
   article: ArchiveArticle;
   role: Role;
   person: string;
-  /** the name as printed, when the Sheet says it is this person */
-  byline: string | null;
+  /** the names as printed that the Sheet says are this person: a line can
+      print two pen names for one */
+  bylines: string[];
 };
 
 /** a byline printed for someone, and how many of their contributions it is on */
@@ -42,14 +43,22 @@ export function contributionsOn(article: ArchiveArticle): Contribution[] {
   for (const credit of article.credits)
     for (const { name, byline } of credit.contributors) {
       const key = `${credit.role}\u0000${name}`;
-      const held = at.get(key);
-      if (held) {
-        held.byline ??= byline;
-        continue;
+      let contribution = at.get(key);
+      if (!contribution) {
+        contribution = {
+          article,
+          role: credit.role,
+          person: name,
+          bylines: [],
+        };
+        at.set(key, contribution);
+        out.push(contribution);
       }
-      const contribution = { article, role: credit.role, person: name, byline };
-      at.set(key, contribution);
-      out.push(contribution);
+      if (
+        byline &&
+        !contribution.bylines.some((b) => bylineKey(b) === bylineKey(byline))
+      )
+        contribution.bylines.push(byline);
     }
   return out;
 }
@@ -74,7 +83,7 @@ export function peopleOf(
   const penNames = new Map<string, Map<string, PenName>>();
   for (const article of [...articles].sort(oldestFirst))
     for (const contribution of contributionsOn(article)) {
-      const { person: name, role, byline } = contribution;
+      const { person: name, role, bylines } = contribution;
       let person = people.get(name);
       if (!person) {
         person = {
@@ -93,7 +102,7 @@ export function peopleOf(
       person.roles[role]++;
       const { section } = article;
       person.sections[section] = (person.sections[section] ?? 0) + 1;
-      if (byline) {
+      for (const byline of bylines) {
         const theirs = penNames.get(name) ?? new Map<string, PenName>();
         penNames.set(name, theirs);
         const key = bylineKey(byline);

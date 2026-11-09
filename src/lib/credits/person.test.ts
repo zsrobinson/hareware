@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import type { ArchiveArticle, Credit } from "./archive";
 import { peopleOf } from "./person";
-import { periodsOf } from "./stats";
+import { NO_FILTERS, people, periodsOf } from "./stats";
 
 /** a credit line; `bylines` are what it prints when the Sheet changes a name */
 const credit = (
@@ -91,4 +91,31 @@ test("a person's contributions add up per period", () => {
       ["2026-2", 1],
     ]),
   );
+});
+
+test("a line printing two pen names for one person keeps both, in one contribution", () => {
+  const twice = [
+    article(4, "2026-10-01T15:00:00Z", "News", [
+      credit(
+        "writer",
+        ["Riley Real", "Riley Real"],
+        ["First Mask", "Second Mask"],
+      ),
+    ]),
+  ];
+  const riley = peopleOf(twice).get("Riley Real")!;
+  expect(riley.contributions).toHaveLength(1);
+  expect(riley.contributions[0]!.bylines).toEqual([
+    "First Mask",
+    "Second Mask",
+  ]);
+  expect(riley.penNames).toEqual([
+    { byline: "First Mask", contributions: 1 },
+    { byline: "Second Mask", contributions: 1 },
+  ]);
+  /* People finds them by either */
+  expect(people(twice, NO_FILTERS)[0]).toMatchObject({
+    contributions: 1,
+    bylines: ["First Mask", "Second Mask"],
+  });
 });

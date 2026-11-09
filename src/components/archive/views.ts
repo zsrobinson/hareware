@@ -204,7 +204,8 @@ export const VIEWS = [
   {
     id: "read-by-section",
     label: "Read by section",
-    question: "Which section's articles this semester are read the most, each?",
+    question:
+      "Which section's articles are read most, per article, this semester?",
     source: "articles",
     range: "semester",
     layout: {

@@ -137,7 +137,11 @@ export function PivotView({
             {[
               pivotCount(pivot),
               filterNote,
-              measureNote(pivot.grouped.measure, [config.rows, config.columns]),
+              measureNote(
+                pivot.grouped.measure,
+                [config.rows, config.columns],
+                pivot.members({ row: null, column: null }),
+              ),
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -388,12 +392,31 @@ function PivotTable({
   };
 
   /* a number that opens nothing: the sum beside it opens its list */
+  /* the most per article of the rows, which a row's faint bar is against */
+  const most = Math.max(
+    0,
+    ...rows.map(
+      (row) => cellValue(pivot, { row: row.key, column: null }).average ?? 0,
+    ),
+  );
   const averageText = (slice: PivotSlice) => {
     const { average } = cellValue(pivot, slice);
-    return average === null ? (
-      <span className="text-muted-foreground/40">–</span>
-    ) : (
+    if (average === null)
+      return <span className="text-muted-foreground/40">–</span>;
+    /* a row's bar, faint behind its number, so the answer reads at a
+       glance; the total is no row, and has none */
+    return slice.row === null || !most ? (
       average.toLocaleString()
+    ) : (
+      <span className="relative inline-block min-w-24 text-right">
+        <span
+          aria-hidden
+          data-bar
+          className="bg-muted absolute inset-y-0 right-0 -z-0 rounded-sm"
+          style={{ width: `${(average / most) * 100}%` }}
+        />
+        <span className="relative">{average.toLocaleString()}</span>
+      </span>
     );
   };
 

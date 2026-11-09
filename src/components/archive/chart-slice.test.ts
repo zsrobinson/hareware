@@ -803,3 +803,24 @@ test("a CSV of views per article says so, with the articles each counted beside 
     chartMatrix(groupOf(words, archive, NO_FILTERS, archive), words).header,
   ).toEqual(["Section", "Words per article"]);
 });
+
+test("views say counting began in January 2023 only where an article is older", () => {
+  const counting = { ...chartOf("sections"), count: "views" } as const;
+  const older = [
+    ...archive,
+    post(11, "2022-11-03", "News", [credit("writer", ["Ada Example"])]),
+  ];
+  const note = (articles: typeof archive) =>
+    measureNote(
+      "views",
+      ["section", "none"],
+      drawnMembers(groupOf(counting, articles, NO_FILTERS, articles), []),
+    );
+
+  expect(note(archive)).toBe(
+    "Lifetime views of the articles published in the range",
+  );
+  expect(note(older)).toBe(
+    "Lifetime views of the articles published in the range, counted since January 2023",
+  );
+});

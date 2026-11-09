@@ -300,3 +300,40 @@ test("a count of views that looks short says so under its caption", async () => 
     ),
   ).toBeTruthy();
 });
+
+/* News's two articles have 10 and 20 views, Sports's one 300 */
+test("Read by section reads the most per article first, each with a faint bar", async () => {
+  stubArchive({
+    posts: [1, 2, 3].map((id) => ({
+      id,
+      title: `Invented headline ${id}`,
+      publishedAt: daysAgo(3 * id),
+      paragraphs: ["Article by: Ada Example"],
+      categoryIds: [id === 3 ? 2 : 1],
+    })),
+    categories: [
+      [1, "News"],
+      [2, "Sports"],
+    ],
+    views: { 1: 10, 2: 20, 3: 300 },
+  });
+  window.history.replaceState(null, "", "/articles?view=read-by-section");
+  render(<ArticlesPage />);
+
+  await screen.findByRole("rowheader", { name: /Sports/ }, WAIT);
+  const order = screen
+    .getAllByRole("rowheader")
+    .map((header) => header.textContent);
+  expect(order.slice(0, 2)).toEqual(["Sports", "News"]);
+  /* a bar for each row with views per article, and none for the total */
+  expect(document.querySelectorAll("[data-bar]")).toHaveLength(2);
+  expect(
+    screen.getByText(
+      "Which section's articles are read most, per article, this semester?",
+    ),
+  ).toBeTruthy();
+  /* nothing on screen is from before Jetpack began counting */
+  expect(document.querySelector("figcaption")!.textContent).not.toContain(
+    "counted since January 2023",
+  );
+});

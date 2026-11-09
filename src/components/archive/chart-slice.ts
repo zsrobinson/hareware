@@ -8,8 +8,10 @@
 
 import { isRole } from "~/lib/credits/labels";
 import { contributionsOn } from "~/lib/credits/person";
+import { COUNTED_SINCE } from "~/lib/services/wordpress/stats";
 import {
   amountOf,
+  easternDate,
   isCounted,
   isPeriod,
   isQuantity,
@@ -44,6 +46,9 @@ export const counted = (n: number, one: string, many: string) =>
 export const unitOf = (n: number, measure: Measure) =>
   counted(n, ...UNITS[measure]);
 
+/* the day Jetpack began counting */
+const COUNTED_FROM = `${COUNTED_SINCE}-01`;
+
 /** "3 articles without views", where views were left out of a sum */
 const missingText = (members: readonly Member[], measure: Measure) => {
   const { missing } = amountOf(members, measure);
@@ -61,19 +66,28 @@ const missingText = (members: readonly Member[], measure: Measure) => {
 export function measureNote(
   measure: Measure,
   dimensions: readonly string[],
+  /** what is counted, whose earliest says whether counting's start matters */
+  members: readonly Member[] = [],
 ): string {
   const people = dimensions.some((d) => d === "person" || d === "role");
   if (measure === "words")
     return people
       ? "Each article's words once, under everyone credited on it"
       : "";
-  if (measure === "views")
+  if (measure === "views") {
+    /* only an article from before counting began has views it never got */
+    const before = members.some(
+      (m) => easternDate(m.units[0]!.article.publishedAt) < COUNTED_FROM,
+    );
     return [
-      "Lifetime views of the articles published in the range, counted since January 2023",
+      `Lifetime views of the articles published in the range${
+        before ? ", counted since January 2023" : ""
+      }`,
       people && "each article once, under everyone credited on it",
     ]
       .filter(Boolean)
       .join(", ");
+  }
   return "";
 }
 

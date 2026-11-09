@@ -150,8 +150,25 @@ export function pivotOf(
         ...seen.map((h) => h.key),
       ]),
     ).map((key) => seen.find((h) => h.key === key) ?? { key, label: key });
-  const rowHeaders =
+  const averageOf = (row: string) =>
+    perArticle(
+      membersAcross(
+        grouped,
+        [row],
+        grouped.series.map((s) => s.key),
+      ),
+      count,
+    );
+  const ownHeaders =
     rows === "section" ? sectionsOf(grouped.categories) : grouped.categories;
+  /* one column of averages answers which row is most per article, so its
+     rows read in that order, the most first; a row with none counted last */
+  const rowHeaders =
+    values === "per-article" && columns === "none" && !ranges
+      ? [...ownHeaders].sort(
+          (a, b) => (averageOf(b.key) ?? -1) - (averageOf(a.key) ?? -1),
+        )
+      : ownHeaders;
   const rowKeys = rowHeaders.map((c) => c.key);
   let shownColumns: Header[] = ranges
     ? [

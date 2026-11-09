@@ -244,7 +244,11 @@ export function ChartView({
               config.values === "per-article" &&
                 perArticleText(drawnMembers(grouped, hidden), grouped.measure),
               filterNote,
-              measureNote(grouped.measure, [config.by, config.split]),
+              measureNote(
+                grouped.measure,
+                [config.by, config.split],
+                drawnMembers(grouped, hidden),
+              ),
             ]
               .filter(Boolean)
               .join(" · ")}

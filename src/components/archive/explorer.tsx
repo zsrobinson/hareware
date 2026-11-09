@@ -39,7 +39,6 @@ import {
   declarationOf,
   openingOf,
   questionOf,
-  rangeOfView,
   readView,
   resetView,
   shapeOf,
@@ -105,7 +104,7 @@ export function ExplorerPage({
   return (
     <ArchiveShell
       searching={shape.type === "table" ? source : "articles"}
-      defaultPreset={rangeOfView(state, source)}
+      opening={openingOf(state, source)}
       period={
         shape.type === "chart" && isPeriod(shape.chart.by)
           ? shape.chart.by

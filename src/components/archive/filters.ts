@@ -193,18 +193,39 @@ export function toFilters(state: FilterState, period?: Period): Filters {
 const list = (value: string | null) =>
   value ? value.split(",").filter(Boolean) : [];
 
-/** `fallback` is the page's own range, which its links leave out */
-export function readState(search: string, fallback: Preset): FilterState {
+/* what a page opens on: a range alone, or every filter a view declares */
+const openingFrom = (opening: Preset | FilterState): FilterState =>
+  typeof opening === "string" ? clearedState(opening) : opening;
+
+const sameList = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((x, i) => x === b[i]);
+
+/**
+ * The filters a link names, each it leaves out as the page opens on it.
+ * Present and empty (`sections=`) is cleared, where the page opens on some.
+ */
+export function readState(
+  search: string,
+  opening: Preset | FilterState,
+): FilterState {
+  const own = openingFrom(opening);
   const params = new URLSearchParams(search);
   const preset = params.get("range") as Preset | null;
   return {
-    preset: preset && PRESETS.some((p) => p.id === preset) ? preset : fallback,
+    preset:
+      preset && PRESETS.some((p) => p.id === preset) ? preset : own.preset,
     from: params.get("from") ?? undefined,
     to: params.get("to") ?? undefined,
-    sections: list(params.get("sections")),
-    roles: list(params.get("roles")).filter(isRole),
+    sections: params.has("sections")
+      ? list(params.get("sections"))
+      : [...own.sections],
+    roles: params.has("roles")
+      ? list(params.get("roles")).filter(isRole)
+      : [...own.roles],
     /* repeated rather than joined: a name can hold a comma */
-    people: params.getAll("people").filter(Boolean),
+    people: params.has("people")
+      ? params.getAll("people").filter(Boolean)
+      : [...own.people],
     search: params.get("q") ?? "",
   };
 }
@@ -217,23 +238,31 @@ export function readState(search: string, fallback: Preset): FilterState {
  */
 export type Searching = "articles" | "people";
 
-/** writes the filters into `params`, leaving a view's own parameters alone;
-    a null `fallback` names the range whatever it is, as a link to another
-    page must */
+/** writes the filters into `params`, leaving a view's own parameters alone,
+    and each filter out that is as the page opens on it. A null `opening`
+    names the range whatever it is, as a link to another page must */
 export function writeState(
   state: FilterState,
   params: URLSearchParams,
-  fallback: Preset | null,
+  opening: Preset | FilterState | null,
 ) {
+  const own = opening === null ? null : openingFrom(opening);
   const set = (key: string, value: string | undefined) =>
     value ? params.set(key, value) : params.delete(key);
+  /* left out as the page opens on it; else named, empty if cleared */
+  const listed = (key: "sections" | "roles", value: readonly string[]) => {
+    if (sameList(value, own?.[key] ?? [])) params.delete(key);
+    else params.set(key, value.join(","));
+  };
 
-  set("range", state.preset === fallback ? undefined : state.preset);
+  set("range", own && state.preset === own.preset ? undefined : state.preset);
   set("from", state.preset === "custom" ? state.from : undefined);
   set("to", state.preset === "custom" ? state.to : undefined);
-  set("sections", state.sections.join(","));
-  set("roles", state.roles.join(","));
+  listed("sections", state.sections);
+  listed("roles", state.roles);
   params.delete("people");
-  for (const name of state.people) params.append("people", name);
+  if (!sameList(state.people, own?.people ?? []))
+    if (state.people.length === 0) params.set("people", "");
+    else for (const name of state.people) params.append("people", name);
   set("q", state.search);
 }

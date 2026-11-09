@@ -278,6 +278,7 @@ export function ArchiveShell({
   reload = "wordpress",
   /* without a filter bar there is no Time to see, so nothing is cut */
   defaultPreset = filters ? "3m" : "all",
+  opening = clearedState(defaultPreset),
   period,
 }: {
   children: (props: ViewProps) => ReactNode;
@@ -290,6 +291,9 @@ export function ArchiveShell({
   reload?: Reload;
   /** the Time filter a page opens on and Clear goes back to */
   defaultPreset?: Preset;
+  /** every filter the page opens on, which a link leaves out and Clear goes
+      back to: a view's own (ADR 0014); its Time filter alone otherwise */
+  opening?: FilterState;
   /** the period a chart's axis is cut into, which a rolling Time range is
       rounded to (see `roundedStart`) */
   period?: Period;
@@ -301,7 +305,7 @@ export function ArchiveShell({
         showFilters={filters}
         roleFilter={roleFilter}
         reload={reload}
-        defaultPreset={defaultPreset}
+        opening={opening}
         period={period}
       >
         {children}
@@ -316,7 +320,7 @@ function Shell({
   showFilters,
   roleFilter,
   reload,
-  defaultPreset,
+  opening,
   period,
 }: {
   children: (props: ViewProps) => ReactNode;
@@ -324,7 +328,7 @@ function Shell({
   showFilters: boolean;
   roleFilter: boolean;
   reload: Reload;
-  defaultPreset: Preset;
+  opening: FilterState;
   period?: Period;
 }) {
   const state = useArchive();
@@ -355,7 +359,7 @@ function Shell({
       showFilters={showFilters}
       roleFilter={roleFilter}
       reload={reload}
-      defaultPreset={defaultPreset}
+      opening={opening}
       period={period}
     >
       {children}
@@ -370,7 +374,7 @@ function Ready({
   showFilters,
   roleFilter,
   reload,
-  defaultPreset,
+  opening,
   period,
 }: {
   state: Extract<ArchiveState, { status: "ready" }>;
@@ -379,7 +383,7 @@ function Ready({
   showFilters: boolean;
   roleFilter: boolean;
   reload: Reload;
-  defaultPreset: Preset;
+  opening: FilterState;
   period?: Period;
 }) {
   /* asked for by a person, as against a read behind the page: only this one
@@ -393,8 +397,8 @@ function Ready({
     [roleFilter],
   );
   const [state, setRawState] = useInAddress<FilterState>(
-    (search) => supported(readState(search, defaultPreset)),
-    (value, params) => writeState(value, params, defaultPreset),
+    (search) => supported(readState(search, opening)),
+    (value, params) => writeState(value, params, opening),
   );
   const setState = useCallback(
     (next: FilterState) => setRawState(supported(next)),
@@ -507,7 +511,7 @@ function Ready({
                 setState={setState}
                 searchPlaceholder={SEARCHES[searching].placeholder}
                 roleFilter={roleFilter}
-                defaultPreset={defaultPreset}
+                opening={opening}
                 reloadButton={inToolbar && freshness(true)}
                 resets={resets}
                 toolbarSlot={setToolbar}
@@ -755,7 +759,7 @@ function FilterBar({
   setState,
   searchPlaceholder,
   roleFilter,
-  defaultPreset,
+  opening,
   reloadButton,
   resets,
   toolbarSlot,
@@ -768,7 +772,7 @@ function FilterBar({
   setState: (state: FilterState) => void;
   searchPlaceholder: string;
   roleFilter: boolean;
-  defaultPreset: Preset;
+  opening: FilterState;
   /** a phone's Reload, at the end of the search row */
   reloadButton: ReactNode;
   /** the view groups' own resets, which the sheet's Reset runs */
@@ -788,13 +792,12 @@ function FilterBar({
     searchPlaceholder,
     "Search",
   );
-  const clear = clearedState(defaultPreset);
+  const clear = opening;
   const changed = JSON.stringify(state) !== JSON.stringify(clear);
+  const differs = (key: "preset" | "sections" | "roles") =>
+    JSON.stringify(state[key]) !== JSON.stringify(opening[key]) ? 1 : 0;
   /* what the phone hides in its sheet, counted on the button that opens it */
-  const active =
-    (state.preset !== defaultPreset ? 1 : 0) +
-    (state.sections.length > 0 ? 1 : 0) +
-    (state.roles.length > 0 ? 1 : 0);
+  const active = differs("preset") + differs("sections") + differs("roles");
 
   const search = (
     /* narrow enough that search, filters and Columns share one line in the

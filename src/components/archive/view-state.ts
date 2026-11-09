@@ -17,7 +17,7 @@ import {
   writeChart,
   type ChartConfig,
 } from "./chart-config";
-import { clearedState, type FilterState, type Preset } from "./filters";
+import { clearedState, type FilterState } from "./filters";
 import { readChoice, readSort, writeChoice, writeSort } from "./page-state";
 import {
   COLUMNS,
@@ -145,13 +145,7 @@ export function questionOf(state: ViewState, source: Source): string | null {
   return state.view === CUSTOM ? null : viewOf(state, source).question;
 }
 
-/** the Time filter the view opens on, which its link leaves out */
-export const rangeOfView = (
-  state: Pick<ViewState, "view" | "base">,
-  source: Source,
-): Preset => viewOf(state, source).range;
-
-/** every filter as the view opens on it */
+/** every filter as the view opens on it, which its link leaves out */
 export function openingOf(
   state: Pick<ViewState, "view" | "base">,
   source: Source,

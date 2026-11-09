@@ -18,7 +18,6 @@ import {
   layoutOf,
   moveColumn,
   openingOf,
-  rangeOfView,
   readView,
   shapeOf,
   switchLayout,
@@ -82,13 +81,13 @@ const SOURCES: Source[] = ["articles", "people"];
 /** a page as it opens on a view: the view, then Time from it */
 const open = (search: string, source: Source) => {
   const view = readView(search, source);
-  return { view, filters: readState(search, rangeOfView(view, source)) };
+  return { view, filters: readState(search, openingOf(view, source)) };
 };
 
 const link = (state: ViewState, filters: FilterState, source: Source) => {
   const params = new URLSearchParams();
   writeView(state, params, source);
-  writeState(filters, params, rangeOfView(state, source));
+  writeState(filters, params, openingOf(state, source));
   return `?${params}`;
 };
 
@@ -217,7 +216,7 @@ test("a link leaves out the view's own time range, and keeps any other", () => {
     { type: "table", columns: ["name"] },
     "people",
   );
-  expect(rangeOfView(custom, "people")).toBe<Preset>("all");
+  expect(openingOf(custom, "people").preset).toBe<Preset>("all");
   expect(
     new URLSearchParams(link(custom, clearedState("all"), "people")).has(
       "range",

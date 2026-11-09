@@ -98,6 +98,38 @@ test("every API that hands out board data asks the gate first", () => {
   }
 });
 
+/* /api/stats is answered in src/worker.ts ahead of Astro, so not under
+   src/pages, and with an administrator's password: only the gated route may
+   read it */
+test("the stats credentials are read behind the gate, and nowhere else", () => {
+  const files = (dir: string): string[] =>
+    readdirSync(new URL(`../${dir}`, import.meta.url), {
+      withFileTypes: true,
+    }).flatMap((entry) =>
+      entry.isDirectory()
+        ? files(`${dir}/${entry.name}`)
+        : /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)
+          ? [`${dir}/${entry.name}`]
+          : [],
+    );
+  const reading = files(".")
+    .filter((file) => !file.endsWith("env.d.ts"))
+    .filter((file) =>
+      readFileSync(new URL(`../${file}`, import.meta.url), "utf8").includes(
+        "WORDPRESS_STATS_",
+      ),
+    );
+  expect(reading).toEqual(["./lib/stats-api.ts"]);
+
+  const route = readFileSync(
+    new URL("./stats-api.ts", import.meta.url),
+    "utf8",
+  );
+  expect(route).toContain("adminAccess(request)");
+  const worker = readFileSync(new URL("../worker.ts", import.meta.url), "utf8");
+  expect(worker).toContain("return answerStats(request)");
+});
+
 test("no public tool is listed among the board's", () => {
   for (const item of toolsNav) expect(ADMIN_ROUTES).not.toContain(item.href);
 });

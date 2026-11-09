@@ -83,6 +83,16 @@ interface HareWareEnv {
    */
   DISCORD_BOT_TOKEN?: string;
 
+  /**
+   * The WordPress account and application password HareWare reads Jetpack's
+   * view counts with, sent as Basic auth to the site's own REST API. The
+   * account is a site administrator, so `passStats()` in
+   * services/wordpress/stats.ts sends them only on a GET it allow-lists, and
+   * never to the browser.
+   */
+  WORDPRESS_STATS_USER?: string;
+  WORDPRESS_STATS_PASSWORD?: string;
+
   /* ---- switches, for .dev.vars only -------------------------------------- */
 
   /**

@@ -148,6 +148,8 @@ deployed one, which it usually is not.
 | `GOOGLE_SERVICE_ACCOUNT_KEY` | The service account's whole JSON key file                               |
 | `GOOGLE_SHEET_ID`            | The Sheet's id, from its url. A secret because the repository is public |
 | `REMINDERS_TRIGGER_SECRET`   | Guards `POST /api/automations/run`. Unset, that route answers `404`     |
+| `WORDPRESS_STATS_USER`       | The WordPress account the archive reads Jetpack's view counts as        |
+| `WORDPRESS_STATS_PASSWORD`   | That account's application password, sent as Basic auth                 |
 
 #### Switches, for `.dev.vars` only
 

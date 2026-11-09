@@ -68,8 +68,8 @@ the drawer read the same answer.
 without waking the Worker ([ADR 0012](docs/adr/0012-static-pages-gated-data.md)):
 on the Workers free plan a request gets 10 ms of CPU. An admin page is an empty
 shell, and its island asks a gated API — `/api/archive.json`, `/api/sheet`,
-`/api/reminder.json`, `/api/access.json`, `/api/automations/run` — each of which
-calls `adminAccess(request)` first and refuses with `refusal()` from
+`/api/reminder.json`, `/api/access.json`, `/api/automations/run`, `/api/stats`
+— each of which calls `adminAccess(request)` first and refuses with `refusal()` from
 `~/lib/admin-api`. The island draws that refusal with `DenialMessage` from
 `~/components/gated`: which of four things is wrong, rather than claiming the
 page does not exist (ADR 0007), and `~/lib/denial` is the one table those four
@@ -86,8 +86,10 @@ the Worker hands out only what needs a secret. A new route under `/api` or
 building the archive, no linkedom (a dev dependency, for tests only).
 `/api/wordpress` passes WordPress's cached answers to the browser, answered in
 `src/worker.ts` ahead of Astro, whose pipeline alone would cost several times
-as much (ADR 0012). Keep it out of `src/pages`, and never read or parse the
-body there. Anything
+as much (ADR 0012). `/api/stats` is answered there too, behind the gate, with a
+WordPress administrator's application password: it GETs only the Jetpack stats
+`passStats()` allow-lists. Keep both out of `src/pages`, and never read or
+parse the body there. Anything
 else under `src/pages` must be `export const prerender = true`. A test file
 under `src/pages` must start with `_`, or Astro routes it and bundles vitest.
 

@@ -20,10 +20,17 @@ WordPress API, and never appears in language a club member reads, except in
 ## Words and views
 
 An Article's **words** are its prose: paragraphs, subheadings and list items,
-less its credit lines. Captions are not counted.
+less its credit lines. Captions and embeds are not counted.
 
 Its **views** are how often Jetpack counted it read, by month, from January 2023. Views that could not be read are _unavailable_, never zero: zero means
 Jetpack has counted nobody reading it.
+
+Both are an Article's, so a count of them is a sum over Articles, each once.
+Someone's words are those of the Articles they are credited on, however many
+roles they had on each, never once a contribution. Views of a period are the
+lifetime views of the Articles published in it, not the views it received.
+**Per article** is a sum over the Articles in it; an Article without views is
+in neither half, and is counted beside the sum ("3 articles without views").
 
 ## Section
 

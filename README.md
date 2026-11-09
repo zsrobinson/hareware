@@ -83,7 +83,11 @@ points at names a letter or two apart, and at lines shaped like a credit that
 no label matches.
 
 People are counted in **contributions**: one person in one role on one
-article, so writing and illustrating an article is two.
+article, so writing and illustrating an article is two. Articles also carry
+their **words**, counted from the body as it is read, and their **views**,
+from Jetpack Stats through the gated `/api/stats`; a chart or pivot of either
+sums the articles it lists, and views that could not be read are
+unavailable, never zero.
 
 ### The Sheet
 

@@ -23,7 +23,7 @@ into another and share.
 
 **Each table is a page, and its views are its tabs.** Articles and People each
 have a row of views over the filters: Articles has All, Sections, Section
-share and History; People has Everyone, Contributors, Top this semester, New
+share, History, Most read and Read by section; People has Everyone, Contributors, Top this semester, New
 this semester, Newcomers, Headcount and Retention. A chart is on the
 page of the table it counts. Problems and Settings are pages as before, without
 views. There is no Contributions page: a contribution is what People's views
@@ -38,6 +38,20 @@ legend opens with off) or a pivot (`PivotConfig`: what it counts, its rows
 and columns, and whether a cell is a number or a share). A page's views are
 the declarations for its table, in order, and the first is a table, which
 the page opens on.
+
+**What a chart or a pivot counts** is one of six measures: articles,
+contributions, people, new people, words or views. The first four count
+their members. Words and views are an article's, so their members are the
+articles the articles measure would list, each once in a cell however many
+people it credits, and the number is the sum of theirs; per article, a
+cell is that sum over the articles in it. Every number is still what its
+list comes to, so the list shows each article's words or views. An article
+whose views could not be read is listed, left out of the sum and counted
+beside it; with no views read at all, a views chart or pivot says so and
+draws nothing. The builder refuses what would count an article twice in a
+whole (a share across people or roles, a stack split by role), an intake
+of articles, and any compare of views: an earlier range's articles have
+had longer to be read, and none were counted before January 2023.
 
 **A pivot is the chart's grouping laid out whole.** Its rows and columns are
 the same cuts a chart's axis and split are, and every cell and total is a

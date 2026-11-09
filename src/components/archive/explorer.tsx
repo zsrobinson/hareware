@@ -35,6 +35,7 @@ import { useOpenRow, type OpenRow } from "./open-row";
 import { useInAddress } from "./page-state";
 import { PivotView } from "./pivot-view";
 import { ViewBuilder } from "./view-builder";
+import { ViewTabs } from "./view-tabs";
 import {
   changeView,
   chooseView,
@@ -403,132 +404,6 @@ function Explorer({
             back={label}
           />
         )}
-      </div>
-    </div>
-  );
-}
-
-function ViewTabs({
-  tabs,
-  view,
-  panelId,
-  onChoose,
-  onClickCustom,
-}: {
-  tabs: { id: string; label: string; icon: LucideIcon }[];
-  view: string;
-  panelId: string;
-  onChoose: (view: string) => void;
-  /** a click on Custom opens the builder; arriving by arrow key does not,
-      or the panel would take focus from the tabs */
-  onClickCustom: () => void;
-}) {
-  const list = useRef<HTMLDivElement>(null);
-  /* which ends have views scrolled past them, faded to say so */
-  const [past, setPast] = useState({ start: false, end: false });
-
-  /* a phone scrolls the views sideways, and a link may open on one past the
-     edge. Only the strip moves: scrollIntoView would also move where the
-     page's first Tab starts from */
-  useEffect(() => {
-    const strip = list.current;
-    const tab = strip?.querySelector<HTMLElement>('[aria-selected="true"]');
-    if (!strip || !tab) return;
-    const left = tab.offsetLeft;
-    const right = left + tab.offsetWidth;
-    if (left < strip.scrollLeft) strip.scrollLeft = left;
-    else if (right > strip.scrollLeft + strip.clientWidth)
-      strip.scrollLeft = right - strip.clientWidth;
-  }, [view]);
-
-  useEffect(() => {
-    const strip = list.current;
-    if (!strip) return;
-    const measure = () =>
-      setPast({
-        start: strip.scrollLeft > 1,
-        end: strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1,
-      });
-    measure();
-    strip.addEventListener("scroll", measure, { passive: true });
-    const observer = new ResizeObserver(measure);
-    observer.observe(strip);
-    return () => {
-      strip.removeEventListener("scroll", measure);
-      observer.disconnect();
-    };
-  }, []);
-  const fade =
-    past.start || past.end
-      ? `linear-gradient(to right, ${past.start ? "transparent" : "#000"}, #000 2rem, #000 calc(100% - 2rem), ${past.end ? "transparent" : "#000"})`
-      : undefined;
-
-  return (
-    /* a container, so the icons go before the labels are cut off */
-    <div className="@container">
-      <div
-        ref={list}
-        role="tablist"
-        aria-label="Views"
-        /* a mouse wraps the views onto another row where they do not fit,
-           so none is out of reach without a scrollbar; a touch screen
-           swipes them, faded at the end that has more. The rule under each
-           row is a background, not a border: tabs pulled over a border made
-           the strip scroll down by a pixel */
-        className="relative flex [scrollbar-width:none] flex-wrap gap-x-1 overflow-x-auto overflow-y-hidden bg-[repeating-linear-gradient(to_bottom,transparent_0_39px,var(--color-border)_39px_40px)] pointer-coarse:flex-nowrap"
-        style={{ maskImage: fade }}
-        onKeyDown={(event) => {
-          /* the tabs pattern: arrows move between the views, Home and End
-             to the first and last, and each chooses */
-          const at = tabs.findIndex((tab) => tab.id === view);
-          const to =
-            event.key === "ArrowRight"
-              ? at + 1
-              : event.key === "ArrowLeft"
-                ? at - 1
-                : event.key === "Home"
-                  ? 0
-                  : event.key === "End"
-                    ? tabs.length - 1
-                    : null;
-          if (to === null) return;
-          event.preventDefault();
-          const next = tabs[(to + tabs.length) % tabs.length]!;
-          onChoose(next.id);
-          list.current
-            ?.querySelector<HTMLElement>(`[data-view="${next.id}"]`)
-            ?.focus();
-        }}
-      >
-        {tabs.map((tab) => {
-          const selected = view === tab.id;
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              data-view={tab.id}
-              aria-selected={selected}
-              aria-controls={panelId}
-              tabIndex={selected ? 0 : -1}
-              onClick={() => {
-                onChoose(tab.id);
-                if (tab.id === "custom") onClickCustom();
-              }}
-              className={cn(
-                /* the chosen view is underlined, so a hovered tab never looks chosen */
-                "focus-visible:ring-ring/50 flex h-10 shrink-0 items-center gap-1.5 rounded-t-md border-b-2 px-2.5 text-sm whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-inset @2xl:px-3 [&_svg]:size-4 [&_svg]:shrink-0 @max-2xl:[&_svg]:hidden",
-                selected
-                  ? "border-foreground text-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground border-transparent",
-              )}
-            >
-              <Icon aria-hidden />
-              {tab.label}
-            </button>
-          );
-        })}
       </div>
     </div>
   );

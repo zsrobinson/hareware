@@ -92,18 +92,18 @@ function titleOf({ config, grouped, series }: Plot) {
 }
 
 /** what a period the chart cannot show whole is short of */
-type Incomplete = "so far" | "in part";
+export type Incomplete = "so far" | "in part";
 
-/** which periods the chart cannot show whole: still running, or cut by the filter */
-function partialKeys(
-  grouped: Grouped,
-  by: ChartConfig["by"],
+/** which periods a view cannot show whole: still running, or cut by the filter */
+export function partialKeys(
+  periods: readonly { key: string }[],
+  by: string,
   filters: Filters,
 ) {
   const partial = new Map<string, Incomplete>();
   if (!isPeriod(by)) return partial;
   const today = easternDate(new Date().toISOString());
-  for (const category of grouped.categories) {
+  for (const category of periods) {
     const { from, to } = periodBounds(category.key, by);
     if (to > today) partial.set(category.key, "so far");
     else if (
@@ -147,7 +147,10 @@ export function ChartView({
   );
   const { grouped, partial } = useMemo(() => {
     const grouped = groupOf(config, shown, filters, archive.articles);
-    return { grouped, partial: partialKeys(grouped, config.by, filters) };
+    return {
+      grouped,
+      partial: partialKeys(grouped.categories, config.by, filters),
+    };
   }, [shown, config, filters, archive]);
   /* the one section the filters leave, whose colour one series takes */
   const section =

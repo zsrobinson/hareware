@@ -1,11 +1,9 @@
 import { expect, test } from "vitest";
-import type { ArchiveArticle, Credit } from "~/lib/credits/archive";
 import { contributionsOn } from "~/lib/credits/person";
 import {
   applyFilters,
   easternDate,
   grainOf,
-  isCounted,
   isPeriod,
   NO_FILTERS,
   people,
@@ -29,6 +27,8 @@ import {
   VALUES,
   type ChartConfig,
 } from "./chart-config";
+import type { ArchiveArticle } from "~/lib/credits/archive";
+import { archive, credit, listed, post } from "./invented-archive";
 import { VIEWS } from "./views";
 
 import {
@@ -54,73 +54,6 @@ const chartOf = (id: string) => {
   builder can make and check, for every mark, that the list is as long as
   the number drawn, and that everything on it belongs there.
 */
-
-const credit = (role: Credit["role"], names: string[]): Credit => ({
-  role,
-  label: role,
-  printed: names.join(" and "),
-  bylines: names,
-  contributors: names.map((name) => ({
-    name,
-    byline: null,
-    source: "printed",
-  })),
-});
-
-const post = (
-  id: number,
-  date: string,
-  section: string,
-  credits: Credit[],
-): ArchiveArticle => ({
-  id,
-  title: `Invented headline ${id}`,
-  link: "",
-  publishedAt: `${date}T16:00:00Z`,
-  section,
-  credits,
-  problems: [],
-});
-
-/* invented names; a dozen, so a top ten leaves people out */
-const archive: ArchiveArticle[] = [
-  post(1, "2025-09-04", "News", [
-    credit("writer", ["Ada Example"]),
-    credit("image", ["Bo Sample"]),
-  ]),
-  post(2, "2025-10-12", "Features", [
-    credit("writer", ["Ada Example", "Cy Placeholder"]),
-    /* the same person in two roles on one article: two contributions */
-    credit("image", ["Ada Example"]),
-  ]),
-  post(3, "2025-11-20", "Sports", [credit("writer", ["Dee Invented"])]),
-  post(4, "2026-01-15", "News", [
-    credit("writer", ["Eli Madeup", "Fay Fictive"]),
-    credit("other", ["Gus Notreal"]),
-  ]),
-  /* nobody credited */
-  post(5, "2026-02-02", "Features", []),
-  post(6, "2026-03-09", "Sports", [
-    credit("writer", ["Ada Example"]),
-    credit("image", ["Hal Pretend"]),
-  ]),
-  post(7, "2026-04-21", "News", [
-    credit("writer", ["Ivy Imagined"]),
-    credit("image", ["Bo Sample", "Jo Standin"]),
-  ]),
-  post(8, "2026-09-03", "Features", [
-    credit("writer", ["Kit Dummy", "Lu Fakename"]),
-    credit("image", ["Cy Placeholder"]),
-  ]),
-  post(9, "2026-10-08", "News", [
-    credit("writer", ["Ada Example"]),
-    credit("image", ["Mo Newname"]),
-  ]),
-  post(10, "2026-10-30", "Sports", [
-    credit("writer", ["Kit Dummy"]),
-    credit("other", ["Gus Notreal"]),
-  ]),
-];
 
 /* every configuration the builder can make: what settle leaves as it is */
 const configs: ChartConfig[] = COUNTS.flatMap(({ id: count }) =>
@@ -167,6 +100,14 @@ const filterings: [string, Filters][] = [
   ["two sections", { ...NO_FILTERS, sections: ["News", "Sports"] }],
 ];
 
+/* the day of the earliest article anywhere that credits each person */
+const firstOf = new Map(
+  archive
+    .flatMap((article) => contributionsOn(article))
+    .map((c) => [c.person, easternDate(c.article.publishedAt)] as const)
+    .sort(([, a], [, b]) => b.localeCompare(a)),
+);
+
 /** whether a unit falls under a key of a dimension, worked out afresh */
 function under(
   unit: Unit,
@@ -178,14 +119,8 @@ function under(
   if (dimension === "section") return unit.article.section === key;
   if (dimension === "role") return unit.role === key;
   if (dimension === "person") return unit.person === key;
-  if (dimension === "joined") {
-    /* the earliest article anywhere that credits them */
-    const first = archive
-      .filter((a) => contributionsOn(a).some((c) => c.person === unit.person))
-      .map((a) => easternDate(a.publishedAt))
-      .sort()[0]!;
-    return periodOf(first, grain).key === key;
-  }
+  if (dimension === "joined")
+    return periodOf(firstOf.get(unit.person!)!, grain).key === key;
   const period = periodOf(easternDate(unit.article.publishedAt), dimension).key;
   return upTo ? period <= key : period === key;
 }
@@ -342,11 +277,16 @@ test("split by when they joined, each person is in one series, at their first co
   ).toHaveLength(4);
 });
 
-test.each(filterings)(
-  "every mark of every chart lists exactly what it counts, with %s",
-  (_, filters) => {
+/* one count at a time, each a test of its own size */
+const byCount = filterings.flatMap(([name, filters]) =>
+  COUNTS.map(({ id }) => [id, name, filters] as const),
+);
+
+test.each(byCount)(
+  "every mark of every chart lists exactly what it counts, counting %s, with %s",
+  (count, _, filters) => {
     const shown = applyFilters(archive, filters);
-    for (const config of counting) {
+    for (const config of counting.filter((c) => c.count === count)) {
       const grouped = groupOf(config, shown, filters, archive);
       expect(grouped.categories.length, JSON.stringify(config)).toBeGreaterThan(
         0,
@@ -508,20 +448,6 @@ test("Headcount's caption counts each person once, which its columns do not", ()
   expect(chartCount(grouped, [])).toBe("13 different people");
   expect(columns).toBeGreaterThan(13);
 });
-
-/* what a table on these filters lists: its articles, and the contributions
-   on them the filters count */
-function listed(state: FilterState) {
-  const filters = toFilters(state);
-  const articles = applyFilters(archive, filters);
-  return {
-    articles: articles.map((a) => a.id).sort((a, b) => a - b),
-    contributions: articles
-      .flatMap((a) => contributionsOn(a).filter(isCounted(filters)))
-      .map((c) => `${c.article.id} ${c.role} ${c.person}`)
-      .sort(),
-  };
-}
 
 /* who People lists on these filters, and what it counts of each */
 function onPeople(state: FilterState, articles = archive) {

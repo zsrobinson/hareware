@@ -17,8 +17,15 @@ import {
   writeChart,
   type ChartConfig,
 } from "./chart-config";
+import { isPeriod, type Period } from "~/lib/credits/stats";
 import { clearedState, type FilterState, type Searching } from "./filters";
 import { readChoice, readSort, writeChoice, writeSort } from "./page-state";
+import {
+  readPivot,
+  settlePivot,
+  writePivot,
+  type PivotConfig,
+} from "./pivot-config";
 import {
   COLUMNS,
   MINIMUMS,
@@ -31,10 +38,11 @@ import {
   type View,
 } from "./views";
 
-/** what the builder makes: a table's columns (its sort is the page's), or a chart */
+/** what the builder makes: a table's columns (its sort is the page's), a chart or a pivot */
 export type Shape =
   | { type: "table"; columns: readonly ColumnId[] }
-  | { type: "chart"; chart: ChartConfig };
+  | { type: "chart"; chart: ChartConfig }
+  | { type: "pivot"; pivot: PivotConfig };
 
 export type ViewState = {
   /** one of the page's views, or "custom" */
@@ -57,7 +65,7 @@ export const CUSTOM = "custom";
 export const viewsOn = (source: Source): View[] =>
   VIEWS.filter((view) => view.source === source);
 
-const firstOf = (source: Source) => viewsOn(source)[0]!;
+const firstView = (source: Source) => viewsOn(source)[0]!;
 
 const find = (source: Source, id: string | null) =>
   viewsOn(source).find((view) => view.id === id);
@@ -68,12 +76,14 @@ export const viewOf = (
   source: Source,
 ): View =>
   find(source, state.view === CUSTOM ? state.base : state.view) ??
-  firstOf(source);
+  firstView(source);
 
 const shapeOfView = ({ layout }: View): Shape =>
   layout.type === "table"
     ? { type: "table", columns: layout.table.columns }
-    : { type: "chart", chart: layout.chart };
+    : layout.type === "chart"
+      ? { type: "chart", chart: layout.chart }
+      : layout;
 
 /** what the search box looks at: a person's names on People's table, and
     what an article prints everywhere else */
@@ -98,6 +108,7 @@ export function layoutOf(
   const shape = shapeOf(state, source);
   if (shape.type === "chart")
     return state.hidden.length > 0 ? { ...shape, hidden: state.hidden } : shape;
+  if (shape.type === "pivot") return shape;
   const shown = shape.columns.filter((id) => !off.includes(id));
   return {
     type: "table",
@@ -114,7 +125,7 @@ export function layoutOf(
 /* the table a view opens with: its own, or for a chart, the page's first */
 function openingTable(view: View, source: Source) {
   const layout =
-    view.layout.type === "table" ? view.layout : firstOf(source).layout;
+    view.layout.type === "table" ? view.layout : firstView(source).layout;
   if (layout.type !== "table") throw new Error(`${source} opens on a chart`);
   return layout.table;
 }
@@ -165,17 +176,33 @@ export function openingOf(
   };
 }
 
-/** a page's chart, for a Custom chart made from a table */
-const firstChart = (source: Source): ChartConfig => {
-  const view = viewsOn(source).find((v) => v.layout.type === "chart");
-  if (view?.layout.type === "chart") return view.layout.chart;
-  /* a page with no chart of its own borrows the archive's first */
-  const any = VIEWS.find((v) => v.layout.type === "chart")!;
-  return (any.layout as Extract<Layout, { type: "chart" }>).chart;
-};
+/** a page's first chart or pivot, for a Custom one made from something
+    else; a page with none of its own borrows the archive's first */
+function firstOf<T extends "chart" | "pivot">(
+  source: Source,
+  type: T,
+): Extract<Layout, { type: T }> {
+  const view =
+    viewsOn(source).find((v) => v.layout.type === type) ??
+    VIEWS.find((v) => v.layout.type === type);
+  if (!view) throw new Error(`no view is a ${type}`);
+  return view.layout as Extract<Layout, { type: T }>;
+}
+
+const firstChart = (source: Source) => firstOf(source, "chart").chart;
+const firstPivot = (source: Source) => firstOf(source, "pivot").pivot;
+
+/** the period a rolling range rounds to, so a view's first period is whole */
+export function periodOfShape(shape: Shape): Period | undefined {
+  if (shape.type === "chart")
+    return isPeriod(shape.chart.by) ? shape.chart.by : undefined;
+  if (shape.type === "pivot")
+    return [shape.pivot.rows, shape.pivot.columns].find(isPeriod);
+  return undefined;
+}
 
 const firstColumns = (source: Source): readonly ColumnId[] => {
-  const { layout } = firstOf(source);
+  const { layout } = firstView(source);
   return layout.type === "table" ? layout.table.columns : COLUMNS[source];
 };
 
@@ -188,27 +215,36 @@ export function readView(search: string, source: Source): ViewState {
   const custom = asked === CUSTOM;
   /* a view no longer offered, or another page's, opens the first */
   const base = (find(source, custom ? params.get("base") : asked) ??
-    firstOf(source))!;
+    firstView(source))!;
   const all: readonly string[] = COLUMNS[source];
   const columns = [...new Set(list(params.get("columns")))].filter((id) =>
     all.includes(id),
   ) as ColumnId[];
   const shape = shapeOfView(base);
+  const layout = params.get("layout");
   /* a Custom link from before tables had no layout: it was a chart */
   const built: Shape | null = !custom
     ? null
-    : params.get("layout") === "table"
+    : layout === "table"
       ? {
           type: "table",
           columns: columns.length > 0 ? columns : firstColumns(source),
         }
-      : {
-          type: "chart",
-          chart: readChart(
-            params,
-            shape.type === "chart" ? shape.chart : firstChart(source),
-          ),
-        };
+      : layout === "pivot"
+        ? {
+            type: "pivot",
+            pivot: readPivot(
+              params,
+              shape.type === "pivot" ? shape.pivot : firstPivot(source),
+            ),
+          }
+        : {
+            type: "chart",
+            chart: readChart(
+              params,
+              shape.type === "chart" ? shape.chart : firstChart(source),
+            ),
+          };
   const opening = openingSort(base, source);
   const [sort] = readSort(search, COLUMNS[source]);
   const view = custom ? CUSTOM : base.id;
@@ -238,11 +274,15 @@ export function writeView(
   params: URLSearchParams,
   source: Source,
 ) {
-  const first = firstOf(source).id;
+  const first = firstView(source).id;
   if (state.view === first) params.delete("view");
   else params.set("view", state.view);
   const custom = state.view === CUSTOM ? shapeOf(state, source) : null;
-  writeChart(custom?.type === "chart" ? custom.chart : null, params);
+  /* the two share some names, so both go before either is written */
+  writeChart(null, params);
+  writePivot(null, params);
+  if (custom?.type === "chart") writeChart(custom.chart, params);
+  if (custom?.type === "pivot") writePivot(custom.pivot, params);
   if (custom) params.set("layout", custom.type);
   else params.delete("layout");
   if (custom?.type === "table") params.set("columns", custom.columns.join(","));
@@ -329,16 +369,16 @@ export const resetView = (state: ViewState, source: Source): ViewState => ({
   hidden: openingHidden({ view: state.base, base: state.base }, source),
 });
 
-/** the builder's Layout: the page's own table, or its first chart */
+/** the builder's Layout: the page's own table, or its first chart or pivot */
 export function switchLayout(
   shape: Shape,
   type: Shape["type"],
   source: Source,
 ): Shape {
   if (shape.type === type) return shape;
-  return type === "table"
-    ? { type, columns: firstColumns(source) }
-    : { type, chart: settle(firstChart(source)) };
+  if (type === "table") return { type, columns: firstColumns(source) };
+  if (type === "pivot") return { type, pivot: settlePivot(firstPivot(source)) };
+  return { type, chart: settle(firstChart(source)) };
 }
 
 /** a column shown or taken out; a table keeps one at least */
@@ -423,7 +463,11 @@ function literal(value: unknown, indent: string, room: number): string {
     const inner = `${indent}  `;
     const lines = Object.entries(value).map(([key, item]) => {
       const lead = `${inner}${key}: `;
-      return `${lead}${literal(item, inner, WIDTH - lead.length - 1)},`;
+      const text = literal(item, inner, WIDTH - lead.length - 1);
+      /* a string too long for its line goes under its key */
+      if (typeof item === "string" && lead.length + text.length + 1 > WIDTH)
+        return `${inner}${key}:\n${inner}  ${text},`;
+      return `${lead}${text},`;
     });
     return `{\n${lines.join("\n")}\n${indent}}`;
   }

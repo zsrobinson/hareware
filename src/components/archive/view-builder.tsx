@@ -10,6 +10,7 @@ import { FieldRows } from "~/components/field-row";
 import { Button } from "~/components/ui/button";
 import { BuilderRow, ChartBuilder } from "./chart-builder";
 import { Choice } from "./choice";
+import { PivotBuilder } from "./pivot-builder";
 import { moveColumn, switchLayout, withColumn, type Shape } from "./view-state";
 import {
   COLUMN_NAMES,
@@ -22,6 +23,7 @@ import {
 const LAYOUTS: { id: Shape["type"]; label: string }[] = [
   { id: "table", label: "Table" },
   { id: "chart", label: "Chart" },
+  { id: "pivot", label: "Pivot" },
 ];
 
 /**
@@ -58,6 +60,11 @@ export function ViewBuilder({
         <ChartBuilder
           config={shape.chart}
           onChange={(chart) => onChange({ type: "chart", chart })}
+        />
+      ) : shape.type === "pivot" ? (
+        <PivotBuilder
+          config={shape.pivot}
+          onChange={(pivot) => onChange({ type: "pivot", pivot })}
         />
       ) : (
         <TableBuilder

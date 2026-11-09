@@ -11,6 +11,7 @@
 
 import type { ChartConfig } from "./chart-config";
 import type { FilterState, Preset } from "./filters";
+import type { PivotConfig } from "./pivot-config";
 
 /** each table's columns, in the order a new view lists them */
 export const COLUMNS = {
@@ -75,7 +76,8 @@ export type Layout<S extends Source = Source> =
       chart: ChartConfig;
       /** the series its legend opens with off */
       hidden?: readonly string[];
-    };
+    }
+  | { type: "pivot"; pivot: PivotConfig };
 
 type ViewOf<S extends Source> = {
   id: string;
@@ -125,6 +127,23 @@ export const VIEWS = [
         draw: "stacked",
         values: "number",
         order: "natural",
+        top: 25,
+      },
+    },
+  },
+  {
+    id: "section-share",
+    label: "Section share",
+    question: "What share of this semester's articles is each section's?",
+    source: "articles",
+    range: "semester",
+    layout: {
+      type: "pivot",
+      pivot: {
+        count: "articles",
+        rows: "section",
+        columns: "none",
+        values: "total",
         top: 25,
       },
     },
@@ -223,6 +242,24 @@ export const VIEWS = [
         draw: "stacked",
         values: "number",
         order: "largest",
+        top: 25,
+      },
+    },
+  },
+  {
+    id: "retention",
+    label: "Retention",
+    question:
+      "Of the people who joined each semester, how many contributed in each one after?",
+    source: "people",
+    range: "all",
+    layout: {
+      type: "pivot",
+      pivot: {
+        count: "people",
+        rows: "joined",
+        columns: "semester",
+        values: "number",
         top: 25,
       },
     },

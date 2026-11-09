@@ -2,7 +2,9 @@ import type { SortingState, VisibilityState } from "@tanstack/react-table";
 import {
   ActivityIcon,
   ChartColumnIcon,
+  ChartPieIcon,
   CodeIcon,
+  Grid3x3Icon,
   HistoryIcon,
   LinkIcon,
   NewspaperIcon,
@@ -18,7 +20,6 @@ import { CopyTextButton } from "~/components/copy-button";
 import { PageActions } from "~/components/page-actions";
 import { PanelGroup, SidePanel, useIsPhone } from "~/components/panel";
 import { Button } from "~/components/ui/button";
-import { isPeriod } from "~/lib/credits/stats";
 import { cn } from "~/lib/utils";
 import {
   AboveToolbar,
@@ -32,6 +33,7 @@ import { ChartView } from "./charts";
 import { carryOver, type FilterState, type Searching } from "./filters";
 import { useOpenRow, type OpenRow } from "./open-row";
 import { useInAddress } from "./page-state";
+import { PivotView } from "./pivot-view";
 import { ViewBuilder } from "./view-builder";
 import {
   changeView,
@@ -39,6 +41,7 @@ import {
   CUSTOM,
   declarationOf,
   openingOf,
+  periodOfShape,
   questionOf,
   readView,
   resetView,
@@ -76,6 +79,7 @@ export type TableViewProps = ViewProps & {
 
 const ICONS: Record<string, LucideIcon> = {
   sections: NewspaperIcon,
+  "section-share": ChartPieIcon,
   history: HistoryIcon,
   contributors: UsersIcon,
   newcomers: UserPlusIcon,
@@ -86,6 +90,13 @@ const ICONS: Record<string, LucideIcon> = {
 const SEARCHED_FOR: Record<Searching, string> = {
   articles: "this view searches titles and bylines",
   people: "this view searches names and bylines",
+};
+
+/* a view with no icon of its own takes its layout's */
+const LAYOUT_ICONS: Record<Shape["type"], LucideIcon> = {
+  table: TableIcon,
+  chart: ChartColumnIcon,
+  pivot: Grid3x3Icon,
 };
 
 /* the name a page's open row had in links from before (see open-row.tsx) */
@@ -112,11 +123,7 @@ export function ExplorerPage({
     <ArchiveShell
       searching={searchingOf(shape, source)}
       opening={openingOf(state, source)}
-      period={
-        shape.type === "chart" && isPeriod(shape.chart.by)
-          ? shape.chart.by
-          : undefined
-      }
+      period={periodOfShape(shape)}
     >
       {(props) => (
         <Explorer
@@ -152,7 +159,7 @@ function Explorer({
   const [picked, setPicked] = useState<VisibilityState>({});
   const off = Object.keys(picked).filter((id) => picked[id] === false);
 
-  /* a table opens a row beside it, and a chart a slice */
+  /* a table opens a row beside it, and a chart or a pivot a slice */
   const row = useOpenRow("open", LEGACY[source]);
   const slice = useOpenRow("slice");
   const panel = shape.type === "table" ? row : slice;
@@ -232,9 +239,7 @@ function Explorer({
     ...viewsOn(source).map((view) => ({
       id: view.id,
       label: view.label,
-      icon:
-        ICONS[view.id] ??
-        (view.layout.type === "table" ? TableIcon : ChartColumnIcon),
+      icon: ICONS[view.id] ?? LAYOUT_ICONS[view.layout.type],
     })),
     { id: CUSTOM, label: "Custom", icon: ICONS[CUSTOM]! },
   ];
@@ -367,13 +372,21 @@ function Explorer({
               setPicked={setPicked}
             />
           </>
-        ) : (
+        ) : shape.type === "chart" ? (
           <ChartView
             {...props}
             config={shape.chart}
             question={question}
             hidden={state.hidden}
             setHidden={(hidden) => setState({ ...state, hidden })}
+            opened={opened}
+            back={label}
+          />
+        ) : (
+          <PivotView
+            {...props}
+            config={shape.pivot}
+            question={question}
             opened={opened}
             back={label}
           />

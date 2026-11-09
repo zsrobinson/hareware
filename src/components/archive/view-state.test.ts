@@ -1,6 +1,7 @@
 import { format } from "prettier";
 import { expect, test, vi } from "vitest";
 import { allows, type ChartConfig } from "./chart-config";
+import { allowsPivot, type PivotConfig } from "./pivot-config";
 import { chartsAddress } from "./charts-address";
 import {
   carryOver,
@@ -283,6 +284,26 @@ const SETTINGS: (keyof ChartConfig)[] = [
   "split",
 ];
 
+/* the same for a pivot's */
+function offeredPivot(
+  pivot: PivotConfig,
+  key: keyof PivotConfig,
+  value: unknown,
+) {
+  const ok = allowsPivot(pivot);
+  if (key === "top") return ok.top;
+  return (ok[key] as Record<string, boolean>)[String(value)] ?? false;
+}
+
+/* what is counted before what it is cut by, which can rule a count out */
+const PIVOT_SETTINGS: (keyof PivotConfig)[] = [
+  "values",
+  "top",
+  "count",
+  "rows",
+  "columns",
+];
+
 /* the declaration's settings made one at a time, each as the builder offers
    it, from a Custom table of one column on all time */
 function rebuild(view: View) {
@@ -318,6 +339,16 @@ function rebuild(view: View) {
     /* People's Show, in the toolbar */
     if ("minimum" in layout.table && layout.table.minimum)
       state = { ...state, minimum: layout.table.minimum };
+  } else if (layout.type === "pivot") {
+    let pivot = (shape() as Extract<Shape, { type: "pivot" }>).pivot;
+    for (let pass = 0; pass < 5; pass++)
+      for (const key of PIVOT_SETTINGS)
+        if (
+          pivot[key] !== layout.pivot[key] &&
+          offeredPivot(pivot, key, layout.pivot[key])
+        )
+          pivot = { ...pivot, [key]: layout.pivot[key] };
+    state = changeView(state, { type: "pivot", pivot }, source);
   } else {
     let chart = (shape() as Extract<Shape, { type: "chart" }>).chart;
     for (let pass = 0; pass < 5; pass++)

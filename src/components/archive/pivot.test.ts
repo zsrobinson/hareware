@@ -735,3 +735,27 @@ test("a pivot of views has every section, an empty one 0 and an unread one blank
   });
   expect(pivotCount(pivot)).toBe("370 views · 1 article without views");
 });
+
+/* Sports is posts 3, 6 and 10: 111, 222 and 370 views */
+test("one column of views per article reads each sum, and beside it the average", () => {
+  const filters = { ...NO_FILTERS, sections: ["Sports"] };
+  const pivot = pivotOf(
+    {
+      count: "views",
+      rows: "section",
+      columns: "none",
+      values: "per-article",
+      top: 25,
+      compare: "none",
+    },
+    applyFilters(archive, filters),
+    filters,
+    archive,
+  );
+
+  expect(pivotMatrix(pivot)).toEqual([
+    ["Section", "Views", "Per article"],
+    ["Sports", "703", "234"],
+    ["Total", "703", "234"],
+  ]);
+});

@@ -254,6 +254,9 @@ function PivotTable({
   const split = config.columns !== "none";
   /* two ranges side by side: no totals across them, but their difference */
   const pairs = pivot.ranges !== null;
+  /* one column of sums per article: each sum, and beside it what it is per
+     article, which opens the same list as the sum */
+  const beside = config.values === "per-article" && !split && !pairs;
   /* where each button is: a row, -1 for the header and rows.length for the
      totals; a column, -1 for the row's header and columns.length for its total */
   const last = { row: rows.length, column: columns.length };
@@ -332,7 +335,7 @@ function PivotTable({
     const at = `${r},${c}`;
     const open = selected !== null && sameSlice(selected, slice);
     const what =
-      average === null
+      average === null || beside
         ? unitOf(count, pivot.grouped.measure)
         : `${unitOf(average, pivot.grouped.measure)} per article`;
     return (
@@ -355,12 +358,22 @@ function PivotTable({
         {content ??
           (none
             ? "–"
-            : average !== null
+            : average !== null && !beside
               ? average.toLocaleString()
               : share === null
                 ? count.toLocaleString()
                 : percentText(share))}
       </button>
+    );
+  };
+
+  /* a number that opens nothing: the sum beside it opens its list */
+  const averageText = (slice: PivotSlice) => {
+    const { average } = cellValue(pivot, slice);
+    return average === null ? (
+      <span className="text-muted-foreground/40">–</span>
+    ) : (
+      average.toLocaleString()
     );
   };
 
@@ -419,6 +432,11 @@ function PivotTable({
             <th scope="col" className={cn(cell, "font-medium")}>
               {pairs ? "Difference" : split ? "Total" : measureName}
             </th>
+            {beside && (
+              <th scope="col" className={cn(cell, "font-medium")}>
+                Per article
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -459,6 +477,11 @@ function PivotTable({
                   )
                 )}
               </td>
+              {beside && (
+                <td className={cn(cell, "tabular-nums")}>
+                  {averageText({ row: row.key, column: null })}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -491,6 +514,11 @@ function PivotTable({
                 )
               )}
             </td>
+            {beside && (
+              <td className={cn(cell, "tabular-nums")}>
+                {averageText({ row: null, column: null })}
+              </td>
+            )}
           </tr>
         </tfoot>
       </table>

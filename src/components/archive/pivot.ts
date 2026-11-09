@@ -388,20 +388,30 @@ export function pivotMatrix(pivot: Pivot): string[][] {
     const { count, share, average } = cellValue(pivot, slice);
     const read = amountOf(pivot.members(slice), pivot.grouped.measure);
     if (read.counted === 0 && read.missing > 0) return "";
-    if (pivot.config.values === "per-article") return String(average ?? 0);
+    if (pivot.config.values === "per-article" && split)
+      return String(average ?? 0);
     return share === null ? String(count) : `${share.toFixed(1)}%`;
   };
   const split = pivot.config.columns !== "none";
+  /* one column of sums: each, and what it is per article */
+  const beside =
+    pivot.config.values === "per-article" && !split && !pivot.ranges;
+  const per = (row: string | null) =>
+    beside
+      ? [String(cellValue(pivot, { row, column: null }).average ?? "")]
+      : [];
   const measure = COUNTS.find((c) => c.id === pivot.grouped.measure)!.label;
   const header = [
     dimensionName(pivot.config.rows),
     ...pivot.columns.map((c) => c.label),
     pivot.ranges ? "Difference" : split ? "Total" : measure,
+    ...(beside ? ["Per article"] : []),
   ];
   const line = (row: string | null, label: string) => [
     label,
     ...pivot.columns.map((c) => text({ row, column: c.key })),
     pivot.ranges ? differenceText(pivot, row, 1) : text({ row, column: null }),
+    ...per(row),
   ];
   return [
     header,

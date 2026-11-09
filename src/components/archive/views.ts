@@ -188,6 +188,38 @@ export const VIEWS = [
     },
   },
   {
+    id: "most-read",
+    label: "Most read",
+    question: "Which of this semester's articles have been read the most?",
+    source: "articles",
+    range: "semester",
+    layout: {
+      type: "table",
+      table: {
+        columns: ["date", "title", "section", "writer", "words", "views"],
+        sort: { id: "views", desc: true },
+      },
+    },
+  },
+  {
+    id: "read-by-section",
+    label: "Read by section",
+    question: "Which section's articles this semester are read the most, each?",
+    source: "articles",
+    range: "semester",
+    layout: {
+      type: "pivot",
+      pivot: {
+        count: "views",
+        rows: "section",
+        columns: "none",
+        values: "per-article",
+        top: 25,
+        compare: "none",
+      },
+    },
+  },
+  {
     id: "everyone",
     label: "Everyone",
     question: "Who has contributed, and how much?",

@@ -9,7 +9,9 @@ import {
   LinkIcon,
   NewspaperIcon,
   SlidersHorizontalIcon,
+  SproutIcon,
   TableIcon,
+  TrophyIcon,
   UserPlusIcon,
   UsersIcon,
   type LucideIcon,
@@ -65,6 +67,8 @@ import type { ColumnId, Minimum, Source, TableSort } from "./views";
 /** what a page's table is handed: the view's columns and sort, and its open row */
 export type TableViewProps = ViewProps & {
   columns: readonly ColumnId[];
+  /** People's rows narrowed to whoever is new in the range */
+  only?: "new";
   sorting: SortingState;
   setSorting: (sorting: SortingState) => void;
   /** the row open beside the table, kept in the address as `?open=` */
@@ -82,6 +86,8 @@ const ICONS: Record<string, LucideIcon> = {
   "section-share": ChartPieIcon,
   history: HistoryIcon,
   contributors: UsersIcon,
+  top: TrophyIcon,
+  new: SproutIcon,
   newcomers: UserPlusIcon,
   headcount: ActivityIcon,
   [CUSTOM]: SlidersHorizontalIcon,
@@ -361,6 +367,7 @@ function Explorer({
             <Table
               {...props}
               columns={shape.columns}
+              only={shape.only}
               sorting={[state.sort]}
               setSorting={([sort]) => {
                 if (sort) setState({ ...state, sort: sort as TableSort });

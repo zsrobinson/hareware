@@ -99,13 +99,38 @@ const EVERY_COLUMN: ColumnDef<PersonRow, unknown>[] = [
   count("image"),
   count("other"),
   {
+    id: "sections",
+    accessorFn: (row) => row.sections.join(", "),
+    header: sortable(COLUMN_NAMES.sections),
+    meta: { csvHeader: COLUMN_NAMES.sections },
+    cell: ({ row }) => (
+      <span className="text-muted-foreground flex flex-wrap gap-x-2">
+        {row.original.sections.map((section) => (
+          <SectionName key={section} section={section} />
+        ))}
+      </span>
+    ),
+  },
+  {
+    id: "roles",
+    accessorFn: (row) =>
+      ROLES.filter((role) => row.counts[role] > 0)
+        .map((role) => ROLE_NAMES[role])
+        .join(", "),
+    header: sortable(COLUMN_NAMES.roles),
+    meta: { csvHeader: COLUMN_NAMES.roles },
+    cell: ({ getValue }) => (
+      <span className="text-muted-foreground">{getValue() as string}</span>
+    ),
+  },
+  {
     id: "first",
     accessorKey: "first",
     header: sortable(COLUMN_NAMES.first),
     meta: { csvHeader: COLUMN_NAMES.first },
     cell: ({ row }) => (
       <span className="text-muted-foreground whitespace-nowrap">
-        {formatMonth(row.original.first)}
+        {formatDate(row.original.first)}
       </span>
     ),
   },
@@ -116,7 +141,7 @@ const EVERY_COLUMN: ColumnDef<PersonRow, unknown>[] = [
     meta: { csvHeader: COLUMN_NAMES.last },
     cell: ({ row }) => (
       <span className="text-muted-foreground whitespace-nowrap">
-        {formatMonth(row.original.last)}
+        {formatDate(row.original.last)}
       </span>
     ),
   },
@@ -124,7 +149,7 @@ const EVERY_COLUMN: ColumnDef<PersonRow, unknown>[] = [
 
 /* what a narrower table leaves out until someone asks for it, so none of
    it is cut off at the edge: beside a panel, and on a phone */
-const BESIDE_PANEL = ["other", "first", "last"];
+const BESIDE_PANEL = ["other", "sections", "roles", "first", "last"];
 const ON_PHONE = ["writer", "image", ...BESIDE_PANEL];
 
 /**
@@ -164,6 +189,7 @@ function People({
   filterNote,
   filterState,
   columns: shown,
+  only,
   sorting: held,
   setSorting,
   opened: openRow,
@@ -196,15 +222,20 @@ function People({
   );
   const rows = useMemo(() => {
     const search = filters.search?.trim() ? searchable(filters.search) : "";
+    /* new: first credited anywhere in the range, whatever the filters */
+    const today = easternDate(new Date().toISOString());
+    const isNew = (row: PersonRow) =>
+      row.first >= (filters.from ?? "") && row.first <= (filters.to ?? today);
     return all.filter(
       (row) =>
+        (only !== "new" || isNew(row)) &&
         row.contributions >= minimum &&
         (!search ||
           [row.name, ...row.bylines].some((name) =>
             searchable(name).includes(search),
           )),
     );
-  }, [all, filters.search, minimum]);
+  }, [all, filters, minimum, only]);
 
   /* the panel counts what the filters leave, and says so, beside their
      whole record, which someone the filters leave out still opens on */
@@ -248,7 +279,7 @@ function People({
         caption={
           <span className="text-muted-foreground text-sm tabular-nums">
             {[
-              `${rows.length} ${rows.length === 1 ? "person" : "people"}`,
+              `${rows.length} ${only === "new" ? "new " : ""}${rows.length === 1 ? "person" : "people"}`,
               filterNote,
               minimum !== 1 && `${minimum}+ contributions`,
             ]

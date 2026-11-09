@@ -4,6 +4,7 @@ import {
   ArrowUpDownIcon,
   ArrowUpIcon,
   LayoutGridIcon,
+  UsersRoundIcon,
 } from "lucide-react";
 import { useId } from "react";
 import { FieldRows } from "~/components/field-row";
@@ -70,8 +71,14 @@ export function ViewBuilder({
         <TableBuilder
           source={source}
           columns={shape.columns}
+          only={shape.only}
           sort={sort}
-          onColumns={(columns) => onChange({ type: "table", columns })}
+          onColumns={(columns) =>
+            onChange({ type: "table", columns, only: shape.only })
+          }
+          onOnly={(only) =>
+            onChange({ type: "table", columns: shape.columns, only })
+          }
           onSort={onSort}
         />
       )}
@@ -82,14 +89,18 @@ export function ViewBuilder({
 function TableBuilder({
   source,
   columns,
+  only,
   sort,
   onColumns,
+  onOnly,
   onSort,
 }: {
   source: Source;
   columns: readonly ColumnId[];
+  only: "new" | undefined;
   sort: TableSort;
   onColumns: (columns: readonly ColumnId[]) => void;
+  onOnly: (only: "new" | undefined) => void;
   onSort: (sort: TableSort) => void;
 }) {
   const ids = useId();
@@ -98,6 +109,21 @@ function TableBuilder({
   const listed = [...columns, ...all.filter((id) => !columns.includes(id))];
   return (
     <>
+      {source === "people" && (
+        <BuilderRow icon={UsersRoundIcon} label="People">
+          <Choice
+            label="People"
+            hideLabel
+            width="w-full"
+            value={only ?? "everyone"}
+            options={[
+              { id: "everyone", label: "Everyone" },
+              { id: "new", label: "New in the range" },
+            ]}
+            onChange={(id) => onOnly(id === "new" ? "new" : undefined)}
+          />
+        </BuilderRow>
+      )}
       <BuilderRow icon={ArrowDownWideNarrowIcon} label="Sort by">
         <Choice
           label="Sort by"

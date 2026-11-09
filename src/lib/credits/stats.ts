@@ -621,6 +621,8 @@ export type PersonRow = {
   last: string;
   /** printed bylines the Sheet counts as this person */
   bylines: string[];
+  /** the sections of the contributions counted, in the paper's order */
+  sections: string[];
   articleIds: number[];
 };
 
@@ -647,6 +649,7 @@ export function people(
         first: own ? easternDate(own.first.article.publishedAt) : date,
         last: own ? easternDate(own.latest.article.publishedAt) : date,
         bylines: [],
+        sections: [],
         articleIds: [],
       };
       rows.set(name, row);
@@ -654,10 +657,13 @@ export function people(
     row.counts[role]++;
     row.contributions++;
     if (!row.articleIds.includes(article.id)) row.articleIds.push(article.id);
+    if (!row.sections.includes(article.section))
+      row.sections.push(article.section);
     for (const byline of bylines)
       if (!row.bylines.includes(byline)) row.bylines.push(byline);
   }
 
+  for (const row of rows.values()) row.sections.sort(compareSections);
   return [...rows.values()].sort(
     (a, b) => b.contributions - a.contributions || a.name.localeCompare(b.name),
   );

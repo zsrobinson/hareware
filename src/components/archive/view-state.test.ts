@@ -338,6 +338,12 @@ function rebuild(view: View) {
     for (const [at, id] of wanted.entries())
       while (columns.indexOf(id) > at) columns = moveColumn(columns, id, -1);
     state = changeView(state, { type: "table", columns }, source);
+    if ("only" in layout.table && layout.table.only)
+      state = changeView(
+        state,
+        { type: "table", columns, only: layout.table.only },
+        source,
+      );
     state = { ...state, sort: { ...state.sort, id: layout.table.sort.id } };
     state = { ...state, sort: { ...state.sort, desc: layout.table.sort.desc } };
     /* People's Show, in the toolbar */

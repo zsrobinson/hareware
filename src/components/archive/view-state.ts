@@ -40,7 +40,7 @@ import {
 
 /** what the builder makes: a table's columns (its sort is the page's), a chart or a pivot */
 export type Shape =
-  | { type: "table"; columns: readonly ColumnId[] }
+  | { type: "table"; columns: readonly ColumnId[]; only?: "new" }
   | { type: "chart"; chart: ChartConfig }
   | { type: "pivot"; pivot: PivotConfig };
 
@@ -80,7 +80,13 @@ export const viewOf = (
 
 const shapeOfView = ({ layout }: View): Shape =>
   layout.type === "table"
-    ? { type: "table", columns: layout.table.columns }
+    ? {
+        type: "table",
+        columns: layout.table.columns,
+        ...("only" in layout.table && layout.table.only
+          ? { only: layout.table.only }
+          : {}),
+      }
     : layout.type === "chart"
       ? { type: "chart", chart: layout.chart }
       : layout;
@@ -118,6 +124,7 @@ export function layoutOf(
       ...(source === "people" && state.minimum !== 1
         ? { minimum: state.minimum }
         : {}),
+      ...(shape.only ? { only: shape.only } : {}),
     },
   } as Layout;
 }
@@ -229,6 +236,9 @@ export function readView(search: string, source: Source): ViewState {
       ? {
           type: "table",
           columns: columns.length > 0 ? columns : firstColumns(source),
+          ...(source === "people" && params.get("only") === "new"
+            ? { only: "new" as const }
+            : {}),
         }
       : layout === "pivot"
         ? {
@@ -287,6 +297,8 @@ export function writeView(
   else params.delete("layout");
   if (custom?.type === "table") params.set("columns", custom.columns.join(","));
   else params.delete("columns");
+  if (custom?.type === "table" && custom.only) params.set("only", custom.only);
+  else params.delete("only");
   if (custom && state.base !== first) params.set("base", state.base);
   else params.delete("base");
   if (same(state.hidden, openingHidden(state, source))) params.delete("hide");

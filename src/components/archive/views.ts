@@ -22,6 +22,8 @@ export const COLUMNS = {
     "writer",
     "image",
     "other",
+    "sections",
+    "roles",
     "first",
     "last",
   ],
@@ -41,6 +43,8 @@ export const COLUMN_NAMES: Record<ColumnId, string> = {
   other: "Other",
   name: "Name",
   contributions: "Contributions",
+  sections: "Sections",
+  roles: "Roles",
   first: "First",
   last: "Latest",
 };
@@ -65,6 +69,8 @@ export type TableLayout<S extends Source = Source> = {
       /** People's Show as it opens, which changing leaves the view as it is;
           everyone when left out */
       minimum?: Minimum;
+      /** People's rows narrowed to whoever is new: first credited in the range */
+      only?: "new";
     }
   : unknown);
 
@@ -209,6 +215,42 @@ export const VIEWS = [
         order: "largest",
         top: 25,
         compare: "none",
+      },
+    },
+  },
+  {
+    id: "top",
+    label: "Top this semester",
+    question: "Who has done the most this semester, and what?",
+    source: "people",
+    range: "semester",
+    layout: {
+      type: "chart",
+      chart: {
+        count: "contributions",
+        by: "person",
+        split: "role",
+        draw: "stacked",
+        values: "number",
+        order: "largest",
+        top: 25,
+        compare: "none",
+      },
+    },
+  },
+  {
+    id: "new",
+    label: "New this semester",
+    question:
+      "Who made their first contribution this semester, where, and as what?",
+    source: "people",
+    range: "semester",
+    layout: {
+      type: "table",
+      table: {
+        columns: ["name", "first", "sections", "roles", "contributions"],
+        sort: { id: "first", desc: true },
+        only: "new",
       },
     },
   },

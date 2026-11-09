@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
+import { queryClient } from "~/lib/query-client";
 import { PeoplePage } from "./people";
 import { stubArchive } from "./stub-archive";
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  /* each test reads its own archive, which the window would otherwise keep */
+  queryClient.clear();
   window.history.replaceState(null, "", "/");
 });
 
@@ -59,4 +62,63 @@ test("a person's panel says what the filters leave of their record, and holds th
   /* a pen name from outside the range is still theirs */
   const credited = within(panel).getByRole("heading", { name: "Credited as" });
   expect(credited.parentElement!.textContent).toContain("Mask One · 1");
+});
+
+test("New lists only whoever was first credited in the range, a pen name's person by their first", async () => {
+  stubArchive({
+    posts: [
+      {
+        id: 1,
+        title: "An invented headline",
+        publishedAt: "2025-10-01T16:00:00Z",
+        categoryIds: [1],
+        paragraphs: ["Article by: Mask One"],
+      },
+      {
+        id: 2,
+        title: "Another invented headline",
+        publishedAt: "2026-03-01T16:00:00Z",
+        categoryIds: [1],
+        paragraphs: ["Article by: Riley Example", "Image Credits: Sam Sample"],
+      },
+      {
+        id: 3,
+        title: "A third invented headline",
+        publishedAt: "2026-04-01T16:00:00Z",
+        categoryIds: [2],
+        paragraphs: ["Article by: Sam Sample"],
+      },
+    ],
+    categories: [
+      [1, "News"],
+      [2, "Sports"],
+    ],
+    overrides: [
+      {
+        postId: 1,
+        role: "writer",
+        byline: "Mask One",
+        realName: "Riley Example",
+        note: "",
+      },
+    ],
+  });
+  window.history.replaceState(
+    null,
+    "",
+    "/people?view=new&range=custom&from=2026-01-01&to=2026-05-31",
+  );
+  render(<PeoplePage />);
+  const table = await screen.findByRole("table");
+  /* Riley first wrote, as Mask One, in the fall */
+  const rows = within(table).getAllByRole("row").slice(1);
+  expect(rows.map((row) => row.querySelector("td")?.textContent)).toEqual([
+    "Sam Sample",
+  ]);
+  expect(
+    within(rows[0]!)
+      .getAllByRole("cell")
+      .map((cell) => cell.textContent),
+  ).toEqual(["Sam Sample", "Mar 1, 2026", "NewsSports", "Writing, Image", "2"]);
+  expect(screen.getByText(/^1 new person/)).toBeTruthy();
 });

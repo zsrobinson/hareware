@@ -96,6 +96,35 @@ files, 151 tests, all passing.
 show are Astro virtual modules (`astro:middleware`, `import.meta.env` and
 `glob`), which only `astro check` resolves.
 
+### Page tests (Pi, after the handoff push)
+
+`saved-views.page.test.tsx`, `explorer.test.tsx` and
+`declared-view.test.tsx` ran with `--testTimeout=30000`: 25 tests, 19
+passed, 6 failed.
+
+- **Three timed out at 30 s:** the first test in each file. This looks like
+  a cold first render of a page on the Pi; check it on the new host first.
+- **Two failures are bugs in the tests, not the app:**
+  - In "a save the Sheet refuses", `queryByText(/^Saved/)` matches Sonner's
+    empty `data-title` div. Match the toast's text exactly instead.
+  - In "a save over someone else's since", "Saved All for everyone" shows
+    twice, because the previous test's toast stays in the Toaster. Clear
+    toasts between tests, or use `findAllByText`.
+- **One was not followed up:** in "a view is headed by its own title,
+  edited or not", the old Custom link's page never showed "What News
+  published". It may be the same cold-render timing, or an old link not
+  opening its base view.
+- jsdom logs `setPointerCapture is not a function` from the Select. It is
+  noise, but it may want a stub in `src/test/dom.ts`.
+
+### Merging with display fixes
+
+`claude/explorer-display-fixes` has three source commits: 4fa4015, 61a5e75
+and 5b5c953. Both branches merge into `claude/explorer-polish`. Expect
+conflicts only around `slice-panel.tsx` (`SeeIn`, where this branch adds
+`via`) and any Sheet fixtures that branch adds without `views: []` and
+`tabs.views`.
+
 ## Gotchas
 
 - **Run tools directly, not through npx or npm.** On Node 26, `npx vitest`

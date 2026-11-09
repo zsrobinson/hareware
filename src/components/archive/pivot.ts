@@ -7,6 +7,7 @@
 
 import type { ArchiveArticle } from "~/lib/credits/archive";
 import { ROLE_NAMES, type Role } from "~/lib/credits/labels";
+import { SECTION_ORDER, sortSections } from "~/lib/credits/sections";
 import { spreadsheetCell } from "~/lib/csv";
 import {
   group,
@@ -47,6 +48,8 @@ export type Pivot = {
   columns: Header[];
   /** how many there were before a top few cut them */
   available: { rows: number; columns: number };
+  /** nothing counted anywhere, though every section is a row of nothing */
+  empty: boolean;
   members: (slice: PivotSlice) => Member[];
   count: (slice: PivotSlice) => number;
   /** what a share is taken of, or null when cells are numbers */
@@ -135,7 +138,18 @@ export function pivotOf(
           { by: rows, order, limit },
           today,
         );
-  const rowKeys = grouped.categories.map((c) => c.key);
+  /* every section the filters leave, whether or not it published: a
+     share of none is a share, which a section left out would not say */
+  const sectionsOf = (seen: Header[]): Header[] =>
+    sortSections(
+      new Set([
+        ...(filters.sections.length > 0 ? filters.sections : SECTION_ORDER),
+        ...seen.map((h) => h.key),
+      ]),
+    ).map((key) => seen.find((h) => h.key === key) ?? { key, label: key });
+  const rowHeaders =
+    rows === "section" ? sectionsOf(grouped.categories) : grouped.categories;
+  const rowKeys = rowHeaders.map((c) => c.key);
   let shownColumns: Header[] = ranges
     ? [
         { key: "now", label: spanLabel(ranges.now) },
@@ -143,7 +157,9 @@ export function pivotOf(
       ]
     : columns === "none"
       ? []
-      : grouped.series;
+      : columns === "section"
+        ? sectionsOf(grouped.series)
+        : grouped.series;
   if (columns === "person") {
     const sizes = new Map(
       grouped.series.map((s) => [
@@ -190,7 +206,10 @@ export function pivotOf(
   return {
     config,
     grouped,
-    rows: grouped.categories.map((c) => nameOf(rows, c)),
+    rows: rowHeaders.map((c) => nameOf(rows, c)),
+    empty: !Object.values(grouped.cells).some((row) =>
+      Object.values(row).some((list) => list.length > 0),
+    ),
     columns: ranges
       ? shownColumns
       : shownColumns.map((c) => nameOf(columns, c)),

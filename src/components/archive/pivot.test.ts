@@ -5,6 +5,7 @@ import {
   applyFilters,
   easternDate,
   grainOf,
+  isCounted,
   NO_FILTERS,
   periodOf,
   type Dimension,
@@ -393,7 +394,9 @@ test("Section share reads each section as a share of the articles, over their co
     ["Section", "Articles"],
     ["News", "40.0%"],
     ["Features", "30.0%"],
+    ["Entertainment", "0.0%"],
     ["Sports", "30.0%"],
+    ["Rabbithole", "0.0%"],
     ["Total", "10"],
   ]);
   expect(toTsv(pivotMatrix(pivot)).split("\n")[1]).toBe("News\t40.0%");
@@ -506,4 +509,157 @@ test("a copied or downloaded pivot reads every cell as text, a name like a formu
   const differences = rows.slice(1).map((cells) => cells.at(-1)!);
   expect(differences.some((cell) => cell.startsWith("+"))).toBe(false);
   expect(differences.filter((cell) => cell.startsWith("'+"))).not.toEqual([]);
+});
+
+test("every section is a row or a column, one with nothing a zero, unless the filters leave it out", () => {
+  const news = [
+    post(1, "2026-03-01", "News", [credit("writer", ["Ada Example"])]),
+  ];
+  const share = pivotOf(pivotOfView("section-share"), news, NO_FILTERS, news);
+  expect(share.rows.map((r) => r.key)).toEqual([
+    "News",
+    "Features",
+    "Entertainment",
+    "Sports",
+    "Rabbithole",
+  ]);
+  expect(cellValue(share, { row: "Sports", column: null })).toEqual({
+    count: 0,
+    share: 0,
+  });
+  expect(toTsv(pivotMatrix(share)).split("\n")).toEqual([
+    "Section\tArticles",
+    "News\t100.0%",
+    "Features\t0.0%",
+    "Entertainment\t0.0%",
+    "Sports\t0.0%",
+    "Rabbithole\t0.0%",
+    "Total\t1",
+  ]);
+
+  /* a section the filters pick is a row though it has nothing, and no other is */
+  const picked = { ...NO_FILTERS, sections: ["Sports", "News"] };
+  expect(
+    pivotOf(pivotOfView("section-share"), news, picked, news).rows.map(
+      (r) => r.key,
+    ),
+  ).toEqual(["News", "Sports"]);
+
+  /* a section of the archive's own, past the paper's five, is kept */
+  const odd = [...news, post(2, "2026-03-02", "Letters", [])];
+  expect(
+    pivotOf(pivotOfView("section-share"), odd, NO_FILTERS, odd).rows.map(
+      (r) => r.key,
+    ),
+  ).toContain("Letters");
+
+  /* and as columns */
+  const roles = pivotOf(
+    {
+      count: "contributions",
+      rows: "role",
+      columns: "section",
+      values: "number",
+      top: 25,
+      compare: "none",
+    },
+    news,
+    NO_FILTERS,
+    news,
+  );
+  expect(roles.columns.map((c) => c.key)).toEqual([
+    "News",
+    "Features",
+    "Entertainment",
+    "Sports",
+    "Rabbithole",
+  ]);
+  expect(roles.count({ row: null, column: "Rabbithole" })).toBe(0);
+});
+
+test("exact people, roles and sections together open each cell as it counts, pen names and all", () => {
+  const pen = credit("writer", ["Joke Byline"]);
+  pen.contributors = [
+    { name: "Ada Example", byline: "Joke Byline", source: "article" },
+  ];
+  const history = [
+    post(1, "2025-09-01", "Sports", [credit("writer", ["Ada Example"])]),
+    post(2, "2026-02-01", "News", [
+      pen,
+      credit("writer", ["Bo Sample"]),
+      credit("image", ["Ada Example", "Cy Placeholder"]),
+    ]),
+    post(3, "2026-03-01", "Sports", [
+      credit("image", ["Ada Example"]),
+      credit("writer", ["Cy Placeholder"]),
+    ]),
+  ];
+  const narrowings = [
+    {
+      people: ["Ada Example"],
+      roles: ["image" as const],
+      sections: ["News", "Sports"],
+    },
+    {
+      people: ["Ada Example", "Cy Placeholder"],
+      roles: ["writer" as const, "image" as const],
+      sections: ["News"],
+    },
+  ];
+  const wrong: string[] = [];
+  for (const config of configs) {
+    if (
+      config.values !== "number" ||
+      config.top !== 10 ||
+      config.compare !== "none"
+    )
+      continue;
+    for (const narrow of narrowings) {
+      const state = {
+        ...clearedState("custom"),
+        from: "2026-01-01",
+        to: "2026-05-31",
+        ...narrow,
+      };
+      const filters = {
+        ...NO_FILTERS,
+        ...narrow,
+        from: state.from,
+        to: state.to,
+      };
+      const pivot = pivotOf(
+        config,
+        applyFilters(history, filters),
+        filters,
+        history,
+      );
+      for (const slice of slicesOf(pivot)) {
+        const members = pivot.members(slice);
+        if (members.length === 0) continue;
+        const counted = isCounted(filters);
+        const names = [
+          ...new Set(
+            members
+              .flatMap((m) => m.units)
+              .flatMap((u) =>
+                u.person
+                  ? [u.person]
+                  : contributionsOn(u.article)
+                      .filter(counted)
+                      .map((c) => c.person),
+              ),
+          ),
+        ].sort();
+        const listed = onPeople(
+          pivotFilters(pivot, slice, state).people,
+          history,
+        )
+          .map((row) => row.name)
+          .sort();
+        if (JSON.stringify(listed) !== JSON.stringify(names))
+          wrong.push(`${JSON.stringify(config)} ${pivotKey(slice)}`);
+      }
+    }
+  }
+  expect(wrong).toEqual([]);
 });

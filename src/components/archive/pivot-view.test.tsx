@@ -247,3 +247,20 @@ test("a chart against the period before draws each category's pair, and their di
   });
   expect(within(panel).getAllByRole("listitem")).toHaveLength(2);
 });
+
+test("a section with nothing is a row of zeros, which opens nothing", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    "/articles?view=section-share&range=all",
+  );
+  render(<ArticlesPage />);
+  const table = await screen.findByRole("table");
+  const rabbithole = within(table).getByRole("row", { name: /^Rabbithole/ });
+  expect(
+    within(rabbithole)
+      .getAllByRole("cell")
+      .map((cell) => cell.textContent),
+  ).toEqual(["0%"]);
+  expect(within(rabbithole).queryByRole("button")).toBeNull();
+});

@@ -121,7 +121,7 @@ export function PivotView({
             {pivot.note}
           </p>
         )}
-        {pivot.rows.length === 0 ? (
+        {pivot.empty ? (
           <p
             data-sheet-anchor
             className="text-muted-foreground py-12 text-center text-sm"
@@ -306,7 +306,7 @@ function PivotTable({
     if (count === 0)
       return (
         <span className="text-muted-foreground/40 tabular-nums">
-          {content ?? 0}
+          {content ?? (share === null ? 0 : percentText(0))}
         </span>
       );
     const at = `${r},${c}`;

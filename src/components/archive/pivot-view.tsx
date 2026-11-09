@@ -426,7 +426,6 @@ function PivotTable({
     );
   };
 
-  /* a number that opens nothing: the sum beside it opens its list */
   /* the most per article of the rows, which a row's faint bar is against */
   const most = Math.max(
     0,
@@ -459,7 +458,7 @@ function PivotTable({
     button(r, c, slice, name, shareBeside ? pivot.count(slice).toLocaleString() : null, "tabular-nums");
   const companion = (r: number, slice: PivotSlice, name: string) => shareBeside
     ? button(r, last.column + 1, slice, `${name}, share`, percentText(pivot.share(slice) ?? 100), "tabular-nums")
-    : averageText(slice);
+    : button(r, last.column + 1, slice, `${name}, per article`, <>{averageText(slice)}<TooNew members={pivot.members(slice)} measure={pivot.grouped.measure} /></>, "tabular-nums");
 
   const label = (
     dimension: string,

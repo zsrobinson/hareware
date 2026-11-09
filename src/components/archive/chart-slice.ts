@@ -128,7 +128,9 @@ export function perArticle(
 /** "468 words per article", or nothing where none was counted */
 export function perArticleText(members: readonly Member[], measure: Measure) {
   const n = perArticle(members, measure);
-  return n === null ? "" : `${unitOf(n, measure)} per article`;
+  if (n === null) return "";
+  const amount = amountOf(members, measure);
+  return `${unitOf(amount.value, measure)} ÷ ${counted(amount.counted, "counted article", "counted articles")} ≈ ${n.toLocaleString()}`;
 }
 
 export const percentText = (value: number) =>

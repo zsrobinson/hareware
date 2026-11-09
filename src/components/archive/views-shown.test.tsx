@@ -191,7 +191,7 @@ test("Read by section is each section's views, and what they are per article", a
   /* 150 views over the two articles counted; the third is too new, which
      its sum is marked for, and which the caption says last */
   const [sum, average] = within(news.closest("tr")!).getAllByRole("cell");
-  expect(average!.textContent).toBe("75");
+  expect(average!.textContent).toBe("75†, 1 article too new to count yet");
   expect(sum!.textContent).toBe("150†, 1 article too new to count yet");
   expect(sum!.querySelector("sup")!.title).toBe(
     "1 article too new to count yet",
@@ -201,8 +201,9 @@ test("Read by section is each section's views, and what they are per article", a
   expect(caption).toMatch(/ · 1 article too new to count yet$/);
 
   /* and its list names it last, as not counted yet */
-  await userEvent.click(within(sum!).getByRole("button"));
+  await userEvent.click(within(average!).getByRole("button"));
   const list = await screen.findByRole("complementary", undefined, WAIT);
+  expect(list.textContent).toContain("150 views ÷ 2 counted articles ≈ 75");
   const items = within(list).getAllByRole("listitem");
   expect(items.at(-1)!.textContent).toMatch(
     /^A third invented headlinenot counted yet/,

@@ -18,6 +18,7 @@ import {
   membersAcross,
   periodIndex,
   periodOf,
+  sinceLabel,
   type Filters,
   type Grouped,
   type Member,
@@ -158,6 +159,42 @@ export function pivotOf(
         ...seen.map((h) => h.key),
       ]),
     ).map((key) => seen.find((h) => h.key === key) ?? { key, label: key });
+  /* an intake against a period at its grain, or periods since it */
+  const grain = grainOf(rows, columns);
+  const at = (key: string) => periodIndex(key, grain);
+  const intakeOf = (slice: PivotSlice) =>
+    rows === "joined" ? slice.row : columns === "joined" ? slice.column : null;
+  const other = rows === "joined" ? columns : rows;
+  const otherOf = (slice: PivotSlice) =>
+    rows === "joined" ? slice.column : slice.row;
+  /* the periods the range covers, up to today */
+  const bounds = {
+    first: filters.from ? at(periodOf(filters.from, grain).key) : -Infinity,
+    last: at(
+      periodOf(
+        [filters.to, today ?? easternDate(new Date().toISOString())]
+          .filter((d) => d !== undefined)
+          .sort()[0]!,
+        grain,
+      ).key,
+    ),
+  };
+  /* semesters since joining run through as many as the earliest intake
+     shown has had in the range, so one nobody came back in reads 0 rather
+     than going missing; `possible` blanks those an intake has not had */
+  const sinceThrough = (seen: Header[], intakes: Header[]): Header[] => {
+    const most = Math.max(
+      -1,
+      ...seen.map((h) => Number(h.key)),
+      ...intakes
+        .filter((h) => /^\d/.test(h.key))
+        .map((h) => bounds.last - at(h.key)),
+    );
+    return Array.from({ length: most + 1 }, (_, k) => ({
+      key: String(k),
+      label: sinceLabel(String(k)),
+    }));
+  };
   const averageOf = (row: string) =>
     perArticle(
       membersAcross(
@@ -168,7 +205,11 @@ export function pivotOf(
       count,
     );
   const ownHeaders =
-    rows === "section" ? sectionsOf(grouped.categories) : grouped.categories;
+    rows === "section"
+      ? sectionsOf(grouped.categories)
+      : rows === "since"
+        ? sinceThrough(grouped.categories, grouped.series)
+        : grouped.categories;
   /* one column of averages answers which row is most per article, so its
      rows read in that order, the most first; a row with none counted last */
   const rowHeaders =
@@ -187,7 +228,9 @@ export function pivotOf(
       ? []
       : columns === "section"
         ? sectionsOf(grouped.series)
-        : grouped.series;
+        : columns === "since"
+          ? sinceThrough(grouped.series, grouped.categories)
+          : grouped.series;
   if (columns === "person") {
     const sizes = new Map(
       grouped.series.map((s) => [
@@ -232,26 +275,6 @@ export function pivotOf(
             { row: null, column: ranges ? slice.column : null }
           : null;
 
-  /* an intake against a period at its grain, or periods since it */
-  const grain = grainOf(rows, columns);
-  const at = (key: string) => periodIndex(key, grain);
-  const intakeOf = (slice: PivotSlice) =>
-    rows === "joined" ? slice.row : columns === "joined" ? slice.column : null;
-  const other = rows === "joined" ? columns : rows;
-  const otherOf = (slice: PivotSlice) =>
-    rows === "joined" ? slice.column : slice.row;
-  /* the periods the range covers, up to today */
-  const bounds = {
-    first: filters.from ? at(periodOf(filters.from, grain).key) : -Infinity,
-    last: at(
-      periodOf(
-        [filters.to, today ?? easternDate(new Date().toISOString())]
-          .filter((d) => d !== undefined)
-          .sort()[0]!,
-        grain,
-      ).key,
-    ),
-  };
   const possible = (slice: PivotSlice) => {
     const intake = intakeOf(slice);
     const key = otherOf(slice);

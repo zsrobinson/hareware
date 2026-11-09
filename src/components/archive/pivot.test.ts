@@ -480,6 +480,59 @@ test("Retention counts each intake by semesters since it joined, blank where non
   ).toBe("intakes");
 });
 
+test("semesters since joining run through every one an intake has had, not only those someone came back in", () => {
+  /* Ada joined in Fall 2025 and never came back; Ben joined a year on */
+  const quiet = [
+    post(1, "2025-10-01", "News", [credit("writer", ["Ada Example"])]),
+    post(2, "2026-10-01", "Sports", [credit("writer", ["Ben Sample"])]),
+  ];
+  const retention = pivotOfView("retention");
+  const pivot = pivotOf(retention, quiet, NO_FILTERS, quiet, "2026-11-09");
+  expect(pivot.columns.map((c) => c.label)).toEqual(["Joined", "+1", "+2"]);
+  /* nobody came back, which is a 0, and Ben has had no semester since */
+  expect(pivotMatrix(pivot).map((line) => line.slice(1, 4))).toEqual([
+    ["Joined", "+1", "+2"],
+    ["1", "0", "0"],
+    ["0", "0", ""],
+    ["1", "", ""],
+    ["2", "0", "0"],
+  ]);
+
+  /* the same, the other way round */
+  const turned = pivotOf(
+    { ...retention, rows: "since", columns: "joined" },
+    quiet,
+    NO_FILTERS,
+    quiet,
+    "2026-11-09",
+  );
+  expect(turned.rows.map((r) => r.label)).toEqual(["Joined", "+1", "+2"]);
+  expect(turned.possible({ row: "2", column: "2025-2" })).toBe(true);
+  expect(turned.count({ row: "2", column: "2025-2" })).toBe(0);
+
+  /* a filter that leaves only the joining still keeps the semesters since */
+  const filters = { ...NO_FILTERS, sections: ["News"] };
+  const news = pivotOf(
+    retention,
+    applyFilters(quiet, filters),
+    filters,
+    quiet,
+    "2026-11-09",
+  );
+  expect(news.columns.map((c) => c.label)).toEqual(["Joined", "+1", "+2"]);
+
+  /* and a range that ends sooner, as many as it reaches */
+  const spring = { ...NO_FILTERS, to: "2026-05-31" };
+  const cut = pivotOf(
+    retention,
+    applyFilters(quiet, spring),
+    spring,
+    quiet,
+    "2026-11-09",
+  );
+  expect(cut.columns.map((c) => c.label)).toEqual(["Joined", "+1"]);
+});
+
 test("a range blanks the semesters since joining it does not cover", () => {
   const filters = { ...NO_FILTERS, from: "2026-06-01", to: "2026-12-31" };
   const pivot = pivotOf(

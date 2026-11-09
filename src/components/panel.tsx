@@ -91,27 +91,44 @@ const ROOMY = "(min-width: 1600px)";
 
 /**
  * Folds the sidebar to its icons while a side panel is open on a laptop
- * narrower than `ROOMY`, and unfolds it on closing, unless it was folded
- * already or someone has used its toggle since. The cookie is left alone:
+ * narrower than `ROOMY`, following the window across both widths while the
+ * panel stays open, and unfolds it on closing. A sidebar folded already is
+ * left as it is, and so is one whose toggle has been used while the panel
+ * was open: it is theirs until the panel closes. The cookie is left alone:
  * it is the sidebar as someone chose it.
  */
 function useFoldedSidebar() {
   useLayoutEffect(() => {
     const shell = document.getElementById("shell");
-    if (
-      !shell ||
-      shell.dataset.state !== "expanded" ||
-      window.matchMedia(PHONE).matches ||
-      window.matchMedia(ROOMY).matches
-    )
-      return;
-    shell.dataset.state = "collapsed";
-    /* the layout's toggle takes this away, and with it the unfolding */
-    shell.dataset.folded = "panel";
+    if (!shell) return;
+    const phone = window.matchMedia(PHONE);
+    const roomy = window.matchMedia(ROOMY);
+    let folded = false;
+    let chosen = false;
+    const reconcile = () => {
+      if (chosen) return;
+      const narrow = !phone.matches && !roomy.matches;
+      if (narrow && !folded && shell.dataset.state === "expanded") {
+        shell.dataset.state = "collapsed";
+        folded = true;
+      } else if (!narrow && folded) {
+        shell.dataset.state = "expanded";
+        folded = false;
+      }
+    };
+    const toggled = (event: MouseEvent) => {
+      if ((event.target as Element | null)?.closest?.("#sidebar-toggle"))
+        chosen = true;
+    };
+    reconcile();
+    phone.addEventListener("change", reconcile);
+    roomy.addEventListener("change", reconcile);
+    document.addEventListener("click", toggled, true);
     return () => {
-      if (shell.dataset.folded !== "panel") return;
-      delete shell.dataset.folded;
-      shell.dataset.state = "expanded";
+      phone.removeEventListener("change", reconcile);
+      roomy.removeEventListener("change", reconcile);
+      document.removeEventListener("click", toggled, true);
+      if (folded && !chosen) shell.dataset.state = "expanded";
     };
   }, []);
 }

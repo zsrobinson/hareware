@@ -85,7 +85,7 @@ test("a pen name said for someone is not a new name when printed again", async (
   const heading = await screen.findByRole("heading", { name: "New names" });
   const names = within(heading.closest("section")!)
     .getAllByRole("listitem")
-    .map((item) => item.querySelector("span")?.textContent);
+    .map((item) => item.querySelector("a")?.textContent);
   expect(names).toEqual(["Ida Imager"]);
 });
 

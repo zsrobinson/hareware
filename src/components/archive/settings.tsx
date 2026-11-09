@@ -19,7 +19,7 @@ import {
 } from "~/lib/credits/archive";
 import { ROLE_NAMES, ROLES, type Label, type Role } from "~/lib/credits/labels";
 import { same, type BylineOn } from "~/lib/credits/sheet";
-import { ArchiveShell, type ViewProps } from "./archive-shell";
+import { ArchiveShell, useTrail, type ViewProps } from "./archive-shell";
 import { Choice } from "./choice";
 import { articleHref } from "./open-row";
 import { useRemovals } from "./removals";
@@ -132,6 +132,7 @@ export function PenNames({
   archive: Archive;
   reloadButton: React.ReactNode;
 }) {
+  const trail = useTrail();
   const [pasting, setPasting] = useState(false);
   /* where focus goes once a pasted list is saved and its box has gone */
   const pasteButton = useRef<HTMLButtonElement>(null);
@@ -251,7 +252,7 @@ export function PenNames({
                     </>
                   )}
                   <a
-                    href={articleHref(o.postId)}
+                    href={articleHref(o.postId, trail)}
                     className="text-muted-foreground hover:text-foreground block truncate text-xs underline-offset-4 hover:underline"
                   >
                     {o.title ?? `Article ${o.postId}`} ·{" "}

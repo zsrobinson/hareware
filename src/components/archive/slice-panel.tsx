@@ -8,7 +8,8 @@ import { easternDate, type Measure, type Member } from "~/lib/credits/stats";
 import { cn } from "~/lib/utils";
 import { counted } from "./chart-slice";
 import { formatDate } from "./dates";
-import { articleHref, personHref } from "./open-row";
+import { useTrail } from "./archive-shell";
+import { articleHref, personHref, type Trail } from "./open-row";
 import { SectionName } from "./section-name";
 
 /* a long slice draws its first rows at once and the rest when asked */
@@ -65,7 +66,7 @@ function Rows({
   roles: Role[];
 }) {
   const [all, setAll] = useState(false);
-  const rows = rowsOf(measure, members, roles);
+  const rows = rowsOf(measure, members, roles, useTrail());
   if (rows.length === 0)
     return <p className="text-muted-foreground text-sm">Nothing here.</p>;
   const shown = all ? rows : rows.slice(0, FIRST);
@@ -89,7 +90,12 @@ function Rows({
 
 type Row = { key: string; content: ReactNode };
 
-function rowsOf(measure: Measure, members: Member[], roles: Role[]): Row[] {
+function rowsOf(
+  measure: Measure,
+  members: Member[],
+  roles: Role[],
+  trail: Trail,
+): Row[] {
   if (measure === "articles")
     return members
       .map((member) => member.units[0]!.article)
@@ -161,7 +167,7 @@ function rowsOf(measure: Measure, members: Member[], roles: Role[]): Row[] {
             <div className="text-muted-foreground text-xs">
               First:{" "}
               <a
-                href={articleHref(unit.article.id)}
+                href={articleHref(unit.article.id, trail)}
                 className="text-foreground underline-offset-4 hover:underline"
               >
                 {unit.article.title}
@@ -213,7 +219,7 @@ function rowsOf(measure: Measure, members: Member[], roles: Role[]): Row[] {
 function Title({ article }: { article: ArchiveArticle }) {
   return (
     <a
-      href={articleHref(article.id)}
+      href={articleHref(article.id, useTrail())}
       className="block font-medium underline-offset-4 hover:underline"
     >
       {article.title}
@@ -224,7 +230,7 @@ function Title({ article }: { article: ArchiveArticle }) {
 function Person({ name, className }: { name: string; className?: string }) {
   return (
     <a
-      href={personHref(name)}
+      href={personHref(name, useTrail())}
       className={cn(
         "block font-medium underline-offset-4 hover:underline",
         className,
@@ -254,6 +260,7 @@ function Meta({
 
 /** each person once, with every role of theirs: "Ada Example (Writing, Image)" */
 function Names({ names }: { names: { name: string; role?: Role }[] }) {
+  const trail = useTrail();
   if (names.length === 0) return <span>No credits</span>;
   const roles = new Map<string, Role[]>();
   for (const { name, role } of names) {
@@ -265,7 +272,7 @@ function Names({ names }: { names: { name: string; role?: Role }[] }) {
     <span key={name}>
       {index > 0 && ", "}
       <a
-        href={personHref(name)}
+        href={personHref(name, trail)}
         className="text-foreground underline-offset-4 hover:underline"
       >
         {name}

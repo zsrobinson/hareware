@@ -195,11 +195,21 @@ export function readState(search: string, fallback: Preset): FilterState {
   };
 }
 
-/** writes the filters into `params`, leaving a view's own parameters alone */
+/**
+ * What the search box looks at: on a page of articles, what they print; on
+ * People's table, a person's name and the bylines they are credited as. Who
+ * someone really is goes in the people filter, so a name searched for never
+ * counts the others on that person's articles as theirs.
+ */
+export type Searching = "articles" | "people";
+
+/** writes the filters into `params`, leaving a view's own parameters alone;
+    a null `fallback` names the range whatever it is, as a link to another
+    page must */
 export function writeState(
   state: FilterState,
   params: URLSearchParams,
-  fallback: Preset,
+  fallback: Preset | null,
 ) {
   const set = (key: string, value: string | undefined) =>
     value ? params.set(key, value) : params.delete(key);

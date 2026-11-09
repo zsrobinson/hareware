@@ -18,7 +18,12 @@ import {
   type Filters,
   type PersonRow,
 } from "~/lib/credits/stats";
-import { ArchiveShell, ToolbarFilters, type ViewProps } from "./archive-shell";
+import {
+  ArchiveShell,
+  ToolbarFilters,
+  useTrail,
+  type ViewProps,
+} from "./archive-shell";
 import { Choice } from "./choice";
 import { formatDate, formatMonth } from "./dates";
 import {
@@ -159,7 +164,7 @@ function People({ archive, filters, filterNote }: ViewProps) {
   const phone = useIsPhone();
   const [minimum, setMinimum] = useChoice("min", MINIMUM_IDS, "1");
   const [sorting, setSorting] = useSort(COLUMNS);
-  const openRow = useOpenRow("person");
+  const openRow = useOpenRow("open", "person");
   const { open } = openRow;
 
   /* names to suggest and check against ignore the filters: a person is
@@ -276,6 +281,7 @@ function PersonPanel({
   archive: Archive;
   onClose: () => void;
 }) {
+  const trail = useTrail();
   const byId = new Map(archive.articles.map((a) => [a.id, a]));
   const articles = person.articleIds
     .map((id) => byId.get(id))
@@ -368,7 +374,7 @@ function PersonPanel({
               <li key={article.id} className="space-y-0.5 py-2.5">
                 {/* the article's panel, where its credits are set */}
                 <a
-                  href={articleHref(article.id)}
+                  href={articleHref(article.id, trail)}
                   className="font-medium underline-offset-4 hover:underline"
                 >
                   {article.title}

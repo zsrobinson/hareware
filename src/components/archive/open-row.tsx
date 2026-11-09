@@ -6,7 +6,9 @@
   the time the panel closes and focus has nowhere to go back to. The name in
   each row reads the open row from here instead.
 
-  The address holds it (`?person=`), so a reload keeps it open. On a phone
+  The address holds it as `?open=`, so a reload keeps it open: a person's
+  name on People, a post id on Articles. `?people=` is a filter, and a name
+  there counts that person alone; `?open=` only opens their panel. On a phone
   the details are a page of their own: opening one is a step in the history,
   so the system Back gesture returns to the list, and the list behind is
   inert while it is covered.
@@ -23,6 +25,7 @@ import {
 } from "react";
 import { useIsPhone } from "~/components/panel";
 import { cn } from "~/lib/utils";
+import { writeState, type FilterState, type Searching } from "./filters";
 
 type OpenRow = {
   open: string | null;
@@ -46,17 +49,61 @@ function address(param: string, key: string | null): URL {
   return url;
 }
 
+/** the filters on screen, which a link to another archive page takes along */
+export type Trail = { state: FilterState; searching: Searching };
+
+/* what each page's search looks at as a link lands on it */
+const SEARCHED: Record<"articles" | "people" | "problems", Searching> = {
+  articles: "articles",
+  people: "people",
+  problems: "articles",
+};
+
+/**
+ * A link to an archive page on this one's filters. It names the range
+ * whatever it is, since each page opens on its own; and it keeps a search
+ * only where it looks at the same thing, as a title searched for on
+ * Articles is not a name on People.
+ */
+export function archiveHref(
+  page: keyof typeof SEARCHED,
+  { state, searching }: Trail,
+  open?: string,
+): string {
+  const params = new URLSearchParams();
+  writeState(
+    searching === SEARCHED[page] ? state : { ...state, search: "" },
+    params,
+    null,
+  );
+  if (open !== undefined) params.set("open", open);
+  return `/${page}?${params}`;
+}
+
 /** where an article's panel opens, from any page */
-export const articleHref = (postId: number) => `/articles?article=${postId}`;
+export const articleHref = (postId: number, trail: Trail) =>
+  archiveHref("articles", trail, String(postId));
 
 /** where a person's panel opens, from any page */
-export const personHref = (name: string) =>
-  `/people?person=${encodeURIComponent(name)}`;
+export const personHref = (name: string, trail: Trail) =>
+  archiveHref("people", trail, name);
 
-/** which row is open, kept in the address under `param`; drawn once hydrated */
-export function useOpenRow(param: string): OpenRow {
+/**
+ * Which row is open, kept in the address as `?open=`; drawn once hydrated.
+ * `legacy` is the name a page's links used before (`person`, `article`),
+ * which still opens the row, and is renamed in the address.
+ */
+export function useOpenRow(param: string, legacy?: string): OpenRow {
   const phone = useIsPhone();
-  const [open, setOpen] = useState<string | null>(() => read(param));
+  const [open, setOpen] = useState<string | null>(
+    () => read(param) ?? (legacy ? read(legacy) : null),
+  );
+  useEffect(() => {
+    if (!legacy || read(legacy) === null) return;
+    const url = address(param, read(param) ?? read(legacy));
+    url.searchParams.delete(legacy);
+    window.history.replaceState(window.history.state, "", url);
+  }, [param, legacy]);
   /* whether this session pushed the entry we are on, which Back takes away */
   const onStep = useRef(false);
 

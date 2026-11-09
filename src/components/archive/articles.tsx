@@ -6,7 +6,7 @@ import {
   UserRoundPlusIcon,
   XIcon,
 } from "lucide-react";
-import { Fragment, useId, useMemo, useState } from "react";
+import { Fragment, useId, useMemo, useState, type ReactNode } from "react";
 import { DataTable, sortable } from "~/components/data-table";
 import { FieldNote, FieldRow, FieldRows } from "~/components/field-row";
 import { SidePanel, useIsPhone } from "~/components/panel";
@@ -24,10 +24,16 @@ import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import { peopleOf } from "~/lib/credits/person";
 import { same } from "~/lib/credits/sheet";
 import { applyFilters, easternDate } from "~/lib/credits/stats";
-import { ArchiveShell, type ViewProps } from "./archive-shell";
+import { ArchiveShell, useTrail, type ViewProps } from "./archive-shell";
 import { formatDate } from "./dates";
 import { PeoplePicker, PersonPicker } from "./person-picker";
-import { OpenRowProvider, RowDetails, RowOpener, useOpenRow } from "./open-row";
+import {
+  archiveHref,
+  OpenRowProvider,
+  RowDetails,
+  RowOpener,
+  useOpenRow,
+} from "./open-row";
 import { useSort } from "./page-state";
 import { SectionName } from "./section-name";
 import { ShellTableControls } from "./table-controls";
@@ -73,6 +79,29 @@ function Contributors({ credits }: { credits: Credit[] }) {
   );
 }
 
+/* the article on Problems, on these filters; a component of its own, so the
+   columns need not change with them (see open-row.tsx) */
+function ProblemsLink({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  const trail = useTrail();
+  return (
+    <a
+      href={archiveHref("problems", {
+        ...trail,
+        state: { ...trail.state, search: title },
+      })}
+      className="text-muted-foreground block text-xs hover:underline"
+    >
+      {children}
+    </a>
+  );
+}
+
 /* what a narrower table leaves out until someone asks for it, so none of
    it is cut off at the edge: beside a panel, and on a phone */
 const BESIDE_PANEL = ["section", "image", "other"];
@@ -86,7 +115,7 @@ const ON_PHONE = ["writer", ...BESIDE_PANEL];
 
 function Articles({ archive, filters, filterNote }: ViewProps) {
   const phone = useIsPhone();
-  const openRow = useOpenRow("article");
+  const openRow = useOpenRow("open", "article");
   const editing = openRow.open === null ? null : Number(openRow.open);
 
   const rows = useMemo(
@@ -136,12 +165,9 @@ function Articles({ archive, filters, filterNote }: ViewProps) {
                 {row.original.title}
               </RowOpener>
               {problems.length > 0 && (
-                <a
-                  href={`/problems?q=${encodeURIComponent(row.original.title)}`}
-                  className="text-muted-foreground block text-xs hover:underline"
-                >
+                <ProblemsLink title={row.original.title}>
                   {problems.map((p) => PROBLEM_KINDS[p.kind]).join(" · ")}
-                </a>
+                </ProblemsLink>
               )}
             </div>
           );

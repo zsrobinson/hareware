@@ -43,7 +43,7 @@ as printed. The Sheet also holds the credit labels, so a new label
 is made from the signed-in pages; a save rewrites only the rows it means to.
 The Sheet is owned by the club's account and reached by a service account; the
 mapping never reaches WordPress, the repository, the log or a public page.
-A real name may sit in a signed-in page's address (`?people=`, `?person=`):
+A real name may sit in a signed-in page's address (`?people=`, `?open=`):
 those links and the files the pages download are for the board, and stay
 inside it.
 

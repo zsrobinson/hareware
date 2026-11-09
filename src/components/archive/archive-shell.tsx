@@ -60,7 +60,9 @@ import {
   writeState,
   type FilterState,
   type Preset,
+  type Searching,
 } from "./filters";
+import type { Trail } from "./open-row";
 import { useInAddress } from "./page-state";
 import { SectionDot } from "./section-name";
 
@@ -85,6 +87,14 @@ const SlotsContext = createContext<Slots>({
    own reset, added while the group has something to reset */
 type AddReset = (reset: () => void) => () => void;
 const ResetContext = createContext<AddReset>(() => () => {});
+
+const TrailContext = createContext<Trail>({
+  state: clearedState("all"),
+  searching: "articles",
+});
+
+/** the filters on screen, for a link to another archive page to take along */
+export const useTrail = () => useContext(TrailContext);
 
 /** a view's controls at the end of the toolbar, after a divider (laptop) */
 export function ToolbarEnd({ children }: { children: ReactNode }) {
@@ -199,14 +209,6 @@ export type ViewProps = {
       at the end of its first row. Null where the shell has placed it */
   reloadButton: ReactNode;
 };
-
-/**
- * What the search box looks at: on a page of articles, what they print; on
- * People, a person's name and the bylines they are credited as. Who someone
- * really is goes in the people filter, so a name searched for never counts
- * the others on that person's articles as theirs.
- */
-export type Searching = "articles" | "people";
 
 const SEARCHES: Record<Searching, { placeholder: string; note: string }> = {
   articles: {
@@ -389,6 +391,7 @@ function Ready({
   );
 
   const filters = useMemo(() => toFilters(state, period), [state, period]);
+  const trail = useMemo(() => ({ state, searching }), [state, searching]);
 
   /* stable, so a view that listens for something to refresh on (Problems,
      on coming back from WordPress) is not re-subscribed on every render */
@@ -481,48 +484,52 @@ function Ready({
   return (
     <SlotsContext.Provider value={slots}>
       <ResetContext.Provider value={addReset}>
-        {/* page-wide, so in the title row beside the h1 */}
-        {!phone && <PageActions>{freshness(false)}</PageActions>}
-        <div className="space-y-6">
-          <div ref={setAbove} className="empty:hidden" />
-          {showFilters && (
-            <FilterBar
-              archive={archive}
-              state={state}
-              setState={setState}
-              searchPlaceholder={SEARCHES[searching].placeholder}
-              roleFilter={roleFilter}
-              defaultPreset={defaultPreset}
-              reloadButton={inToolbar && freshness(true)}
-              resets={resets}
-              toolbarSlot={setToolbar}
-              sheetSlot={setSheet}
-              filtersSlot={setFilters}
-              rowSlot={setRow}
-            />
-          )}
-          {showFilters && (
-            <PeopleFilter
-              archive={archive}
-              state={state}
-              setState={setState}
-              suggest={searching === "articles"}
-            />
-          )}
-          {showFilters && <SheetNotice archive={archive} />}
-          <div className={cn("transition-opacity", refreshing && "opacity-60")}>
-            {children({
-              archive,
-              filters,
-              refresh: refreshNow,
-              refreshing,
-              filterNote: describeFilters(state, period, searching),
-              filterState: state,
-              setFilterState: setState,
-              reloadButton: inView ? freshness(true) : null,
-            })}
+        <TrailContext.Provider value={trail}>
+          {/* page-wide, so in the title row beside the h1 */}
+          {!phone && <PageActions>{freshness(false)}</PageActions>}
+          <div className="space-y-6">
+            <div ref={setAbove} className="empty:hidden" />
+            {showFilters && (
+              <FilterBar
+                archive={archive}
+                state={state}
+                setState={setState}
+                searchPlaceholder={SEARCHES[searching].placeholder}
+                roleFilter={roleFilter}
+                defaultPreset={defaultPreset}
+                reloadButton={inToolbar && freshness(true)}
+                resets={resets}
+                toolbarSlot={setToolbar}
+                sheetSlot={setSheet}
+                filtersSlot={setFilters}
+                rowSlot={setRow}
+              />
+            )}
+            {showFilters && (
+              <PeopleFilter
+                archive={archive}
+                state={state}
+                setState={setState}
+                suggest={searching === "articles"}
+              />
+            )}
+            {showFilters && <SheetNotice archive={archive} />}
+            <div
+              className={cn("transition-opacity", refreshing && "opacity-60")}
+            >
+              {children({
+                archive,
+                filters,
+                refresh: refreshNow,
+                refreshing,
+                filterNote: describeFilters(state, period, searching),
+                filterState: state,
+                setFilterState: setState,
+                reloadButton: inView ? freshness(true) : null,
+              })}
+            </div>
           </div>
-        </div>
+        </TrailContext.Provider>
       </ResetContext.Provider>
     </SlotsContext.Provider>
   );

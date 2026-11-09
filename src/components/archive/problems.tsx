@@ -16,9 +16,9 @@ import {
 } from "~/lib/credits/archive";
 import { peopleOf } from "~/lib/credits/person";
 import { applyFilters, NO_FILTERS } from "~/lib/credits/stats";
-import { ArchiveShell, type ViewProps } from "./archive-shell";
+import { ArchiveShell, useTrail, type ViewProps } from "./archive-shell";
 import { formatDate } from "./dates";
-import { articleHref } from "./open-row";
+import { archiveHref, articleHref, personHref } from "./open-row";
 import { useRemovals } from "./removals";
 import { SectionName } from "./section-name";
 import { useEdit } from "./use-edit";
@@ -188,6 +188,7 @@ const NEW_FOR_DAYS = 30;
  * this is where they look. It needs no answer, and a name leaves on its own.
  */
 function NewNames({ archive }: { archive: ViewProps["archive"] }) {
+  const trail = useTrail();
   const names = useMemo(() => {
     /* counted from the read, so the list holds still while the page is open */
     const since =
@@ -233,9 +234,14 @@ function NewNames({ archive }: { archive: ViewProps["archive"] }) {
             key={name}
             className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 px-4 py-2"
           >
-            <span className="font-medium">{name}</span>
             <a
-              href={articleHref(article.id)}
+              href={personHref(name, trail)}
+              className="font-medium underline-offset-4 hover:underline"
+            >
+              {name}
+            </a>
+            <a
+              href={articleHref(article.id, trail)}
               className="text-muted-foreground hover:text-foreground min-w-0 truncate underline-offset-4 hover:underline"
             >
               {article.title} · {formatDate(article.publishedAt)}
@@ -258,6 +264,7 @@ function ArticleProblems({
   ignoreRef: (element: HTMLElement | null) => void;
   onLeave: () => void;
 }) {
+  const trail = useTrail();
   return (
     <li className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
       <div className="min-w-0 flex-1 space-y-2">
@@ -289,7 +296,7 @@ function ArticleProblems({
               )}
               {problem.kind === "pen-name-again" && (
                 <a
-                  href={articleHref(article.id)}
+                  href={articleHref(article.id, trail)}
                   className="text-muted-foreground hover:text-foreground ml-2 underline underline-offset-4"
                 >
                   Say who
@@ -341,6 +348,7 @@ function PairRow({
   onSeparate: () => void;
   separateRef: (element: HTMLElement | null) => void;
 }) {
+  const trail = useTrail();
   return (
     <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-2 text-sm">
       <span>
@@ -348,7 +356,10 @@ function PairRow({
           <span key={name}>
             {i > 0 && <span className="text-muted-foreground"> and </span>}
             <a
-              href={`/articles?${new URLSearchParams({ people: name })}`}
+              href={archiveHref("articles", {
+                ...trail,
+                state: { ...trail.state, people: [name] },
+              })}
               className="font-medium underline-offset-4 hover:underline"
             >
               {name}

@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { ArticlesPage } from "./articles";
+import { clearedState } from "./filters";
+import { archiveHref, personHref } from "./open-row";
 import { PeoplePage } from "./people";
 
 /*
@@ -85,3 +87,47 @@ test.each<[string, () => ReactNode, string]>([
     expect(opener.isConnected).toBe(true);
   },
 );
+
+test("a link to another page names the range, and keeps a search only where it means the same", () => {
+  const state = {
+    ...clearedState("3m"),
+    roles: ["image" as const],
+    search: "moon",
+  };
+  const link = (href: string) => new URL(href, "https://x.test");
+
+  /* each page opens on its own range, so the one on screen is said */
+  const person = link(
+    personHref("Ada Example", { state, searching: "articles" }),
+  );
+  expect(person.pathname).toBe("/people");
+  expect(person.searchParams.get("range")).toBe("3m");
+  expect(person.searchParams.get("roles")).toBe("image");
+  expect(person.searchParams.get("open")).toBe("Ada Example");
+  /* a title searched for is not a name on People */
+  expect(person.searchParams.has("q")).toBe(false);
+
+  const all = link(
+    archiveHref("articles", {
+      state: clearedState("all"),
+      searching: "articles",
+    }),
+  );
+  expect(all.searchParams.get("range")).toBe("all");
+  expect(
+    link(
+      archiveHref("problems", { state, searching: "articles" }),
+    ).searchParams.get("q"),
+  ).toBe("moon");
+});
+
+test("a link from before opens the person it names, under the new name", async () => {
+  window.history.replaceState(null, "", "/people?person=Ben+Sample");
+  render(<PeoplePage />);
+  expect(
+    await screen.findByRole("complementary", { name: "Ben Sample" }),
+  ).toBeTruthy();
+  const params = new URLSearchParams(window.location.search);
+  expect(params.get("open")).toBe("Ben Sample");
+  expect(params.has("person")).toBe(false);
+});

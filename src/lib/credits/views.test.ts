@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { buildArchive, type SourcePost } from "./archive";
 import { DEFAULT_LABELS } from "./labels";
-import { withViews } from "./views";
+import { thinText, thinViews, withViews } from "./views";
 
 const post = (id: number, publishedAt: string): SourcePost => ({
   id,
@@ -89,4 +89,34 @@ test("views that could not be read are unavailable on every article, never zero"
     reason: "WordPress stats are busy",
   });
   for (const v of views(failed)) expect(v).toEqual({ status: "unavailable" });
+});
+
+/* read on 9 November; a month before is 10 October */
+const READ = { status: "read", fetchedAt: "2026-11-09T16:00:00Z" } as const;
+const old = (total: number) => ({
+  publishedAt: "2026-09-01T10:00:00Z",
+  views: { status: "counted", total, byMonth: {} } as const,
+});
+
+test("a count of views looks short once three, and a tenth, of its month-old articles have none", () => {
+  const of = (zeros: number, read: number) => [
+    ...Array.from({ length: zeros }, () => old(0)),
+    ...Array.from({ length: read }, () => old(50)),
+  ];
+
+  expect(thinViews(of(2, 0), READ)).toBeNull();
+  expect(thinViews(of(3, 27), READ)).toEqual({ none: 3, of: 30 });
+  expect(thinViews(of(3, 28), READ)).toBeNull();
+  expect(thinText({ none: 14, of: 32 })).toBe(
+    "14 of 32 articles have no recorded views; Jetpack may have left some out.",
+  );
+});
+
+test("an article under a month old, or without views read, is no sign of a short count", () => {
+  const fresh = { ...old(0), publishedAt: "2026-10-20T10:00:00Z" };
+  const unread = { ...old(0), views: { status: "unavailable" } as const };
+
+  expect(thinViews([fresh, fresh, fresh, fresh], READ)).toBeNull();
+  expect(thinViews([unread, unread, unread, unread], READ)).toBeNull();
+  expect(thinViews([old(0), old(0), old(0)], { status: "reading" })).toBeNull();
 });

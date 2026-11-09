@@ -11,7 +11,7 @@
 */
 
 import type { PostViews } from "~/lib/services/wordpress/stats";
-import type { Archive } from "./archive";
+import type { Archive, ArchiveArticle } from "./archive";
 
 /* the browser's clock and WordPress's need not agree, so an article this
    close to the ask is unavailable for a while rather than wrongly zero */
@@ -76,3 +76,38 @@ export function withViews(archive: Archive, read: ViewsRead): Archive {
     }),
   };
 }
+
+/* an answer this thin is likelier short than true: on 2026-11-09 Jetpack's
+   counted every one of the site's 419 posts, so a month-old article read by
+   nobody is rare, and many of them is a count that left some out */
+const SETTLED_MS = 30 * 24 * 60 * 60_000;
+const THIN_AT_LEAST = 3;
+const THIN_SHARE = 0.1;
+
+/**
+ * Whether a count of views on these articles looks short: how many of those
+ * published over a month before the read have no recorded views, of how
+ * many, once that is at least three and a tenth of them; else null. Zero is
+ * what Jetpack answered for them, so it is still drawn, and this is said
+ * under it rather than in its place
+ */
+export function thinViews(
+  articles: readonly Pick<ArchiveArticle, "publishedAt" | "views">[],
+  summary: ViewsSummary,
+): { none: number; of: number } | null {
+  if (summary.status !== "read") return null;
+  const settled = Date.parse(summary.fetchedAt) - SETTLED_MS;
+  let of = 0;
+  let none = 0;
+  for (const { publishedAt, views } of articles) {
+    if (views.status !== "counted" || !(Date.parse(publishedAt) < settled))
+      continue;
+    of++;
+    if (views.total === 0) none++;
+  }
+  return none >= THIN_AT_LEAST && none >= of * THIN_SHARE ? { none, of } : null;
+}
+
+/** "14 of 32 articles have no recorded views; Jetpack may have left some out." */
+export const thinText = ({ none, of }: { none: number; of: number }) =>
+  `${none} of ${of} articles have no recorded views; Jetpack may have left some out.`;

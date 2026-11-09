@@ -39,6 +39,7 @@ import { SectionName } from "./section-name";
 import { ShellTableControls } from "./table-controls";
 import { useEdit } from "./use-edit";
 import { COLUMN_NAMES, type ColumnId } from "./views";
+import { ThinViews } from "./views-notes";
 
 const EDIT_IN_WORDPRESS = (id: number) =>
   `https://theumdhare.com/wp-admin/post.php?post=${id}&action=edit`;
@@ -291,6 +292,9 @@ function Articles({
             ]
               .filter(Boolean)
               .join(" · ")}
+            {shown.includes("views") && (
+              <ThinViews articles={rows} summary={archive.views} />
+            )}
           </span>
         }
       />

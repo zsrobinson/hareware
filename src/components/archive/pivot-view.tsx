@@ -49,6 +49,7 @@ import {
 } from "./pivot";
 import { SectionName } from "./section-name";
 import { SlicePanel } from "./slice-panel";
+import { ThinViews } from "./views-notes";
 
 export type PivotViewProps = ViewProps & {
   config: PivotConfig;
@@ -141,6 +142,14 @@ export function PivotView({
               .filter(Boolean)
               .join(" · ")}
           </div>
+          {pivot.grouped.measure === "views" && (
+            <ThinViews
+              articles={pivot
+                .members({ row: null, column: null })
+                .map((m) => m.units[0]!.article)}
+              summary={archive.views}
+            />
+          )}
         </figcaption>
         {pivot.note && (
           <p className="bg-muted/50 rounded-lg border px-3 py-2 text-sm">

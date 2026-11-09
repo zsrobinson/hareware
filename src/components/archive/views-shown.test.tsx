@@ -271,3 +271,32 @@ test("filters that leave only articles without views read say so, and draw nothi
     await screen.findByText(/^None of this article's views/, undefined, WAIT),
   ).toBeTruthy();
 });
+
+/* four articles over a month old, and Jetpack answered for one of them */
+test("a count of views that looks short says so under its caption", async () => {
+  stubArchive({
+    posts: [1, 2, 3, 4].map((id) => ({
+      id,
+      title: `Invented headline ${id}`,
+      publishedAt: daysAgo(40 + id),
+      paragraphs: ["Article by: Ada Example"],
+      categoryIds: [1],
+    })),
+    categories: [[1, "News"]],
+    views: { 1: 100 },
+  });
+  window.history.replaceState(
+    null,
+    "",
+    "/articles?view=read-by-section&range=all",
+  );
+  render(<ArticlesPage />);
+
+  expect(
+    await screen.findByText(
+      "3 of 4 articles have no recorded views; Jetpack may have left some out.",
+      undefined,
+      WAIT,
+    ),
+  ).toBeTruthy();
+});

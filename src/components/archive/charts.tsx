@@ -81,6 +81,7 @@ import {
 } from "./compare";
 import { RowDetails, type OpenRow } from "./open-row";
 import { SlicePanel } from "./slice-panel";
+import { ThinViews } from "./views-notes";
 
 /** what a chart counts, as its one series and its table's column are named */
 const measureName = (measure: Measure) =>
@@ -248,6 +249,14 @@ export function ChartView({
               .filter(Boolean)
               .join(" · ")}
           </div>
+          {grouped.measure === "views" && (
+            <ThinViews
+              articles={drawnMembers(grouped, hidden).map(
+                (m) => m.units[0]!.article,
+              )}
+              summary={archive.views}
+            />
+          )}
         </figcaption>
         {note && (
           <p className="bg-muted/50 rounded-lg border px-3 py-2 text-sm">

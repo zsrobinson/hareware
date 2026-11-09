@@ -6,7 +6,7 @@
 
 import type { ArchiveArticle, Credit } from "~/lib/credits/archive";
 import { contributionsOn } from "~/lib/credits/person";
-import { applyFilters, isCounted } from "~/lib/credits/stats";
+import { applyFilters, isCounted, people } from "~/lib/credits/stats";
 import { toFilters, type FilterState } from "./filters";
 
 export const credit = (role: Credit["role"], names: string[]): Credit => ({
@@ -88,4 +88,14 @@ export function listed(state: FilterState) {
       .map((c) => `${c.article.id} ${c.role} ${c.person}`)
       .sort(),
   };
+}
+
+/* who People lists on these filters, and what it counts of each */
+export function onPeople(state: FilterState, articles = archive) {
+  const filters = toFilters(state);
+  return people(
+    applyFilters(articles, { ...filters, search: undefined }),
+    filters,
+    articles,
+  );
 }

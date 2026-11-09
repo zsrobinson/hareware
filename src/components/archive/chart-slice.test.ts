@@ -6,7 +6,6 @@ import {
   grainOf,
   isPeriod,
   NO_FILTERS,
-  people,
   periodOf,
   type Dimension,
   type Period,
@@ -28,7 +27,7 @@ import {
   type ChartConfig,
 } from "./chart-config";
 import type { ArchiveArticle } from "~/lib/credits/archive";
-import { archive, credit, listed, post } from "./invented-archive";
+import { archive, credit, listed, onPeople, post } from "./invented-archive";
 import { COMPARES } from "./compare";
 import { VIEWS } from "./views";
 
@@ -463,16 +462,6 @@ test("Headcount's caption counts each person once, which its columns do not", ()
   expect(chartCount(grouped, [])).toBe("13 different people");
   expect(columns).toBeGreaterThan(13);
 });
-
-/* who People lists on these filters, and what it counts of each */
-function onPeople(state: FilterState, articles = archive) {
-  const filters = toFilters(state);
-  return people(
-    applyFilters(articles, { ...filters, search: undefined }),
-    filters,
-    articles,
-  );
-}
 
 test("every mark, as filters, lists on a table exactly what it counts", () => {
   const state = clearedState("all");

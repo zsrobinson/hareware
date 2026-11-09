@@ -13,7 +13,7 @@ import {
 } from "~/lib/credits/stats";
 import { COUNTS, TOPS } from "./chart-config";
 import { clearedState } from "./filters";
-import { archive, listed } from "./invented-archive";
+import { archive, listed, onPeople } from "./invented-archive";
 import {
   DIMENSIONS,
   PIVOT_VALUES,
@@ -265,11 +265,16 @@ test("every cell and total, as filters, lists on a table exactly what it counts"
       const units = members.flatMap((m) => m.units);
       const seeing = pivotFilters(pivot, slice, state);
       let ok: boolean;
+      const names = [...new Set(units.map((u) => u.person!))].sort();
       if (pivot.grouped.measure === "newcomers")
-        ok = same(
-          [...seeing.people.people].sort(),
-          [...new Set(units.map((u) => u.person!))].sort(),
-        );
+        ok =
+          same(listed(seeing.articles).articles, articleIds(units)) &&
+          same(
+            onPeople(seeing.people)
+              .map((row) => row.name)
+              .sort(),
+            names,
+          );
       else {
         const table = listed(seeing.articles);
         ok =
@@ -280,10 +285,23 @@ test("every cell and total, as filters, lists on a table exactly what it counts"
             articleIds(units),
           ) &&
           (pivot.grouped.measure === "articles" ||
-            same(
-              table.contributions,
-              units.map((u) => `${u.article.id} ${u.role} ${u.person}`).sort(),
-            ));
+            /* and People has exactly its people, with exactly its contributions */
+            (same(
+              onPeople(seeing.people)
+                .map((row) => row.name)
+                .sort(),
+              names,
+            ) &&
+              onPeople(seeing.people).reduce(
+                (n, row) => n + row.contributions,
+                0,
+              ) === units.length &&
+              same(
+                table.contributions,
+                units
+                  .map((u) => `${u.article.id} ${u.role} ${u.person}`)
+                  .sort(),
+              )));
       }
       if (!ok) wrong.push(`${JSON.stringify(config)} ${pivotKey(slice)}`);
       checked++;

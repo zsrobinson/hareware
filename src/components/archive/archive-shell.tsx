@@ -34,6 +34,7 @@ import {
 } from "~/components/ui/dropdown-menu";
 import { Input } from "~/components/ui/input";
 import type { Archive } from "~/lib/credits/archive";
+import type { ViewsSummary } from "~/lib/credits/views";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import { peopleOf } from "~/lib/credits/person";
 import { sortSections } from "~/lib/credits/sections";
@@ -373,7 +374,15 @@ function Shell({
 }
 
 function Ready({
-  state: { archive, sheetReadAt, checking, checkFailed, refresh: reread },
+  state: {
+    archive,
+    sheetReadAt,
+    checking,
+    checkFailed,
+    viewsChecking,
+    viewsCheckFailed,
+    refresh: reread,
+  },
   children,
   searching,
   showFilters,
@@ -497,6 +506,11 @@ function Ready({
         checkFailed={!refreshing && checkFailed !== null}
         onRefresh={refreshNow}
         compact={compact}
+        views={{
+          summary: archive.views,
+          checking: viewsChecking,
+          failed: viewsCheckFailed !== null,
+        }}
       />
     );
   /* a phone keeps the title row for the h1 alone, so the reload sits at the
@@ -538,6 +552,7 @@ function Ready({
               />
             )}
             {showFilters && <SheetNotice archive={archive} />}
+            {showFilters && <ViewsNotice archive={archive} />}
             <div
               className={cn("transition-opacity", refreshing && "opacity-60")}
             >
@@ -616,6 +631,29 @@ const SOURCES: Record<Reload, { name: string; checking: string }> = {
   sheet: { name: "the Sheet", checking: "Reading the Sheet…" },
 };
 
+/**
+ * How old the views beside the articles are, read on their own and able to
+ * fail on their own: being read, unreadable, being checked, not checked, or
+ * their age. Reload reads them again with WordPress
+ */
+function viewsStatus(
+  views: { summary: ViewsSummary; checking: boolean; failed: boolean },
+  now: number,
+): { text: string; warn: boolean } {
+  const { summary } = views;
+  if (summary.status === "reading")
+    return { text: "Reading views…", warn: false };
+  if (summary.status === "unavailable")
+    return { text: "Views unavailable", warn: true };
+  if (views.checking) return { text: "Checking views…", warn: false };
+  if (views.failed)
+    return {
+      text: `Couldn't check views. As of ${ago(summary.fetchedAt, now)}`,
+      warn: true,
+    };
+  return { text: `Views ${ago(summary.fetchedAt, now)}`, warn: false };
+}
+
 function Freshness({
   source,
   readAt,
@@ -623,6 +661,7 @@ function Freshness({
   checkFailed,
   onRefresh,
   compact,
+  views,
 }: {
   source: Reload;
   readAt: string;
@@ -631,16 +670,21 @@ function Freshness({
   onRefresh: () => void;
   /** the button alone, the age in its tooltip (a phone's search row) */
   compact: boolean;
+  /** Jetpack's views, beside WordPress's articles */
+  views?: { summary: ViewsSummary; checking: boolean; failed: boolean };
 }) {
   const now = useNow();
   const { name, checking: checkingText } = SOURCES[source];
   const label = `Reload from ${name}`;
-  const status = checking
+  const own = checking
     ? checkingText
     : checkFailed
       ? `Couldn't check ${name}. As of ${ago(readAt, now)}`
       : `Updated ${ago(readAt, now)}`;
-  const warn = checkFailed && "text-amber-700 dark:text-amber-400";
+  const read = views && viewsStatus(views, now);
+  const status = read ? `${own} · ${read.text}` : own;
+  const warn =
+    (checkFailed || read?.warn) && "text-amber-700 dark:text-amber-400";
 
   return (
     /* the last thing in its row lines its icon up with the content's edge */
@@ -758,6 +802,18 @@ function PeopleFilter({
         </Button>
       ))}
     </div>
+  );
+}
+
+/* views that could not be read are not zero, and say why once, under the
+   filters; a stored count that could not be checked says so in Freshness */
+function ViewsNotice({ archive }: { archive: Archive }) {
+  if (archive.views.status !== "unavailable") return null;
+  return (
+    <p className="text-muted-foreground border-l-2 border-amber-500/60 pl-3 text-sm">
+      Views couldn't be read, so no view counts are shown.{" "}
+      {archive.views.reason}
+    </p>
   );
 }
 

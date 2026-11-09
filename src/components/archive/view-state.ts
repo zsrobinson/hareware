@@ -18,11 +18,13 @@ import {
   type ChartConfig,
 } from "./chart-config";
 import { clearedState, type FilterState, type Preset } from "./filters";
-import { readSort, writeSort } from "./page-state";
+import { readChoice, readSort, writeChoice, writeSort } from "./page-state";
 import {
   COLUMNS,
+  MINIMUMS,
   VIEWS,
   type ColumnId,
+  type Minimum,
   type Layout,
   type Source,
   type TableSort,
@@ -45,6 +47,8 @@ export type ViewState = {
   hidden: string[];
   /** a table's sort, which each view opens on its own of */
   sort: TableSort;
+  /** People's Show, which each view opens on its own of, as the sort */
+  minimum: Minimum;
 };
 
 export const CUSTOM = "custom";
@@ -77,24 +81,64 @@ export function shapeOf(state: ViewState, source: Source): Shape {
   return shapeOfView(viewOf(state, source));
 }
 
-/** what is on screen, as a view declares it */
-export function layoutOf(state: ViewState, source: Source): Layout {
+/**
+ * What is on screen, as a view declares it. `off` are the columns the
+ * Columns menu has taken out, which the view on screen does not show.
+ */
+export function layoutOf(
+  state: ViewState,
+  source: Source,
+  off: readonly string[] = [],
+): Layout {
   const shape = shapeOf(state, source);
-  return shape.type === "table"
-    ? { type: "table", table: { columns: shape.columns, sort: state.sort } }
-    : shape;
+  if (shape.type === "chart")
+    return state.hidden.length > 0 ? { ...shape, hidden: state.hidden } : shape;
+  const shown = shape.columns.filter((id) => !off.includes(id));
+  return {
+    type: "table",
+    table: {
+      columns: shown.length > 0 ? shown : shape.columns,
+      sort: state.sort,
+      ...(source === "people" && state.minimum !== 1
+        ? { minimum: state.minimum }
+        : {}),
+    },
+  } as Layout;
 }
 
-/** the sort a view opens on: its own, or for a chart, the page's first table's */
-function openingSort(view: View, source: Source): TableSort {
+/* the table a view opens with: its own, or for a chart, the page's first */
+function openingTable(view: View, source: Source) {
   const layout =
     view.layout.type === "table" ? view.layout : firstOf(source).layout;
   if (layout.type !== "table") throw new Error(`${source} opens on a chart`);
-  return layout.table.sort;
+  return layout.table;
 }
+
+/** the sort a view opens on */
+const openingSort = (view: View, source: Source): TableSort =>
+  openingTable(view, source).sort;
+
+/** People's Show as a view opens on it */
+const openingMinimum = (view: View, source: Source): Minimum => {
+  const table = openingTable(view, source);
+  return "minimum" in table && table.minimum ? table.minimum : 1;
+};
+
+/** the series a view's legend opens with off; Custom opens with them all */
+const openingHidden = (
+  state: Pick<ViewState, "view" | "base">,
+  source: Source,
+) => {
+  if (state.view === CUSTOM) return [];
+  const { layout } = viewOf(state, source);
+  return layout.type === "chart" ? [...(layout.hidden ?? [])] : [];
+};
 
 const sameSort = (a: TableSort, b: TableSort) =>
   a.id === b.id && a.desc === b.desc;
+
+const same = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((x, i) => x === b[i]);
 
 /** what a view answers; Custom answers whatever was asked of it */
 export function questionOf(state: ViewState, source: Source): string | null {
@@ -168,12 +212,24 @@ export function readView(search: string, source: Source): ViewState {
         };
   const opening = openingSort(base, source);
   const [sort] = readSort(search, COLUMNS[source]);
+  const view = custom ? CUSTOM : base.id;
   return {
-    view: custom ? CUSTOM : base.id,
+    view,
     custom: built,
     base: base.id,
-    hidden: list(params.get("hide")),
+    /* present and empty is every series on, where the view has some off */
+    hidden: params.has("hide")
+      ? list(params.get("hide"))
+      : openingHidden({ view, base: base.id }, source),
     sort: params.has("sort") && sort ? (sort as TableSort) : opening,
+    minimum: Number(
+      readChoice(
+        search,
+        "min",
+        MINIMUMS.map(String),
+        String(openingMinimum(base, source)),
+      ),
+    ) as Minimum,
   };
 }
 
@@ -194,12 +250,21 @@ export function writeView(
   else params.delete("columns");
   if (custom && state.base !== first) params.set("base", state.base);
   else params.delete("base");
-  if (state.hidden.length > 0) params.set("hide", state.hidden.join(","));
-  else params.delete("hide");
+  if (same(state.hidden, openingHidden(state, source))) params.delete("hide");
+  else params.set("hide", state.hidden.join(","));
   /* a sort changed on a table is held while a chart shows, for the table
      after it, so the link holds it too */
-  const own = openingSort(viewOf(state, source), source);
-  writeSort(sameSort(state.sort, own) ? [] : [state.sort], params);
+  const view = viewOf(state, source);
+  writeSort(
+    sameSort(state.sort, openingSort(view, source)) ? [] : [state.sort],
+    params,
+  );
+  writeChoice(
+    String(state.minimum),
+    params,
+    "min",
+    String(openingMinimum(view, source)),
+  );
 }
 
 /**
@@ -216,33 +281,53 @@ export function chooseView(
     id === CUSTOM && !state.custom && state.view !== CUSTOM
       ? { view: id, custom: shapeOf(state, source), base: state.view }
       : { view: id, custom: state.custom, base: state.base };
-  const changed = !sameSort(
-    state.sort,
-    openingSort(viewOf(state, source), source),
-  );
+  const from = viewOf(state, source);
+  const to = viewOf(next, source);
   return {
     ...next,
-    /* another chart's series are other things, so all of them start on */
-    hidden: [],
-    sort: changed ? state.sort : openingSort(viewOf(next, source), source),
+    /* another chart's series are other things: they start as it declares,
+       but Custom made now is what was on screen */
+    hidden:
+      next.view === CUSTOM && next.custom !== state.custom
+        ? state.hidden
+        : openingHidden(next, source),
+    sort: sameSort(state.sort, openingSort(from, source))
+      ? openingSort(to, source)
+      : state.sort,
+    minimum:
+      state.minimum === openingMinimum(from, source)
+        ? openingMinimum(to, source)
+        : state.minimum,
   };
 }
 
 /** what the builder made: changing a view makes a custom one from it, and the view stays */
-export const changeView = (state: ViewState, shape: Shape): ViewState => ({
-  ...state,
-  view: CUSTOM,
-  custom: shape,
-  base: state.view === CUSTOM ? state.base : state.view,
-  hidden: [],
-});
+export function changeView(
+  state: ViewState,
+  shape: Shape,
+  source: Source,
+): ViewState {
+  const before = shapeOf(state, source);
+  /* the series are the split's, so the legend holds while it stays */
+  const series =
+    before.type === "chart" &&
+    shape.type === "chart" &&
+    before.chart.split === shape.chart.split;
+  return {
+    ...state,
+    view: CUSTOM,
+    custom: shape,
+    base: state.view === CUSTOM ? state.base : state.view,
+    hidden: series ? state.hidden : [],
+  };
+}
 
 /** back to the view Custom was made from */
-export const resetView = (state: ViewState): ViewState => ({
+export const resetView = (state: ViewState, source: Source): ViewState => ({
   ...state,
   view: state.base,
   custom: null,
-  hidden: [],
+  hidden: openingHidden({ view: state.base, base: state.base }, source),
 });
 
 /** the builder's Layout: the page's own table, or its first chart */
@@ -291,6 +376,8 @@ export function declarationOf(
   state: ViewState,
   filters: FilterState,
   source: Source,
+  /** the columns the Columns menu has taken out */
+  off: readonly string[] = [],
 ): { view: View; left: string[] } {
   const view = viewOf(state, source);
   const custom = state.view === CUSTOM;
@@ -314,7 +401,7 @@ export function declarationOf(
       source,
       range: filters.preset === "custom" ? view.range : filters.preset,
       ...(Object.keys(narrowed).length > 0 ? { filters: narrowed } : {}),
-      layout: layoutOf(state, source),
+      layout: layoutOf(state, source, off),
     } as View,
     left,
   };

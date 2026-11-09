@@ -153,6 +153,10 @@ type Props<T> = {
    * cut a value off at its edge
    */
   hidden?: string[];
+  /** what someone chose in the Columns menu, when the page keeps it (to
+      copy what is on screen); the table's own otherwise */
+  picked?: VisibilityState;
+  onPickedChange?: (picked: VisibilityState) => void;
 };
 
 /* a header is often a component: `meta.csvHeader`, else the id. The Columns
@@ -179,13 +183,16 @@ export function DataTable<T>({
   sorting: kept,
   onSortingChange: keep,
   hidden = [],
+  picked: held,
+  onPickedChange: hold,
 }: Props<T>) {
   const [unkept, setUnkept] = useState<SortingState>([]);
   const sorting = kept ?? unkept;
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   /* only what someone chose in the Columns menu: `hidden` is a default that
      moves with the width, so it is laid under the choices rather than kept */
-  const [picked, setPicked] = useState<VisibilityState>({});
+  const [unheld, setUnheld] = useState<VisibilityState>({});
+  const picked = held ?? unheld;
   const columnVisibility: VisibilityState = {
     ...Object.fromEntries(hidden.map((id) => [id, false])),
     ...picked,
@@ -203,12 +210,10 @@ export function DataTable<T>({
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: (updater) => {
       const next = functionalUpdate(updater, columnVisibility);
-      setPicked((before) => {
-        const after = { ...before };
-        for (const [id, visible] of Object.entries(next))
-          if (visible !== (columnVisibility[id] ?? true)) after[id] = visible;
-        return after;
-      });
+      const after = { ...picked };
+      for (const [id, visible] of Object.entries(next))
+        if (visible !== (columnVisibility[id] ?? true)) after[id] = visible;
+      (hold ?? setUnheld)(after);
     },
     onGlobalFilterChange: setSearch,
     getCoreRowModel: getCoreRowModel(),

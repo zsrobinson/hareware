@@ -274,3 +274,24 @@ test("the builder turns a table into a chart, as Custom, and Reset brings the ta
   ).toBe("true");
   expect(screen.getByRole("columnheader", { name: /Name/ })).toBeTruthy();
 });
+
+test("Copy as view takes in the Columns menu and People's Show", async () => {
+  window.history.replaceState(null, "", "/people?min=5");
+  const user = userEvent.setup();
+  render(<PeoplePage />);
+  await user.click(await screen.findByRole("button", { name: /Columns/ }));
+  await user.click(
+    await screen.findByRole("menuitemcheckbox", { name: "Latest" }),
+  );
+  await user.keyboard("{Escape}");
+
+  await user.click(screen.getByRole("button", { name: "Customize" }));
+  const panel = await screen.findByRole("complementary", { name: "Customize" });
+  await user.click(
+    within(panel).getByRole("button", { name: /^Copy as view/ }),
+  );
+  const copied = await navigator.clipboard.readText();
+  expect(copied).toContain("minimum: 5,");
+  expect(copied).toContain('"first"]');
+  expect(copied).not.toContain('"last"');
+});

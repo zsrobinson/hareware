@@ -198,6 +198,8 @@ function Articles({
   sorting: held,
   setSorting,
   opened: openRow,
+  picked,
+  setPicked,
 }: TableViewProps) {
   const phone = useIsPhone();
   const editing = openRow.open === null ? null : Number(openRow.open);
@@ -237,6 +239,8 @@ function Articles({
         csv="articles"
         sorting={sorting}
         onSortingChange={setSorting}
+        picked={picked}
+        onPickedChange={setPicked}
         controls={(controls) => <ShellTableControls {...controls} />}
         selected={(row) => row.id === editing}
         hidden={phone ? ON_PHONE : article ? BESIDE_PANEL : []}

@@ -1,4 +1,4 @@
-import type { SortingState } from "@tanstack/react-table";
+import type { SortingState, VisibilityState } from "@tanstack/react-table";
 import {
   ActivityIcon,
   ChartColumnIcon,
@@ -50,7 +50,7 @@ import {
   type Shape,
   type ViewState,
 } from "./view-state";
-import type { ColumnId, Source, TableSort } from "./views";
+import type { ColumnId, Minimum, Source, TableSort } from "./views";
 
 /*
   A table's page: its views as tabs over the filters, the one on screen
@@ -65,6 +65,12 @@ export type TableViewProps = ViewProps & {
   setSorting: (sorting: SortingState) => void;
   /** the row open beside the table, kept in the address as `?open=` */
   opened: OpenRow;
+  /** People's Show, which the view opens on */
+  minimum: Minimum;
+  setMinimum: (minimum: Minimum) => void;
+  /** what the Columns menu has chosen, which Copy as view takes in */
+  picked: VisibilityState;
+  setPicked: (picked: VisibilityState) => void;
 };
 
 const ICONS: Record<string, LucideIcon> = {
@@ -136,6 +142,9 @@ function Explorer({
   const shape = shapeOf(state, source);
   const label = state.view === CUSTOM ? "Custom" : viewOf(state, source).label;
   const [customizing, setCustomizing] = useState(false);
+  /* the Columns menu's choices, for the table on screen alone */
+  const [picked, setPicked] = useState<VisibilityState>({});
+  const off = Object.keys(picked).filter((id) => picked[id] === false);
 
   /* a table opens a row beside it, and a chart a slice */
   const row = useOpenRow("open", LEGACY[source]);
@@ -175,6 +184,7 @@ function Explorer({
     slice.close();
     const next = chooseView(state, id, source);
     setState(next);
+    setPicked({});
     setFilterState(
       carryOver(filterState, openingOf(state, source), openingOf(next, source)),
     );
@@ -185,9 +195,9 @@ function Explorer({
       row.close();
       slice.close();
     }
-    setState(changeView(state, next));
+    setState(changeView(state, next, source));
   };
-  const reset = () => setState(resetView(state));
+  const reset = () => setState(resetView(state, source));
 
   const tabs = [
     ...viewsOn(source).map((view) => ({
@@ -214,7 +224,12 @@ function Explorer({
       {/* a default view is a declaration in views.ts: this writes the one on screen */}
       <CopyTextButton
         text={() => {
-          const { view, left } = declarationOf(state, filterState, source);
+          const { view, left } = declarationOf(
+            state,
+            filterState,
+            source,
+            shape.type === "table" ? off : [],
+          );
           return viewSource(view, left);
         }}
         label="Copy as view"
@@ -317,6 +332,10 @@ function Explorer({
                 if (sort) setState({ ...state, sort: sort as TableSort });
               }}
               opened={opened}
+              minimum={state.minimum}
+              setMinimum={(minimum) => setState({ ...state, minimum })}
+              picked={picked}
+              setPicked={setPicked}
             />
           </>
         ) : (

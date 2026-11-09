@@ -1,5 +1,5 @@
 import { format } from "prettier";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { allows, type ChartConfig } from "./chart-config";
 import { chartsAddress } from "./charts-address";
 import {
@@ -31,6 +31,51 @@ import {
   type ViewState,
 } from "./view-state";
 import { COLUMNS, VIEWS, type ColumnId, type Source, type View } from "./views";
+
+/* every default view goes through these, and so do two that use what no
+   default does yet: filters, a legend with series off, and People's Show */
+vi.mock("./views", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./views")>();
+  const extra = [
+    {
+      id: "news-history",
+      label: "News history",
+      question: "What has News published, but for Sports?",
+      source: "articles",
+      range: "all",
+      filters: { sections: ["News", "Sports"] },
+      layout: {
+        type: "chart",
+        chart: {
+          count: "articles",
+          by: "semester",
+          split: "section",
+          draw: "stacked",
+          values: "number",
+          order: "largest",
+          top: 25,
+        },
+        hidden: ["Sports"],
+      },
+    },
+    {
+      id: "regulars",
+      label: "Regulars",
+      question: "Who has done the most this semester?",
+      source: "people",
+      range: "semester",
+      layout: {
+        type: "table",
+        table: {
+          columns: ["name", "contributions"],
+          sort: { id: "name", desc: false },
+          minimum: 3,
+        },
+      },
+    },
+  ] as const satisfies readonly View[];
+  return { ...real, VIEWS: [...real.VIEWS, ...extra] };
+});
 
 const SOURCES: Source[] = ["articles", "people"];
 
@@ -78,7 +123,7 @@ test("every view opens from its link as declared, and as Custom", () => {
     expect(layoutOf(back.view, view.source), view.id).toEqual(view.layout);
     expect(back.filters, view.id).toEqual(filters);
 
-    const custom = changeView(state, shapeOf(state, view.source));
+    const custom = changeView(state, shapeOf(state, view.source), view.source);
     const made = open(link(custom, filters, view.source), view.source);
     expect(made.view.view, view.id).toBe(CUSTOM);
     expect(made.view.base, view.id).toBe(view.id);
@@ -108,10 +153,11 @@ test("a link reproduces a custom chart or table, and keeps the filters' paramete
     order: "largest",
     top: 25,
   };
-  const people = changeView(readView("?view=headcount", "people"), {
-    type: "chart",
-    chart,
-  });
+  const people = changeView(
+    readView("?view=headcount", "people"),
+    { type: "chart", chart },
+    "people",
+  );
   const params = new URLSearchParams("range=semester&q=ann");
   writeView(people, params, "people");
   const back = readView(`?${params}`, "people");
@@ -119,10 +165,11 @@ test("a link reproduces a custom chart or table, and keeps the filters' paramete
   expect(back.base).toBe("headcount");
   expect(params.get("q")).toBe("ann");
 
-  const table = changeView(readView("", "people"), {
-    type: "table",
-    columns: ["first", "name"],
-  });
+  const table = changeView(
+    readView("", "people"),
+    { type: "table", columns: ["first", "name"] },
+    "people",
+  );
   const again = readView(link(table, clearedState("3m"), "people"), "people");
   expect(shapeOf(again, "people")).toEqual({
     type: "table",
@@ -165,10 +212,11 @@ test("a link leaves out the view's own time range, and keeps any other", () => {
   expect(narrowed.filters.preset).toBe("12m");
 
   /* Custom keeps the range of the view it was made from */
-  const custom = changeView(readView("?view=headcount", "people"), {
-    type: "table",
-    columns: ["name"],
-  });
+  const custom = changeView(
+    readView("?view=headcount", "people"),
+    { type: "table", columns: ["name"] },
+    "people",
+  );
   expect(rangeOfView(custom, "people")).toBe<Preset>("all");
   expect(
     new URLSearchParams(link(custom, clearedState("all"), "people")).has(
@@ -250,7 +298,11 @@ function rebuild(view: View) {
   let filters = clearedState("all");
   const shape = () => shapeOf(state, source);
 
-  state = changeView(state, switchLayout(shape(), view.layout.type, source));
+  state = changeView(
+    state,
+    switchLayout(shape(), view.layout.type, source),
+    source,
+  );
   const { layout } = view;
   if (layout.type === "table") {
     const wanted: readonly ColumnId[] = layout.table.columns;
@@ -261,9 +313,12 @@ function rebuild(view: View) {
     /* each column moved up until it is where the view has it */
     for (const [at, id] of wanted.entries())
       while (columns.indexOf(id) > at) columns = moveColumn(columns, id, -1);
-    state = changeView(state, { type: "table", columns });
+    state = changeView(state, { type: "table", columns }, source);
     state = { ...state, sort: { ...state.sort, id: layout.table.sort.id } };
     state = { ...state, sort: { ...state.sort, desc: layout.table.sort.desc } };
+    /* People's Show, in the toolbar */
+    if ("minimum" in layout.table && layout.table.minimum)
+      state = { ...state, minimum: layout.table.minimum };
   } else {
     let chart = (shape() as Extract<Shape, { type: "chart" }>).chart;
     for (let pass = 0; pass < 5; pass++)
@@ -273,7 +328,10 @@ function rebuild(view: View) {
           offered(chart, key, layout.chart[key])
         )
           chart = { ...chart, [key]: layout.chart[key] };
-    state = changeView(state, { type: "chart", chart });
+    state = changeView(state, { type: "chart", chart }, source);
+    /* the legend's series, each clicked off */
+    for (const key of layout.hidden ?? [])
+      state = { ...state, hidden: [...state.hidden, key] };
   }
 
   filters = { ...filters, preset: view.range };
@@ -356,4 +414,54 @@ test("a link to the old Charts page opens its view on that view's page", () => {
         view.id,
       );
     }
+});
+
+test("Copy as view keeps the legend's series off, People's Show and the Columns menu", () => {
+  const history = {
+    ...readView("?view=history", "articles"),
+    hidden: ["News"],
+  };
+  const chart = declarationOf(history, clearedState("all"), "articles");
+  expect(chart.view.layout).toMatchObject({ type: "chart", hidden: ["News"] });
+
+  const everyone = { ...readView("", "people"), minimum: 5 as const };
+  const table = declarationOf(everyone, clearedState("3m"), "people", ["last"]);
+  expect(table.view.layout).toEqual({
+    type: "table",
+    table: {
+      columns: ["name", "contributions", "writer", "image", "other", "first"],
+      sort: { id: "contributions", desc: true },
+      minimum: 5,
+    },
+  });
+  expect(table.left).toEqual([]);
+});
+
+test("a view opens with its own series off and its own Show, and a link can undo either", () => {
+  const history = readView("?view=news-history", "articles");
+  expect(history.hidden).toEqual(["Sports"]);
+  expect(
+    new URLSearchParams(
+      link(history, openingOf(history, "articles"), "articles"),
+    ).has("hide"),
+  ).toBe(false);
+  /* every series on, where the view has one off */
+  const all = { ...history, hidden: [] };
+  expect(
+    readView(link(all, clearedState("all"), "articles"), "articles").hidden,
+  ).toEqual([]);
+
+  const regulars = readView("?view=regulars", "people");
+  expect(regulars.minimum).toBe(3);
+  const everyone = { ...regulars, minimum: 1 as const };
+  expect(
+    readView(link(everyone, clearedState("semester"), "people"), "people")
+      .minimum,
+  ).toBe(1);
+  /* changed, it stands on the next view, as a sort does */
+  expect(chooseView(everyone, "everyone", "people").minimum).toBe(1);
+  expect(chooseView(regulars, "everyone", "people").minimum).toBe(1);
+  expect(
+    chooseView({ ...regulars, minimum: 5 }, "everyone", "people").minimum,
+  ).toBe(5);
 });

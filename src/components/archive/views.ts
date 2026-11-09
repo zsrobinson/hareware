@@ -50,17 +50,32 @@ export type TableSort<S extends Source = Source> = {
   desc: boolean;
 };
 
+/** the fewest contributions someone shown on People has made; 1 is everyone */
+export const MINIMUMS = [1, 2, 3, 5, 10] as const;
+export type Minimum = (typeof MINIMUMS)[number];
+
 export type TableLayout<S extends Source = Source> = {
   /** which columns, in order */
   columns: readonly ColumnId<S>[];
   /** the sort it opens on; a header changes it and leaves the view as it is */
   sort: TableSort<S>;
-};
+} & (S extends "people"
+  ? {
+      /** People's Show as it opens, which changing leaves the view as it is;
+          everyone when left out */
+      minimum?: Minimum;
+    }
+  : unknown);
 
 /** how a view shows what it counts */
 export type Layout<S extends Source = Source> =
   | { type: "table"; table: TableLayout<S> }
-  | { type: "chart"; chart: ChartConfig };
+  | {
+      type: "chart";
+      chart: ChartConfig;
+      /** the series its legend opens with off */
+      hidden?: readonly string[];
+    };
 
 type ViewOf<S extends Source> = {
   id: string;

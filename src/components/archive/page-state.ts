@@ -1,6 +1,6 @@
-/* A page's own state in the address beside the filters, left out at its
-   default: `sort=first`, `sort=-first` the other way (./view-state keeps
-   it), and `min` on People. */
+/* State in the address beside the filters, left out at its default: a
+   table's `sort=first`, `sort=-first` the other way, and People's `min`,
+   which ./view-state keeps. */
 
 import type { SortingState } from "@tanstack/react-table";
 import { useEffect, useState } from "react";
@@ -59,15 +59,4 @@ export function useInAddress<T>(
       window.history.replaceState(window.history.state, "", url);
   });
   return [value, setValue] as const;
-}
-
-export function useChoice<T extends string>(
-  key: string,
-  options: readonly T[],
-  fallback: T,
-) {
-  return useInAddress(
-    (search) => readChoice(search, key, options, fallback),
-    (value, params) => writeChoice(value, params, key, fallback),
-  );
 }

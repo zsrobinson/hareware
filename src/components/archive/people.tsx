@@ -28,10 +28,9 @@ import {
   RowDetails,
   RowOpener,
 } from "./open-row";
-import { useChoice } from "./page-state";
 import { SectionName } from "./section-name";
 import { ShellTableControls } from "./table-controls";
-import { COLUMN_NAMES, type ColumnId } from "./views";
+import { COLUMN_NAMES, MINIMUMS, type ColumnId, type Minimum } from "./views";
 
 export function PeoplePage() {
   return <ExplorerPage source="people" table={People} />;
@@ -70,11 +69,10 @@ const count = (
   };
 };
 
-const MINIMUMS = ["1", "2", "3", "5", "10"].map((n) => ({
-  id: n,
-  label: n === "1" ? "All people" : `${n}+ contributions`,
+const SHOWS = MINIMUMS.map((n) => ({
+  id: String(n),
+  label: n === 1 ? "All people" : `${n}+ contributions`,
 }));
-const MINIMUM_IDS = MINIMUMS.map((m) => m.id);
 
 /* every column a view of people can show, by its id in ./views. None
    depends on which row is open, so its name is never redrawn as a new
@@ -169,9 +167,12 @@ function People({
   sorting: held,
   setSorting,
   opened: openRow,
+  minimum,
+  setMinimum,
+  picked,
+  setPicked,
 }: TableViewProps) {
   const phone = useIsPhone();
-  const [minimum, setMinimum] = useChoice("min", MINIMUM_IDS, "1");
   const { open } = openRow;
   const columns = useMemo(
     () =>
@@ -197,7 +198,7 @@ function People({
     const search = filters.search?.trim() ? searchable(filters.search) : "";
     return all.filter(
       (row) =>
-        row.contributions >= Number(minimum) &&
+        row.contributions >= minimum &&
         (!search ||
           [row.name, ...row.bylines].some((name) =>
             searchable(name).includes(search),
@@ -219,9 +220,9 @@ function People({
       label="Show"
       hideLabel
       width={phone ? "w-full justify-between" : "w-fit"}
-      value={minimum}
-      options={MINIMUMS}
-      onChange={setMinimum}
+      value={String(minimum)}
+      options={SHOWS}
+      onChange={(n) => setMinimum(Number(n) as Minimum)}
     />
   );
 
@@ -239,6 +240,8 @@ function People({
         csv="people"
         sorting={sorting}
         onSortingChange={setSorting}
+        picked={picked}
+        onPickedChange={setPicked}
         controls={(controls) => <ShellTableControls {...controls} />}
         selected={(row) => row.name === open}
         hidden={phone ? ON_PHONE : person ? BESIDE_PANEL : []}
@@ -247,7 +250,7 @@ function People({
             {[
               `${rows.length} ${rows.length === 1 ? "person" : "people"}`,
               filterNote,
-              minimum !== "1" && `${minimum}+ contributions`,
+              minimum !== 1 && `${minimum}+ contributions`,
             ]
               .filter(Boolean)
               .join(" · ")}

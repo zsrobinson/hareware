@@ -24,6 +24,9 @@ const WIDTHS = {
 } as const;
 
 const { title, width = "wide", heading = true } = Astro.props;
+/* the title row spans the standard width however narrow the page's column,
+   so its actions sit at the same edge on every page */
+const frame = width === "full" ? WIDTHS.full : WIDTHS.wide;
 const pathname = pagePath(Astro.url.pathname);
 
 /* every page is prerendered (ADR 0012), so the sidebar is drawn open and the
@@ -131,7 +134,7 @@ const collapsed = false;
             {
               /* every page starts from the same left edge, however wide it runs */
             }
-            <div class:list={["w-full", WIDTHS[width]]}>
+            <div class:list={["w-full", frame]}>
               {
                 /* on a phone the row folds away when it holds only the
                    hidden h1 and actions a phone hides */
@@ -151,7 +154,9 @@ const collapsed = false;
                   </div>
                 )
               }
-              <slot />
+              <div class:list={["w-full", WIDTHS[width]]}>
+                <slot />
+              </div>
             </div>
           </main>
           <div id="side-panel" class="contents"></div>

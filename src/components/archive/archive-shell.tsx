@@ -226,9 +226,11 @@ export type ViewProps = {
   reloadButton: ReactNode;
 };
 
+/* what the box says it looks at: on People a chart's search is of the
+   articles it counts, which saying so tells apart from the table's names */
 const SEARCHES: Record<Searching, { placeholder: string; note: string }> = {
   articles: {
-    placeholder: "Search titles and bylines",
+    placeholder: "Search articles by title or byline",
     note: "in a title or byline",
   },
   people: {

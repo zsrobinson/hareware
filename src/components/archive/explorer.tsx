@@ -93,7 +93,7 @@ const ICONS: Record<string, LucideIcon> = {
 };
 
 const SEARCHED_FOR: Record<Searching, string> = {
-  articles: "this view searches titles and bylines",
+  articles: "this view searches articles by title or byline",
   people: "this view searches names and bylines",
 };
 

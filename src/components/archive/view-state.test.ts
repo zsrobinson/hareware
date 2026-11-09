@@ -184,10 +184,14 @@ test("a table's sort is the view's own until changed, and a change stands", () =
 
   const byName = { ...everyone, sort: { id: "name" as const, desc: false } };
   expect(link(byName, clearedState("3m"), "people")).toBe("?sort=name");
-  /* a chart has no sort to show, and the table has it back after */
+  /* a chart holds it for the table after, and so does its link */
   const chart = chooseView(byName, "contributors", "people");
-  expect(link(chart, clearedState("3m"), "people")).toBe("?view=contributors");
+  const held = link(chart, clearedState("3m"), "people");
+  expect(held).toBe("?view=contributors&sort=name");
   expect(chooseView(chart, "everyone", "people").sort).toEqual(byName.sort);
+  expect(
+    chooseView(readView(held, "people"), "everyone", "people").sort,
+  ).toEqual(byName.sort);
   /* unchanged, each view opens on its own */
   expect(
     chooseView(

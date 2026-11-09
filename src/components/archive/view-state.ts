@@ -196,10 +196,10 @@ export function writeView(
   else params.delete("base");
   if (state.hidden.length > 0) params.set("hide", state.hidden.join(","));
   else params.delete("hide");
-  /* a sort means something only to a table, and only where it is not the view's own */
-  const table = shapeOf(state, source).type === "table";
+  /* a sort changed on a table is held while a chart shows, for the table
+     after it, so the link holds it too */
   const own = openingSort(viewOf(state, source), source);
-  writeSort(table && !sameSort(state.sort, own) ? [state.sort] : [], params);
+  writeSort(sameSort(state.sort, own) ? [] : [state.sort], params);
 }
 
 /**

@@ -11,7 +11,7 @@ const credit = (
 ): Credit => ({
   role,
   label: role,
-  printed: names.join(" and "),
+  printed: names.map((name, i) => bylines[i] ?? name).join(" and "),
   bylines: names.map((name, i) => bylines[i] ?? name),
   contributors: names.map((name, i) => ({
     name,

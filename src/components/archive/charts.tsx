@@ -488,6 +488,9 @@ type Plot = {
   /** a line drawn dashed: the second of the roles' grey pair, which is
       too near the first in tone to tell apart at a line's width */
   dashed: (series: string) => boolean;
+  /** a mark drawn with an edge: Other, the faintest role, which is too
+      near the page in tone to find by its fill alone */
+  edged: (category: string, series: string) => boolean;
   /** the two ranges, when each category is the range on screen against an earlier one */
   ranges: Compared["ranges"];
 };
@@ -599,6 +602,10 @@ function plotOf(
         : own;
     },
     dashed: (key) => split === "role" && key === ROLES[1],
+    edged: (category, key) =>
+      split === "role"
+        ? key === ROLES[2]
+        : split === "none" && by === "role" && category === ROLES[2],
     ranges,
   };
 }
@@ -702,6 +709,7 @@ function Legend({
               <Swatch
                 lines={lines}
                 dashed={plot.dashed(series.key)}
+                edged={plot.edged("", series.key)}
                 color={plot.color("", series.key)}
               />
               {series.label}
@@ -715,13 +723,22 @@ function Legend({
 }
 
 /** a series' mark in a legend or a card: a square, or a stroke for lines */
+/* Other's edge: the next role's tone, round the mark */
+const EDGE = "var(--role-2)";
+const edge = (plot: Plot, category: string, series: string) =>
+  plot.edged(category, series)
+    ? { stroke: EDGE, strokeWidth: 1, "data-edged": "" }
+    : {};
+
 function Swatch({
   lines,
   dashed = false,
+  edged = false,
   color,
 }: {
   lines: boolean;
   dashed?: boolean;
+  edged?: boolean;
   color: string;
 }) {
   if (lines && dashed)
@@ -739,7 +756,10 @@ function Swatch({
         "shrink-0",
         lines ? "h-0.5 w-3.5 rounded-full" : "size-3 rounded-sm",
       )}
-      style={{ background: color }}
+      style={{
+        background: color,
+        boxShadow: edged && !lines ? `inset 0 0 0 1px ${EDGE}` : undefined,
+      }}
     />
   );
 }
@@ -1022,6 +1042,7 @@ function Card({
               <Swatch
                 lines={plot.config.draw === "lines"}
                 dashed={plot.dashed(s.key)}
+                edged={plot.edged(category.key, s.key)}
                 color={plot.color(category.key, s.key)}
               />
               <span className="text-muted-foreground min-w-0 flex-1 truncate">
@@ -1477,6 +1498,7 @@ function TimeChart({
                     d={segment.d}
                     fillOpacity={partial.has(category.key) ? 0.45 : undefined}
                     style={{ fill: plot.color(category.key, segment.key) }}
+                    {...edge(plot, category.key, segment.key)}
                   />
                 ))}
                 {segments.map((segment) => (
@@ -1957,6 +1979,7 @@ function BarChart({
                   key={segment.key}
                   d={segment.d}
                   style={{ fill: plot.color(category.key, segment.key) }}
+                  {...edge(plot, category.key, segment.key)}
                 />
               ))}
               {segments.map((segment) => (

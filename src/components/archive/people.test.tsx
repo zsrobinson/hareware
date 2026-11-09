@@ -179,3 +179,26 @@ test("a chart's long name breaks onto a second line before it is cut", async () 
   /* whole, so nothing in it needs a tooltip to read */
   expect(chart.querySelector("title")).toBeNull();
 });
+
+test("a chart's Other, the faintest role, is drawn with an edge", async () => {
+  stubArchive({
+    posts: [
+      {
+        id: 1,
+        title: "An invented headline",
+        publishedAt: "2026-03-01T16:00:00Z",
+        paragraphs: ["Article by: Sam Sample", "Formatted by: Pat Placeholder"],
+      },
+    ],
+  });
+  window.history.replaceState(null, "", "/people?view=top&range=all");
+  render(<PeoplePage />);
+  await screen.findByText("Who did the most, and as what");
+  const chart = document.querySelector("svg[role=group]")!;
+  /* Pat's one bar is Other's, and only it has an edge */
+  expect(chart.querySelectorAll("path[data-edged]")).toHaveLength(1);
+  const swatch = (name: string) =>
+    screen.getByRole("button", { name }).querySelector("span")!;
+  expect(swatch("Other").style.boxShadow).toContain("var(--role-2)");
+  expect(swatch("Writing").style.boxShadow).toBe("");
+});

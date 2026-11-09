@@ -7,8 +7,9 @@
   stack in slot order (the paper's section order, which ~/lib/credits/stats
   sorts them into) so neighbours are the pairs the palette was checked for.
   Roles take three steps of one quiet slate of their own (Writing darkest,
-  Other faintest, each at least 3:1 from the next in both modes), so a role
-  is never read as a section.
+  Other faintest, each at least 3:1 from the next in both modes, and Other
+  edged in Image's tone, being near the page), so a role is never read as a
+  section.
 */
 
 import { ROLES } from "~/lib/credits/labels";

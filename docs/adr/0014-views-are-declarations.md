@@ -31,7 +31,8 @@ count, and what an article's credits are made of.
 **A view is a declaration**, plain data in `src/components/archive/views.ts`:
 its label and the question it answers, the table it counts, the Time filter
 and any other filters it opens on, and its layout. A layout is a table (which
-columns, in what order, and the sort it opens on) or a chart (`ChartConfig`).
+columns, in what order, the sort it opens on, and on People the Show) or a
+chart (`ChartConfig`, and the series its legend opens with off).
 A page's views are the declarations for its table, in order, and the first is
 a table, which the page opens on. Pivot is the third layout, to come.
 
@@ -43,18 +44,23 @@ own steps and gets its declaration back, so no default can drift into one
 nobody could reproduce.
 
 **Copy as view writes what is on screen as a declaration**, formatted as
-`views.ts` is, so adding a default is a paste and a pull request. What a view
-cannot hold, a fixed range of dates or a search, is left out and said in the
-copy.
+`views.ts` is, so adding a default is a paste and a pull request. It takes in
+the legend, People's Show and the columns the Columns menu took out. What a
+view cannot hold, a fixed range of dates, a search, or articles a mark chose,
+is left out and said in the copy.
 
 **No view is stored anywhere else**: not in the Sheet (ADR 0011: it holds only
 what WordPress lacks), not in D1 (the invocation log alone), and not in the
 browser. A view of one's own is its link.
 
-**What a view opens on is where it starts.** The Time range, the other filters
-and a table's sort start from the view, and changing any of them leaves the
-view as it is; choosing another view keeps whatever was changed, until Clear. A
-link names each only where it is not the view's own.
+**What a view opens on is where it starts.** The Time range, the other filters,
+a table's sort, People's Show and a chart's legend start from the view, however
+it is reached: its tab, its link, a reload or Clear. Changing any of them
+leaves the view as it is; choosing another view keeps whatever was changed,
+until Clear. A link names each only where it is not the view's own, and one
+cleared where the view has some as empty (`sections=`). A search the next view
+would read another way (names on People's table, what articles print
+elsewhere) is cleared, and the page says so.
 
 **Selections become filters, and filters travel.** What a chart's mark counts
 can be opened on either table as ordinary filters: a period is the part of it

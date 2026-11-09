@@ -29,6 +29,7 @@ import {
 import {
   counted,
   pairCount,
+  perArticle,
   sliceFilters,
   unitOf,
   type SliceFilters,
@@ -282,7 +283,9 @@ export function pivotTitle({ config, grouped, ranges }: Pivot): string {
         ? ", as a share of each column"
         : config.values === "total"
           ? ", as a share of the total"
-          : "";
+          : config.values === "per-article"
+            ? ", per article"
+            : "";
   const versus =
     ranges && config.compare !== "none"
       ? `, against ${againstName(config.compare)}`
@@ -336,15 +339,23 @@ export function pivotCount(pivot: Pivot): string {
   return parts.join(" · ");
 }
 
-/** what a cell reads: its share, or a count where it is a number or the whole a share is of */
+/**
+ * What a cell reads: its share, or a count where it is a number or the
+ * whole a share is of; per article, its words or views over the articles
+ * it counted (null with none counted), beside the count it is of
+ */
 export function cellValue(
   pivot: Pivot,
   slice: PivotSlice,
-): { count: number; share: number | null } {
+): { count: number; share: number | null; average: number | null } {
   const base = pivot.base(slice);
   return {
     count: pivot.count(slice),
     share: base && !sameSlice(base, slice) ? pivot.share(slice) : null,
+    average:
+      pivot.config.values === "per-article"
+        ? perArticle(pivot.members(slice), pivot.grouped.measure)
+        : null,
   };
 }
 
@@ -374,9 +385,10 @@ export function differenceText(pivot: Pivot, row: string | null, digits = 0) {
  */
 export function pivotMatrix(pivot: Pivot): string[][] {
   const text = (slice: PivotSlice) => {
-    const { count, share } = cellValue(pivot, slice);
+    const { count, share, average } = cellValue(pivot, slice);
     const read = amountOf(pivot.members(slice), pivot.grouped.measure);
     if (read.counted === 0 && read.missing > 0) return "";
+    if (pivot.config.values === "per-article") return String(average ?? 0);
     return share === null ? String(count) : `${share.toFixed(1)}%`;
   };
   const split = pivot.config.columns !== "none";

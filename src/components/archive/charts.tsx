@@ -56,6 +56,9 @@ import {
   columnSeries,
   measureNote,
   pairCount,
+  perArticle,
+  perArticleText,
+  drawnMembers,
   percentText,
   readSlice,
   sliceCount,
@@ -100,9 +103,11 @@ function titleOf(plot: Plot) {
         : ", as a share of each"
       : config.values === "running"
         ? ", as a running total"
-        : plot.ranges && config.compare !== "none"
-          ? `, against ${againstName(config.compare)}`
-          : "";
+        : config.values === "per-article"
+          ? ", per article"
+          : plot.ranges && config.compare !== "none"
+            ? `, against ${againstName(config.compare)}`
+            : "";
   return one
     ? `${one.label} ${what.toLowerCase()} by ${by}${values}`
     : `${what} by ${by}${split}${values}`;
@@ -224,6 +229,8 @@ export function ChartView({
           <div className="text-muted-foreground text-sm">
             {[
               ranges ? pairCount(grouped) : chartCount(grouped, hidden),
+              config.values === "per-article" &&
+                perArticleText(drawnMembers(grouped, hidden), grouped.measure),
               filterNote,
               measureNote(grouped.measure, [config.by, config.split]),
             ]
@@ -372,6 +379,8 @@ function sliceText(plot: Plot, slice: Slice, filterNote: string) {
     title,
     caption: [
       sliceCount(plot.grouped.measure, plot.members(slice), whole),
+      plot.config.values === "per-article" &&
+        perArticleText(plot.members(slice), plot.grouped.measure),
       /* the earlier range's dates are in the title, and are not the filters' */
       slice.series !== "then" && filterNote,
     ]
@@ -398,8 +407,11 @@ type Plot = {
   partial: Map<string, Incomplete>;
   /** values as percentages */
   share: boolean;
-  /** the count behind a mark: as counted, or so far for a running total */
+  /** the count behind a mark: as counted, so far for a running total, or
+      per article */
   count: (category: string, series: string) => number;
+  /** a number as its reading says it: "468 words", "468 words per article" */
+  unit: (n: number) => string;
   /** the series a category's total covers (see chart-slice) */
   columnSeries: string[];
   /** the category's total: what its whole column's members come to */
@@ -444,19 +456,27 @@ function plotOf(
   }));
   const series = all.filter((s) => !hidden.includes(s.key));
   const allKeys = all.map((s) => s.key);
-  const count = (category: string, key: string) =>
-    grouped.values[category]?.[key] ?? 0;
   const columns = columnSeries(grouped, hidden);
   const members = (slice: Slice) => sliceMembers(grouped, slice, hidden);
+  /* per article, each number is its list's words or views over the
+     articles it counted, so it is still worked out from the list */
+  const average = config.values === "per-article";
+  const count = average
+    ? (category: string, key: string) =>
+        grouped.values[category]?.[key] === undefined
+          ? 0
+          : (perArticle(members({ category, series: key }), grouped.measure) ??
+            0)
+    : (category: string, key: string) => grouped.values[category]?.[key] ?? 0;
   /* a total is what the list its column opens comes to, worked out once */
   const totals = new Map<string, number>();
   const total = (category: string) => {
     const known = totals.get(category);
     if (known !== undefined) return known;
-    const n = amountOf(
-      members({ category, series: null }),
-      grouped.measure,
-    ).value;
+    const column = members({ category, series: null });
+    const n = average
+      ? (perArticle(column, grouped.measure) ?? 0)
+      : amountOf(column, grouped.measure).value;
     totals.set(category, n);
     return n;
   };
@@ -481,6 +501,8 @@ function plotOf(
     partial,
     share,
     count,
+    unit: (n) =>
+      `${unitOf(n, grouped.measure)}${average ? " per article" : ""}`,
     columnSeries: columns,
     total,
     whole,
@@ -679,7 +701,7 @@ function reading(plot: Plot, category: Series) {
     : "";
   const sofar = plot.config.values === "running" ? " so far" : "";
   if (plot.ranges) return `${category.label}: ${parts.join(", ")}`;
-  return `${category.label}${partly}: ${unitOf(total, plot.grouped.measure)}${sofar}${
+  return `${category.label}${partly}: ${plot.unit(total)}${sofar}${
     plot.series.length > 1 || plot.share ? `. ${parts.join(", ")}` : ""
   }`;
 }
@@ -941,7 +963,7 @@ function Card({
               key={s.key}
               type="button"
               disabled={!n}
-              aria-label={`${s.label}: see ${unitOf(n, plot.grouped.measure)}`}
+              aria-label={`${s.label}: see ${plot.unit(n)}`}
               className={cn(row(false), !n && "opacity-50")}
               onClick={() => onOpen(s.key)}
             >
@@ -985,7 +1007,7 @@ function Card({
           disabled={!total}
           onClick={() => onOpen(null)}
         >
-          See {unitOf(total, plot.grouped.measure)}
+          See {plot.unit(total)}
         </Button>
       )}
     </div>
@@ -1426,7 +1448,7 @@ function TimeChart({
               >
                 {/* what each share is of, in words where there is room */}
                 {band * every >= 72
-                  ? unitOf(plot.total(category.key), plot.grouped.measure)
+                  ? plot.unit(plot.total(category.key))
                   : plot.total(category.key).toLocaleString()}
               </text>
             )}
@@ -2132,7 +2154,7 @@ function CountButton({
     <button
       type="button"
       data-slice={key}
-      aria-label={`${slice.series === null ? category.label : `${label}, ${category.label}`}: see ${unitOf(n, plot.grouped.measure)}`}
+      aria-label={`${slice.series === null ? category.label : `${label}, ${category.label}`}: see ${plot.unit(n)}`}
       aria-current={open ? "true" : undefined}
       className={cn(
         "focus-visible:ring-ring/50 -mx-1 rounded-sm px-1 tabular-nums underline-offset-4 outline-none hover:underline focus-visible:ring-3",

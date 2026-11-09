@@ -6,6 +6,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { FieldRows } from "~/components/field-row";
+import { isQuantity } from "~/lib/credits/stats";
 import { BuilderRow, CompareRow } from "./chart-builder";
 import { COUNTS, TOPS } from "./chart-config";
 import { Choice } from "./choice";
@@ -74,7 +75,9 @@ export function PivotBuilder({
           hideLabel
           width="w-full"
           value={config.values}
-          options={PIVOT_VALUES.map((v) => ({
+          options={PIVOT_VALUES.filter(
+            (v) => v.id !== "per-article" || isQuantity(config.count),
+          ).map((v) => ({
             ...v,
             disabled: !ok.values[v.id],
           }))}

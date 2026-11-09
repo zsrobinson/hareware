@@ -15,7 +15,13 @@ import { saveFile } from "~/lib/save-file";
 import { cn } from "~/lib/utils";
 import type { ViewProps } from "./archive-shell";
 import { COUNTS } from "./chart-config";
-import { measureNote, percentText, sliceCount, unitOf } from "./chart-slice";
+import {
+  measureNote,
+  percentText,
+  perArticleText,
+  sliceCount,
+  unitOf,
+} from "./chart-slice";
 import { partialKeys, ViewsUnavailable, type Incomplete } from "./charts";
 import { filtersFor } from "./compare";
 import { RowDetails, type OpenRow } from "./open-row";
@@ -180,6 +186,8 @@ export function PivotView({
                   ? undefined
                   : pivot.count(pivot.base(slice)!),
               ),
+              config.values === "per-article" &&
+                perArticleText(pivot.members(slice), pivot.grouped.measure),
               /* the earlier range's dates are in the title, and are not the filters' */
               slice.column !== "then" && filterNote,
             ]
@@ -311,7 +319,7 @@ function PivotTable({
     content: ReactNode,
     className?: string,
   ) => {
-    const { count, share } = cellValue(pivot, slice);
+    const { count, share, average } = cellValue(pivot, slice);
     if (pivot.members(slice).length === 0)
       return (
         <span className="text-muted-foreground/40 tabular-nums">
@@ -323,7 +331,10 @@ function PivotTable({
     const none = unread.counted === 0 && unread.missing > 0;
     const at = `${r},${c}`;
     const open = selected !== null && sameSlice(selected, slice);
-    const what = unitOf(count, pivot.grouped.measure);
+    const what =
+      average === null
+        ? unitOf(count, pivot.grouped.measure)
+        : `${unitOf(average, pivot.grouped.measure)} per article`;
     return (
       <button
         type="button"
@@ -344,9 +355,11 @@ function PivotTable({
         {content ??
           (none
             ? "–"
-            : share === null
-              ? count.toLocaleString()
-              : percentText(share))}
+            : average !== null
+              ? average.toLocaleString()
+              : share === null
+                ? count.toLocaleString()
+                : percentText(share))}
       </button>
     );
   };

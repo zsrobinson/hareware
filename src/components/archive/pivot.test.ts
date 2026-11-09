@@ -23,6 +23,7 @@ import {
   overlaps,
   post,
   summed,
+  summedOver,
 } from "./invented-archive";
 import {
   DIMENSIONS,
@@ -227,7 +228,14 @@ function check(pivot: Pivot, filters: Filters) {
         ),
       );
 
-    const { share } = cellValue(pivot, slice);
+    const { share, average } = cellValue(pivot, slice);
+    /* per article: the sum over the articles in it, which its list shows */
+    if (config.values === "per-article") {
+      const over = summedOver(grouped.measure, members);
+      expect(average, name).toBe(
+        over ? Math.round(summed(grouped.measure, members) / over) : null,
+      );
+    } else expect(average, name).toBeNull();
     const base = pivot.base(slice);
     if (base && share !== null) {
       const of = pivot.count(base);
@@ -415,10 +423,10 @@ test("Section share reads each section as a share of the articles, over their co
     archive,
   );
   const read = (row: string | null) => cellValue(pivot, { row, column: null });
-  expect(read("News")).toEqual({ count: 4, share: 40 });
-  expect(read("Sports")).toEqual({ count: 3, share: 30 });
+  expect(read("News")).toEqual({ count: 4, share: 40, average: null });
+  expect(read("Sports")).toEqual({ count: 3, share: 30, average: null });
   /* the whole a share is of reads as its count */
-  expect(read(null)).toEqual({ count: 10, share: null });
+  expect(read(null)).toEqual({ count: 10, share: null, average: null });
   expect(pivotMatrix(pivot)).toEqual([
     ["Section", "Articles"],
     ["News", "40.0%"],
@@ -555,6 +563,7 @@ test("every section is a row or a column, one with nothing a zero, unless the fi
   expect(cellValue(share, { row: "Sports", column: null })).toEqual({
     count: 0,
     share: 0,
+    average: null,
   });
   expect(toTsv(pivotMatrix(share)).split("\n")).toEqual([
     "Section\tArticles",

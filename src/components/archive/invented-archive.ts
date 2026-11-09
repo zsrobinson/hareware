@@ -113,6 +113,17 @@ export function summed(measure: Measure, members: readonly Member[]) {
   return sum;
 }
 
+/* the articles in such a sum: all of a list's for words, and for views
+   those whose views were read */
+export function summedOver(measure: Measure, members: readonly Member[]) {
+  const articles = new Map(
+    members.flatMap((m) => m.units.map((u) => [u.article.id, u.article])),
+  );
+  return [...articles.values()].filter(
+    (article) => measure !== "views" || article.views.status === "counted",
+  ).length;
+}
+
 /* where an article can be in two cells of a sum of words or views: under
    two people, or two roles */
 export const overlaps = (dimension: string) =>

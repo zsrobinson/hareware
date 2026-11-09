@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { FieldRow, FieldRows } from "~/components/field-row";
-import { isPeriod } from "~/lib/credits/stats";
+import { isPeriod, isQuantity } from "~/lib/credits/stats";
 import {
   allows,
   COUNTS,
@@ -58,6 +58,7 @@ export function ChartBuilder({
     number: "Number",
     share: split ? "Share of each" : "Share of all",
     running: "Running total",
+    "per-article": "Per article",
   };
   const natural =
     config.by === "section"
@@ -126,13 +127,15 @@ export function ChartBuilder({
           hideLabel
           width="w-full"
           value={config.values}
-          options={VALUES.filter((id) => id !== "running" || time).map(
-            (id) => ({
-              id,
-              label: valueLabel[id],
-              disabled: !ok.values[id],
-            }),
-          )}
+          options={VALUES.filter(
+            (id) =>
+              (id !== "running" || time) &&
+              (id !== "per-article" || isQuantity(config.count)),
+          ).map((id) => ({
+            id,
+            label: valueLabel[id],
+            disabled: !ok.values[id],
+          }))}
           onChange={(values) => set({ values })}
         />
       </BuilderRow>

@@ -15,6 +15,7 @@ import {
   type Unit,
 } from "~/lib/credits/stats";
 import {
+  allows,
   COUNTS,
   DRAWS,
   GROUPINGS,
@@ -43,6 +44,8 @@ import {
   chartCount,
   drawnMembers,
   measureNote,
+  perArticle,
+  perArticleText,
   readSlice,
   sliceCount,
   MOST_ARTICLES,
@@ -733,4 +736,41 @@ test("views unavailable are left out of a sum and counted beside it, never as ze
   );
   expect(chartCount(grouped, [])).toMatch(/· 2 articles without views$/);
   expect(measureNote("views", ["section", "none"])).toMatch(/^Lifetime views/);
+});
+
+test("per article is words or views over the articles counted, and nothing else's", () => {
+  const views = groupOf(
+    { ...chartOf("sections"), count: "views", values: "per-article" },
+    archive,
+    NO_FILTERS,
+    archive,
+  );
+  const news = sliceMembers(views, { category: "News", series: null }, []);
+  /* 37 views over posts 1 and 7, the two with views read */
+  expect(perArticle(news, "views")).toBe(19);
+  expect(perArticleText(news, "views")).toBe("19 views per article");
+
+  const sections = chartOf("sections");
+  expect(allows({ ...sections, count: "articles" }).values["per-article"]).toBe(
+    false,
+  );
+  /* averages stacked would add up to nothing */
+  expect(
+    allows({
+      ...sections,
+      count: "words",
+      by: "semester",
+      split: "section",
+      draw: "stacked",
+    }).values["per-article"],
+  ).toBe(false);
+  expect(
+    allows({
+      ...sections,
+      count: "words",
+      by: "semester",
+      split: "section",
+      values: "per-article",
+    }).draw.stacked,
+  ).toBe(false);
 });

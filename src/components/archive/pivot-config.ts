@@ -14,7 +14,7 @@ import { COUNTS, GROUPINGS, TOPS } from "./chart-config";
 import { COMPARES, type Compare } from "./compare";
 
 /** a cell as a number, or as a share of its row, its column or everything */
-export type PivotValues = "number" | "row" | "column" | "total";
+export type PivotValues = "number" | "row" | "column" | "total" | "per-article";
 
 export type PivotConfig = {
   count: Measure;
@@ -42,6 +42,7 @@ export const PIVOT_VALUES: { id: PivotValues; label: string }[] = [
   { id: "row", label: "Share of each row" },
   { id: "column", label: "Share of each column" },
   { id: "total", label: "Share of the total" },
+  { id: "per-article", label: "Per article" },
 ];
 
 /**
@@ -114,6 +115,8 @@ export function allowsPivot({
       row: split && !overlaps(columns),
       column: split && !overlaps(rows),
       total: !overlaps(rows) && !overlaps(columns),
+      /* words or views over the articles counted: of a sum, not a count */
+      "per-article": quantity,
     } satisfies Record<PivotValues, boolean>,
     top: axes.includes("person"),
     compare: Object.fromEntries(

@@ -77,6 +77,25 @@ export function measureNote(
   return "";
 }
 
+/**
+ * Words or views per article: what a list comes to over the articles it
+ * counted, to the nearest whole one, or null with none counted. Articles
+ * without views are in neither half
+ */
+export function perArticle(
+  members: readonly Member[],
+  measure: Measure,
+): number | null {
+  const { value, counted } = amountOf(members, measure);
+  return counted > 0 ? Math.round(value / counted) : null;
+}
+
+/** "468 words per article", or nothing where none was counted */
+export function perArticleText(members: readonly Member[], measure: Measure) {
+  const n = perArticle(members, measure);
+  return n === null ? "" : `${unitOf(n, measure)} per article`;
+}
+
 export const percentText = (value: number) =>
   value > 0 && value < 1 ? "<1%" : `${Math.round(value)}%`;
 

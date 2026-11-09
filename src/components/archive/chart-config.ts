@@ -19,7 +19,7 @@ import {
 
 export type Split = "none" | "section" | "role" | "joined";
 export type Draw = "stacked" | "grouped" | "lines";
-export type Values = "number" | "share" | "running";
+export type Values = "number" | "share" | "running" | "per-article";
 
 export type ChartConfig = {
   count: Measure;
@@ -62,7 +62,7 @@ export const SPLITS: { id: Split; label: string }[] = [
 ];
 
 export const DRAWS: Draw[] = ["stacked", "grouped", "lines"];
-export const VALUES: Values[] = ["number", "share", "running"];
+export const VALUES: Values[] = ["number", "share", "running", "per-article"];
 export const ORDERS: Order[] = ["largest", "natural"];
 export const TOPS = [10, 25, 50, 0];
 
@@ -128,6 +128,8 @@ export function allows(config: ChartConfig) {
       stacked:
         (count !== "people" || parts) &&
         !(quantity && split === "role") &&
+        /* averages do not add up to a column */
+        !(config.values === "per-article" && split !== "none") &&
         !comparing,
       grouped: split !== "none" || comparing,
       lines: time,
@@ -141,6 +143,11 @@ export function allows(config: ChartConfig) {
         !(quantity && overlapping) &&
         !comparing,
       running: time,
+      /* words or views over the articles counted: of a sum, not a count */
+      "per-article":
+        quantity &&
+        !(config.draw === "stacked" && split !== "none") &&
+        !comparing,
     } satisfies Record<Values, boolean>,
     compare: Object.fromEntries(
       COMPARES.map(({ id }) => [id, id === "none" || comparable]),

@@ -164,9 +164,15 @@ const sameSort = (a: TableSort, b: TableSort) =>
 const same = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((x, i) => x === b[i]);
 
-/** what a view answers; Custom answers whatever was asked of it */
-export function questionOf(state: ViewState, source: Source): string | null {
-  return state.view === CUSTOM ? null : viewOf(state, source).question;
+/** what heads a view: its own title and question; Custom's title is made
+    from what it shows, and it answers whatever was asked of it */
+export function headingOf(
+  state: ViewState,
+  source: Source,
+): { title: string | null; question: string | null } {
+  if (state.view === CUSTOM) return { title: null, question: null };
+  const { title, question } = viewOf(state, source);
+  return { title, question };
 }
 
 /** every filter as the view opens on it, which its link leaves out */
@@ -482,6 +488,7 @@ export function declarationOf(
     view: {
       id: custom ? "new-view" : view.id,
       label: custom ? "New view" : view.label,
+      title: custom ? "What heads it?" : view.title,
       question: custom ? "What does it answer?" : view.question,
       source,
       range: filters.preset === "custom" ? view.range : filters.preset,

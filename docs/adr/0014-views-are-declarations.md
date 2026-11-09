@@ -30,8 +30,11 @@ views. There is no Contributions page: a contribution is what People's views
 count, and what an article's credits are made of.
 
 **A view is a declaration**, plain data in `src/components/archive/views.ts`:
-its label and the question it answers, the table it counts, the Time filter
-and any other filters it opens on, and its layout. A layout is a table (which
+its tab's label, the title that heads it and the question it answers, the
+table it counts, the Time filter and any other filters it opens on, and its
+layout. Every layout is headed alike: the title, the question, then what it
+counts, with Download CSV in the page's title row. Custom has no words of
+its own, so its title says what it shows ("Articles by section"). A layout is a table (which
 columns, in what order, the sort it opens on, and on People the Show and
 whether it lists only the new), a chart (`ChartConfig`, and the series its
 legend opens with off) or a pivot (`PivotConfig`: what it counts, its rows

@@ -53,11 +53,13 @@ import {
 import { SectionName } from "./section-name";
 import { SlicePanel } from "./slice-panel";
 import { ThinViews, TooNew } from "./views-notes";
+import { ShellTableControls } from "./table-controls";
+import { ViewHeading } from "./view-heading";
 
 export type PivotViewProps = ViewProps & {
   config: PivotConfig;
-  /** what the view answers, under the title */
-  question: string | null;
+  /** the view's own title, or null to say what it shows, and what it answers */
+  heading: { title: string | null; question: string | null };
   /** the cell open beside the pivot, kept in the address as `?slice=` */
   opened: OpenRow;
   /** what a phone's Back from a cell says: the view it is on */
@@ -71,7 +73,7 @@ export function PivotView({
   filterNote,
   filterState,
   config,
-  question,
+  heading,
   opened,
   back,
 }: PivotViewProps) {
@@ -132,28 +134,26 @@ export function PivotView({
   return (
     <div className="space-y-4">
       <figure className="space-y-3">
-        <figcaption className="space-y-0.5">
-          <div className="font-medium">{title}</div>
-          {question && (
-            <div className="text-muted-foreground text-sm">{question}</div>
-          )}
-          <div className="text-muted-foreground text-sm">
-            {[
-              pivotCount(pivot),
-              filterNote,
-              measureNote(
-                pivot.grouped.measure,
-                [config.rows, config.columns],
-                pivot.members({ row: null, column: null }),
-              ),
-              tooNewText(
-                pivot.members({ row: null, column: null }),
-                pivot.grouped.measure,
-              ),
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </div>
+        <ViewHeading
+          figure
+          title={heading.title ?? title}
+          question={heading.question}
+          count={[
+            pivotCount(pivot),
+            filterNote,
+            measureNote(
+              pivot.grouped.measure,
+              [config.rows, config.columns],
+              pivot.members({ row: null, column: null }),
+            ),
+            tooNewText(
+              pivot.members({ row: null, column: null }),
+              pivot.grouped.measure,
+            ),
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        >
           {pivot.grouped.measure === "views" && (
             <ThinViews
               articles={pivot
@@ -162,7 +162,7 @@ export function PivotView({
               summary={archive.views}
             />
           )}
-        </figcaption>
+        </ViewHeading>
         {pivot.note && (
           <p className="bg-muted/50 rounded-lg border px-3 py-2 text-sm">
             {pivot.note}
@@ -177,24 +177,30 @@ export function PivotView({
           </p>
         ) : (
           <>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                className="bg-background"
-                onClick={download}
-              >
-                <DownloadIcon />
-                Download CSV
-              </Button>
-              {/* tab-separated, which a sheet or a doc pastes as a table */}
-              <CopyTextButton
-                text={() => toTsv(pivotMatrix(pivot))}
-                label="Copy table"
-                what="the table, to paste into a sheet"
-                icon={ClipboardCopyIcon}
-                failed="Download the CSV instead."
-              />
-            </div>
+            {/* in the title row, as every view's is */}
+            <ShellTableControls
+              columns={null}
+              download={
+                <>
+                  {/* tab-separated, which a sheet or a doc pastes as a table */}
+                  <CopyTextButton
+                    text={() => toTsv(pivotMatrix(pivot))}
+                    label="Copy table"
+                    what="the table, to paste into a sheet"
+                    icon={ClipboardCopyIcon}
+                    failed="Download the CSV instead."
+                  />
+                  <Button
+                    variant="outline"
+                    className="bg-background"
+                    onClick={download}
+                  >
+                    <DownloadIcon />
+                    Download CSV
+                  </Button>
+                </>
+              }
+            />
             <PivotTable
               pivot={pivot}
               partial={partial}

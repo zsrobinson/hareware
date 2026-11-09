@@ -98,8 +98,11 @@ export type Layout<S extends Source = Source> =
 
 type ViewOf<S extends Source> = {
   id: string;
+  /** its tab */
   label: string;
-  /** what it answers, shown under it */
+  /** what heads it, as an editor would put it */
+  title: string;
+  /** what it answers, shown under its title */
   question: string;
   /** what it counts: articles, or the people credited on them */
   source: S;
@@ -124,6 +127,7 @@ export const VIEWS = [
   {
     id: "all",
     label: "All",
+    title: "What we published",
     question: "What have we published, and who made it?",
     source: "articles",
     range: "3m",
@@ -138,6 +142,7 @@ export const VIEWS = [
   {
     id: "sections",
     label: "Sections",
+    title: "Articles in each section",
     question: "What have we published lately, and where?",
     source: "articles",
     range: "3m",
@@ -158,6 +163,7 @@ export const VIEWS = [
   {
     id: "section-share",
     label: "Section share",
+    title: "Each section's share of the articles",
     question: "What share of this semester's articles is each section's?",
     source: "articles",
     range: "semester",
@@ -176,6 +182,7 @@ export const VIEWS = [
   {
     id: "history",
     label: "History",
+    title: "Articles each semester, since the start",
     question: "What has the paper published since the archive began?",
     source: "articles",
     range: "all",
@@ -196,6 +203,7 @@ export const VIEWS = [
   {
     id: "most-read",
     label: "Most read",
+    title: "The most read articles",
     question: "Which of this semester's articles have been read the most?",
     source: "articles",
     range: "semester",
@@ -210,6 +218,7 @@ export const VIEWS = [
   {
     id: "read-by-section",
     label: "Read by section",
+    title: "Views per article, by section",
     question:
       "Which section's articles are read most, per article, this semester?",
     source: "articles",
@@ -229,6 +238,7 @@ export const VIEWS = [
   {
     id: "everyone",
     label: "Everyone",
+    title: "Everyone who contributed",
     question: "Who has contributed, and how much?",
     source: "people",
     range: "3m",
@@ -251,6 +261,7 @@ export const VIEWS = [
   {
     id: "top",
     label: "Top contributors",
+    title: "Who did the most, and as what",
     question: "Who has done the most this semester, and what?",
     source: "people",
     range: "semester",
@@ -271,6 +282,7 @@ export const VIEWS = [
   {
     id: "new",
     label: "New people",
+    title: "Who joined, and where they started",
     question:
       "Who made their first contribution this semester, where, and as what?",
     source: "people",
@@ -287,6 +299,7 @@ export const VIEWS = [
   {
     id: "headcount",
     label: "Headcount",
+    title: "People at work each semester",
     question: "How many people has the club had at work, semester to semester?",
     source: "people",
     range: "all",
@@ -307,6 +320,7 @@ export const VIEWS = [
   {
     id: "retention",
     label: "Retention",
+    title: "Who came back, by semester joined",
     question:
       "Of the people who joined each semester, how many came back each semester after?",
     source: "people",

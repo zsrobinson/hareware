@@ -42,7 +42,7 @@ import {
   declarationOf,
   openingOf,
   periodOfShape,
-  questionOf,
+  headingOf,
   readView,
   resetView,
   searchingOf,
@@ -64,6 +64,8 @@ import type { ColumnId, Minimum, Source, TableSort } from "./views";
 
 /** what a page's table is handed: the view's columns and sort, and its open row */
 export type TableViewProps = ViewProps & {
+  /** its title and question, over the count */
+  heading: { title: string; question: string | null };
   columns: readonly ColumnId[];
   /** People's rows narrowed to whoever is new in the range */
   only?: "new";
@@ -246,7 +248,7 @@ function Explorer({
     { id: CUSTOM, label: "Custom", icon: ICONS[CUSTOM]! },
   ];
   const panelId = useId();
-  const question = questionOf(state, source);
+  const heading = headingOf(state, source);
 
   const builder = (
     <div className="space-y-6">
@@ -357,11 +359,18 @@ function Explorer({
       >
         {shape.type === "table" ? (
           <>
-            {question && (
-              <p className="text-muted-foreground text-sm">{question}</p>
-            )}
             <Table
               {...props}
+              heading={{
+                title:
+                  heading.title ??
+                  (source === "articles"
+                    ? "Articles"
+                    : shape.only === "new"
+                      ? "New people"
+                      : "People"),
+                question: heading.question,
+              }}
               columns={shape.columns}
               only={shape.only}
               sorting={[state.sort]}
@@ -379,7 +388,7 @@ function Explorer({
           <ChartView
             {...props}
             config={shape.chart}
-            question={question}
+            heading={heading}
             hidden={state.hidden}
             setHidden={(hidden) => setState({ ...state, hidden })}
             opened={opened}
@@ -389,7 +398,7 @@ function Explorer({
           <PivotView
             {...props}
             config={shape.pivot}
-            question={question}
+            heading={heading}
             opened={opened}
             back={label}
           />

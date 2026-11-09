@@ -20,6 +20,7 @@ import { ToolbarFilters, useTrail } from "./archive-shell";
 import { counted } from "./chart-slice";
 import { Choice } from "./choice";
 import { ExplorerPage, type TableViewProps } from "./explorer";
+import { ViewHeading } from "./view-heading";
 import { formatDate, formatMonth } from "./dates";
 import { isRolling, periodNamed, PRESETS, type FilterState } from "./filters";
 import {
@@ -188,6 +189,7 @@ function People({
   filters,
   filterNote,
   filterState,
+  heading,
   columns: shown,
   only,
   sorting: held,
@@ -277,15 +279,17 @@ function People({
         selected={(row) => row.name === open}
         hidden={phone ? ON_PHONE : person ? BESIDE_PANEL : []}
         caption={
-          <span className="text-muted-foreground text-sm tabular-nums">
-            {[
+          <ViewHeading
+            title={heading.title}
+            question={heading.question}
+            count={[
               `${rows.length} ${only === "new" ? "new " : ""}${rows.length === 1 ? "person" : "people"}`,
               filterNote,
               minimum !== 1 && `${minimum}+ contributions`,
             ]
               .filter(Boolean)
               .join(" · ")}
-          </span>
+          />
         }
       />
 

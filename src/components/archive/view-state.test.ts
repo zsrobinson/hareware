@@ -40,6 +40,7 @@ vi.mock("./views", async (importOriginal) => {
     {
       id: "news-history",
       label: "News history",
+      title: "News, by semester",
       question: "What has News published, but for Sports?",
       source: "articles",
       range: "all",
@@ -62,6 +63,7 @@ vi.mock("./views", async (importOriginal) => {
     {
       id: "regulars",
       label: "Regulars",
+      title: "The regulars",
       question: "Who has done the most this semester?",
       source: "people",
       range: "semester",
@@ -380,6 +382,7 @@ function rebuild(view: View) {
 const WORDS = {
   id: "new-view",
   label: "New view",
+  title: "What heads it?",
   question: "What does it answer?",
 };
 

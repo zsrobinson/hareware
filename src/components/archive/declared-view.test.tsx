@@ -17,6 +17,7 @@ vi.mock("./views", async (importOriginal) => {
   const news = {
     id: "news",
     label: "News",
+    title: "What News published",
     question: "What has News published?",
     source: "articles",
     range: "all",
@@ -88,4 +89,21 @@ test("a view's own filters hold on its link, on a reload, and after Clear", asyn
     expect((await count()).textContent).toMatch(/^1 article · News$/),
   );
   expect(window.location.search).toBe("?view=news");
+});
+
+test("a view is headed by its own title, and Custom by what it shows", async () => {
+  window.history.replaceState(null, "", "/articles?view=news");
+  const first = render(<ArticlesPage />);
+  expect(await screen.findByText("What News published")).toBeTruthy();
+  expect(screen.getByText("What has News published?")).toBeTruthy();
+  first.unmount();
+
+  window.history.replaceState(
+    null,
+    "",
+    "/articles?view=custom&base=news&layout=chart&count=articles&by=section&split=none",
+  );
+  render(<ArticlesPage />);
+  expect(await screen.findByText("Articles by section")).toBeTruthy();
+  expect(screen.queryByText("What News published")).toBeNull();
 });

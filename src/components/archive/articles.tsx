@@ -26,6 +26,7 @@ import { same } from "~/lib/credits/sheet";
 import { applyFilters, easternDate } from "~/lib/credits/stats";
 import { useShowsViews, useTrail } from "./archive-shell";
 import { ExplorerPage, type TableViewProps } from "./explorer";
+import { ViewHeading } from "./view-heading";
 import { formatDate } from "./dates";
 import { PeoplePicker, PersonPicker } from "./person-picker";
 import {
@@ -234,6 +235,7 @@ function Articles({
   archive,
   filters,
   filterNote,
+  heading,
   columns: shown,
   sorting: held,
   setSorting,
@@ -289,18 +291,21 @@ function Articles({
         selected={(row) => row.id === editing}
         hidden={phone ? ON_PHONE : article ? BESIDE_PANEL : []}
         caption={
-          <span className="text-muted-foreground text-sm tabular-nums">
-            {[
+          <ViewHeading
+            title={heading.title}
+            question={heading.question}
+            count={[
               `${rows.length} ${rows.length === 1 ? "article" : "articles"}`,
               filterNote,
               viewsAwait && "Sorted by date until views load",
             ]
               .filter(Boolean)
               .join(" · ")}
+          >
             {shown.includes("views") && (
               <ThinViews articles={rows} summary={archive.views} />
             )}
-          </span>
+          </ViewHeading>
         }
       />
       {article && (

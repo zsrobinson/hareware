@@ -84,6 +84,8 @@ import { shortLabel } from "./dates";
 import { RowDetails, type OpenRow } from "./open-row";
 import { SlicePanel } from "./slice-panel";
 import { ThinViews, TooNew } from "./views-notes";
+import { ShellTableControls } from "./table-controls";
+import { ViewHeading } from "./view-heading";
 
 /** what a chart counts, as its one series and its table's column are named */
 const measureName = (measure: Measure) =>
@@ -143,8 +145,8 @@ export function partialKeys(
 
 export type ChartViewProps = ViewProps & {
   config: ChartConfig;
-  /** what the view answers, under the chart's title */
-  question: string | null;
+  /** the view's own title, or null to say what it shows, and what it answers */
+  heading: { title: string | null; question: string | null };
   /** the series the legend has off */
   hidden: string[];
   setHidden: (hidden: string[]) => void;
@@ -161,7 +163,7 @@ export function ChartView({
   filterNote,
   filterState,
   config,
-  question,
+  heading,
   hidden,
   setHidden,
   opened,
@@ -235,28 +237,26 @@ export function ChartView({
   return (
     <div className="space-y-4">
       <figure className="space-y-4">
-        <figcaption className="space-y-0.5">
-          <div className="font-medium">{titleOf(plot)}</div>
-          {question && (
-            <div className="text-muted-foreground text-sm">{question}</div>
-          )}
-          {/* what is drawn, and which filters cut it */}
-          <div className="text-muted-foreground text-sm">
-            {[
-              ranges ? pairCount(grouped) : chartCount(grouped, hidden),
-              config.values === "per-article" &&
-                perArticleText(drawnMembers(grouped, hidden), grouped.measure),
-              filterNote,
-              measureNote(
-                grouped.measure,
-                [config.by, config.split],
-                drawnMembers(grouped, hidden),
-              ),
-              tooNewText(drawnMembers(grouped, hidden), grouped.measure),
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </div>
+        <ViewHeading
+          figure
+          title={heading.title ?? titleOf(plot)}
+          question={heading.question}
+          /* what is drawn, and which filters cut it */
+          count={[
+            ranges ? pairCount(grouped) : chartCount(grouped, hidden),
+            config.values === "per-article" &&
+              perArticleText(drawnMembers(grouped, hidden), grouped.measure),
+            filterNote,
+            measureNote(
+              grouped.measure,
+              [config.by, config.split],
+              drawnMembers(grouped, hidden),
+            ),
+            tooNewText(drawnMembers(grouped, hidden), grouped.measure),
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        >
           {grouped.measure === "views" && (
             <ThinViews
               articles={drawnMembers(grouped, hidden).map(
@@ -265,7 +265,7 @@ export function ChartView({
               summary={archive.views}
             />
           )}
-        </figcaption>
+        </ViewHeading>
         {note && (
           <p className="bg-muted/50 rounded-lg border px-3 py-2 text-sm">
             {note}
@@ -2181,20 +2181,24 @@ function NumbersTable({
       onOpenChange={setOpen}
       className="overflow-hidden rounded-lg border"
     >
-      <div className="flex items-center gap-2 pr-2">
-        {/* one surface: the row is not painted, so it never shows as two
-            tones beside Download CSV */}
-        <CollapsibleTrigger className="group focus-visible:ring-ring/50 flex h-10 flex-1 items-center gap-2 px-3 text-left text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-inset">
-          <ChevronRightIcon className="text-muted-foreground group-hover:text-foreground size-4 transition-transform group-data-[panel-open]:rotate-90" />
-          {open ? "Hide table" : "Show as table"}
-        </CollapsibleTrigger>
-        {open && (
-          <Button variant="ghost" size="sm" onClick={download}>
+      {/* in the title row, as every view's is */}
+      <ShellTableControls
+        columns={null}
+        download={
+          <Button
+            variant="outline"
+            className="bg-background"
+            onClick={download}
+          >
             <DownloadIcon />
             Download CSV
           </Button>
-        )}
-      </div>
+        }
+      />
+      <CollapsibleTrigger className="group focus-visible:ring-ring/50 flex h-10 w-full items-center gap-2 px-3 text-left text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-inset">
+        <ChevronRightIcon className="text-muted-foreground group-hover:text-foreground size-4 transition-transform group-data-[panel-open]:rotate-90" />
+        {open ? "Hide table" : "Show as table"}
+      </CollapsibleTrigger>
       <CollapsibleContent className="border-t">
         <Table>
           <TableHeader>

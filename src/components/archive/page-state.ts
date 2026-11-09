@@ -1,14 +1,9 @@
-/*
-  What an archive page keeps in the address besides its filters, so a
-  reload or a link opens it as it was: a table's sort (`sort=first`, or
-  `sort=-first` for the other way), and a page's own choices, as People's
-  minimum. Each is left out while it is the page's default.
-*/
+/* A page's own state in the address beside the filters, left out at its
+   default: `sort=first`, `sort=-first` the other way, and `min` on People. */
 
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-/** the sort a link names, on one of `columns`; unsorted otherwise */
 export function readSort(
   search: string,
   columns: readonly string[],
@@ -26,7 +21,6 @@ export function writeSort(sorting: SortingState, params: URLSearchParams) {
   else params.delete("sort");
 }
 
-/** one of `options` under `key`, else the page's own */
 export function readChoice<T extends string>(
   search: string,
   key: string,
@@ -47,7 +41,6 @@ export function writeChoice(
   else params.set(key, value);
 }
 
-/** state read from the address as the page opens, and written back to it */
 function useInAddress<T>(
   read: (search: string) => T,
   write: (value: T, params: URLSearchParams) => void,
@@ -69,11 +62,8 @@ function useInAddress<T>(
 const idOf = <T>(column: ColumnDef<T, unknown>) =>
   column.id ?? ("accessorKey" in column ? String(column.accessorKey) : "");
 
-/**
- * A table's sort, kept in the address. A sort on a column the table does
- * not have now (Other, until the Roles filter asks for it) is held, and
- * comes back with the column.
- */
+/* a sort on a column the table does not have now (Other, until the Roles
+   filter asks for it) is held, and comes back with the column */
 export function useSort<T>(
   columns: readonly ColumnDef<T, unknown>[],
   /** the columns the table has only sometimes, which a link may sort by */
@@ -87,7 +77,6 @@ export function useSort<T>(
   return [sorting.filter((by) => ids.includes(by.id)), setSorting] as const;
 }
 
-/** a choice of the page's own, under `key` in the address */
 export function useChoice<T extends string>(
   key: string,
   options: readonly T[],

@@ -5,6 +5,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
+import { cn } from "~/lib/utils";
+import { EDITED } from "./edited";
 
 /** a labelled dropdown, the one control every archive picker uses */
 export function Choice<T extends string>({
@@ -14,6 +16,7 @@ export function Choice<T extends string>({
   onChange,
   hideLabel = false,
   width = "min-w-32",
+  edited = false,
 }: {
   label: string;
   value: T;
@@ -23,6 +26,8 @@ export function Choice<T extends string>({
   hideLabel?: boolean;
   /** a fixed width, so a long option does not move what sits beside it */
   width?: string;
+  /** its value differs from the saved view's, which it is tinted to say */
+  edited?: boolean;
 }) {
   const shown = (id: T) => {
     const option = options.find((o) => o.id === id);
@@ -51,7 +56,11 @@ export function Choice<T extends string>({
         }))}
         onValueChange={(next) => onChange(next as T)}
       >
-        <SelectTrigger aria-label={label} className={width}>
+        <SelectTrigger
+          aria-label={label}
+          aria-description={edited ? "changed from the saved view" : undefined}
+          className={cn(width, edited && EDITED)}
+        >
           <SelectValue>{(id: T) => shown(id)}</SelectValue>
         </SelectTrigger>
         <SelectContent>

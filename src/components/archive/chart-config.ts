@@ -235,7 +235,8 @@ export function readChart(
   });
 }
 
-const KEYS = [
+/** each setting, by its name in a link */
+export const CHART_PARAMS = [
   "count",
   "by",
   "split",
@@ -248,7 +249,7 @@ const KEYS = [
 
 /** writes a chart into `params`, or takes one out (null) */
 export function writeChart(chart: ChartConfig | null, params: URLSearchParams) {
-  for (const key of KEYS)
+  for (const key of CHART_PARAMS)
     if (chart) params.set(key, String(chart[key]));
     else params.delete(key);
 }

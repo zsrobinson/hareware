@@ -7,6 +7,7 @@ import {
   RefreshCwIcon,
   SearchIcon,
   UserRoundIcon,
+  UsersRoundIcon,
   XIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -67,6 +68,8 @@ import {
 } from "./filters";
 import type { Trail } from "./open-row";
 import { useInAddress } from "./page-state";
+import { counted } from "./chart-slice";
+import { EDITED } from "./edited";
 import { SectionDot } from "./section-name";
 
 /* where a view puts its own controls: the end of the toolbar on a laptop
@@ -86,10 +89,27 @@ const SlotsContext = createContext<Slots>({
   row: null,
 });
 
-/* what the sheet's Reset does besides clearing the filters: each view group's
-   own reset, added while the group has something to reset */
-type AddReset = (reset: () => void) => () => void;
-const ResetContext = createContext<AddReset>(() => () => {});
+/* a page of views says how far what is on screen is from the view as
+   saved, and how to go back to it: the one Reset, which the filters' own
+   Clear gives way to, and the count on the phone's Customize */
+type Edits = { count: number; reset: () => void };
+const EditsContext = createContext<(edits: Edits | null) => void>(() => {});
+
+/**
+ * Says what differs from the saved view: `count` differences, which
+ * `reset` takes back, all of them, filters and view alike (ADR 0015).
+ */
+export function useViewEdits(count: number, reset: () => void) {
+  const set = useContext(EditsContext);
+  const latest = useRef(reset);
+  useLayoutEffect(() => {
+    latest.current = reset;
+  });
+  useEffect(() => {
+    set({ count, reset: () => latest.current() });
+  }, [count, set]);
+  useEffect(() => () => set(null), [set]);
+}
 
 const TrailContext = createContext<Trail>({
   state: clearedState("all"),
@@ -159,27 +179,8 @@ export function ToolbarFilters({
 }
 
 /** a view's own group in the phone's Customize sheet, after Filter */
-export function SheetGroup({
-  children,
-  onReset,
-}: {
-  children: ReactNode;
-  /** what the sheet's Reset does to this group; left out while there is
-      nothing to reset, which leaves Reset off if the filters are clear too */
-  onReset?: () => void;
-}) {
+export function SheetGroup({ children }: { children: ReactNode }) {
   const { sheet } = useContext(SlotsContext);
-  const addReset = useContext(ResetContext);
-  const latest = useRef(onReset);
-  useLayoutEffect(() => {
-    latest.current = onReset;
-  });
-  const resettable = Boolean(onReset);
-  useEffect(() => {
-    if (!resettable) return;
-    return addReset(() => latest.current?.());
-  }, [resettable, addReset]);
-
   return sheet ? createPortal(children, sheet) : null;
 }
 
@@ -278,13 +279,18 @@ export function describeFilters(
     );
   if (state.roles.length > 0)
     parts.push(state.roles.map((role) => ROLE_NAMES[role]).join(", "));
-  if (state.people.length > 0)
-    parts.push(
-      state.people.length <= 2
-        ? state.people.join(" and ")
-        : `${state.people.length} people`,
-    );
-  if (state.articles.length > 0) parts.push(chosenArticles(state.articles));
+  /* what a mark sent, by the mark, rather than its count of each */
+  if (state.via && (state.articles.length > 0 || state.people.length > 0))
+    parts.push(`from ${state.via}`);
+  else {
+    if (state.people.length > 0)
+      parts.push(
+        state.people.length <= 2
+          ? state.people.join(" and ")
+          : `${state.people.length} people`,
+      );
+    if (state.articles.length > 0) parts.push(chosenArticles(state.articles));
+  }
   if (state.search.trim())
     parts.push(`“${state.search.trim()}” ${SEARCHES[searching].note}`);
   return parts.filter(Boolean).join(" · ");
@@ -490,16 +496,7 @@ function Ready({
     [],
   );
 
-  const [resets, setResets] = useState<ReadonlySet<() => void>>(new Set());
-  const addReset = useCallback<AddReset>((reset) => {
-    setResets((all) => new Set(all).add(reset));
-    return () =>
-      setResets((all) => {
-        const left = new Set(all);
-        left.delete(reset);
-        return left;
-      });
-  }, []);
+  const [edits, setEdits] = useState<Edits | null>(null);
 
   const [viewsShown, setViewsShown] = useState(0);
   const showViews = useCallback(() => {
@@ -546,7 +543,7 @@ function Ready({
 
   return (
     <SlotsContext.Provider value={slots}>
-      <ResetContext.Provider value={addReset}>
+      <EditsContext.Provider value={setEdits}>
         <ViewsShownContext.Provider value={showViews}>
           <TrailContext.Provider value={trail}>
             {/* page-wide, so in the title row beside the h1 */}
@@ -562,7 +559,7 @@ function Ready({
                   roleFilter={roleFilter}
                   opening={opening}
                   reloadButton={inToolbar && freshness(true)}
-                  resets={resets}
+                  edits={edits}
                   toolbarSlot={setToolbar}
                   sheetSlot={setSheet}
                   filtersSlot={setFilters}
@@ -574,6 +571,7 @@ function Ready({
                   archive={archive}
                   state={state}
                   setState={setState}
+                  opening={opening}
                   suggest={searching === "articles"}
                 />
               )}
@@ -598,7 +596,7 @@ function Ready({
             </div>
           </TrailContext.Provider>
         </ViewsShownContext.Provider>
-      </ResetContext.Provider>
+      </EditsContext.Provider>
     </SlotsContext.Provider>
   );
 }
@@ -757,23 +755,56 @@ function Freshness({
 
 const SUGGESTED = 3;
 
+/* a chip for one change: tinted where the saved view does not have it */
+function Chip({
+  edited,
+  title,
+  onRemove,
+  children,
+}: {
+  edited: boolean;
+  title: string;
+  onRemove: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      className={cn(edited && EDITED, edited && "border")}
+      title={title}
+      onClick={onRemove}
+    >
+      {children}
+      <XIcon aria-hidden />
+      <span className="sr-only">, remove</span>
+    </Button>
+  );
+}
+
 /**
  * The people filter, a chip per person that removes them; and, while the
  * search box holds part of a name, the people it could mean, any of whom
- * counts their own contributions alone in place of the search.
+ * counts their own contributions alone in place of the search. What a
+ * chart's mark sent with its name (`via`) is one chip, whose people open
+ * out to a chip each.
  */
 function PeopleFilter({
   archive,
   state,
   setState,
+  opening,
   suggest,
 }: {
   archive: Archive;
   state: FilterState;
   setState: (state: FilterState) => void;
+  /** the saved view's filters, whose own people are not a change */
+  opening: FilterState;
   /** false where the search already looks at names (People) */
   suggest: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const typed = suggest ? searchable(state.search.trim()) : "";
   const suggested = useMemo(() => {
     if (typed.length < 2) return [];
@@ -792,40 +823,81 @@ function PeopleFilter({
     suggested.length === 0
   )
     return null;
+  const own = (name: string) => opening.people.includes(name);
+  const arrived = state.people.filter((name) => !own(name));
+  const grouped =
+    Boolean(state.via) && (state.articles.length > 0 || arrived.length > 0);
+  const person = (name: string) => (
+    <Chip
+      key={name}
+      edited={!own(name)}
+      title={`Count everyone, not only ${name}`}
+      onRemove={() =>
+        setState({
+          ...state,
+          people: state.people.filter((p) => p !== name),
+        })
+      }
+    >
+      <UserRoundIcon />
+      {name}
+    </Chip>
+  );
   return (
     <div role="group" aria-label="People" className="flex flex-wrap gap-2">
-      {state.articles.length > 0 && (
-        <Button
-          variant="secondary"
-          size="sm"
-          title="Count every article, not only those a chart's mark picked"
-          onClick={() => setState({ ...state, articles: [] })}
-        >
-          <NewspaperIcon />
-          {chosenArticles(state.articles)}
-          <XIcon aria-hidden />
-          <span className="sr-only">, remove</span>
-        </Button>
+      {grouped ? (
+        <>
+          <Chip
+            edited
+            title={`Count every article and everyone, not only what ${state.via} sent`}
+            onRemove={() =>
+              setState({
+                ...state,
+                articles: [],
+                people: [...opening.people],
+                via: undefined,
+              })
+            }
+          >
+            <NewspaperIcon />
+            From {state.via}
+            {state.articles.length > 0 &&
+              ` · ${counted(state.articles.length, "article", "articles")}`}
+          </Chip>
+          {arrived.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-edited"
+              aria-expanded={open}
+              onClick={() => setOpen(!open)}
+            >
+              <UsersRoundIcon />
+              {counted(arrived.length, "person", "people")}
+              <ChevronDownIcon
+                className={cn("transition-transform", open && "rotate-180")}
+                aria-hidden
+              />
+            </Button>
+          )}
+          {state.people.filter(own).map(person)}
+          {open && arrived.map(person)}
+        </>
+      ) : (
+        <>
+          {state.articles.length > 0 && (
+            <Chip
+              edited
+              title="Count every article, not only those a chart's mark picked"
+              onRemove={() => setState({ ...state, articles: [] })}
+            >
+              <NewspaperIcon />
+              {chosenArticles(state.articles)}
+            </Chip>
+          )}
+          {state.people.map(person)}
+        </>
       )}
-      {state.people.map((name) => (
-        <Button
-          key={name}
-          variant="secondary"
-          size="sm"
-          title={`Count everyone, not only ${name}`}
-          onClick={() =>
-            setState({
-              ...state,
-              people: state.people.filter((p) => p !== name),
-            })
-          }
-        >
-          <UserRoundIcon />
-          {name}
-          <XIcon aria-hidden />
-          <span className="sr-only">, remove</span>
-        </Button>
-      ))}
       {suggested.map((name) => (
         <Button
           key={name}
@@ -885,7 +957,7 @@ function FilterBar({
   roleFilter,
   opening,
   reloadButton,
-  resets,
+  edits,
   toolbarSlot,
   sheetSlot,
   filtersSlot,
@@ -899,8 +971,9 @@ function FilterBar({
   opening: FilterState;
   /** a phone's Reload, at the end of the search row */
   reloadButton: ReactNode;
-  /** the view groups' own resets, which the sheet's Reset runs */
-  resets: ReadonlySet<() => void>;
+  /** on a page of views, what differs from the saved view, which its one
+      Reset takes back in place of Clear */
+  edits: Edits | null;
   /** where the view's own controls go, after the divider */
   toolbarSlot: (element: HTMLElement | null) => void;
   /** where the view's own group goes in the phone's sheet */
@@ -919,9 +992,15 @@ function FilterBar({
   const clear = opening;
   const changed = JSON.stringify(state) !== JSON.stringify(clear);
   const differs = (key: "preset" | "sections" | "roles") =>
-    JSON.stringify(state[key]) !== JSON.stringify(opening[key]) ? 1 : 0;
-  /* what the phone hides in its sheet, counted on the button that opens it */
-  const active = differs("preset") + differs("sections") + differs("roles");
+    JSON.stringify(state[key]) !== JSON.stringify(opening[key]) ||
+    (key === "preset" && state.preset === "custom");
+  /* on a phone, counted on the button that opens the sheet: every
+     difference from the saved view, or where there are no views, the
+     filters the sheet hides */
+  const active =
+    edits?.count ??
+    [differs("preset"), differs("sections"), differs("roles")].filter(Boolean)
+      .length;
 
   const search = (
     /* narrow enough that search, filters and Columns share one line in the
@@ -933,7 +1012,14 @@ function FilterBar({
         ref={searchInput}
         type="search"
         placeholder={placeholder}
-        className="bg-background pl-8"
+        className={cn(
+          "bg-background pl-8",
+          state.search.trim() && EDITED,
+          state.search.trim() && "placeholder:text-edited/70",
+        )}
+        aria-description={
+          state.search.trim() ? "changed from the saved view" : undefined
+        }
         value={state.search}
         onChange={(event) => setState({ ...state, search: event.target.value })}
       />
@@ -949,6 +1035,7 @@ function FilterBar({
       label="Time"
       hideLabel
       width={fill ?? "w-fit"}
+      edited={differs("preset")}
       value={state.preset}
       options={PRESETS}
       onChange={(preset) => setState({ ...state, preset })}
@@ -974,6 +1061,7 @@ function FilterBar({
       label="Sections"
       all="All sections"
       className={fill}
+      edited={differs("sections")}
       options={archive.sections.map((section) => ({
         value: section,
         label: section,
@@ -988,6 +1076,7 @@ function FilterBar({
       label="Roles"
       all="All roles"
       className={fill}
+      edited={differs("roles")}
       options={ROLES.map((role) => ({
         value: role,
         label: ROLE_NAMES[role],
@@ -998,7 +1087,8 @@ function FilterBar({
   );
 
   if (phone) {
-    /* the search, the people and the chosen articles are outside the sheet, so
+    /* on a page of views, the one Reset, of everything; elsewhere the
+       search, the people and the chosen articles are outside the sheet, so
        its Reset leaves them */
     const cleared = {
       ...clear,
@@ -1006,12 +1096,10 @@ function FilterBar({
       people: state.people,
       articles: state.articles,
     };
-    const reset = () => {
-      setState(cleared);
-      for (const each of resets) each();
-    };
-    const resettable =
-      resets.size > 0 || JSON.stringify(state) !== JSON.stringify(cleared);
+    const reset = edits ? edits.reset : () => setState(cleared);
+    const resettable = edits
+      ? edits.count > 0
+      : JSON.stringify(state) !== JSON.stringify(cleared);
 
     return (
       <section aria-label="Filters" className="flex items-center gap-2">
@@ -1024,10 +1112,23 @@ function FilterBar({
         >
           Customize
           {active > 0 && (
-            <span className="bg-foreground text-background inline-flex size-4.5 items-center justify-center rounded-full text-[0.6875rem] tabular-nums">
+            <span
+              className={cn(
+                "inline-flex size-4.5 items-center justify-center rounded-full text-[0.6875rem] tabular-nums",
+                edits
+                  ? "bg-edited-solid text-edited-solid-foreground"
+                  : "bg-foreground text-background",
+              )}
+            >
               {active}
               <span className="sr-only">
-                {active === 1 ? " filter on" : " filters on"}
+                {edits
+                  ? active === 1
+                    ? " change from the saved view"
+                    : " changes from the saved view"
+                  : active === 1
+                    ? " filter on"
+                    : " filters on"}
               </span>
             </span>
           )}
@@ -1089,8 +1190,9 @@ function FilterBar({
         {roles}
         <div ref={filtersSlot} className="contents" />
         {/* last of the filters, since it clears them all; beside a panel,
-            its icon alone, as Columns is */}
-        {changed && (
+            its icon alone, as Columns is. A page of views has its one
+            Reset instead, by its tabs */}
+        {changed && !edits && (
           <Button
             variant="ghost"
             className="@max-2xl:px-2"
@@ -1180,6 +1282,7 @@ function MultiSelect({
   selected,
   onChange,
   className,
+  edited,
 }: {
   label: string;
   all: string;
@@ -1187,6 +1290,8 @@ function MultiSelect({
   selected: string[];
   onChange: (selected: string[]) => void;
   className?: string;
+  /** differs from the saved view, which its tint says */
+  edited: boolean;
 }) {
   const summary =
     selected.length === 0
@@ -1199,19 +1304,22 @@ function MultiSelect({
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={label}
+        aria-description={edited ? "changed from the saved view" : undefined}
         render={
           <Button
             variant="outline"
             className={cn(
               "bg-background font-normal",
-              selected.length > 0 && "border-foreground/40",
+              edited && EDITED,
               className,
             )}
           />
         }
       >
         {summary}
-        <ChevronDownIcon className="text-muted-foreground" />
+        <ChevronDownIcon
+          className={edited ? "text-edited/70" : "text-muted-foreground"}
+        />
       </DropdownMenuTrigger>
       <DropdownMenuContent>
         {options.map((option) => (

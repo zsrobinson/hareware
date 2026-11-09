@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { toCsv } from "~/lib/csv";
+import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
 import {
   DropdownMenu,
@@ -157,6 +158,9 @@ type Props<T> = {
       copy what is on screen); the table's own otherwise */
   picked?: VisibilityState;
   onPickedChange?: (picked: VisibilityState) => void;
+  /** how the Columns menu says the columns differ from somewhere's own,
+      as a page of saved views does */
+  columnsChanged?: { className: string; description: string };
 };
 
 /* a header is often a component: `meta.csvHeader`, else the id. The Columns
@@ -185,6 +189,7 @@ export function DataTable<T>({
   hidden = [],
   picked: held,
   onPickedChange: hold,
+  columnsChanged,
 }: Props<T>) {
   const [unkept, setUnkept] = useState<SortingState>([]);
   const sorting = kept ?? unkept;
@@ -253,7 +258,13 @@ export function DataTable<T>({
     columns: (
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={<Button variant="outline" className="bg-background" />}
+          aria-description={columnsChanged?.description}
+          render={
+            <Button
+              variant="outline"
+              className={cn("bg-background", columnsChanged?.className)}
+            />
+          }
         >
           {/* an icon in a toolbar too narrow for its name (beside a panel) */}
           <Columns3Icon className="hidden @max-2xl:block" />

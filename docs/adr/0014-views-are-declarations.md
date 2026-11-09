@@ -3,6 +3,11 @@
 **Status:** Accepted — 2026-11-09. Amends ADR 0012: the Charts page is gone,
 and `/charts` is a static page that forwards. Amends ADR 0011: the open panel's
 address is `?open=`, and every link between archive pages carries its filters.
+Amended by ADR 0015 the same day: views are the board's, kept in the Sheet,
+and `views.ts` is only their starter set; Custom and Copy as view are gone,
+and a changed view is edited, not carried to the next tab. The sections below
+on Custom, Copy as view, where views are kept and what a view opens on are
+superseded there.
 
 ## Context
 

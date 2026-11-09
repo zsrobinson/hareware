@@ -41,8 +41,9 @@ const archiveOf = (overrides: Override[]) =>
       unscoped: [],
       ignored: [],
       labels: null,
+      views: [],
       problems: [],
-      tabs: { overrides: true, labels: true, ignored: true },
+      tabs: { overrides: true, labels: true, ignored: true, views: true },
     },
     labels: DEFAULT_LABELS,
     fetchedAt: "2026-10-05T00:00:00Z",
@@ -211,8 +212,9 @@ test("an old every-article row shows where it would go, and leaves answered arti
       ],
       ignored: [],
       labels: null,
+      views: [],
       problems: [],
-      tabs: { overrides: true, labels: true, ignored: true },
+      tabs: { overrides: true, labels: true, ignored: true, views: true },
     },
   });
   const sent = renderWith(<PenNames archive={archive} reloadButton={null} />);
@@ -269,8 +271,9 @@ test("old rows for different roles are set role by role, each with its own name"
       unscoped: [writer, image],
       ignored: [],
       labels: null,
+      views: [],
       problems: [],
-      tabs: { overrides: true, labels: true, ignored: true },
+      tabs: { overrides: true, labels: true, ignored: true, views: true },
     },
   });
   const sent = renderWith(<PenNames archive={archive} reloadButton={null} />);

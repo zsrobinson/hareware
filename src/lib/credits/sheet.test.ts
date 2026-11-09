@@ -9,6 +9,8 @@ import {
   setDifferentPeople,
   setIgnored,
   setLabels,
+  ViewConflict,
+  writeViews,
 } from "./sheet";
 
 /* invented names only: what the Sheet maps is private */
@@ -132,6 +134,7 @@ test("which tabs exist is reported, so a renamed one is not read as empty", asyn
     overrides: false,
     labels: false,
     ignored: false,
+    views: false,
   });
 });
 
@@ -409,5 +412,227 @@ test("labels are written whole, as the settings page edits them", async () => {
   expect(tabs.Labels).toEqual([
     ["label", "role"],
     ["Puzzle by", "writer"],
+  ]);
+});
+
+/* ---- views ---------------------------------------------------------------- */
+
+const HEADER = ["id", "page", "position", "view", "updated by", "updated at"];
+const declared = (label: string) => ({ v: 1, label, title: label });
+const starterOf = (...ids: string[]) =>
+  ids.map((id) => ({ id, view: declared(id) }));
+
+test("the Views tab comes through as the rows it holds, unread", async () => {
+  const { sheets } = fakeSheet({
+    Views: [
+      ["updated at", "id", "page", "view", "position", "updated by"],
+      [
+        "2026-11-01T00:00:00.000Z",
+        "all",
+        "articles",
+        "{not json",
+        "1",
+        "Riley",
+      ],
+      ["", "", "", "", "", ""],
+    ],
+  });
+
+  const state = await readSheet(sheets);
+
+  expect(state.status === "read" && state.views).toEqual([
+    {
+      row: 2,
+      id: "all",
+      page: "articles",
+      position: "1",
+      view: "{not json",
+      updatedBy: "Riley",
+      updatedAt: "2026-11-01T00:00:00.000Z",
+    },
+  ]);
+  expect(state.status === "read" && state.tabs.views).toBe(true);
+});
+
+test("the first write on a page writes its starter views with the change, creating the tab", async () => {
+  const { sheets, tabs } = fakeSheet({});
+
+  const at = await writeViews(
+    sheets,
+    "people",
+    { kind: "save", id: "top", view: declared("Top"), basedOn: "" },
+    { starter: starterOf("everyone", "top"), who: "Riley", at: "T1" },
+  );
+
+  expect(at).toBe("T1");
+  expect(tabs.Views).toEqual([
+    HEADER,
+    [
+      "everyone",
+      "people",
+      "1",
+      JSON.stringify(declared("everyone")),
+      "Riley",
+      "T1",
+    ],
+    ["top", "people", "2", JSON.stringify(declared("Top")), "Riley", "T1"],
+  ]);
+});
+
+test("a starter copy is refused once someone has written the page", async () => {
+  const { sheets, tabs } = fakeSheet({
+    Views: [HEADER, ["everyone", "people", "1", "{}", "Sam", "T0"]],
+  });
+  const before = structuredClone(tabs.Views);
+
+  await expect(
+    writeViews(
+      sheets,
+      "people",
+      { kind: "save", id: "everyone", view: declared("E"), basedOn: "" },
+      { starter: starterOf("everyone"), who: "Riley" },
+    ),
+  ).rejects.toThrow(ViewConflict);
+  expect(tabs.Views).toEqual(before);
+});
+
+test("a save based on an older copy of the row is a conflict, and writes nothing", async () => {
+  const { sheets, tabs } = fakeSheet({
+    Views: [
+      HEADER,
+      ["all", "articles", "1", "{}", "Sam", "T2"],
+      ["everyone", "people", "1", "{}", "Sam", "T0"],
+    ],
+  });
+  const before = structuredClone(tabs.Views);
+
+  await expect(
+    writeViews(
+      sheets,
+      "articles",
+      { kind: "save", id: "all", view: declared("All"), basedOn: "T1" },
+      { starter: null, who: "Riley" },
+    ),
+  ).rejects.toThrow("Someone changed this view since you opened it");
+  expect(tabs.Views).toEqual(before);
+
+  await expect(
+    writeViews(
+      sheets,
+      "articles",
+      { kind: "delete", id: "gone", basedOn: "T1" },
+      { starter: null, who: "Riley" },
+    ),
+  ).rejects.toThrow("Someone deleted this view since you opened it");
+  expect(tabs.Views).toEqual(before);
+});
+
+test("a save on the copy it was based on rewrites that row alone", async () => {
+  const { sheets, tabs } = fakeSheet({
+    Views: [
+      ["view", "id", "page", "position", "updated by", "updated at"],
+      ["{}", "all", "articles", "1", "Sam", "T0"],
+      ["{}", "all", "people", "1", "Sam", "T0"],
+      ["typed by hand", "", "", "", "", ""],
+    ],
+  });
+
+  await writeViews(
+    sheets,
+    "articles",
+    { kind: "save", id: "all", view: declared("All"), basedOn: "T0" },
+    { starter: null, who: "Riley", at: "T1" },
+  );
+
+  expect(tabs.Views).toEqual([
+    ["view", "id", "page", "position", "updated by", "updated at"],
+    [JSON.stringify(declared("All")), "all", "articles", "1", "Riley", "T1"],
+    ["{}", "all", "people", "1", "Sam", "T0"],
+    ["typed by hand", "", "", "", "", ""],
+  ]);
+});
+
+test("a page whose rows have gone refuses a write based on them", async () => {
+  const { sheets } = fakeSheet({ Views: [HEADER] });
+
+  await expect(
+    writeViews(
+      sheets,
+      "articles",
+      { kind: "save", id: "all", view: declared("All"), basedOn: "T0" },
+      { starter: null, who: "Riley" },
+    ),
+  ).rejects.toThrow(ViewConflict);
+});
+
+test("a new view goes last, or where it is put back; an id taken is a conflict", async () => {
+  const { sheets, tabs } = fakeSheet({
+    Views: [HEADER, ["all", "articles", "1", "{}", "Sam", "T0"]],
+  });
+  const create = (id: string, position?: number) =>
+    writeViews(
+      sheets,
+      "articles",
+      { kind: "create", id, view: declared(id), position },
+      { starter: null, who: "Riley", at: "T1" },
+    );
+
+  await create("v-new");
+  await create("v-back", 7);
+
+  expect(tabs.Views!.slice(2).map((row) => row.slice(0, 3))).toEqual([
+    ["v-new", "articles", "2"],
+    ["v-back", "articles", "7"],
+  ]);
+  await expect(create("all")).rejects.toThrow(ViewConflict);
+});
+
+test("a move rewrites positions alone, and is refused if the order it saw has changed", async () => {
+  const { sheets, tabs } = fakeSheet({
+    Views: [
+      HEADER,
+      ["b", "articles", "2", "{}", "Sam", "T0"],
+      ["a", "articles", "1", "{}", "Sam", "T0"],
+    ],
+  });
+  const move = (order: string[], basedOn: string[]) =>
+    writeViews(
+      sheets,
+      "articles",
+      { kind: "reorder", order, basedOn },
+      { starter: null, who: "Riley", at: "T1" },
+    );
+
+  await expect(move(["b", "a"], ["b", "a"])).rejects.toThrow(ViewConflict);
+  await expect(move(["b"], ["a", "b"])).rejects.toThrow(ViewConflict);
+  await move(["b", "a"], ["a", "b"]);
+
+  expect(tabs.Views).toEqual([
+    HEADER,
+    ["b", "articles", "1", "{}", "Sam", "T0"],
+    ["a", "articles", "2", "{}", "Sam", "T0"],
+  ]);
+});
+
+test("restoring a page replaces its rows with the starter set and leaves the other page's", async () => {
+  const { sheets, tabs } = fakeSheet({
+    Views: [
+      HEADER,
+      ["mine", "articles", "1", "{}", "Sam", "T0"],
+      ["everyone", "people", "1", "{}", "Sam", "T0"],
+    ],
+  });
+
+  await writeViews(
+    sheets,
+    "articles",
+    { kind: "restore" },
+    { starter: starterOf("all"), who: "Riley", at: "T1" },
+  );
+
+  expect(tabs.Views).toEqual([
+    HEADER,
+    ["everyone", "people", "1", "{}", "Sam", "T0"],
+    ["all", "articles", "1", JSON.stringify(declared("all")), "Riley", "T1"],
   ]);
 });

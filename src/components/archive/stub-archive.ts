@@ -6,8 +6,10 @@
 */
 
 import { vi } from "vitest";
-import type { Override } from "~/lib/credits/sheet";
+import { applyEdit, isViewEdit, parseEdit } from "~/lib/credits/edits";
+import { readSheet, ViewConflict, type Override } from "~/lib/credits/sheet";
 import { queryClient } from "~/lib/query-client";
+import type { Rows, Sheets } from "~/lib/services/google/sheets";
 
 export type StubPost = {
   id: number;
@@ -25,6 +27,8 @@ export function stubArchive({
   categories = [],
   overrides,
   views,
+  viewsTab,
+  answer,
 }: {
   posts: StubPost[];
   categories?: [number, string][];
@@ -33,6 +37,12 @@ export function stubArchive({
   /** each post's lifetime views, by post id, as a stored read of them;
       without it no views are kept, and /api/stats is not set up */
   views?: Record<number, number>;
+  /** the Sheet's Views tab, in memory: given, the Sheet is connected, and
+      /api/sheet changes it as the Worker would, for /api/archive.json to
+      read back */
+  viewsTab?: Rows;
+  /** how /api/sheet answers in place of writing, as a failure would */
+  answer?: () => Response;
 }) {
   /* the client outlives a page, as it does between pages: a read another
      test left in it would be drawn instead */
@@ -47,17 +57,45 @@ export function stubArchive({
     categories,
     fetchedAt: new Date().toISOString(),
   };
-  const sheet = overrides
-    ? {
-        status: "read",
-        overrides,
-        unscoped: [],
-        ignored: [],
-        labels: null,
-        problems: [],
-        tabs: { overrides: true, labels: true, ignored: true },
-      }
-    : { status: "unconfigured", missing: ["KEY"] };
+  const tabs: Record<string, Rows> = viewsTab ? { Views: viewsTab } : {};
+  const sheets = {
+    tabs: async () => Object.keys(tabs),
+    read: async (titles: string[]) =>
+      new Map(titles.filter((t) => t in tabs).map((t) => [t, tabs[t]!])),
+    addTab: async (title: string) => {
+      tabs[title] = [];
+    },
+    replace: async (title: string, rows: Rows) => {
+      tabs[title] = rows;
+    },
+  } as unknown as Sheets;
+  const sheet = async () => {
+    if (!overrides && !viewsTab)
+      return { status: "unconfigured", missing: ["KEY"] };
+    const read = await readSheet(sheets);
+    return read.status === "read"
+      ? {
+          ...read,
+          overrides: overrides ?? [],
+          tabs: { ...read.tabs, overrides: true, labels: true, ignored: true },
+        }
+      : read;
+  };
+  const write = async (body: string) => {
+    if (answer) return answer();
+    const edit = parseEdit(JSON.parse(body));
+    if ("error" in edit) return new Response(edit.error, { status: 400 });
+    if (!isViewEdit(edit)) return new Response(null, { status: 204 });
+    try {
+      return Response.json({
+        updatedAt: await applyEdit(sheets, edit, "Riley Real"),
+      });
+    } catch (error) {
+      if (error instanceof ViewConflict)
+        return Response.json({ conflict: error.message }, { status: 409 });
+      throw error;
+    }
+  };
   /* asked well before any post, so every one of them is counted */
   const counted = views && {
     posts: Object.fromEntries(
@@ -71,12 +109,12 @@ export function stubArchive({
   };
   vi.stubGlobal(
     "fetch",
-    vi.fn((url: string) =>
-      Promise.resolve(
-        String(url).startsWith("/api/stats/")
-          ? new Response("WordPress stats aren't set up", { status: 503 })
-          : Response.json({ sheet }),
-      ),
+    vi.fn(async (url: string, init?: RequestInit) =>
+      String(url).startsWith("/api/stats/")
+        ? new Response("WordPress stats aren't set up", { status: 503 })
+        : String(url) === "/api/sheet"
+          ? write(String(init?.body))
+          : Response.json({ sheet: await sheet() }),
     ),
   );
   vi.stubGlobal("caches", {
@@ -106,4 +144,5 @@ export function stubArchive({
   /* jsdom lays nothing out */
   if (!("scrollIntoView" in Element.prototype))
     Object.assign(Element.prototype, { scrollIntoView() {} });
+  return { tabs };
 }

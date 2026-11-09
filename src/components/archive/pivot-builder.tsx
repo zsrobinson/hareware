@@ -9,6 +9,7 @@ import { FieldRows } from "~/components/field-row";
 import { isQuantity } from "~/lib/credits/stats";
 import { BuilderRow, CompareRow } from "./chart-builder";
 import { COUNTS, TOPS } from "./chart-config";
+import { COMPARES } from "./compare";
 import { Choice } from "./choice";
 import {
   allowsPivot,
@@ -25,18 +26,33 @@ import {
  */
 export function PivotBuilder({
   config,
+  saved,
   onChange,
 }: {
   config: PivotConfig;
+  /** the view's pivot as saved, whose settings a changed row says */
+  saved?: PivotConfig;
   onChange: (next: PivotConfig) => void;
 }) {
   const set = (patch: Partial<PivotConfig>) =>
     onChange(settlePivot({ ...config, ...patch }));
   const ok = allowsPivot(config);
+  const was = (
+    key: keyof PivotConfig,
+    options: { id: string; label: string }[],
+  ) =>
+    saved && saved[key] !== config[key]
+      ? (options.find((o) => o.id === String(saved[key]))?.label ?? "")
+      : undefined;
+  const columns = [{ id: "none" as const, label: "Nothing" }, ...DIMENSIONS];
+  const tops = TOPS.map((n) => ({
+    id: String(n),
+    label: n === 0 ? "Everyone" : `Top ${n}`,
+  }));
 
   return (
     <FieldRows>
-      <BuilderRow icon={HashIcon} label="Count">
+      <BuilderRow icon={HashIcon} label="Count" saved={was("count", COUNTS)}>
         <Choice
           label="Count"
           hideLabel
@@ -46,7 +62,7 @@ export function PivotBuilder({
           onChange={(count) => set({ count })}
         />
       </BuilderRow>
-      <BuilderRow icon={Rows3Icon} label="Rows">
+      <BuilderRow icon={Rows3Icon} label="Rows" saved={was("rows", DIMENSIONS)}>
         <Choice
           label="Rows"
           hideLabel
@@ -56,20 +72,25 @@ export function PivotBuilder({
           onChange={(rows) => set({ rows })}
         />
       </BuilderRow>
-      <BuilderRow icon={Columns3Icon} label="Columns">
+      <BuilderRow
+        icon={Columns3Icon}
+        label="Columns"
+        saved={was("columns", columns)}
+      >
         <Choice
           label="Columns"
           hideLabel
           width="w-full"
           value={config.columns}
-          options={[
-            { id: "none" as const, label: "Nothing" },
-            ...DIMENSIONS,
-          ].map((d) => ({ ...d, disabled: !ok.columns[d.id] }))}
+          options={columns.map((d) => ({ ...d, disabled: !ok.columns[d.id] }))}
           onChange={(columns) => set({ columns })}
         />
       </BuilderRow>
-      <BuilderRow icon={PercentIcon} label="Values">
+      <BuilderRow
+        icon={PercentIcon}
+        label="Values"
+        saved={was("values", PIVOT_VALUES)}
+      >
         <Choice
           label="Values"
           hideLabel
@@ -87,19 +108,17 @@ export function PivotBuilder({
       <CompareRow
         value={config.compare}
         allowed={ok.compare}
+        saved={was("compare", COMPARES)}
         onChange={(compare) => set({ compare })}
       />
       {ok.top && (
-        <BuilderRow icon={UsersIcon} label="Show">
+        <BuilderRow icon={UsersIcon} label="Show" saved={was("top", tops)}>
           <Choice
             label="Show"
             hideLabel
             width="w-full"
             value={String(config.top)}
-            options={TOPS.map((n) => ({
-              id: String(n),
-              label: n === 0 ? "Everyone" : `Top ${n}`,
-            }))}
+            options={tops}
             onChange={(top) => set({ top: Number(top) })}
           />
         </BuilderRow>

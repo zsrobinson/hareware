@@ -95,10 +95,21 @@ articles, which can include another semester's, and says so.
 
 One way of looking at a table, Articles or People: as a table, a chart or a
 pivot, on a range and filters it opens on. Each table is a page, and its views are its
-tabs; the defaults are declared in `src/components/archive/views.ts`
-([ADR 0014](docs/adr/0014-views-are-declarations.md)). **Custom** is whatever
-the builder made from one, and a view of one's own is its link. Say "view",
-never "report", "dashboard" or "saved view": nothing is saved.
+tabs ([ADR 0014](docs/adr/0014-views-are-declarations.md)). Views are the
+board's: rows of the Sheet's Views tab, which any member changes, adds,
+renames, moves or deletes from the page, for everyone
+([ADR 0015](docs/adr/0015-views-are-shared-in-the-sheet.md)). Say "view",
+never "report", "dashboard" or "saved view": every view is saved.
+
+The **starter set** is what a page shows while the Sheet has no views for
+it, declared in `src/components/archive/views.ts`; the first change anyone
+makes there writes it to the Sheet.
+
+A view is **edited** once anything on screen differs from it as saved: a
+filter, the search, the sort, the columns, anything in Customize. **Reset**
+takes it back to the view as saved, and **Save for everyone** keeps the
+edits as the view. Edits belong to their view: choosing another drops them,
+which Undo brings back. A link carries a view's edits, so it opens edited.
 
 A **pivot** is rows by columns, each cut by a dimension (a period, a section,
 a role, a person, when they joined, or semesters since), every cell a number or a share of
@@ -118,16 +129,17 @@ not of time, compares.
 ## The Sheet
 
 The club's Google Sheet, owned by the club's account, holding the only facts
-WordPress does not:
+WordPress does not, and the board's views:
 
 - **Overrides**: who a byline really is, on one Article per row.
 - **Labels**: which credit line labels count, and their roles.
 - **Ignored**: Articles whose problems are intended, and similar names that are
   different people.
+- **Views**: each page's views, one per row.
 
 HareWare reads it on every load and writes it from the signed-in pages, so
-nobody needs to open it in normal use. It holds corrections only, never a copy
-of WordPress. What is in it is private: it never appears on WordPress, in the
+nobody needs to open it in normal use. It holds corrections and views only,
+never a copy of WordPress. What is in it is private: it never appears on WordPress, in the
 repository, in the log, or on a page anyone outside the Editorial Board can
 reach.
 
@@ -167,5 +179,5 @@ reminder did not run", never "the job failed".
 One thing HareWare did, as recorded in the log: a run of an automation, a manual
 trigger, a press of a "Not posted" button, or a change to the Sheet. Each
 records what happened and, where there was one, the Discord user behind it. A
-Sheet change is logged by kind and post id only: the log never carries a real
+Sheet change is logged by kind and post id, or page and view id, only: the log never carries a real
 name.

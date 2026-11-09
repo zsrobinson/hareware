@@ -1,14 +1,15 @@
 /*
-  Which view a page shows, kept in the address beside the filters so a link
-  reproduces it: one of the page's own views (./views), or Custom, whatever
-  the builder last made, on the filters of the view it was made from. Every
-  view is a layout the builder can show, so choosing one and then changing
-  a setting starts from exactly what was on screen.
+  Which view a page shows, and how what is on screen differs from that view
+  as saved, kept in the address beside the filters so a link reproduces it.
+  A link names a view by its id and only what differs from it, so it opens
+  edited for whoever follows it, on whatever that view is by then (ADR 0015).
+  Every view is a layout the builder can show, so changing a setting starts
+  from exactly what was on screen.
 
-  The range and a table's sort are only where a view starts: changing
-  either leaves the view as it is, and is kept when another view is chosen,
-  until Clear. The series a chart's legend has off are kept too, so a link
-  shows what was on screen.
+  The range, a table's sort, People's Show and the series a chart's legend
+  has off are where a view starts, and changing any of them is an edit of
+  it, as Customize's are. Edits belong to their view: choosing another opens
+  that one as saved.
 */
 
 import {
@@ -45,39 +46,39 @@ export type Shape =
   | { type: "chart"; chart: ChartConfig }
   | { type: "pivot"; pivot: PivotConfig };
 
+/** what is on screen, besides the filters, whatever the view says */
 export type ViewState = {
-  /** one of the page's views, or "custom" */
+  /** one of the page's views, or NEW */
   view: string;
-  /** null until the builder has been used, so Custom starts from what was on screen */
-  custom: Shape | null;
-  /** the view Custom was made from, which Reset goes back to */
-  base: string;
+  shape: Shape;
   /** the series a chart's legend has off */
   hidden: string[];
-  /** a table's sort, which each view opens on its own of */
+  /** a table's sort */
   sort: TableSort;
-  /** People's Show, which each view opens on its own of, as the sort */
+  /** People's Show */
   minimum: Minimum;
 };
 
-export const CUSTOM = "custom";
+/** a view not saved yet, from the page's `+`: a copy of its first. Its id
+    is no saved view's: the Sheet's rows may not use it (./saved-views) */
+export const NEW = "draft";
 
-/** a page's views, its tabs in order; the first is a table, and opens the page */
-export const viewsOn = (source: Source): View[] =>
-  VIEWS.filter((view) => view.source === source);
-
-const firstView = (source: Source) => viewsOn(source)[0]!;
-
-const find = (source: Source, id: string | null) =>
-  viewsOn(source).find((view) => view.id === (RENAMED[id ?? ""] ?? id));
-
-/** the view on screen, or the one Custom was made from */
-export const viewOf = (
-  state: Pick<ViewState, "view" | "base">,
-  source: Source,
-): View =>
-  find(source, state.view === CUSTOM ? state.base : state.view) ??
-  firstView(source);
+/**
+ * The view `id` names, as saved: one of the page's, or a new one made from
+ * its first. `views` are the page's, in order, never empty.
+ */
+export function savedOf(views: readonly View[], id: string): View {
+  const first = views[0]!;
+  if (id === NEW)
+    return {
+      ...first,
+      id: NEW,
+      label: "New view",
+      title: "New view",
+      question: "",
+    };
+  return views.find((view) => view.id === id) ?? first;
+}
 
 const shapeOfView = ({ layout }: View): Shape =>
   layout.type === "table"
@@ -97,30 +98,16 @@ const shapeOfView = ({ layout }: View): Shape =>
 export const searchingOf = (shape: Shape, source: Source): Searching =>
   shape.type === "table" ? source : "articles";
 
-/** what is on screen, as the builder shows it */
-export function shapeOf(state: ViewState, source: Source): Shape {
-  if (state.view === CUSTOM && state.custom) return state.custom;
-  return shapeOfView(viewOf(state, source));
-}
-
-/**
- * What is on screen, as a view declares it. `off` are the columns the
- * Columns menu has taken out, which the view on screen does not show.
- */
-export function layoutOf(
-  state: ViewState,
-  source: Source,
-  off: readonly string[] = [],
-): Layout {
-  const shape = shapeOf(state, source);
+/** What is on screen, as a view declares it. */
+export function layoutOf(state: ViewState, source: Source): Layout {
+  const { shape } = state;
   if (shape.type === "chart")
     return state.hidden.length > 0 ? { ...shape, hidden: state.hidden } : shape;
   if (shape.type === "pivot") return shape;
-  const shown = shape.columns.filter((id) => !off.includes(id));
   return {
     type: "table",
     table: {
-      columns: shown.length > 0 ? shown : shape.columns,
+      columns: shape.columns,
       sort: state.sort,
       ...(source === "people" && state.minimum !== 1
         ? { minimum: state.minimum }
@@ -130,33 +117,38 @@ export function layoutOf(
   } as Layout;
 }
 
-/* the table a view opens with: its own, or for a chart, the page's first */
-function openingTable(view: View, source: Source) {
+/* the table a view opens with: its own, or for a chart, the page's first
+   table, or every column by the first */
+function openingTable(view: View, views: readonly View[]) {
   const layout =
-    view.layout.type === "table" ? view.layout : firstView(source).layout;
-  if (layout.type !== "table") throw new Error(`${source} opens on a chart`);
-  return layout.table;
+    view.layout.type === "table"
+      ? view.layout
+      : views.find((v) => v.layout.type === "table")?.layout;
+  if (layout?.type === "table") return layout.table;
+  const columns = COLUMNS[view.source];
+  return { columns, sort: { id: columns[0], desc: false } };
 }
 
-/** the sort a view opens on */
-const openingSort = (view: View, source: Source): TableSort =>
-  openingTable(view, source).sort;
-
 /** People's Show as a view opens on it */
-const openingMinimum = (view: View, source: Source): Minimum => {
-  const table = openingTable(view, source);
+function openingMinimum(view: View, views: readonly View[]): Minimum {
+  const table = openingTable(view, views);
   return "minimum" in table && table.minimum ? table.minimum : 1;
-};
+}
 
-/** the series a view's legend opens with off; Custom opens with them all */
-const openingHidden = (
-  state: Pick<ViewState, "view" | "base">,
-  source: Source,
-) => {
-  if (state.view === CUSTOM) return [];
-  const { layout } = viewOf(state, source);
-  return layout.type === "chart" ? [...(layout.hidden ?? [])] : [];
-};
+/** what a view opens on, besides the filters: itself, as saved */
+export function openingState(view: View, views: readonly View[]): ViewState {
+  return {
+    view: view.id,
+    shape: shapeOfView(view),
+    hidden: view.layout.type === "chart" ? [...(view.layout.hidden ?? [])] : [],
+    sort: openingTable(view, views).sort as TableSort,
+    minimum: openingMinimum(view, views),
+  };
+}
+
+/** the view on screen as saved, opened afresh: what Reset goes back to */
+export const resetView = (state: ViewState, views: readonly View[]) =>
+  openingState(savedOf(views, state.view), views);
 
 const sameSort = (a: TableSort, b: TableSort) =>
   a.id === b.id && a.desc === b.desc;
@@ -164,23 +156,20 @@ const sameSort = (a: TableSort, b: TableSort) =>
 const same = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((x, i) => x === b[i]);
 
-/** what heads a view: its own title and question; Custom's title is made
-    from what it shows, and it answers whatever was asked of it */
+const sameShape = (a: Shape, b: Shape) =>
+  JSON.stringify(a) === JSON.stringify(b);
+
+/** what heads a view: its own title and question, edited or not */
 export function headingOf(
   state: ViewState,
-  source: Source,
-): { title: string | null; question: string | null } {
-  if (state.view === CUSTOM) return { title: null, question: null };
-  const { title, question } = viewOf(state, source);
+  views: readonly View[],
+): { title: string; question: string } {
+  const { title, question } = savedOf(views, state.view);
   return { title, question };
 }
 
 /** every filter as the view opens on it, which its link leaves out */
-export function openingOf(
-  state: Pick<ViewState, "view" | "base">,
-  source: Source,
-): FilterState {
-  const view = viewOf(state, source);
+export function openingOf(view: View): FilterState {
   const { sections = [], roles = [], people = [] } = view.filters ?? {};
   return {
     ...clearedState(view.range),
@@ -190,21 +179,75 @@ export function openingOf(
   };
 }
 
-/** a page's first chart or pivot, for a Custom one made from something
-    else; a page with none of its own borrows the archive's first */
+/** what can differ from a view as saved, each one edit however much changed */
+export type Difference =
+  | "range"
+  | "sections"
+  | "roles"
+  | "people"
+  | "articles"
+  | "search"
+  | "layout"
+  | "sort"
+  | "minimum"
+  | "hidden";
+
+/**
+ * How what is on screen differs from the view as saved. A sort is a
+ * table's, Show People's table's and the legend a chart's: one held while
+ * the layout does not show it is not on screen to differ.
+ */
+export function differences(
+  state: ViewState,
+  filters: FilterState,
+  views: readonly View[],
+): Difference[] {
+  const saved = savedOf(views, state.view);
+  const opening = openingState(saved, views);
+  const from = openingOf(saved);
+  const listDiffers = (key: "sections" | "roles" | "people") =>
+    !same(filters[key], from[key]);
+  const table = state.shape.type === "table";
+  const found: [Difference, boolean][] = [
+    ["range", filters.preset !== from.preset || filters.preset === "custom"],
+    ["sections", listDiffers("sections")],
+    ["roles", listDiffers("roles")],
+    ["people", listDiffers("people")],
+    ["articles", filters.articles.length > 0],
+    ["search", filters.search.trim() !== ""],
+    ["layout", !sameShape(state.shape, opening.shape)],
+    ["sort", table && !sameSort(state.sort, opening.sort)],
+    [
+      "minimum",
+      table && saved.source === "people" && state.minimum !== opening.minimum,
+    ],
+    [
+      "hidden",
+      state.shape.type === "chart" && !same(state.hidden, opening.hidden),
+    ],
+  ];
+  return found.filter(([, differs]) => differs).map(([key]) => key);
+}
+
+/** whether there is anything to save: a new view always has */
+export const isEdited = (
+  state: ViewState,
+  filters: FilterState,
+  views: readonly View[],
+) => state.view === NEW || differences(state, filters, views).length > 0;
+
+/** a page's first chart or pivot, for one made from something else; a page
+    with none of its own borrows the starter set's first */
 function firstOf<T extends "chart" | "pivot">(
-  source: Source,
+  views: readonly View[],
   type: T,
 ): Extract<Layout, { type: T }> {
   const view =
-    viewsOn(source).find((v) => v.layout.type === type) ??
+    views.find((v) => v.layout.type === type) ??
     VIEWS.find((v) => v.layout.type === type);
   if (!view) throw new Error(`no view is a ${type}`);
   return view.layout as Extract<Layout, { type: T }>;
 }
-
-const firstChart = (source: Source) => firstOf(source, "chart").chart;
-const firstPivot = (source: Source) => firstOf(source, "pivot").pivot;
 
 /** the period a rolling range rounds to, so a view's first period is whole */
 export function periodOfShape(shape: Shape): Period | undefined {
@@ -215,191 +258,197 @@ export function periodOfShape(shape: Shape): Period | undefined {
   return undefined;
 }
 
-const firstColumns = (source: Source): readonly ColumnId[] => {
-  const { layout } = firstView(source);
-  return layout.type === "table" ? layout.table.columns : COLUMNS[source];
-};
-
 const list = (value: string | null) =>
   value ? value.split(",").filter(Boolean) : [];
 
-export function readView(search: string, source: Source): ViewState {
-  const params = new URLSearchParams(search);
-  const asked = params.get("view");
-  const custom = asked === CUSTOM;
-  /* a view no longer offered, or another page's, opens the first */
-  const base = (find(source, custom ? params.get("base") : asked) ??
-    firstView(source))!;
-  const all: readonly string[] = COLUMNS[source];
-  const columns = [...new Set(list(params.get("columns")))].filter((id) =>
-    all.includes(id),
-  ) as ColumnId[];
-  const shape = shapeOfView(base);
-  const layout = params.get("layout");
-  /* a Custom link from before tables had no layout: it was a chart */
-  const built: Shape | null = !custom
-    ? null
-    : layout === "table"
-      ? {
-          type: "table",
-          columns: columns.length > 0 ? columns : firstColumns(source),
-          ...(source === "people" && params.get("only") === "new"
-            ? { only: "new" as const }
-            : {}),
-        }
-      : layout === "pivot"
-        ? {
-            type: "pivot",
-            pivot: readPivot(
-              params,
-              shape.type === "pivot" ? shape.pivot : firstPivot(source),
-            ),
-          }
-        : {
-            type: "chart",
-            chart: readChart(
-              params,
-              shape.type === "chart" ? shape.chart : firstChart(source),
-            ),
-          };
-  const opening = openingSort(base, source);
-  const [sort] = readSort(search, COLUMNS[source]);
-  const view = custom ? CUSTOM : base.id;
-  return {
-    view,
-    custom: built,
-    base: base.id,
-    /* present and empty is every series on, where the view has some off */
-    hidden: params.has("hide")
-      ? list(params.get("hide"))
-      : openingHidden({ view, base: base.id }, source),
-    sort: params.has("sort") && sort ? (sort as TableSort) : opening,
-    minimum: Number(
-      readChoice(
-        search,
-        "min",
-        MINIMUMS.map(String),
-        String(openingMinimum(base, source)),
-      ),
-    ) as Minimum,
-  };
-}
+const LAYOUTS: Shape["type"][] = ["table", "chart", "pivot"];
 
-/** writes the view into `params`, leaving the filters' own parameters alone */
-export function writeView(
-  state: ViewState,
-  params: URLSearchParams,
-  source: Source,
-) {
-  const first = firstView(source).id;
-  if (state.view === first) params.delete("view");
-  else params.set("view", state.view);
-  const custom = state.view === CUSTOM ? shapeOf(state, source) : null;
-  /* the two share some names, so both go before either is written */
-  writeChart(null, params);
-  writePivot(null, params);
-  if (custom?.type === "chart") writeChart(custom.chart, params);
-  if (custom?.type === "pivot") writePivot(custom.pivot, params);
-  if (custom) params.set("layout", custom.type);
-  else params.delete("layout");
-  if (custom?.type === "table") params.set("columns", custom.columns.join(","));
-  else params.delete("columns");
-  if (custom?.type === "table" && custom.only) params.set("only", custom.only);
-  else params.delete("only");
-  if (custom && state.base !== first) params.set("base", state.base);
-  else params.delete("base");
-  if (same(state.hidden, openingHidden(state, source))) params.delete("hide");
-  else params.set("hide", state.hidden.join(","));
-  /* a sort changed on a table is held while a chart shows, for the table
-     after it, so the link holds it too */
-  const view = viewOf(state, source);
-  writeSort(
-    sameSort(state.sort, openingSort(view, source)) ? [] : [state.sort],
-    params,
-  );
-  writeChoice(
-    String(state.minimum),
-    params,
-    "min",
-    String(openingMinimum(view, source)),
-  );
+/** the view a link names, which may be one renamed since or gone */
+function asked(params: URLSearchParams, views: readonly View[]) {
+  const named = params.get("view");
+  /* a Custom link from before views were saved: the view it was made from */
+  const id = named === "custom" ? (params.get("base") ?? "") : (named ?? "");
+  if (id === "" || id === NEW) return { id: id || views[0]!.id, missing: null };
+  if (views.some((view) => view.id === id)) return { id, missing: null };
+  const renamed = RENAMED[id];
+  if (renamed && views.some((view) => view.id === renamed))
+    return { id: renamed, missing: null };
+  return { id: views[0]!.id, missing: id };
 }
 
 /**
- * Another view chosen from the tabs. Custom starts from what was on screen
- * until the builder has made one; a sort changed since the last view opened
- * stands, as a filter does (`carryOver`).
+ * What a link opens on. `missing` is a view it names that the page no
+ * longer has: it opens the page's first view as saved, since what the link
+ * changed was another view's, and the page says so.
  */
-export function chooseView(
-  state: ViewState,
-  id: string,
+export function readView(
+  search: string,
+  views: readonly View[],
   source: Source,
-): ViewState {
-  const next =
-    id === CUSTOM && !state.custom && state.view !== CUSTOM
-      ? { view: id, custom: shapeOf(state, source), base: state.view }
-      : { view: id, custom: state.custom, base: state.base };
-  const from = viewOf(state, source);
-  const to = viewOf(next, source);
+): { state: ViewState; missing: string | null } {
+  const params = new URLSearchParams(search);
+  const { id, missing } = asked(params, views);
+  const saved = savedOf(views, id);
+  const opening = openingState(saved, views);
+  if (missing !== null) return { state: opening, missing };
+
+  const all: readonly string[] = COLUMNS[source];
+  const savedShape = opening.shape;
+  const layout = params.get("layout") as Shape["type"] | null;
+  const type = layout && LAYOUTS.includes(layout) ? layout : null;
+  const columns = [...new Set(list(params.get("columns")))].filter((c) =>
+    all.includes(c),
+  ) as ColumnId[];
+  const shape: Shape =
+    type === null
+      ? savedShape
+      : type === "table"
+        ? {
+            type,
+            columns:
+              columns.length > 0
+                ? columns
+                : savedShape.type === "table"
+                  ? savedShape.columns
+                  : openingTable(saved, views).columns,
+            ...(source !== "people"
+              ? {}
+              : params.has("only")
+                ? params.get("only") === "new"
+                  ? { only: "new" as const }
+                  : {}
+                : savedShape.type === "table" && savedShape.only
+                  ? { only: savedShape.only }
+                  : {}),
+          }
+        : type === "pivot"
+          ? {
+              type,
+              pivot: readPivot(
+                params,
+                savedShape.type === "pivot"
+                  ? savedShape.pivot
+                  : firstOf(views, "pivot").pivot,
+              ),
+            }
+          : {
+              type,
+              chart: readChart(
+                params,
+                savedShape.type === "chart"
+                  ? savedShape.chart
+                  : firstOf(views, "chart").chart,
+              ),
+            };
+  const [sort] = readSort(search, all);
   return {
-    ...next,
-    /* another chart's series are other things: they start as it declares,
-       but Custom made now is what was on screen */
-    hidden:
-      next.view === CUSTOM && next.custom !== state.custom
-        ? state.hidden
-        : openingHidden(next, source),
-    sort: sameSort(state.sort, openingSort(from, source))
-      ? openingSort(to, source)
-      : state.sort,
-    minimum:
-      state.minimum === openingMinimum(from, source)
-        ? openingMinimum(to, source)
-        : state.minimum,
+    state: {
+      view: saved.id,
+      shape,
+      /* present and empty is every series on, where the view has some off */
+      hidden: params.has("hide") ? list(params.get("hide")) : opening.hidden,
+      sort: params.has("sort") && sort ? (sort as TableSort) : opening.sort,
+      minimum: Number(
+        readChoice(
+          search,
+          "min",
+          MINIMUMS.map(String),
+          String(opening.minimum),
+        ),
+      ) as Minimum,
+    },
+    missing: null,
   };
 }
 
-/** what the builder made: changing a view makes a custom one from it, and the view stays */
-export function changeView(
+/* the settings of a chart or a pivot that differ from the saved one's, or
+   all of them where the view is saved as something else */
+function writeDiffering<T extends Record<string, unknown>>(
+  write: (config: T, params: URLSearchParams) => void,
+  config: T,
+  saved: T | null,
+  params: URLSearchParams,
+) {
+  const mine = new URLSearchParams();
+  write(config, mine);
+  const theirs = new URLSearchParams();
+  if (saved) write(saved, theirs);
+  for (const [key, value] of mine)
+    if (theirs.get(key) !== value) params.set(key, value);
+}
+
+/** writes the view into `params`, each part only where it differs from the
+    view as saved, leaving the filters' own parameters alone */
+export function writeView(
   state: ViewState,
-  shape: Shape,
-  source: Source,
-): ViewState {
-  const before = shapeOf(state, source);
+  params: URLSearchParams,
+  views: readonly View[],
+) {
+  const saved = savedOf(views, state.view);
+  const opening = openingState(saved, views);
+  if (state.view === views[0]!.id) params.delete("view");
+  else params.set("view", state.view);
+  params.delete("base");
+  /* the two share some names, so both go before either is written */
+  writeChart(null, params);
+  writePivot(null, params);
+  for (const key of ["layout", "columns", "only"]) params.delete(key);
+  const { shape } = state;
+  const from = opening.shape;
+  if (!sameShape(shape, from)) {
+    params.set("layout", shape.type);
+    if (shape.type === "chart")
+      writeDiffering(
+        writeChart,
+        shape.chart,
+        from.type === "chart" ? from.chart : null,
+        params,
+      );
+    if (shape.type === "pivot")
+      writeDiffering(
+        writePivot,
+        shape.pivot,
+        from.type === "pivot" ? from.pivot : null,
+        params,
+      );
+    if (shape.type === "table") {
+      if (from.type !== "table" || !same(shape.columns, from.columns))
+        params.set("columns", shape.columns.join(","));
+      const was = from.type === "table" ? from.only : undefined;
+      if (shape.only !== was) params.set("only", shape.only ?? "");
+    }
+  }
+  if (same(state.hidden, opening.hidden)) params.delete("hide");
+  else params.set("hide", state.hidden.join(","));
+  writeSort(sameSort(state.sort, opening.sort) ? [] : [state.sort], params);
+  writeChoice(String(state.minimum), params, "min", String(opening.minimum));
+}
+
+/** what the builder made: the view stays, edited */
+export function changeView(state: ViewState, shape: Shape): ViewState {
+  const before = state.shape;
   /* the series are the split's, so the legend holds while it stays */
   const series =
     before.type === "chart" &&
     shape.type === "chart" &&
     before.chart.split === shape.chart.split;
-  return {
-    ...state,
-    view: CUSTOM,
-    custom: shape,
-    base: state.view === CUSTOM ? state.base : state.view,
-    hidden: series ? state.hidden : [],
-  };
+  return { ...state, shape, hidden: series ? state.hidden : [] };
 }
 
-/** back to the view Custom was made from */
-export const resetView = (state: ViewState, source: Source): ViewState => ({
-  ...state,
-  view: state.base,
-  custom: null,
-  hidden: openingHidden({ view: state.base, base: state.base }, source),
-});
-
 /**
- * The builder's Layout: the page's own table, or its first chart or pivot.
- * A list of new people stays one: it is drawn as where they started, and
- * as what.
+ * The builder's Layout: the view's own table, or the page's first chart or
+ * pivot. A list of new people stays one: it is drawn as where they
+ * started, and as what.
  */
 export function switchLayout(
   shape: Shape,
   type: Shape["type"],
-  source: Source,
+  views: readonly View[],
+  view: View,
 ): Shape {
   if (shape.type === type) return shape;
-  if (type === "table") return { type, columns: firstColumns(source) };
+  if (type === "table")
+    return { type, columns: openingTable(view, views).columns };
   const fresh = shape.type === "table" && shape.only === "new";
   if (type === "pivot")
     return {
@@ -407,12 +456,12 @@ export function switchLayout(
       pivot: settlePivot(
         fresh
           ? {
-              ...firstPivot(source),
+              ...firstOf(views, "pivot").pivot,
               count: "newcomers",
               rows: "section",
               columns: "role",
             }
-          : firstPivot(source),
+          : firstOf(views, "pivot").pivot,
       ),
     };
   return {
@@ -420,13 +469,13 @@ export function switchLayout(
     chart: settle(
       fresh
         ? {
-            ...firstChart(source),
+            ...firstOf(views, "chart").chart,
             count: "newcomers",
             by: "section",
             split: "role",
             order: "natural",
           }
-        : firstChart(source),
+        : firstOf(views, "chart").chart,
     ),
   };
 }
@@ -456,20 +505,17 @@ export function moveColumn(
 }
 
 /**
- * What is on screen as a declaration for ./views: the view's layout, the
- * range and filters as they are now, and a view's own words (placeholders
- * for Custom, to be written). What a view cannot open on is left as the
- * view had it, and said in `left`.
+ * What is on screen as a declaration, to save: the view's own words, the
+ * range and filters as they are now, and the layout. What a view cannot
+ * open on is left out, and said in `left`: it stays on screen, an edit
+ * still.
  */
 export function declarationOf(
   state: ViewState,
   filters: FilterState,
-  source: Source,
-  /** the columns the Columns menu has taken out */
-  off: readonly string[] = [],
+  views: readonly View[],
 ): { view: View; left: string[] } {
-  const view = viewOf(state, source);
-  const custom = state.view === CUSTOM;
+  const saved = savedOf(views, state.view);
   const narrowed = Object.fromEntries(
     (["sections", "roles", "people"] as const)
       .filter((key) => filters[key].length > 0)
@@ -478,55 +524,20 @@ export function declarationOf(
   const left: string[] = [];
   if (filters.preset === "custom")
     left.push(
-      `the range on screen (${[filters.from, filters.to].filter(Boolean).join(" to ") || "custom"}): a view opens on one counted from today`,
+      `the range of dates (${[filters.from, filters.to].filter(Boolean).join(" to ") || "custom"}): a view opens on one counted from today`,
     );
   if (filters.search.trim())
     left.push(`the search for “${filters.search.trim()}”`);
   if (filters.articles.length > 0)
     left.push(`the ${filters.articles.length} articles a chart's mark chose`);
+  const { filters: _, ...words } = saved;
   return {
     view: {
-      id: custom ? "new-view" : view.id,
-      label: custom ? "New view" : view.label,
-      title: custom ? "What heads it?" : view.title,
-      question: custom ? "What does it answer?" : view.question,
-      source,
-      range: filters.preset === "custom" ? view.range : filters.preset,
+      ...words,
+      range: filters.preset === "custom" ? saved.range : filters.preset,
       ...(Object.keys(narrowed).length > 0 ? { filters: narrowed } : {}),
-      layout: layoutOf(state, source, off),
+      layout: layoutOf(state, saved.source),
     } as View,
     left,
   };
-}
-
-const WIDTH = 80;
-
-/* a value as prettier would print it here: objects open, an array on one
-   line where it fits */
-function literal(value: unknown, indent: string, room: number): string {
-  if (Array.isArray(value)) {
-    const items = value.map((item) => literal(item, `${indent}  `, WIDTH));
-    const flat = `[${items.join(", ")}]`;
-    if (flat.length <= room) return flat;
-    return `[\n${items.map((item) => `${indent}  ${item},`).join("\n")}\n${indent}]`;
-  }
-  if (typeof value === "object" && value !== null) {
-    const inner = `${indent}  `;
-    const lines = Object.entries(value).map(([key, item]) => {
-      const lead = `${inner}${key}: `;
-      const text = literal(item, inner, WIDTH - lead.length - 1);
-      /* a string too long for its line goes under its key */
-      if (typeof item === "string" && lead.length + text.length + 1 > WIDTH)
-        return `${inner}${key}:\n${inner}  ${text},`;
-      return `${lead}${text},`;
-    });
-    return `{\n${lines.join("\n")}\n${indent}}`;
-  }
-  return JSON.stringify(value);
-}
-
-/** a declaration as source text, an item of `VIEWS` ready to paste into ./views */
-export function viewSource(view: View, left: readonly string[] = []): string {
-  const notes = left.map((what) => `  // not kept: ${what}\n`).join("");
-  return `${notes}  ${literal(view, "  ", WIDTH)},\n`;
 }

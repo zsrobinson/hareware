@@ -5,11 +5,14 @@ import { applyEdit, describeEdit, parseEdit } from "~/lib/credits/edits";
 import { sheetsClient } from "~/lib/credits/load";
 import { refusal } from "~/lib/admin-api";
 import { record } from "~/lib/log";
+import { ViewConflict } from "~/lib/credits/sheet";
 import { Sheets } from "~/lib/services/google/sheets";
 
 export const prerender = false;
 
-/* Every change the signed-in pages make to the Sheet comes through here. */
+/* Every change the signed-in pages make to the Sheet comes through here. A
+   change to views answers with the `updated at` it wrote, which the page
+   reads back before it says Saved; a conflict is 409, with what changed. */
 export const POST: APIRoute = async ({ request }) => {
   const access = await adminAccess(request);
   if (!access.allowed) {
@@ -27,9 +30,20 @@ export const POST: APIRoute = async ({ request }) => {
     );
 
   const who = access.who.profile?.displayName ?? "someone";
+  let updatedAt: string | void;
   try {
-    await applyEdit(client, edit, who);
+    updatedAt = await applyEdit(client, edit, who);
   } catch (error) {
+    if (error instanceof ViewConflict) {
+      await record(env.DB, {
+        source: "manual",
+        action: "sheet-edit",
+        outcome: "skipped",
+        summary: `changed since it was opened, so not: ${describeEdit(edit)}`,
+        actor: access.who.session.discordUserId,
+      });
+      return Response.json({ conflict: error.message }, { status: 409 });
+    }
     await record(env.DB, {
       source: "manual",
       action: "sheet-edit",
@@ -50,5 +64,7 @@ export const POST: APIRoute = async ({ request }) => {
     summary: describeEdit(edit),
     actor: access.who.session.discordUserId,
   });
-  return new Response(null, { status: 204 });
+  return updatedAt
+    ? Response.json({ updatedAt })
+    : new Response(null, { status: 204 });
 };

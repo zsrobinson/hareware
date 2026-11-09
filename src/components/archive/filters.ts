@@ -51,6 +51,9 @@ export type FilterState = {
   /** post ids, exactly, as a chart's mark picked them; empty for every article */
   articles: number[];
   search: string;
+  /** where the people and articles came from, as the mark that sent them
+      named it ("Retention · Joined Fall 2025, +1"); its link carries it */
+  via?: string;
 };
 
 /** nothing narrowed but the page's own time range */
@@ -62,32 +65,6 @@ export const clearedState = (preset: Preset): FilterState => ({
   articles: [],
   search: "",
 });
-
-/**
- * The filters once another view is chosen: each as the new view opens on it,
- * unless it has been changed since the last view opened, when the change
- * stands until Clear.
- */
-export function carryOver(
-  now: FilterState,
-  from: FilterState,
-  to: FilterState,
-): FilterState {
-  const kept = <T>(
-    key: "preset" | "sections" | "roles" | "people" | "articles",
-  ): T =>
-    (JSON.stringify(now[key]) === JSON.stringify(from[key])
-      ? to[key]
-      : now[key]) as T;
-  return {
-    ...now,
-    preset: kept("preset"),
-    sections: kept("sections"),
-    roles: kept("roles"),
-    people: kept("people"),
-    articles: kept("articles"),
-  };
-}
 
 const SEMESTER_STARTS = ["01-01", "06-01"];
 const SEMESTER_ENDS = ["05-31", "12-31"];
@@ -253,6 +230,7 @@ export function readState(
       .map(Number)
       .filter((id) => Number.isInteger(id) && id > 0),
     search: params.get("q") ?? "",
+    ...(params.get("via") ? { via: params.get("via")! } : {}),
   };
 }
 
@@ -292,4 +270,8 @@ export function writeState(
     else for (const name of state.people) params.append("people", name);
   set("articles", state.articles.join(","));
   set("q", state.search);
+  /* only while what it says arrived is still there */
+  const arrived =
+    state.articles.length > 0 || !sameList(state.people, own?.people ?? []);
+  set("via", arrived ? state.via : undefined);
 }

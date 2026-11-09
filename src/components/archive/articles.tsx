@@ -38,6 +38,7 @@ import {
   RowOpener,
 } from "./open-row";
 import { SectionName } from "./section-name";
+import { EDITED } from "./edited";
 import { ShellTableControls } from "./table-controls";
 import { useEdit } from "./use-edit";
 import { COLUMN_NAMES, type ColumnId } from "./views";
@@ -257,6 +258,7 @@ function Articles({
   opened: openRow,
   picked,
   setPicked,
+  columnsEdited,
 }: TableViewProps) {
   const phone = useIsPhone();
   const roomy = useRoomBesidePanel();
@@ -303,6 +305,11 @@ function Articles({
         onSortingChange={setSorting}
         picked={picked}
         onPickedChange={setPicked}
+        columnsChanged={
+          columnsEdited
+            ? { className: EDITED, description: "changed from the saved view" }
+            : undefined
+        }
         controls={(controls) => <ShellTableControls {...controls} />}
         selected={(row) => row.id === editing}
         /* the column a table is sorted by is never one it leaves out */

@@ -7,13 +7,16 @@ The in-house tooling for [The Hare](https://theumdhare.com):
 - **A social reminder** that posts each morning's new articles to
   `#instagram-posting` and pings that day's poster.
 - **An archive viewer** for the Editorial Board: Articles and People, each with
-  its views as tabs (tables, charts and pivots), and Problems, over every published
-  post, with real names in place of pseudonyms.
+  its views as tabs (tables, charts and pivots) that the board saves and shares,
+  and Problems, over every published post, with real names in place of
+  pseudonyms.
 
 WordPress is the record of what the club published. HareWare reads it and keeps
 no copy. The one fact WordPress does not hold, who is really behind a
-pseudonymous byline, lives in a small Google Sheet owned by the club's account.
-[ADR 0011](docs/adr/0011-wordpress-is-the-record.md) has the reasoning.
+pseudonymous byline, lives in a small Google Sheet owned by the club's account,
+beside the board's views of the archive.
+[ADR 0011](docs/adr/0011-wordpress-is-the-record.md) and
+[ADR 0015](docs/adr/0015-views-are-shared-in-the-sheet.md) have the reasoning.
 
 Shared vocabulary is in [CONTEXT.md](CONTEXT.md), and the decisions behind the
 design are in [docs/adr](docs/adr).
@@ -93,20 +96,23 @@ unavailable, never zero.
 
 HareWare reads the Sheet on every load and writes it from the signed-in pages:
 who a byline is on one article from Articles (many at once from Settings),
-ignored problems from Problems, credit labels from Settings. Nobody needs to
+ignored problems from Problems, credit labels from Settings, and views from
+Articles and People. Nobody needs to
 open it in normal use, and HareWare adds any tab it is missing the first time
 it saves there. Each tab is read by its header row, so columns can be in any
 order.
 
-| Tab         | Columns                                          | Meaning                                                                                                                                                                                                                                                                                                                                                       |
-| ----------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Overrides` | `post_id`, `role`, `byline`, `real_name`, `note` | A printed `byline` counts as `real_name` on the article `post_id`, in `role` or, blank, any role. A row with a `role` but no byline adds someone the article does not print. Every row names an article ([ADR 0013](docs/adr/0013-pen-names-per-article.md)); a row with no `post_id` counts nowhere, and Settings lists it to set on its articles or remove. |
-| `Labels`    | `label`, `role`                                  | Which paragraph labels start a credit line, and whether each credits `writer`, `image` or `other`. Empty, the defaults in `src/lib/credits/labels.ts` apply.                                                                                                                                                                                                  |
-| `Ignored`   | `post_id`, `names`, `note`                       | Articles whose problems are intended, or a pair of similar names that are different people.                                                                                                                                                                                                                                                                   |
+| Tab         | Columns                                                      | Meaning                                                                                                                                                                                                                                                                                                                                                       |
+| ----------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Overrides` | `post_id`, `role`, `byline`, `real_name`, `note`             | A printed `byline` counts as `real_name` on the article `post_id`, in `role` or, blank, any role. A row with a `role` but no byline adds someone the article does not print. Every row names an article ([ADR 0013](docs/adr/0013-pen-names-per-article.md)); a row with no `post_id` counts nowhere, and Settings lists it to set on its articles or remove. |
+| `Labels`    | `label`, `role`                                              | Which paragraph labels start a credit line, and whether each credits `writer`, `image` or `other`. Empty, the defaults in `src/lib/credits/labels.ts` apply.                                                                                                                                                                                                  |
+| `Ignored`   | `post_id`, `names`, `note`                                   | Articles whose problems are intended, or a pair of similar names that are different people.                                                                                                                                                                                                                                                                   |
+| `Views`     | `id`, `page`, `position`, `view`, `updated by`, `updated at` | Each page's views, in `position` order. `view` is the declaration as JSON with `"v": 1`; a row HareWare cannot read is listed in Settings. A page with no rows shows its starter set from `src/components/archive/views.ts`, which the first change there writes ([ADR 0015](docs/adr/0015-views-are-shared-in-the-sheet.md)).                                |
 
 A save reads the tab, changes the rows it means to, and writes the tab back,
 keeping every other row as it was. Two people saving at once is
-last-writer-wins.
+last-writer-wins, except on `Views`, where a save based on a copy someone has
+changed since is refused, and the page offers to reload or overwrite.
 
 **What is in the Sheet is private.** It never goes into WordPress, the
 repository, the log or a public page. The archive pages are empty shells; the

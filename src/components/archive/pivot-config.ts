@@ -182,8 +182,8 @@ export function readPivot(
   });
 }
 
-/* each setting's name in a link; the table's own columns are `columns` */
-const KEYS = {
+/** each setting's name in a link; the table's own columns are `columns` */
+export const PIVOT_PARAMS = {
   count: "count",
   rows: "rows",
   columns: "cols",
@@ -194,7 +194,7 @@ const KEYS = {
 
 /** writes a pivot into `params`, or takes one out (null) */
 export function writePivot(pivot: PivotConfig | null, params: URLSearchParams) {
-  for (const [setting, key] of Object.entries(KEYS))
+  for (const [setting, key] of Object.entries(PIVOT_PARAMS))
     if (pivot) params.set(key, String(pivot[setting as keyof PivotConfig]));
     else params.delete(key);
 }

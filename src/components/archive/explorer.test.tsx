@@ -11,6 +11,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { ArticlesPage } from "./articles";
 import { PeoplePage } from "./people";
 import { stubArchive } from "./stub-archive";
+import { Toaster } from "~/components/ui/sonner";
 import { queryClient } from "~/lib/query-client";
 
 /*
@@ -128,25 +129,33 @@ test("a link to a slice opens it, and one to nothing opens nothing", async () =>
   expect(screen.queryByRole("complementary")).toBeNull();
 });
 
-test("a view brings its own time range, unless Time was chosen", async () => {
+test("a view's edits are its own: another tab opens as saved, and Undo brings them back", async () => {
   const user = userEvent.setup();
   const time = () => screen.getByRole("combobox", { name: "Time" }).textContent;
   const range = () => new URLSearchParams(window.location.search).get("range");
 
-  window.history.replaceState(null, "", "/articles");
-  const { unmount } = render(<ArticlesPage />);
-  await user.click(await screen.findByRole("tab", { name: "History" }));
-  await waitFor(() => expect(time()).toContain("All time"));
-  await user.click(screen.getByRole("tab", { name: "Sections" }));
-  await waitFor(() => expect(time()).toContain("Last 3 months"));
-  unmount();
-
-  /* a year chosen on All stays through the views, and in the link */
   window.history.replaceState(null, "", "/articles?range=12m");
-  render(<ArticlesPage />);
-  await user.click(await screen.findByRole("tab", { name: "History" }));
-  await user.click(screen.getByRole("tab", { name: "Sections" }));
-  expect(time()).toContain("Last 12 months");
+  render(
+    <>
+      <Toaster />
+      <ArticlesPage />
+    </>,
+  );
+  expect(await screen.findByRole("tab", { name: "All, edited" })).toBeTruthy();
+  await user.click(screen.getByRole("tab", { name: "History" }));
+  await waitFor(() => expect(time()).toContain("All time"));
+  expect(range()).toBeNull();
+
+  const toast = await screen.findByText("Unsaved changes to All discarded");
+  await user.click(
+    within(toast.closest("li")!).getByRole("button", { name: "Undo" }),
+  );
+  await waitFor(() => expect(time()).toContain("Last 12 months"));
+  expect(
+    screen
+      .getByRole("tab", { name: "All, edited" })
+      .getAttribute("aria-selected"),
+  ).toBe("true");
   expect(range()).toBe("12m");
 });
 
@@ -177,23 +186,26 @@ test("a list opened over Customize gives Customize back when it closes", async (
   await waitFor(() => expect(document.activeElement).toBe(customize));
 });
 
-test("Reset in Customize leaves focus in the panel, not on the page", async () => {
+test("the one Reset takes back every change, filters and view alike", async () => {
   window.history.replaceState(
     null,
     "",
-    "/articles?view=custom&base=sections&layout=chart&count=articles&by=section&split=none&draw=stacked&values=share&order=natural&top=25",
+    "/articles?view=custom&base=sections&layout=chart&count=articles&by=section&split=none&draw=stacked&values=share&order=natural&top=25&range=12m&q=moon",
   );
   const user = userEvent.setup();
   render(<ArticlesPage />);
-  await user.click(await screen.findByRole("button", { name: "Customize" }));
-  const panel = await screen.findByRole("complementary", { name: "Customize" });
-  await user.click(within(panel).getByRole("button", { name: "Reset" }));
   expect(
-    screen.getByRole("tab", { name: "Sections" }).getAttribute("aria-selected"),
-  ).toBe("true");
-  expect(document.activeElement).toBe(
-    within(panel).getByRole("heading", { name: "Customize" }),
-  );
+    await screen.findByRole("tab", { name: "Sections, edited" }),
+  ).toBeTruthy();
+  /* no Clear beside it: Reset is the one way back */
+  expect(screen.queryByRole("button", { name: /Clear/ })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Reset" }));
+  await waitFor(() => expect(window.location.search).toBe("?view=sections"));
+  expect(screen.getByRole("tab", { name: "Sections" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Reset" })).toBeNull();
+  expect(
+    screen.queryByRole("button", { name: /Save for everyone/ }),
+  ).toBeNull();
 });
 
 test("a chart of one series names its count for what it is", async () => {
@@ -255,7 +267,7 @@ test("what a mark counts opens as filters on either table", async () => {
   expect(to("See the people").pathname).toBe("/people");
 });
 
-test("the builder turns a table into a chart, as Custom, and Reset brings the table back", async () => {
+test("the builder edits the view in place, says what it was, and Reset brings the table back", async () => {
   /* a name searched for on the table is not what a chart's search reads */
   window.history.replaceState(null, "", "/people?q=ben");
   const user = userEvent.setup();
@@ -266,23 +278,26 @@ test("the builder turns a table into a chart, as Custom, and Reset brings the ta
   await user.click(await screen.findByRole("option", { name: "Chart" }));
   await waitFor(() =>
     expect(
-      screen.getByRole("tab", { name: "Custom" }).getAttribute("aria-selected"),
+      screen
+        .getByRole("tab", { name: "Everyone, edited" })
+        .getAttribute("aria-selected"),
     ).toBe("true"),
   );
+  expect(within(panel).getByText("saved: Table")).toBeTruthy();
   const params = new URLSearchParams(window.location.search);
-  expect(params.get("view")).toBe("custom");
+  expect(params.has("view")).toBe(false);
   expect(params.get("layout")).toBe("chart");
   expect(params.has("q")).toBe(false);
   expect(document.querySelector("figcaption")).toBeTruthy();
 
-  await user.click(within(panel).getByRole("button", { name: "Reset" }));
+  await user.click(screen.getByRole("button", { name: "Reset" }));
   expect(
     screen.getByRole("tab", { name: "Everyone" }).getAttribute("aria-selected"),
   ).toBe("true");
   expect(screen.getByRole("columnheader", { name: /Name/ })).toBeTruthy();
 });
 
-test("Copy as view takes in the Columns menu and People's Show", async () => {
+test("a column taken out from the Columns menu is an edit of the view, in its link", async () => {
   window.history.replaceState(null, "", "/people?min=5");
   const user = userEvent.setup();
   render(<PeoplePage />);
@@ -291,16 +306,12 @@ test("Copy as view takes in the Columns menu and People's Show", async () => {
     await screen.findByRole("menuitemcheckbox", { name: "Latest" }),
   );
   await user.keyboard("{Escape}");
-
-  await user.click(screen.getByRole("button", { name: "Customize" }));
-  const panel = await screen.findByRole("complementary", { name: "Customize" });
-  await user.click(
-    within(panel).getByRole("button", { name: /^Copy as view/ }),
+  const params = new URLSearchParams(window.location.search);
+  expect(params.get("columns")).toBe(
+    "name,contributions,writer,image,other,first",
   );
-  const copied = await navigator.clipboard.readText();
-  expect(copied).toContain("minimum: 5,");
-  expect(copied).toContain('"first"]');
-  expect(copied).not.toContain('"last"');
+  expect(params.get("min")).toBe("5");
+  expect(screen.getByRole("tab", { name: "Everyone, edited" })).toBeTruthy();
 });
 
 test("a search for a name is cleared on a chart, which would read it as a title", async () => {
@@ -401,7 +412,7 @@ test("Home and End choose the first and last of the views", async () => {
       .find((tab) => tab.getAttribute("aria-selected") === "true");
   (await screen.findByRole("tab", { name: "Sections" })).focus();
   await user.keyboard("{End}");
-  await waitFor(() => expect(selected()?.textContent).toBe("Custom"));
+  await waitFor(() => expect(selected()?.textContent).toBe("Read by section"));
   expect(document.activeElement).toBe(selected());
   await user.keyboard("{Home}");
   await waitFor(() => expect(selected()?.textContent).toBe("All"));

@@ -47,8 +47,9 @@ beforeEach(() => {
     unscoped: [],
     ignored: [],
     labels: null,
+    views: [],
     problems: [],
-    tabs: { overrides: true, labels: true, ignored: true },
+    tabs: { overrides: true, labels: true, ignored: true, views: true },
   };
   vi.stubGlobal(
     "fetch",

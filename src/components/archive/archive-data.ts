@@ -54,6 +54,10 @@ const SNAPSHOT_STORED = "/wordpress-snapshot-v4";
 const VIEWS_STORED = "/wordpress-views-v2";
 
 export const SHEET_KEY = ["sheet"] as const;
+
+/** the gated read of the Sheet, which SHEET_KEY holds */
+export const readSheetPayload = () =>
+  fetchGated<SheetPayload>("/api/archive.json");
 const WORDPRESS_KEY = ["wordpress"] as const;
 const VIEWS_KEY = ["views"] as const;
 const RESTORED_KEY = ["wordpress", "restored"] as const;
@@ -241,7 +245,7 @@ export function useArchive(): ArchiveState {
   const queryClient = useQueryClient();
   const sheet = useQuery({
     queryKey: SHEET_KEY,
-    queryFn: () => fetchGated<SheetPayload>("/api/archive.json"),
+    queryFn: readSheetPayload,
     staleTime: 60_000,
   });
   const restored = useQuery({

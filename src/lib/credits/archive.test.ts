@@ -46,8 +46,9 @@ const read = (
   unscoped,
   ignored,
   labels: null,
+  views: [],
   problems: [],
-  tabs: { overrides: true, labels: true, ignored: true },
+  tabs: { overrides: true, labels: true, ignored: true, views: true },
 });
 
 const build = (posts: SourcePost[], sheet: SheetState = read()) =>
@@ -353,7 +354,7 @@ test("a Sheet that could not be read leaves every article as printed, and says s
 test("a missing tab is named, so a renamed Overrides tab is never mistaken for an empty one", () => {
   const archive = build([post(1, ["Article by: A"])], {
     ...read(),
-    tabs: { overrides: false, labels: true, ignored: true },
+    tabs: { overrides: false, labels: true, ignored: true, views: true },
   } as SheetState);
 
   expect(archive.sheet).toMatchObject({

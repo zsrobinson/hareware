@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { FieldRow, FieldRows } from "~/components/field-row";
+import { cn } from "~/lib/utils";
 import { isPeriod, isQuantity } from "~/lib/credits/stats";
 import {
   allows,
@@ -36,9 +37,12 @@ import { COMPARES, type Compare } from "./compare";
  */
 export function ChartBuilder({
   config,
+  saved,
   onChange,
 }: {
   config: ChartConfig;
+  /** the view's chart as saved, whose settings a changed row says */
+  saved?: ChartConfig;
   onChange: (next: ChartConfig) => void;
 }) {
   const set = (patch: Partial<ChartConfig>) =>
@@ -67,6 +71,17 @@ export function ChartBuilder({
         ? "Role order"
         : "A to Z";
 
+  /* what a changed row was, as saved */
+  const was = <K extends keyof ChartConfig>(
+    key: K,
+    name: (value: ChartConfig[K]) => string | undefined,
+  ) =>
+    saved && saved[key] !== config[key] ? (name(saved[key]) ?? "") : undefined;
+  const named =
+    (options: { id: string; label: string }[]) => (id: string | number) =>
+      options.find((o) => o.id === String(id))?.label;
+  const topName = (n: number) => (n === 0 ? "Everyone" : `Top ${n}`);
+
   /* a choice with one option is no choice: draw is only offered where it varies */
   const comparing = config.compare !== "none";
   const draws = DRAWS.filter((draw) => draw !== "grouped" || split || comparing)
@@ -75,7 +90,11 @@ export function ChartBuilder({
 
   return (
     <FieldRows>
-      <BuilderRow icon={HashIcon} label="Count">
+      <BuilderRow
+        icon={HashIcon}
+        label="Count"
+        saved={was("count", named(COUNTS))}
+      >
         <Choice
           label="Count"
           hideLabel
@@ -85,7 +104,11 @@ export function ChartBuilder({
           onChange={(count) => set({ count })}
         />
       </BuilderRow>
-      <BuilderRow icon={GroupIcon} label="Group by">
+      <BuilderRow
+        icon={GroupIcon}
+        label="Group by"
+        saved={was("by", named(GROUPINGS))}
+      >
         <Choice
           label="Group by"
           hideLabel
@@ -95,7 +118,11 @@ export function ChartBuilder({
           onChange={(by) => set({ by })}
         />
       </BuilderRow>
-      <BuilderRow icon={LayersIcon} label="Split by">
+      <BuilderRow
+        icon={LayersIcon}
+        label="Split by"
+        saved={was("split", named(SPLITS))}
+      >
         <Choice
           label="Split by"
           hideLabel
@@ -106,7 +133,11 @@ export function ChartBuilder({
         />
       </BuilderRow>
       {draws.length > 1 && (
-        <BuilderRow icon={ChartColumnIcon} label="Draw as">
+        <BuilderRow
+          icon={ChartColumnIcon}
+          label="Draw as"
+          saved={was("draw", (draw) => drawLabel[draw])}
+        >
           <Choice
             label="Draw as"
             hideLabel
@@ -121,7 +152,11 @@ export function ChartBuilder({
           />
         </BuilderRow>
       )}
-      <BuilderRow icon={PercentIcon} label="Values">
+      <BuilderRow
+        icon={PercentIcon}
+        label="Values"
+        saved={was("values", (values) => valueLabel[values])}
+      >
         <Choice
           label="Values"
           hideLabel
@@ -142,10 +177,17 @@ export function ChartBuilder({
       <CompareRow
         value={config.compare}
         allowed={ok.compare}
+        saved={was("compare", named(COMPARES))}
         onChange={(compare) => set({ compare })}
       />
       {ok.order && (
-        <BuilderRow icon={ArrowDownWideNarrowIcon} label="Order">
+        <BuilderRow
+          icon={ArrowDownWideNarrowIcon}
+          label="Order"
+          saved={was("order", (order) =>
+            order === "largest" ? "Largest first" : natural,
+          )}
+        >
           <Choice
             label="Order"
             hideLabel
@@ -160,16 +202,13 @@ export function ChartBuilder({
         </BuilderRow>
       )}
       {ok.top && (
-        <BuilderRow icon={UsersIcon} label="Show">
+        <BuilderRow icon={UsersIcon} label="Show" saved={was("top", topName)}>
           <Choice
             label="Show"
             hideLabel
             width="w-full"
             value={String(config.top)}
-            options={TOPS.map((n) => ({
-              id: String(n),
-              label: n === 0 ? "Everyone" : `Top ${n}`,
-            }))}
+            options={TOPS.map((n) => ({ id: String(n), label: topName(n) }))}
             onChange={(top) => set({ top: Number(top) })}
           />
         </BuilderRow>
@@ -182,14 +221,17 @@ export function ChartBuilder({
 export function CompareRow({
   value,
   allowed,
+  saved,
   onChange,
 }: {
   value: Compare;
   allowed: Record<Compare, boolean>;
+  /** what it was as saved, where it differs */
+  saved?: string;
   onChange: (compare: Compare) => void;
 }) {
   return (
-    <BuilderRow icon={GitCompareArrowsIcon} label="Compare">
+    <BuilderRow icon={GitCompareArrowsIcon} label="Compare" saved={saved}>
       <Choice
         label="Compare with"
         hideLabel
@@ -202,17 +244,23 @@ export function CompareRow({
   );
 }
 
-/** one setting in the Customize panel: its icon, its name, its control */
+/**
+ * One setting in the Customize panel: its icon, its name, its control.
+ * One that differs from the view as saved is tinted, and says what it was.
+ */
 export function BuilderRow({
   icon,
   label,
+  saved,
   children,
 }: {
   icon: LucideIcon;
   label: string;
+  /** what the setting is in the view as saved, where it differs */
+  saved?: string;
   children: ReactNode;
 }) {
-  return (
+  const row = (
     <FieldRow
       icon={icon}
       label={<span aria-hidden>{label}</span>}
@@ -221,5 +269,19 @@ export function BuilderRow({
     >
       {children}
     </FieldRow>
+  );
+  if (saved === undefined) return row;
+  return (
+    <div
+      className={cn(
+        "-mx-2 space-y-1 rounded-lg px-2 py-1.5 ring-1",
+        "bg-edited/8 ring-edited/30 dark:bg-edited/10",
+      )}
+    >
+      {row}
+      <p className="text-edited text-xs sm:pl-[calc(1rem+5.5rem+1.5rem)]">
+        saved: {saved || "nothing"}
+      </p>
+    </div>
   );
 }

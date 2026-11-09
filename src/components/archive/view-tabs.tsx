@@ -1,10 +1,12 @@
-import { ChevronDownIcon, type LucideIcon } from "lucide-react";
+import { ChevronDownIcon, PlusIcon, type LucideIcon } from "lucide-react";
 import {
+  Fragment,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
+  type ReactNode,
 } from "react";
 import {
   DropdownMenu,
@@ -16,11 +18,12 @@ import { cn } from "~/lib/utils";
 
 /*
   A page's views as one row of tabs, whatever the width: on a laptop the
-  views that do not fit fold into "N more" at the end, before Custom, which
-  is always shown; a touch screen swipes the row instead. The chosen view is
-  always in the row, swapped in for the last that fits where it would be
-  folded, so the row never wraps or moves the page under it, and a panel
-  opening only folds more of it.
+  views that do not fit fold into "N more" at the end, before the `+` that
+  adds one, which is always shown; a touch screen swipes the row instead.
+  The chosen view is always in the row, with its menu and, while edited, a
+  dot; swapped in for the last that fits where it would be folded, so the
+  row never wraps or moves the page under it, and a panel opening only
+  folds more of it.
 */
 
 export type Tab = { id: string; label: string; icon: LucideIcon };
@@ -30,10 +33,9 @@ const GAP = 4;
 
 /**
  * Which views a row of `room` shows, in order, and which fold into the
- * menu: as many as fit from the first, with the menu and the last tab
- * (Custom) beside them; the chosen one swapped in for those it needs room
- * from where it would be folded. `widths` are the views' and then the last
- * tab's, as drawn.
+ * menu: as many as fit from the first, with the menu and the `+` beside
+ * them; the chosen one swapped in for those it needs room from where it
+ * would be folded. `widths` are the views' and then the `+`'s, as drawn.
  */
 export function foldTabs(
   widths: readonly number[],
@@ -88,30 +90,35 @@ function useTouch() {
 export function ViewTabs({
   tabs,
   view,
+  edited,
+  menu: viewMenu,
   panelId,
   onChoose,
-  onClickCustom,
+  onNew,
 }: {
-  /** the views, then Custom last */
+  /** the page's views, in order */
   tabs: Tab[];
   view: string;
+  /** the chosen view differs from itself as saved, which its dot says */
+  edited: boolean;
+  /** the chosen view's menu, drawn beside it */
+  menu: ReactNode;
   panelId: string;
   onChoose: (view: string) => void;
-  /** a click on Custom opens the builder; arriving by arrow key does not,
-      or the panel would take focus from the tabs */
-  onClickCustom: () => void;
+  /** the `+`: a new view, from the page's first */
+  onNew: () => void;
 }) {
   const touch = useTouch();
   const box = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const ruler = useRef<HTMLDivElement>(null);
-  const views = tabs.slice(0, -1);
-  const custom = tabs.at(-1)!;
+  const views = tabs;
   const chosen = tabs.findIndex((tab) => tab.id === view);
 
   /* which views fold, measured from a hidden copy of the row */
   const [folded, setFolded] = useState<string[]>([]);
-  const ids = tabs.map((tab) => tab.id).join();
+  /* a renamed view is another width */
+  const ids = tabs.map((tab) => `${tab.id}:${tab.label}`).join();
   useLayoutEffect(() => {
     const container = box.current;
     const copy = ruler.current;
@@ -134,7 +141,7 @@ export function ViewTabs({
     const observer = new ResizeObserver(measure);
     observer.observe(container);
     return () => observer.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- tabs by their ids
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tabs by their ids and names
   }, [touch, ids, chosen]);
   const shown = views.filter((tab) => !folded.includes(tab.id));
   const menu = views.filter((tab) => folded.includes(tab.id));
@@ -205,23 +212,27 @@ export function ViewTabs({
   const tab = ({ id, label, icon: Icon }: Tab) => {
     const selected = view === id;
     return (
-      <button
-        key={id}
-        type="button"
-        role="tab"
-        data-view={id}
-        aria-selected={selected}
-        aria-controls={panelId}
-        tabIndex={selected ? 0 : -1}
-        onClick={() => {
-          onChoose(id);
-          if (id === custom.id) onClickCustom();
-        }}
-        className={tabClass(selected)}
-      >
-        <Icon aria-hidden />
-        {label}
-      </button>
+      <Fragment key={id}>
+        <button
+          type="button"
+          role="tab"
+          data-view={id}
+          aria-selected={selected}
+          aria-controls={panelId}
+          tabIndex={selected ? 0 : -1}
+          onClick={() => onChoose(id)}
+          className={cn(tabClass(selected), selected && "pr-1 @2xl:pr-1")}
+        >
+          <Icon aria-hidden />
+          {label}
+          {selected && edited && (
+            <span className="bg-edited size-1.5 rounded-full">
+              <span className="sr-only">, edited</span>
+            </span>
+          )}
+        </button>
+        {selected && viewMenu}
+      </Fragment>
     );
   };
 
@@ -234,12 +245,18 @@ export function ViewTabs({
         aria-hidden
         className="pointer-events-none invisible absolute flex h-0 gap-x-1 overflow-hidden"
       >
+        {/* each as it is drawn chosen: with its dot and its menu */}
         {tabs.map(({ id, label, icon: Icon }) => (
           <span key={id} className={tabClass(true)}>
             <Icon />
             {label}
+            <span className="size-1.5" />
+            <span className="w-7" />
           </span>
         ))}
+        <span className={tabClass(false, false)}>
+          <PlusIcon />
+        </span>
         <span className={tabClass(true, false)}>
           {views.length} more
           <ChevronDownIcon />
@@ -298,7 +315,15 @@ export function ViewTabs({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        {tab(custom)}
+        <button
+          type="button"
+          className={tabClass(false, false)}
+          aria-label="New view"
+          title="New view"
+          onClick={onNew}
+        >
+          <PlusIcon aria-hidden />
+        </button>
       </div>
     </div>
   );

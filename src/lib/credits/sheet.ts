@@ -1,10 +1,12 @@
 /*
-  The club's Sheet: the few facts WordPress does not hold. Three tabs, each
-  read by its header row so the columns can be in any order:
+  The club's Sheet: the few facts WordPress does not hold, and the board's
+  views of the archive. Four tabs, each read by its header row so the columns
+  can be in any order:
 
     Overrides  who a printed byline really is, on one article
     Labels     which paragraph labels are credit lines, and their roles
     Ignored    articles whose problems are intended
+    Views      each archive page's views, shared by the board (ADR 0015)
 
   HareWare reads it on every load and writes it from the signed-in pages, so
   nobody needs to open it in normal use. What it says is private: it never
@@ -18,6 +20,7 @@ export const TABS = {
   overrides: "Overrides",
   labels: "Labels",
   ignored: "Ignored",
+  views: "Views",
 } as const;
 type Tab = keyof typeof TABS;
 
@@ -26,6 +29,7 @@ const COLUMNS: Record<Tab, string[]> = {
   overrides: ["post_id", "role", "byline", "real_name", "note"],
   labels: ["label", "role"],
   ignored: ["post_id", "names", "note"],
+  views: ["id", "page", "position", "view", "updated by", "updated at"],
 };
 
 /**
@@ -65,6 +69,21 @@ export type Unscoped = {
   note: string;
 };
 
+/**
+ * A row of the Views tab as it stands. The declaration is the browser's to
+ * read and check, as it reads a view from a link: the Worker passes it on as
+ * the text it is (ADR 0012, ADR 0015).
+ */
+export type ViewRow = {
+  row: number;
+  id: string;
+  page: string;
+  position: string;
+  view: string;
+  updatedBy: string;
+  updatedAt: string;
+};
+
 /** a row the Sheet holds that HareWare could not use, and why */
 export type SheetProblem = { tab: string; row: number; message: string };
 
@@ -78,6 +97,8 @@ export type SheetState =
       ignored: Ignored[];
       /** null when the Labels tab is absent or empty: the defaults apply */
       labels: Label[] | null;
+      /** every row of the Views tab with anything in it, unread */
+      views: ViewRow[];
       problems: SheetProblem[];
       /** which tabs exist; a missing one is created on the first write */
       tabs: Record<Tab, boolean>;
@@ -108,11 +129,13 @@ export async function readSheet(sheets: Sheets): Promise<SheetState> {
       unscoped,
       ignored,
       labels: labels.length > 0 ? labels : null,
+      views: table("views", found.get(TABS.views)).map(toViewRow),
       problems,
       tabs: {
         overrides: found.has(TABS.overrides),
         labels: found.has(TABS.labels),
         ignored: found.has(TABS.ignored),
+        views: found.has(TABS.views),
       },
     };
   } catch (error) {
@@ -205,6 +228,16 @@ function toOverride(
     note: cells.note ?? "",
   } satisfies Override;
 }
+
+const toViewRow = ({ row, cells }: Row): ViewRow => ({
+  row,
+  id: cells.id ?? "",
+  page: cells.page ?? "",
+  position: cells.position ?? "",
+  view: cells.view ?? "",
+  updatedBy: cells["updated by"] ?? "",
+  updatedAt: cells["updated at"] ?? "",
+});
 
 function toIgnored({ row, cells }: Row, problems: SheetProblem[]) {
   const postId = postIdOf(cells.post_id ?? "");
@@ -434,4 +467,181 @@ export function pairKey(names: [string, string]) {
 export function same(a: string, b: string) {
   const fold = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
   return fold(a) === fold(b);
+}
+
+/* ---- views ---------------------------------------------------------------- */
+
+/** the archive pages that have views, as the Views tab's page column names them */
+export const PAGES = ["articles", "people"] as const;
+export type Page = (typeof PAGES)[number];
+export const isPage = (value: unknown): value is Page =>
+  PAGES.includes(value as Page);
+
+/**
+ * A view as the Views tab stores it: the declaration, with `"v": 1`, less
+ * its id and page, which are columns of their own. The browser shapes and
+ * checks it; here it is only written down.
+ */
+export type StoredView = { id: string; view: Record<string, unknown> };
+
+/** the page's views changed since the copy a write was based on */
+export class ViewConflict extends Error {}
+
+/**
+ * One change to a page's views. Each carries what its writer's copy was
+ * based on: a view's `updated at`, or for a reorder the order it saw.
+ */
+export type ViewWrite =
+  | {
+      kind: "save" | "rename";
+      id: string;
+      view: Record<string, unknown>;
+      basedOn: string;
+    }
+  | {
+      kind: "create";
+      id: string;
+      view: Record<string, unknown>;
+      /** where it goes; after the page's last view otherwise */
+      position?: number;
+    }
+  | { kind: "delete"; id: string; basedOn: string }
+  | { kind: "reorder"; order: string[]; basedOn: string[] }
+  /** the page's views replaced by its starter set */
+  | { kind: "restore" };
+
+/* the Views tab's columns, in HareWare's order */
+const ID = 0;
+const PAGE = 1;
+const POSITION = 2;
+const VIEW = 3;
+const BY = 4;
+const AT = 5;
+
+/** a page's views in order: by position, then as the tab lists them */
+export function inOrder<T extends { position: number }>(rows: T[]): T[] {
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => a.row.position - b.row.position || a.index - b.index)
+    .map(({ row }) => row);
+}
+
+/**
+ * Changes one page's views and returns the `updated at` it wrote. It touches
+ * only the rows the write means; and a page with no rows yet, which shows
+ * its starter set, gets that set written with the change, so the first write
+ * keeps the views everyone was looking at. `starter` is that set as the
+ * writer saw it: given when its copy was the starter set, which refuses if
+ * someone has written the page since, and absent when its copy was the tab,
+ * which refuses if the page's rows have gone.
+ *
+ * A move changes positions alone, which is not a change to any view: it
+ * leaves `updated by` and `updated at` as they were, so nobody editing one
+ * of them meets a conflict because a tab moved.
+ */
+export async function writeViews(
+  sheets: Sheets,
+  page: Page,
+  write: ViewWrite,
+  {
+    starter,
+    who,
+    at = new Date().toISOString(),
+  }: { starter: StoredView[] | null; who: string; at?: string },
+): Promise<string> {
+  const conflict = (message: string) => {
+    throw new ViewConflict(message);
+  };
+  const stored = (view: Record<string, unknown>) => JSON.stringify(view);
+  const rowOf = ({ id, view }: StoredView, position: number) => [
+    id,
+    page,
+    String(position),
+    stored(view),
+    "",
+    "",
+  ];
+
+  await rewrite(sheets, "views", (rows) => {
+    const ofPage = (cells: string[]) =>
+      !blank(cells) && same(cells[PAGE] ?? "", page);
+    let next = rows.map((cells) => [...cells]);
+    const stamped = new Set<string[]>();
+
+    if (write.kind === "restore") {
+      if (!starter) conflict("Restoring needs the starter views");
+      const fresh = starter!.map((view, i) => rowOf(view, i + 1));
+      fresh.forEach((cells) => stamped.add(cells));
+      next = [...next.filter((cells) => !ofPage(cells)), ...fresh];
+    } else if (starter) {
+      if (next.some(ofPage))
+        conflict("Someone saved this page's views since you opened it");
+      const fresh = starter.map((view, i) => rowOf(view, i + 1));
+      fresh.forEach((cells) => stamped.add(cells));
+      next.push(...fresh);
+    } else if (!next.some(ofPage))
+      conflict("This page's views left the Sheet since you opened it");
+
+    const find = (id: string) =>
+      next.find((cells) => ofPage(cells) && cells[ID]!.trim() === id);
+    const changed = (cells: string[] | undefined, basedOn: string) => {
+      if (!cells) conflict("Someone deleted this view since you opened it");
+      if ((cells![AT] ?? "").trim() !== basedOn)
+        conflict("Someone changed this view since you opened it");
+      return cells!;
+    };
+    const order = () =>
+      inOrder(
+        next
+          .filter(ofPage)
+          .map((cells) => ({ cells, position: Number(cells[POSITION]) || 0 })),
+      ).map(({ cells }) => cells[ID]!.trim());
+
+    switch (write.kind) {
+      case "save":
+      case "rename": {
+        const cells = changed(find(write.id), write.basedOn);
+        cells[VIEW] = stored(write.view);
+        stamped.add(cells);
+        break;
+      }
+      case "create": {
+        if (find(write.id)) conflict("Someone made a view with this id first");
+        const last = Math.max(
+          0,
+          ...next.filter(ofPage).map((cells) => Number(cells[POSITION]) || 0),
+        );
+        const cells = rowOf(write, write.position ?? last + 1);
+        next.push(cells);
+        stamped.add(cells);
+        break;
+      }
+      case "delete": {
+        const cells = changed(find(write.id), write.basedOn);
+        next = next.filter((each) => each !== cells);
+        break;
+      }
+      case "reorder": {
+        const now = order();
+        const equal = (a: string[], b: string[]) =>
+          a.length === b.length && a.every((id, i) => id === b[i]);
+        if (!equal(now, write.basedOn))
+          conflict("Someone changed this page's views since you opened it");
+        if (!equal([...now].sort(), [...write.order].sort()))
+          conflict("A move has to keep every view");
+        write.order.forEach((id, index) => {
+          find(id)![POSITION] = String(index + 1);
+        });
+        break;
+      }
+    }
+
+    for (const cells of stamped) {
+      while (cells.length < 6) cells.push("");
+      cells[BY] = who;
+      cells[AT] = at;
+    }
+    return next;
+  });
+  return at;
 }

@@ -8,8 +8,8 @@ import type { View } from "./views";
 
 /*
   A view's filters are where it starts however it is reached: from its tab,
-  its link, a reload, or Clear. No default declares any yet, so this adds
-  one, as a paste into views.ts would.
+  its link, a reload, or Reset. No starter view declares any yet, so this
+  adds one to the starter set.
 */
 
 vi.mock("./views", async (importOriginal) => {
@@ -66,7 +66,7 @@ afterEach(() => {
 
 const count = () => screen.findByText(/^\d+ articles?/);
 
-test("a view's own filters hold on its link, on a reload, and after Clear", async () => {
+test("a view's own filters hold on its link, on a reload, and after Reset", async () => {
   window.history.replaceState(null, "", "/articles?view=news");
   const first = render(<ArticlesPage />);
   expect((await count()).textContent).toMatch(/^1 article · News$/);
@@ -82,28 +82,29 @@ test("a view's own filters hold on its link, on a reload, and after Clear", asyn
   render(<ArticlesPage />);
   expect((await count()).textContent).toMatch(/^2 articles/);
 
-  /* Clear goes back to the view's own, not to nothing */
+  /* Reset goes back to the view's own, not to nothing */
   const user = userEvent.setup();
-  await user.click(screen.getByRole("button", { name: /Clear/ }));
+  await user.click(screen.getByRole("button", { name: "Reset" }));
   await waitFor(async () =>
     expect((await count()).textContent).toMatch(/^1 article · News$/),
   );
   expect(window.location.search).toBe("?view=news");
 });
 
-test("a view is headed by its own title, and Custom by what it shows", async () => {
+test("a view is headed by its own title, edited or not", async () => {
   window.history.replaceState(null, "", "/articles?view=news");
   const first = render(<ArticlesPage />);
   expect(await screen.findByText("What News published")).toBeTruthy();
   expect(screen.getByText("What has News published?")).toBeTruthy();
   first.unmount();
 
+  /* an old Custom link is the view it was made from, edited */
   window.history.replaceState(
     null,
     "",
     "/articles?view=custom&base=news&layout=chart&count=articles&by=section&split=none",
   );
   render(<ArticlesPage />);
-  expect(await screen.findByText("Articles by section")).toBeTruthy();
-  expect(screen.queryByText("What News published")).toBeNull();
+  expect(await screen.findByText("What News published")).toBeTruthy();
+  expect(screen.getByRole("tab", { name: "News, edited" })).toBeTruthy();
 });

@@ -1,30 +1,27 @@
-import { format } from "prettier";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { allows, type ChartConfig } from "./chart-config";
 import { allowsPivot, type PivotConfig } from "./pivot-config";
 import { chartsAddress } from "./charts-address";
 import {
-  carryOver,
   clearedState,
   readState,
   writeState,
   type FilterState,
-  type Preset,
 } from "./filters";
 import {
   changeView,
-  chooseView,
-  CUSTOM,
   declarationOf,
+  differences,
+  isEdited,
   layoutOf,
   moveColumn,
+  NEW,
   openingOf,
+  openingState,
   readView,
-  shapeOf,
+  resetView,
+  savedOf,
   switchLayout,
-  viewOf,
-  viewsOn,
-  viewSource,
   withColumn,
   writeView,
   type Shape,
@@ -32,80 +29,81 @@ import {
 } from "./view-state";
 import { COLUMNS, VIEWS, type ColumnId, type Source, type View } from "./views";
 
-/* every default view goes through these, and so do two that use what no
-   default does yet: filters, a legend with series off, and People's Show */
-vi.mock("./views", async (importOriginal) => {
-  const real = await importOriginal<typeof import("./views")>();
-  const extra = [
-    {
-      id: "news-history",
-      label: "News history",
-      title: "News, by semester",
-      question: "What has News published, but for Sports?",
-      source: "articles",
-      range: "all",
-      filters: { sections: ["News", "Sports"] },
-      layout: {
-        type: "chart",
-        chart: {
-          count: "articles",
-          by: "semester",
-          split: "section",
-          draw: "stacked",
-          values: "number",
-          order: "largest",
-          top: 25,
-          compare: "none",
-        },
-        hidden: ["Sports"],
+/* every starter view goes through these, and so do two that use what no
+   starter does yet: filters, a legend with series off, and People's Show */
+const EXTRA = [
+  {
+    id: "news-history",
+    label: "News history",
+    title: "News, by semester",
+    question: "What has News published, but for Sports?",
+    source: "articles",
+    range: "all",
+    filters: { sections: ["News", "Sports"] },
+    layout: {
+      type: "chart",
+      chart: {
+        count: "articles",
+        by: "semester",
+        split: "section",
+        draw: "stacked",
+        values: "number",
+        order: "largest",
+        top: 25,
+        compare: "none",
+      },
+      hidden: ["Sports"],
+    },
+  },
+  {
+    id: "regulars",
+    label: "Regulars",
+    title: "The regulars",
+    question: "Who has done the most?",
+    source: "people",
+    range: "semester",
+    layout: {
+      type: "table",
+      table: {
+        columns: ["name", "contributions"],
+        sort: { id: "name", desc: false },
+        minimum: 3,
       },
     },
-    {
-      id: "regulars",
-      label: "Regulars",
-      title: "The regulars",
-      question: "Who has done the most this semester?",
-      source: "people",
-      range: "semester",
-      layout: {
-        type: "table",
-        table: {
-          columns: ["name", "contributions"],
-          sort: { id: "name", desc: false },
-          minimum: 3,
-        },
-      },
-    },
-  ] as const satisfies readonly View[];
-  return { ...real, VIEWS: [...real.VIEWS, ...extra] };
-});
+  },
+] as const satisfies readonly View[];
 
 const SOURCES: Source[] = ["articles", "people"];
+const ALL: readonly View[] = [...VIEWS, ...EXTRA];
+/** a page's views, as the Sheet or its starter set gives them */
+const on = (source: Source): View[] => ALL.filter((v) => v.source === source);
 
-/** a page as it opens on a view: the view, then Time from it */
+/** a page as it opens from a link: the view, then the filters from it */
 const open = (search: string, source: Source) => {
-  const view = readView(search, source);
-  return { view, filters: readState(search, openingOf(view, source)) };
+  const { state } = readView(search, on(source), source);
+  return {
+    view: state,
+    filters: readState(search, openingOf(savedOf(on(source), state.view))),
+  };
 };
+const viewAt = (search: string, source: Source) => open(search, source).view;
 
 const link = (state: ViewState, filters: FilterState, source: Source) => {
   const params = new URLSearchParams();
-  writeView(state, params, source);
-  writeState(filters, params, openingOf(state, source));
+  const views = on(source);
+  writeView(state, params, views);
+  writeState(filters, params, openingOf(savedOf(views, state.view)));
   return `?${params}`;
 };
 
-const opening = (view: View): ViewState =>
-  readView(`?view=${view.id}`, view.source);
+const opening = (view: View): ViewState => openingState(view, on(view.source));
 
-test("each page opens on a table, and every view is one its page can show", () => {
+test("each page opens on a table, and every starter view is one its page can show", () => {
   const ids = VIEWS.map((view) => view.id);
   expect(new Set(ids).size).toBe(ids.length);
-  expect(ids).not.toContain(CUSTOM);
-  for (const source of SOURCES) {
-    const [first] = viewsOn(source);
-    expect(first?.layout.type, source).toBe("table");
-  }
+  expect(ids).not.toContain(NEW);
+  for (const source of SOURCES)
+    expect(on(source)[0]?.layout.type, source).toBe("table");
   for (const view of VIEWS)
     if (view.layout.type === "table") {
       const columns: readonly string[] = COLUMNS[view.source];
@@ -117,151 +115,178 @@ test("each page opens on a table, and every view is one its page can show", () =
     }
 });
 
-test("every view opens from its link as declared, and as Custom", () => {
-  for (const view of VIEWS) {
+test("every view opens from its link as saved, not edited, and edited back as it was", () => {
+  for (const view of ALL) {
     const state = opening(view);
-    const filters = openingOf(state, view.source);
+    const filters = openingOf(view);
     const back = open(link(state, filters, view.source), view.source);
-    expect(back.view.view, view.id).toBe(view.id);
+    expect(back.view, view.id).toEqual(state);
     expect(layoutOf(back.view, view.source), view.id).toEqual(view.layout);
     expect(back.filters, view.id).toEqual(filters);
+    expect(isEdited(back.view, back.filters, on(view.source)), view.id).toBe(
+      false,
+    );
 
-    const custom = changeView(state, shapeOf(state, view.source), view.source);
-    const made = open(link(custom, filters, view.source), view.source);
-    expect(made.view.view, view.id).toBe(CUSTOM);
-    expect(made.view.base, view.id).toBe(view.id);
-    expect(layoutOf(made.view, view.source), view.id).toEqual(view.layout);
+    const other = switchLayout(
+      state.shape,
+      state.shape.type === "pivot" ? "chart" : "pivot",
+      on(view.source),
+      view,
+    );
+    const edited = changeView(state, other);
+    const made = open(link(edited, filters, view.source), view.source);
+    expect(made.view.view, view.id).toBe(view.id);
+    expect(made.view.shape, view.id).toEqual(other);
+    expect(differences(made.view, made.filters, on(view.source))).toEqual([
+      "layout",
+    ]);
   }
 });
 
-test("a view links by name alone, and a page's first by nothing", () => {
+test("a view links by its id and what differs alone, and a page's first by nothing", () => {
   const history = opening(VIEWS.find((v) => v.id === "history")!);
   expect(link(history, clearedState("all"), "articles")).toBe("?view=history");
-  const all = readView("", "articles");
+  const all = viewAt("", "articles");
   expect(all.view).toBe("all");
   expect(link(all, clearedState("3m"), "articles")).toBe("?");
 
-  /* a view no longer offered, or another page's, opens the page's first */
-  expect(readView("?view=mix", "articles").view).toBe("all");
-  expect(readView("?view=headcount", "articles").view).toBe("all");
-});
-
-test("a link reproduces a custom chart or table, and keeps the filters' parameters", () => {
-  const chart: ChartConfig = {
-    count: "newcomers",
-    by: "school-year",
-    split: "role",
-    draw: "lines",
-    values: "running",
-    order: "largest",
-    top: 25,
-    compare: "none",
-  };
-  const people = changeView(
-    readView("?view=headcount", "people"),
-    { type: "chart", chart },
-    "people",
-  );
-  const params = new URLSearchParams("range=semester&q=ann");
-  writeView(people, params, "people");
-  const back = readView(`?${params}`, "people");
-  expect(shapeOf(back, "people")).toEqual({ type: "chart", chart });
-  expect(back.base).toBe("headcount");
-  expect(params.get("q")).toBe("ann");
-
-  const table = changeView(
-    readView("", "people"),
-    { type: "table", columns: ["first", "name"] },
-    "people",
-  );
-  const again = readView(link(table, clearedState("3m"), "people"), "people");
-  expect(shapeOf(again, "people")).toEqual({
-    type: "table",
-    columns: ["first", "name"],
+  /* one setting changed is one setting in the link */
+  if (history.shape.type !== "chart") throw new Error("History is a chart");
+  const lines = changeView(history, {
+    type: "chart",
+    chart: { ...history.shape.chart, draw: "lines" },
   });
-
-  /* a Custom link from before tables is a chart */
-  expect(
-    shapeOf(
-      readView("?view=custom&count=articles&by=semester", "articles"),
-      "articles",
-    ).type,
-  ).toBe("chart");
+  expect(link(lines, clearedState("all"), "articles")).toBe(
+    "?view=history&layout=chart&draw=lines",
+  );
 });
 
-test("a link keeps the series the legend has off", () => {
-  const history = {
-    ...readView("?view=history", "articles"),
-    hidden: ["News", "Sports"],
-  };
+test("a link opens on the view as it is saved now, with its changes on top", () => {
+  const history = VIEWS.find((v) => v.id === "history")!;
+  const before = on("articles");
   const params = new URLSearchParams();
-  writeView(history, params, "articles");
-  expect(params.get("hide")).toBe("News,Sports");
-  expect(readView(`?${params}`, "articles").hidden).toEqual(["News", "Sports"]);
+  if (history.layout.type !== "chart") throw new Error("History is a chart");
+  writeView(
+    changeView(opening(history), {
+      type: "chart",
+      chart: { ...history.layout.chart, draw: "lines" },
+    }),
+    params,
+    before,
+  );
+  /* someone saves History by year since */
+  const after = before.map((v) =>
+    v.id === "history" && v.layout.type === "chart"
+      ? {
+          ...v,
+          layout: {
+            ...v.layout,
+            chart: { ...v.layout.chart, by: "year" as const },
+          },
+        }
+      : v,
+  );
+  const { state } = readView(`?${params}`, after, "articles");
+  expect(state.shape).toMatchObject({
+    type: "chart",
+    chart: { by: "year", draw: "lines" },
+  });
 });
 
-test("a link leaves out the view's own time range, and keeps any other", () => {
-  const history = readView("?view=history", "articles");
-  const time = (search: string) => open(search, "articles").filters.preset;
-  expect(link(history, clearedState("all"), "articles")).toBe("?view=history");
-  expect(time("?view=history")).toBe("all");
-  expect(time("?view=sections")).toBe("3m");
-
-  /* Time changed after choosing a view is a filter, and the view stays */
-  const narrowed = open(
-    link(history, clearedState("12m"), "articles"),
+test("a link to a view the page no longer has says so, and opens the first as saved", () => {
+  const read = readView(
+    "?view=gone&layout=chart&count=people&range=12m",
+    on("articles"),
     "articles",
   );
-  expect(narrowed.view.view).toBe("history");
-  expect(narrowed.filters.preset).toBe("12m");
+  expect(read.missing).toBe("gone");
+  expect(read.state).toEqual(opening(on("articles")[0]!));
+  /* another page's view is not this page's */
+  expect(readView("?view=headcount", on("articles"), "articles").missing).toBe(
+    "headcount",
+  );
+});
 
-  /* Custom keeps the range of the view it was made from */
-  const custom = changeView(
-    readView("?view=headcount", "people"),
-    { type: "table", columns: ["name"] },
+test("an old Custom link opens the view it was made from, with its changes", () => {
+  const custom = viewAt(
+    "?view=custom&base=headcount&layout=chart&count=people&by=year&split=none&draw=lines&values=number&order=largest&top=25&compare=none",
     "people",
   );
-  expect(openingOf(custom, "people").preset).toBe<Preset>("all");
+  expect(custom.view).toBe("headcount");
+  expect(custom.shape).toMatchObject({ type: "chart", chart: { by: "year" } });
+  /* with no base, it was made from the page's first */
   expect(
-    new URLSearchParams(link(custom, clearedState("all"), "people")).has(
-      "range",
-    ),
-  ).toBe(false);
+    viewAt("?view=custom&layout=table&columns=name", "people"),
+  ).toMatchObject({
+    view: "everyone",
+    shape: { type: "table", columns: ["name"] },
+  });
+  /* and the link it is rewritten to names no Custom */
+  expect(link(custom, clearedState("all"), "people")).not.toContain("custom");
+  expect(link(custom, clearedState("all"), "people")).not.toContain("base");
 });
 
-test("a table's sort is the view's own until changed, and a change stands", () => {
-  const everyone = readView("", "people");
-  expect(everyone.sort).toEqual({ id: "contributions", desc: true });
-  expect(link(everyone, clearedState("3m"), "people")).toBe("?");
+test("a link to a view merged into another opens the one it became", () => {
+  expect(viewAt("?view=contributors", "people").view).toBe("top");
+  expect(viewAt("?view=newcomers", "people").view).toBe("new");
+  expect(
+    viewAt("?view=custom&base=newcomers&layout=table&columns=name", "people")
+      .view,
+  ).toBe("new");
+});
 
+test("whatever differs from the view as saved is an edit, and Reset takes it all back", () => {
+  const views = on("people");
+  const everyone = opening(views[0]!);
+  const filters = openingOf(views[0]!);
+  expect(differences(everyone, filters, views)).toEqual([]);
+
+  const changed: ViewState = {
+    ...everyone,
+    sort: { id: "name", desc: false },
+    minimum: 5,
+  };
+  const narrowed: FilterState = {
+    ...filters,
+    preset: "12m",
+    sections: ["News"],
+    people: ["Ada Example"],
+    articles: [3],
+    search: "ada",
+  };
+  expect(differences(changed, narrowed, views)).toEqual([
+    "range",
+    "sections",
+    "people",
+    "articles",
+    "search",
+    "sort",
+    "minimum",
+  ]);
+  expect(resetView(changed, views)).toEqual(everyone);
+
+  /* a sort held while a chart shows is not on screen to differ */
+  const chart = changeView(
+    changed,
+    switchLayout(changed.shape, "chart", views, views[0]!),
+  );
+  expect(differences(chart, filters, views)).toEqual(["layout"]);
+
+  /* a new view is something to save, before anything changes */
+  const fresh = openingState(savedOf(views, NEW), views);
+  expect(fresh.view).toBe(NEW);
+  expect(differences(fresh, filters, views)).toEqual([]);
+  expect(isEdited(fresh, filters, views)).toBe(true);
+});
+
+test("a table's sort is the view's own until changed, and each view opens on its own", () => {
+  const everyone = viewAt("", "people");
+  expect(everyone.sort).toEqual({ id: "contributions", desc: true });
   const byName = { ...everyone, sort: { id: "name" as const, desc: false } };
   expect(link(byName, clearedState("3m"), "people")).toBe("?sort=name");
-  /* a chart holds it for the table after, and so does its link */
-  const chart = chooseView(byName, "top", "people");
-  const held = link(chart, clearedState("semester"), "people");
-  expect(held).toBe("?view=top&sort=name");
-  expect(chooseView(chart, "everyone", "people").sort).toEqual(byName.sort);
-  expect(
-    chooseView(readView(held, "people"), "everyone", "people").sort,
-  ).toEqual(byName.sort);
-  /* unchanged, each view opens on its own */
-  expect(
-    chooseView(chooseView(everyone, "top", "people"), "everyone", "people")
-      .sort,
-  ).toEqual(everyone.sort);
-});
-
-test("a view opens on its own filters, unless they have been changed", () => {
-  const from = { ...clearedState("3m"), roles: ["writer" as const] };
-  const to = { ...clearedState("all"), sections: ["News"] };
-  /* untouched: the next view's own */
-  expect(carryOver(from, from, to)).toEqual(to);
-  /* Time and a typed search were changed, so they stand */
-  const changed = { ...from, preset: "12m" as const, search: "ada" };
-  expect(carryOver(changed, from, to)).toEqual({
-    ...to,
-    preset: "12m",
-    search: "ada",
+  expect(viewAt("?view=new", "people").sort).toEqual({
+    id: "first",
+    desc: true,
   });
 });
 
@@ -308,23 +333,22 @@ const PIVOT_SETTINGS: (keyof PivotConfig)[] = [
 ];
 
 /* the declaration's settings made one at a time, each as the builder offers
-   it, from a Custom table of one column on all time */
+   it, from a table of one column on all time */
 function rebuild(view: View) {
   const { source } = view;
+  const views = on(source);
   const [starter] = COLUMNS[source];
   let state: ViewState = {
-    ...readView("", source),
-    view: CUSTOM,
-    custom: { type: "table", columns: [starter] },
+    ...opening(views[0]!),
+    shape: { type: "table", columns: [starter] },
     sort: { id: starter, desc: false },
   };
   let filters = clearedState("all");
-  const shape = () => shapeOf(state, source);
+  const shape = () => state.shape;
 
   state = changeView(
     state,
-    switchLayout(shape(), view.layout.type, source),
-    source,
+    switchLayout(shape(), view.layout.type, views, view),
   );
   const { layout } = view;
   if (layout.type === "table") {
@@ -336,13 +360,13 @@ function rebuild(view: View) {
     /* each column moved up until it is where the view has it */
     for (const [at, id] of wanted.entries())
       while (columns.indexOf(id) > at) columns = moveColumn(columns, id, -1);
-    state = changeView(state, { type: "table", columns }, source);
+    state = changeView(state, { type: "table", columns });
     if ("only" in layout.table && layout.table.only)
-      state = changeView(
-        state,
-        { type: "table", columns, only: layout.table.only },
-        source,
-      );
+      state = changeView(state, {
+        type: "table",
+        columns,
+        only: layout.table.only,
+      });
     state = { ...state, sort: { ...state.sort, id: layout.table.sort.id } };
     state = { ...state, sort: { ...state.sort, desc: layout.table.sort.desc } };
     /* People's Show, in the toolbar */
@@ -357,7 +381,7 @@ function rebuild(view: View) {
           offeredPivot(pivot, key, layout.pivot[key])
         )
           pivot = { ...pivot, [key]: layout.pivot[key] };
-    state = changeView(state, { type: "pivot", pivot }, source);
+    state = changeView(state, { type: "pivot", pivot });
   } else {
     let chart = (shape() as Extract<Shape, { type: "chart" }>).chart;
     for (let pass = 0; pass < 5; pass++)
@@ -367,7 +391,7 @@ function rebuild(view: View) {
           offered(chart, key, layout.chart[key])
         )
           chart = { ...chart, [key]: layout.chart[key] };
-    state = changeView(state, { type: "chart", chart }, source);
+    state = changeView(state, { type: "chart", chart });
     /* the legend's series, each clicked off */
     for (const key of layout.hidden ?? [])
       state = { ...state, hidden: [...state.hidden, key] };
@@ -376,63 +400,36 @@ function rebuild(view: View) {
   filters = { ...filters, preset: view.range };
   for (const key of ["sections", "roles", "people"] as const)
     filters = { ...filters, [key]: [...(view.filters?.[key] ?? [])] };
-  return declarationOf(state, filters, source);
+  return declarationOf({ ...state, view: view.id }, filters, views);
 }
 
-const WORDS = {
-  id: "new-view",
-  label: "New view",
-  title: "What heads it?",
-  question: "What does it answer?",
-};
-
-test("every default view can be built from nothing in the builder", () => {
-  for (const view of VIEWS) {
+test("every view can be built from nothing in the builder, and saves as declared", () => {
+  for (const view of ALL) {
     const { view: made, left } = rebuild(view);
     expect(left, view.id).toEqual([]);
-    expect(made, view.id).toEqual({ ...view, ...WORDS });
+    expect(made, view.id).toEqual(view);
   }
 });
 
-test("Copy as view writes a default as it is declared, ready to paste", async () => {
-  for (const view of VIEWS) {
-    const state = opening(view);
-    const { view: copied, left } = declarationOf(
-      state,
-      openingOf(state, view.source),
-      view.source,
-    );
-    expect(copied, view.id).toEqual(view);
-    expect(left).toEqual([]);
-
-    const text = viewSource(copied);
-    /* what the paste means: the same declaration */
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval -- reads back our own output
-    const pasted: unknown = new Function(
-      `return ${text.trim().replace(/,$/, "")}`,
-    )();
-    expect(pasted, view.id).toEqual(view);
-    /* and how it reads: as views.ts is formatted, so it passes the check */
-    const file = `export const VIEWS = [\n${text}];\n`;
-    expect(await format(file, { parser: "typescript" }), view.id).toBe(file);
-  }
-});
-
-test("Copy as view says what a view cannot keep", () => {
-  const state = readView("", "articles");
+test("a save says what a view cannot keep, and keeps the rest", () => {
+  const views = on("articles");
   const { view, left } = declarationOf(
-    state,
+    opening(views[0]!),
     {
       ...clearedState("custom"),
       from: "2025-06-01",
       to: "2025-12-31",
       search: "moon",
+      articles: [4, 5],
     },
-    "articles",
+    views,
   );
   expect(view.range).toBe("3m");
-  expect(left).toHaveLength(2);
-  expect(viewSource(view, left)).toMatch(/^ {2}\/\/ not kept: the range/);
+  expect(left).toEqual([
+    "the range of dates (2025-06-01 to 2025-12-31): a view opens on one counted from today",
+    "the search for “moon”",
+    "the 2 articles a chart's mark chose",
+  ]);
 });
 
 test("a link to the old Charts page opens its view on that view's page", () => {
@@ -457,93 +454,50 @@ test("a link to the old Charts page opens its view on that view's page", () => {
     if (view.layout.type === "chart") {
       const to = new URL(chartsAddress(`?view=${view.id}`), "https://x.test");
       expect(to.pathname).toBe(`/${view.source}`);
-      expect(viewOf(readView(to.search, view.source), view.source).id).toBe(
-        view.id,
-      );
+      expect(viewAt(to.search, view.source).view).toBe(view.id);
     }
 });
 
-test("a link to a view merged into another opens the one it became", () => {
-  expect(viewOf(readView("?view=contributors", "people"), "people").id).toBe(
-    "top",
-  );
-  expect(readView("?view=newcomers", "people").view).toBe("new");
-  const custom = readView(
-    "?view=custom&base=newcomers&layout=table&columns=name",
-    "people",
-  );
-  expect(custom.base).toBe("new");
-  expect(link(custom, clearedState("semester"), "people")).toContain(
-    "base=new",
-  );
-});
-
 test("a list of new people switched to a chart or a pivot counts new people", () => {
-  const fresh = shapeOf(readView("?view=new", "people"), "people");
-  const chart = switchLayout(fresh, "chart", "people");
+  const views = on("people");
+  const newPeople = savedOf(views, "new");
+  const fresh = opening(newPeople).shape;
+  const chart = switchLayout(fresh, "chart", views, newPeople);
   expect(chart.type === "chart" && chart.chart).toMatchObject({
     count: "newcomers",
     by: "section",
     split: "role",
   });
-  const pivot = switchLayout(fresh, "pivot", "people");
+  const pivot = switchLayout(fresh, "pivot", views, newPeople);
   expect(pivot.type === "pivot" && pivot.pivot).toMatchObject({
     count: "newcomers",
     rows: "section",
     columns: "role",
   });
   /* everyone, as the page's first chart */
-  const everyone = shapeOf(readView("", "people"), "people");
-  const first = switchLayout(everyone, "chart", "people");
+  const first = switchLayout(
+    opening(views[0]!).shape,
+    "chart",
+    views,
+    views[0]!,
+  );
   expect(first.type === "chart" && first.chart.count).toBe("contributions");
 });
 
-test("Copy as view keeps the legend's series off, People's Show and the Columns menu", () => {
-  const history = {
-    ...readView("?view=history", "articles"),
-    hidden: ["News"],
-  };
-  const chart = declarationOf(history, clearedState("all"), "articles");
-  expect(chart.view.layout).toMatchObject({ type: "chart", hidden: ["News"] });
-
-  const everyone = { ...readView("", "people"), minimum: 5 as const };
-  const table = declarationOf(everyone, clearedState("3m"), "people", ["last"]);
-  expect(table.view.layout).toEqual({
-    type: "table",
-    table: {
-      columns: ["name", "contributions", "writer", "image", "other", "first"],
-      sort: { id: "contributions", desc: true },
-      minimum: 5,
-    },
-  });
-  expect(table.left).toEqual([]);
-});
-
 test("a view opens with its own series off and its own Show, and a link can undo either", () => {
-  const history = readView("?view=news-history", "articles");
+  const history = viewAt("?view=news-history", "articles");
   expect(history.hidden).toEqual(["Sports"]);
-  expect(
-    new URLSearchParams(
-      link(history, openingOf(history, "articles"), "articles"),
-    ).has("hide"),
-  ).toBe(false);
-  /* every series on, where the view has one off */
   const all = { ...history, hidden: [] };
+  expect(link(all, clearedState("all"), "articles")).toContain("hide=");
   expect(
-    readView(link(all, clearedState("all"), "articles"), "articles").hidden,
+    viewAt(link(all, clearedState("all"), "articles"), "articles").hidden,
   ).toEqual([]);
 
-  const regulars = readView("?view=regulars", "people");
+  const regulars = viewAt("?view=regulars", "people");
   expect(regulars.minimum).toBe(3);
   const everyone = { ...regulars, minimum: 1 as const };
   expect(
-    readView(link(everyone, clearedState("semester"), "people"), "people")
+    viewAt(link(everyone, clearedState("semester"), "people"), "people")
       .minimum,
   ).toBe(1);
-  /* changed, it stands on the next view, as a sort does */
-  expect(chooseView(everyone, "everyone", "people").minimum).toBe(1);
-  expect(chooseView(regulars, "everyone", "people").minimum).toBe(1);
-  expect(
-    chooseView({ ...regulars, minimum: 5 }, "everyone", "people").minimum,
-  ).toBe(5);
 });

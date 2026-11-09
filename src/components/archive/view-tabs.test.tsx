@@ -7,20 +7,18 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { foldTabs, ViewTabs } from "./view-tabs";
 
 /* every tab 100 wide, the menu too, with 4 between */
-test("as many views as fit stay in the row, beside the menu and Custom", () => {
+test("as many views as fit stay in the row, beside the menu and the plus", () => {
   const widths = [100, 100, 100, 100, 100, 100];
-  /* all of them: five views and Custom */
+  /* all of them: five views and the plus */
   expect(foldTabs(widths, 100, 620, 0)).toEqual({
     shown: [0, 1, 2, 3, 4],
     folded: [],
   });
-  /* 500 leaves 296 for views beside Custom and the menu */
+  /* 500 leaves 296 for views beside the plus and the menu */
   expect(foldTabs(widths, 100, 500, 0)).toEqual({
     shown: [0, 1],
     folded: [2, 3, 4],
   });
-  /* Custom chosen is always shown, and folds nothing more */
-  expect(foldTabs(widths, 100, 500, 5).shown).toEqual([0, 1]);
 });
 
 test("a folded view chosen takes the place of the last that fit", () => {
@@ -44,11 +42,13 @@ function Row() {
   const [view, setView] = useState("all");
   return (
     <ViewTabs
-      tabs={[...TABS, { id: "custom", label: "Custom", icon: SquareIcon }]}
+      tabs={TABS}
       view={view}
+      edited={false}
+      menu={null}
       panelId="panel"
       onChoose={setView}
-      onClickCustom={() => {}}
+      onNew={() => {}}
     />
   );
 }
@@ -82,10 +82,10 @@ const shown = () => screen.getAllByRole("tab").map((tab) => tab.textContent);
 test("the views that do not fit are a menu, and the one chosen there joins the row", async () => {
   const user = userEvent.setup();
   render(<Row />);
-  expect(shown()).toEqual(["All", "Sections", "Custom"]);
+  expect(shown()).toEqual(["All", "Sections"]);
   await user.click(screen.getByRole("button", { name: "3 more" }));
   await user.click(await screen.findByRole("menuitem", { name: "Most read" }));
-  expect(shown()).toEqual(["All", "Most read", "Custom"]);
+  expect(shown()).toEqual(["All", "Most read"]);
   const chosen = screen.getByRole("tab", { name: "Most read" });
   expect(chosen.getAttribute("aria-selected")).toBe("true");
   await waitFor(() => expect(document.activeElement).toBe(chosen));
@@ -98,13 +98,30 @@ test("arrows move through every view, folded or not, and keep focus on the one c
   await user.keyboard("{ArrowRight}{ArrowRight}");
   /* History was folded: it is in the row now, and has focus */
   expect(document.activeElement?.textContent).toBe("History");
-  expect(shown()).toEqual(["All", "History", "Custom"]);
+  expect(shown()).toEqual(["All", "History"]);
   await user.keyboard("{End}");
-  expect(document.activeElement?.textContent).toBe("Custom");
+  expect(document.activeElement?.textContent).toBe("Retention");
   await user.keyboard("{Home}");
   expect(document.activeElement?.textContent).toBe("All");
   await user.keyboard("{ArrowLeft}");
-  expect(document.activeElement?.textContent).toBe("Custom");
+  expect(document.activeElement?.textContent).toBe("Retention");
+});
+
+test("the chosen view has its menu beside it, and a dot while it is edited", () => {
+  render(
+    <ViewTabs
+      tabs={TABS}
+      view="history"
+      edited
+      menu={<button type="button">History's menu</button>}
+      panelId="panel"
+      onChoose={() => {}}
+      onNew={() => {}}
+    />,
+  );
+  expect(screen.getByRole("tab", { name: "History, edited" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "History's menu" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "New view" })).toBeTruthy();
 });
 
 test("a touch screen keeps every view in the row, to swipe", () => {
@@ -114,7 +131,7 @@ test("a touch screen keeps every view in the row, to swipe", () => {
     removeEventListener: () => {},
   }));
   render(<Row />);
-  expect(shown()).toHaveLength(6);
+  expect(shown()).toHaveLength(5);
   expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
 });
 

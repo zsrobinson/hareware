@@ -1,23 +1,60 @@
 /*
   What the signed-in pages may change in the Sheet, checked before anything is
   written. Each edit says how to log itself, and the log line never carries a
-  real name: the log is not where the Sheet's secrets go.
+  real name: the log is not where the Sheet's secrets go. A view's words are
+  the board's too, so a view is logged by its page and id alone.
 */
 
 import type { Sheets } from "~/lib/services/google/sheets";
 import { isRole, type Label, type Role } from "./labels";
 import {
+  isPage,
   setArticleCredits,
   setBylines,
   setDifferentPeople,
   setIgnored,
   setLabels,
+  writeViews,
   type BylineOn,
+  type Page,
   type PrintedElsewhere,
+  type StoredView,
   type Unscoped,
+  type ViewWrite,
 } from "./sheet";
 
 type CreditEntry = { byline: string | null; realName: string };
+
+/* a view's id, as a link names it */
+const VIEW_ID = /^[a-z0-9][a-z0-9-]{0,47}$/;
+/* a declaration is a few hundred characters; a Sheet cell holds 50,000 */
+const MOST_VIEW = 8_000;
+
+/** what every change to a page's views carries */
+type OnPage = {
+  page: Page;
+  /** the page's starter views, when the writer's copy was them (./sheet) */
+  starter: StoredView[] | null;
+};
+
+export type ViewEdit = OnPage &
+  (
+    | {
+        kind: "view-save" | "view-rename";
+        id: string;
+        view: Record<string, unknown>;
+        basedOn: string;
+      }
+    | {
+        kind: "view-create";
+        id: string;
+        view: Record<string, unknown>;
+        position?: number;
+      }
+    | { kind: "view-delete"; id: string; basedOn: string }
+    | { kind: "view-reorder"; order: string[]; basedOn: string[] }
+    | { kind: "views-restore" }
+  );
 
 export type Edit =
   | {
@@ -38,7 +75,119 @@ export type Edit =
     }
   | { kind: "labels"; labels: Label[] }
   | { kind: "ignore"; postId: number; ignored: boolean }
-  | { kind: "different-people"; names: [string, string]; different: boolean };
+  | { kind: "different-people"; names: [string, string]; different: boolean }
+  | ViewEdit;
+
+export const isViewEdit = (edit: Edit): edit is ViewEdit =>
+  edit.kind.startsWith("view");
+
+/* a declaration as the Views tab keeps it: checked whole by the browser,
+   which reads it; here only that it is one, of a size a cell holds */
+function storedView(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return undefined;
+  const view = value as Record<string, unknown>;
+  if (view.v !== 1 || "id" in view || "source" in view) return undefined;
+  if (typeof view.label !== "string" || !view.label.trim()) return undefined;
+  return JSON.stringify(view).length <= MOST_VIEW ? view : undefined;
+}
+
+function parseViewEdit(
+  b: Record<string, unknown>,
+): ViewEdit | { error: string } {
+  if (!isPage(b.page)) return { error: "page must be articles or people" };
+  const page = b.page;
+  let starter: StoredView[] | null = null;
+  if (b.starter !== undefined && b.starter !== null) {
+    if (!Array.isArray(b.starter) || b.starter.length === 0)
+      return { error: "starter must list the page's starter views" };
+    starter = [];
+    for (const each of b.starter as Record<string, unknown>[]) {
+      const view = storedView(each?.view);
+      if (typeof each?.id !== "string" || !VIEW_ID.test(each.id) || !view)
+        return { error: "every starter view needs an id and a declaration" };
+      starter.push({ id: each.id, view });
+    }
+  }
+  const id = typeof b.id === "string" && VIEW_ID.test(b.id) ? b.id : null;
+  const basedOn = typeof b.basedOn === "string" ? b.basedOn.trim() : null;
+  const view = storedView(b.view);
+  const on = { page, starter };
+
+  switch (b.kind) {
+    case "view-save":
+    case "view-rename":
+      if (!id) return { error: "id must be a view's id" };
+      if (basedOn === null)
+        return { error: "basedOn must be the row's updated at" };
+      if (!view)
+        return { error: "view must be a declaration, with v 1 and a label" };
+      return { ...on, kind: b.kind, id, view, basedOn };
+    case "view-create": {
+      if (!id) return { error: "id must be a view's id" };
+      if (!view)
+        return { error: "view must be a declaration, with v 1 and a label" };
+      const position = Number(b.position);
+      return {
+        ...on,
+        kind: "view-create",
+        id,
+        view,
+        ...(b.position !== undefined && Number.isFinite(position)
+          ? { position }
+          : {}),
+      };
+    }
+    case "view-delete":
+      if (!id) return { error: "id must be a view's id" };
+      if (basedOn === null)
+        return { error: "basedOn must be the row's updated at" };
+      return { ...on, kind: "view-delete", id, basedOn };
+    case "view-reorder": {
+      const ids = (v: unknown) =>
+        Array.isArray(v) && v.every((x) => typeof x === "string")
+          ? (v as string[])
+          : null;
+      const order = ids(b.order);
+      const before = ids(b.basedOn);
+      if (!order || !before || order.length === 0)
+        return { error: "order and basedOn must list the page's view ids" };
+      return { ...on, kind: "view-reorder", order, basedOn: before };
+    }
+    case "views-restore":
+      if (!starter) return { error: "restoring needs the starter views" };
+      return { ...on, kind: "views-restore" };
+    default:
+      return { error: "unknown edit" };
+  }
+}
+
+/* the Sheet's write for a change to a page's views */
+function viewWrite(edit: ViewEdit): ViewWrite {
+  switch (edit.kind) {
+    case "view-save":
+    case "view-rename":
+      return {
+        kind: edit.kind === "view-save" ? "save" : "rename",
+        id: edit.id,
+        view: edit.view,
+        basedOn: edit.basedOn,
+      };
+    case "view-create":
+      return {
+        kind: "create",
+        id: edit.id,
+        view: edit.view,
+        position: edit.position,
+      };
+    case "view-delete":
+      return { kind: "delete", id: edit.id, basedOn: edit.basedOn };
+    case "view-reorder":
+      return { kind: "reorder", order: edit.order, basedOn: edit.basedOn };
+    case "views-restore":
+      return { kind: "restore" };
+  }
+}
 
 /** an edit, or why the request is not one */
 export function parseEdit(body: unknown): Edit | { error: string } {
@@ -50,6 +199,9 @@ export function parseEdit(body: unknown): Edit | { error: string } {
     Array.isArray(v) && v.every((n) => typeof n === "string")
       ? (v as string[]).map((n) => n.trim()).filter(Boolean)
       : undefined;
+
+  if (typeof b.kind === "string" && b.kind.startsWith("view"))
+    return parseViewEdit(b);
 
   switch (b.kind) {
     case "article-credits": {
@@ -164,8 +316,20 @@ export function parseEdit(body: unknown): Edit | { error: string } {
   }
 }
 
-/** applies an edit; `who` signs the rows it writes */
-export async function applyEdit(sheets: Sheets, edit: Edit, who: string) {
+/**
+ * applies an edit; `who` signs the rows it writes. A change to views returns
+ * the `updated at` it wrote, or throws `ViewConflict`
+ */
+export async function applyEdit(
+  sheets: Sheets,
+  edit: Edit,
+  who: string,
+): Promise<string | void> {
+  if (isViewEdit(edit))
+    return writeViews(sheets, edit.page, viewWrite(edit), {
+      starter: edit.starter,
+      who,
+    });
   const day = new Date().toLocaleDateString("en-US", {
     timeZone: "America/New_York",
     month: "short",
@@ -207,5 +371,27 @@ export function describeEdit(edit: Edit): string {
       return `${edit.ignored ? "ignored" : "restored"} the problems on post ${edit.postId}`;
     case "different-people":
       return `${edit.different ? "marked" : "unmarked"} two similar names as different people`;
+    default:
+      return describeViewEdit(edit);
+  }
+}
+
+function describeViewEdit(edit: ViewEdit): string {
+  const starter = edit.starter
+    ? `, first writing its ${edit.starter.length} starter views`
+    : "";
+  switch (edit.kind) {
+    case "view-save":
+      return `saved view ${edit.id} on ${edit.page}${starter}`;
+    case "view-rename":
+      return `renamed view ${edit.id} on ${edit.page}${starter}`;
+    case "view-create":
+      return `added view ${edit.id} on ${edit.page}${starter}`;
+    case "view-delete":
+      return `deleted view ${edit.id} on ${edit.page}${starter}`;
+    case "view-reorder":
+      return `moved the views on ${edit.page}${starter}`;
+    case "views-restore":
+      return `restored the ${edit.starter?.length ?? 0} starter views on ${edit.page}`;
   }
 }

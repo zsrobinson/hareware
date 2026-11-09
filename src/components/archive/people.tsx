@@ -30,6 +30,7 @@ import {
   RowOpener,
 } from "./open-row";
 import { SectionName } from "./section-name";
+import { EDITED } from "./edited";
 import { ShellTableControls } from "./table-controls";
 import { COLUMN_NAMES, MINIMUMS, type ColumnId, type Minimum } from "./views";
 
@@ -214,6 +215,8 @@ function People({
   setMinimum,
   picked,
   setPicked,
+  columnsEdited,
+  minimumEdited,
 }: TableViewProps) {
   const phone = useIsPhone();
   const roomy = useRoomBesidePanel();
@@ -270,6 +273,7 @@ function People({
       hideLabel
       width={phone ? "w-full justify-between" : "w-fit"}
       value={String(minimum)}
+      edited={minimumEdited}
       options={SHOWS}
       onChange={(n) => setMinimum(Number(n) as Minimum)}
     />
@@ -291,6 +295,11 @@ function People({
         onSortingChange={setSorting}
         picked={picked}
         onPickedChange={setPicked}
+        columnsChanged={
+          columnsEdited
+            ? { className: EDITED, description: "changed from the saved view" }
+            : undefined
+        }
         controls={(controls) => <ShellTableControls {...controls} />}
         selected={(row) => row.name === open}
         /* the column a table is sorted by is never one it leaves out; a

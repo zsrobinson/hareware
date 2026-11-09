@@ -23,6 +23,7 @@ import { ArchiveShell, useTrail, type ViewProps } from "./archive-shell";
 import { Choice } from "./choice";
 import { articleHref } from "./open-row";
 import { useRemovals } from "./removals";
+import { SavedViews } from "./settings-views";
 import { useEdit } from "./use-edit";
 
 export function SettingsPage() {
@@ -38,6 +39,9 @@ function Settings({ archive, reloadButton }: ViewProps) {
     <div className="max-w-2xl space-y-10">
       <PenNames archive={archive} reloadButton={reloadButton} />
       <Labels archive={archive} />
+      <Section id="views" title="Views">
+        <SavedViews list={LIST} row={ROW} />
+      </Section>
       <SheetStatus archive={archive} />
     </div>
   );

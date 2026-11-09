@@ -12,6 +12,7 @@ import { Button } from "~/components/ui/button";
 import { BuilderRow, ChartBuilder } from "./chart-builder";
 import { Choice } from "./choice";
 import { PivotBuilder } from "./pivot-builder";
+import { cn } from "~/lib/utils";
 import { moveColumn, switchLayout, withColumn, type Shape } from "./view-state";
 import {
   COLUMN_NAMES,
@@ -19,6 +20,7 @@ import {
   type ColumnId,
   type Source,
   type TableSort,
+  type View,
 } from "./views";
 
 const LAYOUTS: { id: Shape["type"]; label: string }[] = [
@@ -30,41 +32,61 @@ const LAYOUTS: { id: Shape["type"]; label: string }[] = [
 /**
  * The Customize panel: how the view shows what it counts, and the settings
  * of that layout. Every change is one of view-state's, so what the builder
- * can make is what a declaration can say.
+ * can make is what a declaration can say. A setting that differs from the
+ * view as saved says what it was there.
  */
 export function ViewBuilder({
   source,
   shape,
   sort,
+  saved,
+  views,
   onChange,
   onSort,
 }: {
   source: Source;
   shape: Shape;
   sort: TableSort;
+  /** the view as saved, and the sort it opens on */
+  saved: { view: View; shape: Shape; sort: TableSort };
+  /** the page's views, whose first chart or pivot a new layout starts from */
+  views: readonly View[];
   onChange: (shape: Shape) => void;
   onSort: (sort: TableSort) => void;
 }) {
+  const was = saved.shape;
   return (
     <FieldRows>
-      <BuilderRow icon={LayoutGridIcon} label="Show as">
+      <BuilderRow
+        icon={LayoutGridIcon}
+        label="Show as"
+        saved={
+          was.type === shape.type
+            ? undefined
+            : LAYOUTS.find((l) => l.id === was.type)?.label
+        }
+      >
         <Choice
           label="Show as"
           hideLabel
           width="w-full"
           value={shape.type}
           options={LAYOUTS}
-          onChange={(type) => onChange(switchLayout(shape, type, source))}
+          onChange={(type) =>
+            onChange(switchLayout(shape, type, views, saved.view))
+          }
         />
       </BuilderRow>
       {shape.type === "chart" ? (
         <ChartBuilder
           config={shape.chart}
+          saved={was.type === "chart" ? was.chart : undefined}
           onChange={(chart) => onChange({ type: "chart", chart })}
         />
       ) : shape.type === "pivot" ? (
         <PivotBuilder
           config={shape.pivot}
+          saved={was.type === "pivot" ? was.pivot : undefined}
           onChange={(pivot) => onChange({ type: "pivot", pivot })}
         />
       ) : (
@@ -73,6 +95,11 @@ export function ViewBuilder({
           columns={shape.columns}
           only={shape.only}
           sort={sort}
+          saved={{
+            columns: was.type === "table" ? was.columns : null,
+            only: was.type === "table" ? was.only : undefined,
+            sort: saved.sort,
+          }}
           onColumns={(columns) =>
             onChange({ type: "table", columns, only: shape.only })
           }
@@ -91,6 +118,7 @@ function TableBuilder({
   columns,
   only,
   sort,
+  saved,
   onColumns,
   onOnly,
   onSort,
@@ -99,6 +127,12 @@ function TableBuilder({
   columns: readonly ColumnId[];
   only: "new" | undefined;
   sort: TableSort;
+  /** the table as saved; no columns where the view is saved as a chart or a pivot */
+  saved: {
+    columns: readonly ColumnId[] | null;
+    only: "new" | undefined;
+    sort: TableSort;
+  };
   onColumns: (columns: readonly ColumnId[]) => void;
   onOnly: (only: "new" | undefined) => void;
   onSort: (sort: TableSort) => void;
@@ -107,10 +141,22 @@ function TableBuilder({
   /* shown first, in their order, then the rest as the table lists them */
   const all: readonly ColumnId[] = COLUMNS[source];
   const listed = [...columns, ...all.filter((id) => !columns.includes(id))];
+  const columnsChanged =
+    saved.columns !== null && saved.columns.join() !== columns.join();
   return (
     <>
       {source === "people" && (
-        <BuilderRow icon={UsersRoundIcon} label="People">
+        <BuilderRow
+          icon={UsersRoundIcon}
+          label="People"
+          saved={
+            saved.columns !== null && saved.only !== only
+              ? saved.only === "new"
+                ? "New in the range"
+                : "Everyone"
+              : undefined
+          }
+        >
           <Choice
             label="People"
             hideLabel
@@ -124,7 +170,13 @@ function TableBuilder({
           />
         </BuilderRow>
       )}
-      <BuilderRow icon={ArrowDownWideNarrowIcon} label="Sort by">
+      <BuilderRow
+        icon={ArrowDownWideNarrowIcon}
+        label="Sort by"
+        saved={
+          saved.sort.id !== sort.id ? COLUMN_NAMES[saved.sort.id] : undefined
+        }
+      >
         <Choice
           label="Sort by"
           hideLabel
@@ -134,7 +186,17 @@ function TableBuilder({
           onChange={(id) => onSort({ ...sort, id })}
         />
       </BuilderRow>
-      <BuilderRow icon={ArrowUpDownIcon} label="Order">
+      <BuilderRow
+        icon={ArrowUpDownIcon}
+        label="Order"
+        saved={
+          saved.sort.desc !== sort.desc
+            ? saved.sort.desc
+              ? "Descending"
+              : "Ascending"
+            : undefined
+        }
+      >
         <Choice
           label="Order"
           hideLabel
@@ -148,10 +210,26 @@ function TableBuilder({
         />
       </BuilderRow>
       <fieldset className="space-y-1">
-        <legend className="text-muted-foreground mb-1 text-xs font-medium">
+        <legend
+          className={cn(
+            "text-muted-foreground mb-1 text-xs font-medium",
+            columnsChanged && "text-edited",
+          )}
+        >
           Columns
+          {columnsChanged && (
+            <span className="font-normal">
+              {" "}
+              · saved: {saved.columns!.map((id) => COLUMN_NAMES[id]).join(", ")}
+            </span>
+          )}
         </legend>
-        <ul className="divide-y rounded-lg border text-sm">
+        <ul
+          className={cn(
+            "divide-y rounded-lg border text-sm",
+            columnsChanged && "border-edited/30",
+          )}
+        >
           {listed.map((id) => {
             const shown = columns.includes(id);
             const at = columns.indexOf(id);

@@ -67,7 +67,7 @@ export function SlicePanel({
     >
       <div className="-mt-3 space-y-3">
         <p className="text-muted-foreground text-sm">{caption}</p>
-        {seeing && <SeeIn seeing={seeing} />}
+        {seeing && <SeeIn seeing={seeing} via={`${back} · ${title}`} />}
         <Rows measure={measure} members={members} filters={filters} />
       </div>
     </SidePanel>
@@ -76,14 +76,14 @@ export function SlicePanel({
 
 /* the same slice as a table to sort, read through and download: a chart's
    search is of articles, which People's is not, so it goes only to Articles */
-function SeeIn({ seeing }: { seeing: SliceFilters }) {
+function SeeIn({ seeing, via }: { seeing: SliceFilters; via: string }) {
   const link = cn(buttonVariants({ variant: "outline", size: "sm" }));
   return (
     <div className="flex flex-wrap gap-2">
       <a
         className={link}
         href={archiveHref("articles", {
-          state: seeing.articles,
+          state: { ...seeing.articles, via },
           searching: "articles",
         })}
       >
@@ -93,7 +93,7 @@ function SeeIn({ seeing }: { seeing: SliceFilters }) {
       <a
         className={link}
         href={archiveHref("people", {
-          state: seeing.people,
+          state: { ...seeing.people, via },
           searching: "articles",
         })}
       >

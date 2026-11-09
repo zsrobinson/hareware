@@ -4,13 +4,14 @@ An Astro app on Cloudflare Workers for [The Hare](https://theumdhare.com):
 public tools that turn published articles into Instagram posts, InDesign copy
 and newsletter content; a Discord bot that posts the morning social reminder;
 and, for the Editorial Board, an archive viewer over every published post:
-Articles and People, each with its views as tabs (tables, charts and pivots), and
-Problems.
+Articles and People, each with its views as tabs (tables, charts and pivots)
+that the board saves for everyone, and Problems.
 
 **WordPress is the record.** HareWare reads it live from the public REST API
 and keeps no copy. The one fact WordPress lacks — who is really behind a
 pseudonymous byline — lives in a Google Sheet owned by the club, as overrides
-only. Nothing here reads Notion or tracks work in progress.
+only, beside the board's views of the archive. Nothing here reads Notion or
+tracks work in progress.
 [ADR 0011](docs/adr/0011-wordpress-is-the-record.md) has the reasoning; read it
 before proposing that HareWare store articles or track anything unpublished.
 
@@ -31,7 +32,9 @@ src/lib/
   session · auth · admin · member       who is asking, and whether they may
   admin-api · denial                    the gate, and the four ways it refuses
 src/components/archive/                 the archive pages' islands
-  views.ts                              their default views, as declarations
+  views.ts                              the starter set of views
+  saved-views · view-writes             the board's views, read from the Sheet
+                                        and written back
 src/pages/api/                          the routes those answer
 ```
 
@@ -44,11 +47,15 @@ An automation is an entry in `src/lib/automations/registry.ts` — id, hour,
 channel, and the function that runs it — plus its module. The registry is what
 dispatches, so adding one is those two things and nothing else.
 
-A default view of the archive is a declaration in
-`src/components/archive/views.ts`: its page's tab, its link and its place in
-the builder follow from it, and Copy as view on any page writes one
-([ADR 0014](docs/adr/0014-views-are-declarations.md)). Views are kept nowhere
-else, not in the Sheet, D1 or the browser.
+The archive's views are the board's, rows of the Sheet's `Views` tab that any
+member saves from the page ([ADR 0015](docs/adr/0015-views-are-shared-in-the-sheet.md)).
+`src/components/archive/views.ts` is only the starter set, what a page shows
+until the first change there writes it to the tab, so a change to it reaches
+no page that has rows. The Worker passes the rows on unread; the browser
+checks each with the code that reads a view from a link, and lists one it
+cannot read rather than dropping it. Every write carries the `updated at` it
+was based on, a conflict is a 409 the page offers to reload or overwrite, and
+Saved is said only once a read of the Sheet shows it.
 
 ## Who is asking
 

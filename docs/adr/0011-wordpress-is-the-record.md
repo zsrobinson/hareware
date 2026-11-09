@@ -2,7 +2,8 @@
 
 **Status:** Accepted — 2026-11-07. Revised the same day: HareWare writes the
 Sheet and people are counted in contributions; folded in below. How a pen name
-is recorded was changed by ADR 0013, and the open panel's address by ADR 0014.
+is recorded was changed by ADR 0013, the open panel's address by ADR 0014,
+and the Sheet holds the board's views too since ADR 0015.
 
 Supersedes ADRs 0001, 0002, 0004, 0006, 0009 and 0010, which were deleted with
 the code they described; they are in the history before this commit.
@@ -57,6 +58,10 @@ here reads it.
 
 **D1 stays for the invocation log only**, as ADR 0007 set out. It is not for
 domain data.
+
+**The Sheet also holds the board's views of the archive** (ADR 0015). They
+are not a copy of anything WordPress has, so the rule above stands: no
+record of an article is kept anywhere but WordPress.
 
 ## Considered
 

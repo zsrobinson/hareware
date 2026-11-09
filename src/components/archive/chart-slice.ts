@@ -19,7 +19,6 @@ import {
   type Measure,
   type Member,
 } from "~/lib/credits/stats";
-import type { ChartConfig } from "./chart-config";
 import { rangeOf, toFilters, type FilterState } from "./filters";
 
 export type Slice = {
@@ -69,14 +68,15 @@ export function readSlice(key: string, grouped: Grouped): Slice | null {
 /**
  * The series a category's total adds up: those drawn. People are the
  * exception: one person in two series is one person in the total, which is
- * theirs whatever the legend hides.
+ * theirs whatever the legend hides. Their intake is the one cut that
+ * someone is never in two series of.
  */
 export function columnSeries(
   grouped: Grouped,
   hidden: readonly string[],
 ): string[] {
   const all = grouped.series.map((s) => s.key);
-  return grouped.measure === "people"
+  return grouped.measure === "people" && grouped.breakdown !== "joined"
     ? all
     : all.filter((key) => !hidden.includes(key));
 }
@@ -179,49 +179,65 @@ export const MOST_ARTICLES = 250;
  * is that filter, so the table counts what the mark did (Articles lists an
  * article nobody is credited on too, which no count of people has).
  *
- * New people are not a filter, and People's search is of names, not of what
- * an article prints. So where either picked what the mark counts, the tables
- * are given its articles by post id: their first articles, with the people,
- * for new people; the articles found, for a search. Past `MOST_ARTICLES`
- * they are given the people by name, and `broader` says so.
+ * New people and an intake are not filters, and People's search is of
+ * names, not of what an article prints. So where one of them picked what
+ * the mark counts, the tables are given its articles by post id: with the
+ * people, for new people or an intake; the articles found, for a search.
+ * Past `MOST_ARTICLES` they are given the people by name, and `broader`
+ * says so where that is more than the mark. A null category or series is
+ * all of them that are shown: a pivot's totals.
  */
 export function sliceFilters(
   grouped: Grouped,
-  config: Pick<ChartConfig, "by" | "split">,
-  slice: Slice,
+  config: { by: Dimension; split: Dimension | "none" },
+  slice: { category: string | null; series: string | null },
   members: Member[],
   hidden: readonly string[],
   state: FilterState,
   now = new Date(),
 ): SliceFilters {
   let next: FilterState = { ...state };
+  /* an intake is no filter: its people are named */
+  let intake = false;
+  /* as the view cut it: a rolling range from its first whole period */
+  const range = rangeOf(state, now, [config.by, config.split].find(isPeriod));
+  /* the dates the slice's periods leave of the range, once one has */
+  const dates = { cut: false, ...range };
+  const later = (a: string, b?: string) => (b && b > a ? b : a);
+  const earlier = (a: string, b?: string) => (b && b < a ? b : a);
   const narrow = (dimension: Dimension, keys: string[]) => {
     if (dimension === "section") next = { ...next, sections: keys };
     else if (dimension === "role")
       next = { ...next, roles: keys.filter(isRole) };
     else if (dimension === "person") next = { ...next, people: keys };
+    else if (dimension === "joined") intake = true;
+    else {
+      const sorted = [...keys].sort();
+      const from = periodBounds(sorted[0]!, dimension).from;
+      const to = periodBounds(sorted.at(-1)!, dimension).to;
+      /* a running total is everything up to the period */
+      if (!grouped.running || dimension !== config.by)
+        dates.from = later(from, dates.from);
+      dates.to = earlier(to, dates.to);
+      dates.cut = true;
+    }
   };
 
-  if (isPeriod(config.by)) {
-    const period = periodBounds(slice.category, config.by);
-    /* as the chart cut it: a rolling range from its first whole period */
-    const range = rangeOf(state, now, config.by);
-    const later = (a: string, b?: string) => (b && b > a ? b : a);
-    const earlier = (a: string, b?: string) => (b && b < a ? b : a);
-    next = {
-      ...next,
-      preset: "custom",
-      /* a running total is everything up to the period */
-      from: grouped.running ? range.from : later(period.from, range.from),
-      to: earlier(period.to, range.to),
-    };
-  } else narrow(config.by, [slice.category]);
+  if (slice.category !== null) narrow(config.by, [slice.category]);
+  else if (grouped.categories.length < grouped.available)
+    /* the people a top few leaves */
+    narrow(
+      config.by,
+      grouped.categories.map((c) => c.key),
+    );
 
   if (config.split !== "none") {
     const keys =
       slice.series !== null ? [slice.series] : columnSeries(grouped, hidden);
     if (keys.length < grouped.series.length) narrow(config.split, keys);
   }
+  if (dates.cut)
+    next = { ...next, preset: "custom", from: dates.from, to: dates.to };
 
   const units = members.flatMap((m) => m.units);
   const ids = [...new Set(units.map((unit) => unit.article.id))].sort(
@@ -247,15 +263,24 @@ export function sliceFilters(
   const searched = Boolean(state.search.trim());
   return {
     /* Articles' own search reads a chart's as the chart did */
-    articles: !newcomers ? next : fits ? chosen : named,
-    people:
-      newcomers && fits
+    articles: intake
+      ? fits
         ? { ...chosen, people: names }
-        : newcomers || searched
+        : named
+      : !newcomers
+        ? next
+        : fits
+          ? chosen
+          : named,
+    people:
+      (newcomers || intake) && fits
+        ? { ...chosen, people: names }
+        : newcomers || intake || searched
           ? fits
             ? chosen
             : named
           : next,
+    /* an intake's people by name, on its dates, are exactly the mark */
     broader: !fits && (newcomers || searched),
   };
 }

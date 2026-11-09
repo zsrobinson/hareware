@@ -4,12 +4,14 @@ import { contributionsOn } from "~/lib/credits/person";
 import {
   applyFilters,
   easternDate,
+  grainOf,
   isCounted,
   isPeriod,
   NO_FILTERS,
   people,
   periodOf,
   type Dimension,
+  type Period,
   type Filters,
   type Grouped,
   type Member,
@@ -166,16 +168,31 @@ const filterings: [string, Filters][] = [
 ];
 
 /** whether a unit falls under a key of a dimension, worked out afresh */
-function under(unit: Unit, dimension: Dimension, key: string, upTo: boolean) {
+function under(
+  unit: Unit,
+  dimension: Dimension,
+  key: string,
+  upTo: boolean,
+  grain: Period,
+) {
   if (dimension === "section") return unit.article.section === key;
   if (dimension === "role") return unit.role === key;
   if (dimension === "person") return unit.person === key;
+  if (dimension === "joined") {
+    /* the earliest article anywhere that credits them */
+    const first = archive
+      .filter((a) => contributionsOn(a).some((c) => c.person === unit.person))
+      .map((a) => easternDate(a.publishedAt))
+      .sort()[0]!;
+    return periodOf(first, grain).key === key;
+  }
   const period = periodOf(easternDate(unit.article.publishedAt), dimension).key;
   return upTo ? period <= key : period === key;
 }
 
 function check(grouped: Grouped, config: ChartConfig, filters: Filters) {
   const { measure } = grouped;
+  const grain = grainOf(config.by);
   const keys = grouped.series.map((s) => s.key);
   const hiddens = [[], ...keys.slice(0, 1).map((key) => [key])];
 
@@ -191,9 +208,11 @@ function check(grouped: Grouped, config: ChartConfig, filters: Filters) {
       for (const member of members) {
         expect(member.units.length).toBeGreaterThan(0);
         for (const unit of member.units) {
-          expect(under(unit, config.by, category, grouped.running)).toBe(true);
+          expect(under(unit, config.by, category, grouped.running, grain)).toBe(
+            true,
+          );
           if (config.split !== "none")
-            expect(under(unit, config.split, series, false)).toBe(true);
+            expect(under(unit, config.split, series, false, grain)).toBe(true);
           if (filters.roles.length > 0 && unit.role)
             expect(filters.roles).toContain(unit.role);
         }
@@ -224,10 +243,11 @@ function check(grouped: Grouped, config: ChartConfig, filters: Filters) {
     for (const hidden of hiddens) {
       const column = sliceMembers(grouped, { category, series: null }, hidden);
       /* as long as the column's total: the stack of the series the legend
-         leaves on, or for people, the distinct people across every series */
+         leaves on, or for people, the distinct people across every series,
+         unless the series are when they joined, which nobody is in two of */
       const drawn = keys.filter((key) => !hidden.includes(key));
       expect(column.length).toBe(
-        measure === "people"
+        measure === "people" && config.split !== "joined"
           ? (grouped.totals[category] ?? 0)
           : drawn.reduce(
               (sum, s) => sum + (grouped.values[category]?.[s] ?? 0),
@@ -295,6 +315,31 @@ test("Headcount counts each person once a semester, whatever they did", () => {
   ]);
   expect(grouped.values["2025-2"]?.all).toBe(4);
   expect(fall.find((m) => m.id === "Ada Example")!.units).toHaveLength(3);
+});
+
+test("split by when they joined, each person is in one series, at their first contribution", () => {
+  const grouped = groupOf(
+    { ...chartOf("headcount"), split: "joined", draw: "stacked" },
+    archive,
+    /* a role filter does not move anyone's intake */
+    { ...NO_FILTERS, roles: ["writer"] },
+    archive,
+  );
+  const spring = (series: string) =>
+    sliceMembers(grouped, { category: "2026-1", series }, [])
+      .map((m) => m.id)
+      .sort();
+  /* Ada wrote in Spring 2026 and started in Fall 2025; Bo, who also did,
+     only drew then */
+  expect(spring("2025-2")).toEqual(["Ada Example"]);
+  expect(spring("2026-1")).toEqual([
+    "Eli Madeup",
+    "Fay Fictive",
+    "Ivy Imagined",
+  ]);
+  expect(
+    sliceMembers(grouped, { category: "2026-1", series: null }, []),
+  ).toHaveLength(4);
 });
 
 test.each(filterings)(

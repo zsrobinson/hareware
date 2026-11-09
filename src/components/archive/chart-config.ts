@@ -15,7 +15,7 @@ import {
   type Order,
 } from "~/lib/credits/stats";
 
-export type Split = "none" | "section" | "role";
+export type Split = "none" | "section" | "role" | "joined";
 export type Draw = "stacked" | "grouped" | "lines";
 export type Values = "number" | "share" | "running";
 
@@ -52,6 +52,7 @@ export const SPLITS: { id: Split; label: string }[] = [
   { id: "none", label: "Nothing" },
   { id: "section", label: "Section" },
   { id: "role", label: "Role" },
+  { id: "joined", label: "Joined in" },
 ];
 
 export const DRAWS: Draw[] = ["stacked", "grouped", "lines"];
@@ -67,8 +68,12 @@ export const TOPS = [10, 25, 50, 0];
 export function allows(config: ChartConfig) {
   const { count, by, split } = config;
   const time = isPeriod(by);
-  /* an article has no one role or person; and by person, every person is one */
-  const articles = by !== "person" && by !== "role" && split !== "role";
+  /* an article has no one role, person or intake; and by person, every
+     person is one */
+  const articles =
+    by !== "person" && by !== "role" && split !== "role" && split !== "joined";
+  /* someone has one intake, so people split by it add up to the whole */
+  const parts = split === "none" || split === "joined";
   const people = by !== "person";
   return {
     count: {
@@ -91,17 +96,19 @@ export function allows(config: ChartConfig) {
       none: true,
       section: by !== "section",
       role: by !== "role" && count !== "articles",
+      joined: count !== "articles",
     } satisfies Record<Split, boolean>,
     draw: {
       /* one person in two sections would be drawn twice in one column */
-      stacked: !(count === "people" && split !== "none"),
+      stacked: count !== "people" || parts,
       grouped: split !== "none",
       lines: time,
     } satisfies Record<Draw, boolean>,
     values: {
       number: true,
-      /* distinct people do not add up to a whole to take a share of */
-      share: count !== "people",
+      /* distinct people do not add up to a whole to take a share of,
+         except split by when they joined */
+      share: count !== "people" || split === "joined",
       running: time,
     } satisfies Record<Values, boolean>,
     order: !time,

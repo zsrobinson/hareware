@@ -32,7 +32,10 @@ export function seriesColor(
     const index = (SECTION_ORDER as readonly string[]).indexOf(key);
     return index === -1 ? "var(--series-other)" : `var(--series-${index + 1})`;
   }
-  const index = [...allKeys].sort().indexOf(key);
+  /* the newest intakes are the ones a chart of them is about */
+  const order = [...allKeys].sort();
+  if (dimension === "joined") order.reverse();
+  const index = order.indexOf(key);
   return index >= 0 && index < SLOTS
     ? `var(--series-${index + 1})`
     : "var(--series-other)";

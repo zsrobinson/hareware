@@ -36,10 +36,23 @@ export const NO_FILTERS: Filters = { sections: [], roles: [], people: [] };
 
 const PERIODS = ["month", "semester", "school-year", "year"] as const;
 export type Period = (typeof PERIODS)[number];
-export type Dimension = Period | "section" | "role" | "person";
+/**
+ * What a count can be cut by. "joined" is a person's intake: the period of
+ * their first contribution ever, in any role and whatever the filters, at
+ * the grain of the period beside it (`grainOf`).
+ */
+export type Dimension = Period | "section" | "role" | "person" | "joined";
 
 export const isPeriod = (dimension: string): dimension is Period =>
   (PERIODS as readonly string[]).includes(dimension);
+
+/** a dimension that runs in time order, every period in it shown */
+const inTime = (dimension: string) =>
+  isPeriod(dimension) || dimension === "joined";
+
+/** the period an intake is cut into: the period beside it, else semesters */
+export const grainOf = (...dimensions: string[]): Period =>
+  dimensions.find(isPeriod) ?? "semester";
 
 /**
  * What a chart adds up. An article counts once. A contribution is one person
@@ -298,6 +311,8 @@ export function periodsOf(person: Person, period: Period): Map<string, number> {
 export type Grouped = {
   /** what was counted, which grouping by person or role can change */
   measure: Measure;
+  /** what the series are cut by */
+  breakdown: Dimension | "none";
   categories: { key: string; label: string }[];
   series: { key: string; label: string }[];
   /** value[categoryKey][seriesKey]: how many members the cell has */
@@ -365,7 +380,7 @@ function naturalOrder(dimension: Dimension | "none") {
     a: { key: string; label: string },
     b: { key: string; label: string },
   ) =>
-    isPeriod(dimension)
+    inTime(dimension)
       ? a.key.localeCompare(b.key)
       : dimension === "section"
         ? compareSections(a.key, b.key)
@@ -392,18 +407,22 @@ export function group(
   },
 ): Grouped {
   const { by, breakdown, filters } = options;
+  const history = options.history ?? articles;
   const touchesPeople = [by, breakdown].some(
-    (d) => d === "person" || d === "role",
+    (d) => d === "person" || d === "role" || d === "joined",
   );
-  /* an article has no one role or person, so those count contributions; and
-     by person, every person would be one person */
+  /* an article has no one role, person or intake, so those count
+     contributions; and by person, every person would be one person */
   const measure: Measure =
     options.measure === "articles" && touchesPeople
       ? "contributions"
-      : options.measure !== "articles" && by === "person"
+      : options.measure !== "articles" &&
+          (by === "person" || breakdown === "person")
         ? "contributions"
         : options.measure;
-  const list = units(articles, measure, filters, options.history ?? articles);
+  const list = units(articles, measure, filters, history);
+  const grain = grainOf(by, breakdown);
+  const everyone = peopleOf(history);
 
   const keyOf = (
     unit: Unit,
@@ -416,6 +435,12 @@ export function group(
         return { key: unit.role ?? "?", label: unit.role ?? "?" };
       case "person":
         return { key: unit.person ?? "?", label: unit.person ?? "?" };
+      case "joined": {
+        const first = everyone.get(unit.person ?? "")?.first;
+        return first
+          ? periodOf(easternDate(first.article.publishedAt), grain)
+          : { key: "?", label: "?" };
+      }
       default:
         return periodOf(easternDate(unit.article.publishedAt), dimension);
     }
@@ -458,14 +483,24 @@ export function group(
       ),
     ]),
   );
-  const series = [...seriesLabels].map(([key, label]) => ({ key, label }));
+  /* a period or an intake with nothing in it still shows, as nothing */
+  const series =
+    breakdown !== "none" && inTime(breakdown)
+      ? fillPeriods(
+          [...seriesLabels.keys()],
+          isPeriod(breakdown) ? breakdown : grain,
+        )
+      : [...seriesLabels].map(([key, label]) => ({ key, label }));
   series.sort(naturalOrder(breakdown));
   const running = Boolean(options.running) && isPeriod(by);
   const own = { categories: [], series, cells: members, running: false };
 
   let categories: { key: string; label: string }[];
-  if (isPeriod(by)) {
-    categories = fillPeriods([...categoryLabels.keys()], by);
+  if (inTime(by)) {
+    categories = fillPeriods(
+      [...categoryLabels.keys()],
+      isPeriod(by) ? by : grain,
+    );
   } else {
     /* the biggest first, by the members each has */
     const sizes = new Map(
@@ -498,6 +533,7 @@ export function group(
 
   return {
     measure,
+    breakdown,
     categories,
     series,
     values,

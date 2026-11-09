@@ -22,7 +22,12 @@ import {
   sliceCount,
   unitOf,
 } from "./chart-slice";
-import { partialKeys, ViewsUnavailable, type Incomplete } from "./charts";
+import {
+  noneCounted,
+  partialKeys,
+  ViewsUnavailable,
+  type Incomplete,
+} from "./charts";
 import { filtersFor } from "./compare";
 import { RowDetails, type OpenRow } from "./open-row";
 import { dimensionName, type PivotConfig } from "./pivot-config";
@@ -100,6 +105,12 @@ export function PivotView({
 
   if (config.count === "views" && archive.views.status !== "read")
     return <ViewsUnavailable views={archive.views} />;
+  const unseen = noneCounted(
+    pivot.grouped.measure,
+    pivot.members({ row: null, column: null }),
+  );
+  if (unseen !== null)
+    return <ViewsUnavailable views={archive.views} articles={unseen} />;
   const title = pivotTitle(pivot);
   const download = () => {
     const [header, ...body] = pivotMatrix(pivot);

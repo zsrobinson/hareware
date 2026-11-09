@@ -152,3 +152,122 @@ test("Read by section is each section's views, and what they are per article", a
     "150 views · 1 article without views",
   );
 });
+
+/* News's one article has 120 views; Sports's was published a minute ago,
+   after the count was asked for, so it has none read: not none at all */
+function newsAndSports(newsAt = daysAgo(3)) {
+  stubArchive({
+    posts: [
+      {
+        id: 1,
+        title: "Counted",
+        publishedAt: newsAt,
+        paragraphs: ["Article by: Ada Example"],
+        words: 100,
+        categoryIds: [1],
+      },
+      {
+        id: 2,
+        title: "Unread",
+        publishedAt: minutesAgo(1),
+        paragraphs: ["Article by: Bo Sample"],
+        words: 100,
+        categoryIds: [2],
+      },
+    ],
+    categories: [
+      [1, "News"],
+      [2, "Sports"],
+    ],
+    views: { 1: 120 },
+  });
+}
+const chartOfViews = (settings: string) =>
+  `/articles?view=custom&base=sections&layout=chart&count=views&split=none&order=natural&top=25&compare=none&range=all&${settings}`;
+const marks = () =>
+  [...document.querySelectorAll("[data-category]")]
+    .map((mark) => mark.getAttribute("aria-label"))
+    .filter(Boolean);
+const drawnText = () =>
+  [...document.querySelectorAll("svg text")].map((text) => text.textContent);
+
+test.each([
+  ["a sum", "by=section&draw=stacked&values=number"],
+  ["per article", "by=section&draw=stacked&values=per-article"],
+])(
+  "a category none of whose views were read is unavailable, never 0, as %s",
+  async (_, settings) => {
+    newsAndSports();
+    window.history.replaceState(null, "", chartOfViews(settings));
+    render(<ArticlesPage />);
+
+    await waitFor(
+      () => expect(marks()).toContain("Sports: views unavailable"),
+      WAIT,
+    );
+    expect(marks().some((label) => /Sports: 0/.test(label!))).toBe(false);
+    /* its bar's end says so, as the counted one says its number */
+    expect(drawnText()).toContain("–");
+  },
+);
+
+test("a line breaks at a period none of whose views were read", async () => {
+  newsAndSports(daysAgo(60));
+  window.history.replaceState(
+    null,
+    "",
+    chartOfViews("by=month&draw=lines&values=number"),
+  );
+  render(<ArticlesPage />);
+
+  await waitFor(
+    () =>
+      expect(
+        marks().some((label) => label!.endsWith(": views unavailable")),
+      ).toBe(true),
+    WAIT,
+  );
+  /* a point each month but the unread one, which is the last, and no
+     segment into it; a month with no articles is a 0, which it is */
+  const months = marks().length;
+  expect(months).toBeGreaterThanOrEqual(2);
+  expect(document.querySelectorAll('svg circle[r="4"]')).toHaveLength(
+    months - 1,
+  );
+  expect(
+    document.querySelectorAll(
+      'svg line[stroke="currentColor"][stroke-width="2"]',
+    ),
+  ).toHaveLength(months - 2);
+});
+
+test("filters that leave only articles without views read say so, and draw nothing", async () => {
+  newsAndSports();
+  window.history.replaceState(
+    null,
+    "",
+    `${chartOfViews("by=section&draw=stacked&values=number")}&sections=Sports`,
+  );
+  render(<ArticlesPage />);
+
+  expect(
+    await screen.findByText(
+      "None of this article's views are counted yet: it is newer than the last read of views.",
+      undefined,
+      WAIT,
+    ),
+  ).toBeTruthy();
+  expect(document.querySelector("[data-category]")).toBeNull();
+
+  cleanup();
+  newsAndSports();
+  window.history.replaceState(
+    null,
+    "",
+    "/articles?view=read-by-section&sections=Sports",
+  );
+  render(<ArticlesPage />);
+  expect(
+    await screen.findByText(/^None of this article's views/, undefined, WAIT),
+  ).toBeTruthy();
+});

@@ -32,6 +32,7 @@ import {
   applyFilters,
   easternDate,
   isPeriod,
+  membersAcross,
   periodBounds,
   type Filters,
   type Grouped,
@@ -208,6 +209,16 @@ export function ChartView({
   });
   if (config.count === "views" && archive.views.status !== "read")
     return <ViewsUnavailable views={archive.views} />;
+  const unseen = noneCounted(
+    grouped.measure,
+    membersAcross(
+      grouped,
+      Object.keys(grouped.cells),
+      grouped.series.map((s) => s.key),
+    ),
+  );
+  if (unseen !== null)
+    return <ViewsUnavailable views={archive.views} articles={unseen} />;
   const openSlice = (next: Slice, from: "chart" | "table") => {
     /* the table has every series, so the chart shows them all to match it */
     const drawn = from === "table" ? [] : hidden;
@@ -334,22 +345,46 @@ export function ChartView({
 
 /**
  * In place of a count of views when there are none to count: still being
- * read, or unreadable. Never drawn as zeros (~/lib/credits/views)
+ * read, unreadable, or, for `articles` the filters leave, none of them
+ * counted yet. Never drawn as zeros (~/lib/credits/views)
  */
-export function ViewsUnavailable({ views }: { views: ViewsSummary }) {
+export function ViewsUnavailable({
+  views,
+  articles,
+}: {
+  views: ViewsSummary;
+  /** how many articles are on screen, none with views read */
+  articles?: number;
+}) {
   return (
     <p
       data-sheet-anchor
       role="status"
       className="text-muted-foreground py-12 text-center text-sm"
     >
-      {views.status === "reading"
-        ? "Reading views from Jetpack…"
-        : `Views are unavailable, so none are counted here.${
-            views.status === "unavailable" ? ` ${views.reason}` : ""
-          }`}
+      {articles !== undefined
+        ? `None of ${articles === 1 ? "this article's" : `these ${articles} articles'`} views are counted yet: ${
+            articles === 1 ? "it is" : "each is"
+          } newer than the last read of views.`
+        : views.status === "reading"
+          ? "Reading views from Jetpack…"
+          : `Views are unavailable, so none are counted here.${
+              views.status === "unavailable" ? ` ${views.reason}` : ""
+            }`}
     </p>
   );
+}
+
+/**
+ * How many articles a count of views has on screen, when not one of them
+ * has views read; null where any has, or it counts something else
+ */
+export function noneCounted(
+  measure: string,
+  members: readonly Member[],
+): number | null {
+  if (measure !== "views" || members.length === 0) return null;
+  return amountOf(members, "views").counted === 0 ? members.length : null;
 }
 
 /** a slice's title ("News · Fall 2026") and caption: its count, and the filters */
@@ -422,8 +457,14 @@ type Plot = {
   members: (slice: Slice) => Member[];
   /** what a mark shows: its count, or its share */
   value: (category: string, series: string) => number;
-  /** whether the category has anything drawn, and so anything to open */
+  /** whether the category has anything to open: articles, even where none
+      of their views could be read */
   filled: (category: string) => boolean;
+  /** a mark with articles none of whose views could be read: its 0 is no
+      answer, so it is said and drawn as unread, never as zero */
+  unread: (category: string, series: string | null) => boolean;
+  /** a mark's number as text: "–" where it is unread */
+  figure: (category: string, series: string | null, n: number) => string;
   percent: (category: string, series: string) => number;
   color: (category: string, series: string) => string;
   /** a line drawn dashed: the second of the roles' grey pair, which is
@@ -458,6 +499,11 @@ function plotOf(
   const allKeys = all.map((s) => s.key);
   const columns = columnSeries(grouped, hidden);
   const members = (slice: Slice) => sliceMembers(grouped, slice, hidden);
+  const unread = (category: string, key: string | null) => {
+    if (grouped.measure !== "views") return false;
+    const list = members({ category, series: key });
+    return list.length > 0 && amountOf(list, grouped.measure).counted === 0;
+  };
   /* per article, each number is its list's words or views over the
      articles it counted, so it is still worked out from the list */
   const average = config.values === "per-article";
@@ -509,7 +555,11 @@ function plotOf(
     members,
     value: share ? percent : count,
     filled: (category) =>
-      total(category) > 0 && series.some((s) => count(category, s.key) > 0),
+      members({ category, series: null }).length > 0 &&
+      series.some((s) => members({ category, series: s.key }).length > 0),
+    unread,
+    figure: (category, key, n) =>
+      unread(category, key) ? "–" : n.toLocaleString(),
     percent,
     /* one series by section or role takes each bar's own colour; else the
        section it is cut to, or a grey that names nothing. The earlier of
@@ -692,6 +742,7 @@ function reading(plot: Plot, category: Series) {
   const total = plot.total(category.key);
   const parts = plot.series.map((s) => {
     const n = plot.count(category.key, s.key);
+    if (plot.unread(category.key, s.key)) return `${s.label} views unavailable`;
     return plot.share
       ? `${s.label} ${percentText(plot.percent(category.key, s.key))} (${n.toLocaleString()})`
       : `${s.label} ${n.toLocaleString()}`;
@@ -701,7 +752,10 @@ function reading(plot: Plot, category: Series) {
     : "";
   const sofar = plot.config.values === "running" ? " so far" : "";
   if (plot.ranges) return `${category.label}: ${parts.join(", ")}`;
-  return `${category.label}${partly}: ${plot.unit(total)}${sofar}${
+  const whole = plot.unread(category.key, null)
+    ? "views unavailable"
+    : `${plot.unit(total)}${sofar}`;
+  return `${category.label}${partly}: ${whole}${
     plot.series.length > 1 || plot.share ? `. ${parts.join(", ")}` : ""
   }`;
 }
@@ -937,6 +991,11 @@ function Card({
       {(many || plot.share) &&
         plot.series.map((s) => {
           const n = plot.count(category.key, s.key);
+          /* something to open: articles, even with none of their views read */
+          const opens = plot.members({
+            category: category.key,
+            series: s.key,
+          }).length;
           const content = (
             <>
               <Swatch
@@ -948,7 +1007,7 @@ function Card({
                 {s.label}
               </span>
               <span className="font-semibold tabular-nums">
-                {n.toLocaleString()}
+                {plot.figure(category.key, s.key, n)}
               </span>
               {plot.share && (
                 <span className="text-muted-foreground w-9 text-right tabular-nums">
@@ -962,9 +1021,13 @@ function Card({
             <button
               key={s.key}
               type="button"
-              disabled={!n}
-              aria-label={`${s.label}: see ${plot.unit(n)}`}
-              className={cn(row(false), !n && "opacity-50")}
+              disabled={!opens}
+              aria-label={`${s.label}: see ${
+                plot.unread(category.key, s.key)
+                  ? "articles without views"
+                  : plot.unit(n)
+              }`}
+              className={cn(row(false), !opens && "opacity-50")}
               onClick={() => onOpen(s.key)}
             >
               {content}
@@ -972,7 +1035,7 @@ function Card({
           ) : (
             <div
               key={s.key}
-              className={cn(row(pointing === s.key), !n && "opacity-50")}
+              className={cn(row(pointing === s.key), !opens && "opacity-50")}
             >
               {content}
             </div>
@@ -994,7 +1057,7 @@ function Card({
           <span className="font-semibold tabular-nums">
             {plot.ranges
               ? signed(difference(plot, category.key))
-              : total.toLocaleString()}
+              : plot.figure(category.key, null, total)}
           </span>
           {plot.share && <span className="w-9" />}
         </div>
@@ -1004,10 +1067,13 @@ function Card({
           variant="outline"
           size="sm"
           className="mt-2 w-full"
-          disabled={!total}
+          disabled={!plot.filled(category.key)}
           onClick={() => onOpen(null)}
         >
-          See {plot.unit(total)}
+          See{" "}
+          {plot.unread(category.key, null)
+            ? "the articles without views"
+            : plot.unit(total)}
         </Button>
       )}
     </div>
@@ -1230,7 +1296,9 @@ function TimeChart({
         keys: end.those.map((s) => s.key),
         text: [
           single &&
-            (plot.share ? percentText(end.value) : end.value.toLocaleString()),
+            (plot.share
+              ? percentText(end.value)
+              : plot.figure(lastKey, end.those[0]!.key, end.value)),
           (!single || series.length > 1) &&
             end.those.map((s) => s.label).join(", "),
         ]
@@ -1408,14 +1476,14 @@ function TimeChart({
                     as={outlined(segment.key, index)}
                   />
                 ))}
-                {totals && total > 0 && (
+                {totals && (total > 0 || plot.unread(category.key, null)) && (
                   <text
                     x={cx(index)}
                     y={y(capOf(category.key)) - 6}
                     textAnchor="middle"
                     className="fill-muted-foreground text-xs tabular-nums"
                   >
-                    {total.toLocaleString()}
+                    {plot.figure(category.key, null, total)}
                   </text>
                 )}
               </g>
@@ -1457,10 +1525,13 @@ function TimeChart({
 
         {lines &&
           series.map((s) => {
+            /* a period none of whose views were read is no point on the
+               line, which breaks there rather than dropping to zero */
             const points = categories.map((c, i) => ({
               key: c.key,
               x: cx(i),
               y: y(plot.value(c.key, s.key)),
+              gap: plot.unread(c.key, s.key),
             }));
             const end = points[points.length - 1];
             const dashed = plot.dashed(s.key);
@@ -1472,25 +1543,29 @@ function TimeChart({
                 style={{ color: plot.color("", s.key) }}
                 pointerEvents="none"
               >
-                {points.slice(1).map((point, i) => (
-                  <line
-                    key={point.key}
-                    x1={points[i]!.x}
-                    y1={points[i]!.y}
-                    x2={point.x}
-                    y2={point.y}
-                    stroke="currentColor"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeDasharray={
-                      partial.has(point.key) || partial.has(points[i]!.key)
-                        ? "0 5"
-                        : dashed
-                          ? "6 5"
-                          : undefined
-                    }
-                  />
-                ))}
+                {points
+                  .slice(1)
+                  .map((point, i) =>
+                    point.gap || points[i]!.gap ? null : (
+                      <line
+                        key={point.key}
+                        x1={points[i]!.x}
+                        y1={points[i]!.y}
+                        x2={point.x}
+                        y2={point.y}
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeDasharray={
+                          partial.has(point.key) || partial.has(points[i]!.key)
+                            ? "0 5"
+                            : dashed
+                              ? "6 5"
+                              : undefined
+                        }
+                      />
+                    ),
+                  )}
                 {points.map((point, i) => (
                   <Ring
                     key={point.key}
@@ -1500,7 +1575,7 @@ function TimeChart({
                   />
                 ))}
                 {points.map((point, i) =>
-                  points.length <= 40 || i === active ? (
+                  !point.gap && (points.length <= 40 || i === active) ? (
                     <circle
                       key={point.key}
                       cx={point.x}
@@ -1691,7 +1766,7 @@ function BarChart({
   /* each name cut to the label column, never drawn past the chart's edge */
   const labels = categories.map((c) => fitted(c.label, labelW - 14));
   const endText = (key: string, sum: number) =>
-    plot.share ? percentText(sum) : plot.total(key).toLocaleString();
+    plot.share ? percentText(sum) : plot.figure(key, null, plot.total(key));
 
   /* each row's segments: where they are drawn, and where a click finds them */
   const rows: Segment[][] = categories.map((category, index) => {

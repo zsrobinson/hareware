@@ -430,6 +430,18 @@ test("counts an article's prose: paragraphs, subheadings and list items, not its
   expect(build([fromHtml(1, html)]).articles[0]!.words).toBe(4 + 2 + 2 + 3 + 4);
 });
 
+/* the outer item's words either side of the inner list are its own, and two
+   paragraphs in one item are two runs of text */
+test("counts every word of a nested list once, and keeps blocks apart", () => {
+  const words = (html: string) => build([fromHtml(1, html)]).articles[0]!.words;
+
+  expect(words("<ul><li>One<ul><li>Two</li></ul>Three</li></ul>")).toBe(3);
+  expect(words("<ul><li><p>One</p><p>Two</p></li></ul>")).toBe(2);
+  expect(words("<p>One</p><p>Two</p>")).toBe(2);
+  /* inline markup is not a break: this is one word */
+  expect(words("<p>wo<em>r</em>d</p>")).toBe(1);
+});
+
 test("a credit line counts as prose until a label makes it one", () => {
   const html = `<p>Article by: Penn Name</p><p>Squirrel wrangling: Sam Squirrel</p><p>Five words of real prose.</p>`;
   const words = (labels = DEFAULT_LABELS) =>

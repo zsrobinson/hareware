@@ -10,7 +10,7 @@ const minutesAgo = (minutes: number) =>
   new Date(Date.now() - minutes * 60_000).toISOString();
 
 /* the stored reads, by their keys in Cache Storage */
-const SNAPSHOT = "/wordpress-snapshot-v2";
+const SNAPSHOT = "/wordpress-snapshot-v3";
 const VIEWS = "/wordpress-views-v1";
 
 /* one invented article, as a stored read of WordPress keeps it */

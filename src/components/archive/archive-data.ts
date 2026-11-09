@@ -50,7 +50,7 @@ const STALE_MS = 24 * 60 * 60_000;
 /* bump when Snapshot or Views changes shape, so a stored copy of the old one
    is not read */
 const CACHE = "hareware-wordpress";
-const SNAPSHOT_STORED = "/wordpress-snapshot-v2";
+const SNAPSHOT_STORED = "/wordpress-snapshot-v3";
 const VIEWS_STORED = "/wordpress-views-v1";
 
 export const SHEET_KEY = ["sheet"] as const;

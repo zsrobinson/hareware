@@ -6,6 +6,7 @@
 */
 
 import { countWords } from "~/lib/get-word-count";
+import { parseDocument } from "~/lib/services/wordpress/parse-document";
 import { decodeEntities } from "~/lib/services/wordpress/posts";
 import type { Label, Role } from "./labels";
 
@@ -72,31 +73,66 @@ export function unrecognisedLines(texts: string[], labels: Label[]): string[] {
   );
 }
 
-/* a block's text, tags dropped and whitespace collapsed */
-const textOf = (markup: string) =>
-  decodeEntities(markup.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, ""))
-    .replace(/[\s\u00a0]+/g, " ")
-    .trim();
-
-/** the text of each `<p>` short enough to be a credit */
+/**
+ * the text of each `<p>` short enough to be a credit, tags dropped and
+ * whitespace collapsed
+ */
 export function paragraphs(html: string): string[] {
   return [...html.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
-    .map((match) => textOf(match[1]!))
+    .map((match) =>
+      decodeEntities(
+        match[1]!.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, ""),
+      )
+        .replace(/[\s\u00a0]+/g, " ")
+        .trim(),
+    )
     .filter((text) => text && text.length <= MAX_CREDIT_LENGTH);
 }
 
+/* the elements whose text is prose: the blocks the Word Counter counts */
+const PROSE = new Set(["P", "H2", "H3", "LI"]);
+/* where one run of text ends and the next begins; any other element is
+   inline, and "wo<em>r</em>d" is one word */
+const BLOCK =
+  /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DD|DIV|DL|DT|FIGCAPTION|FIGURE|FOOTER|H[1-6]|HEADER|HR|LI|OL|P|PRE|SECTION|TABLE|TBODY|TD|TH|THEAD|TR|UL)$/;
+
 /**
- * the words of a post's prose: its paragraphs, subheadings and list items, the
- * blocks the Word Counter counts. Captions, embeds and the theme's date line
- * are not prose. Credit lines are counted here, since which lines are credits
- * depends on the labels: `creditParagraphs()` is what to take off
+ * the words of a post's prose: the text of its paragraphs, subheadings and
+ * list items, each run of text ending where a block does, and a block inside
+ * another counted once. Credit lines are counted here, since which lines are
+ * credits depends on the labels: `creditParagraphs()` is what to take off.
+ * In the browser, with its own parser (~/lib/services/wordpress/parse-document)
  */
 export function bodyWords(html: string): number {
+  const document = parseDocument(
+    `<!doctype html><html><body>${html}</body></html>`,
+  );
   let words = 0;
-  /* a block inside another, as a paragraph in a list item, is in the outer
-     one's match and counted once */
-  for (const match of html.matchAll(/<(p|h2|h3|li)\b[^>]*>([\s\S]*?)<\/\1>/gi))
-    words += countWords(textOf(match[2]!));
+  let run = "";
+  const end = () => {
+    words += countWords(run);
+    run = "";
+  };
+  const walk = (node: Node, prose: boolean) => {
+    for (const child of node.childNodes) {
+      if (child.nodeType === child.TEXT_NODE) {
+        if (prose) run += child.textContent ?? "";
+        continue;
+      }
+      if (child.nodeType !== child.ELEMENT_NODE) continue;
+      const tag = (child as Element).tagName.toUpperCase();
+      if (tag === "BR") {
+        run += " ";
+        continue;
+      }
+      const block = BLOCK.test(tag);
+      if (block) end();
+      walk(child, prose || PROSE.has(tag));
+      if (block) end();
+    }
+  };
+  walk(document.body, false);
+  end();
   return words;
 }
 

@@ -371,9 +371,20 @@ function Ready({
   /* asked for by a person, as against a read behind the page: only this one
      dims the page, since only here are they waiting on it */
   const [refreshing, setRefreshing] = useState(false);
+  /* a page without the Roles filter counts every role, so a role in its
+     link is dropped, from the address too, rather than named in a caption
+     it does not cut */
+  const supported = useCallback(
+    (next: FilterState) => (roleFilter ? next : { ...next, roles: [] }),
+    [roleFilter],
+  );
   /* drawn only once hydrated (Shell), so the address is there */
-  const [state, setState] = useState<FilterState>(() =>
-    readState(window.location.search, defaultPreset),
+  const [state, setRawState] = useState<FilterState>(() =>
+    supported(readState(window.location.search, defaultPreset)),
+  );
+  const setState = useCallback(
+    (next: FilterState) => setRawState(supported(next)),
+    [supported],
   );
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -381,11 +392,7 @@ function Ready({
     window.history.replaceState(window.history.state, "", url);
   }, [state, defaultPreset]);
 
-  /* a page without the Roles filter counts every role, whatever a link says */
-  const filters = useMemo(
-    () => toFilters(roleFilter ? state : { ...state, roles: [] }, period),
-    [state, period, roleFilter],
-  );
+  const filters = useMemo(() => toFilters(state, period), [state, period]);
 
   /* stable, so a view that listens for something to refresh on (Problems,
      on coming back from WordPress) is not re-subscribed on every render */

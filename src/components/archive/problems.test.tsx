@@ -88,3 +88,14 @@ test("a pen name said for someone is not a new name when printed again", async (
     .map((item) => item.querySelector("span")?.textContent);
   expect(names).toEqual(["Ida Imager"]);
 });
+
+test("a role in a link to Problems is dropped, since every role counts there", async () => {
+  window.history.replaceState(null, "", "/problems?roles=image");
+  render(<ProblemsPage />);
+  /* post 2 has no image credit, listed under any role, and the caption
+     names no role */
+  const count = await screen.findByRole("heading", { name: /to check/ });
+  expect(count.textContent).toBe("1 article to check");
+  expect(screen.getByText("Invented headline 2")).toBeTruthy();
+  expect(new URLSearchParams(window.location.search).has("roles")).toBe(false);
+});

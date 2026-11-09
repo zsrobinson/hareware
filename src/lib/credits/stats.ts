@@ -71,7 +71,7 @@ export function searchable(text: string) {
 }
 
 /** whether the filters count a contribution: in a role and by a person picked */
-const counts =
+export const isCounted =
   ({ roles, people }: Filters) =>
   ({ role, person }: { role: Role; person: string }) =>
     (roles.length === 0 || roles.includes(role)) &&
@@ -80,7 +80,7 @@ const counts =
 /** an article stays under a role or person filter only with a contribution it counts */
 function hasCounted(article: ArchiveArticle, filters: Filters) {
   if (filters.roles.length === 0 && filters.people.length === 0) return true;
-  return contributionsOn(article).some(counts(filters));
+  return contributionsOn(article).some(isCounted(filters));
 }
 
 /**
@@ -243,7 +243,7 @@ function contributions(
   filters: Filters,
 ): Contribution[] {
   return articles.flatMap((article) =>
-    contributionsOn(article).filter(counts(filters)),
+    contributionsOn(article).filter(isCounted(filters)),
   );
 }
 
@@ -265,7 +265,7 @@ function units(
        role: a period filter must not make everyone in its first month new,
        nor a role filter make someone new at their first image */
     const shown = new Set(articles.map((article) => article.id));
-    const counted = counts(filters);
+    const counted = isCounted(filters);
     return [...peopleOf(history).values()].flatMap(
       ({ first, contributions }) => {
         if (!shown.has(first.article.id)) return [];

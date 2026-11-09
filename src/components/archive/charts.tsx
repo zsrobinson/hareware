@@ -428,7 +428,7 @@ function Charts({
             {...sliceText(plot, slice, filterNote)}
             measure={grouped.measure}
             members={plot.members(slice)}
-            roles={filters.roles}
+            filters={filters}
             onClose={opened.close}
             restoreFocus={() =>
               document.querySelector<HTMLElement>(

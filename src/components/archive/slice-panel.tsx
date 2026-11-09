@@ -4,7 +4,14 @@ import { Button } from "~/components/ui/button";
 import type { ArchiveArticle } from "~/lib/credits/archive";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import { compareSections } from "~/lib/credits/sections";
-import { easternDate, type Measure, type Member } from "~/lib/credits/stats";
+import { contributionsOn } from "~/lib/credits/person";
+import {
+  easternDate,
+  isCounted,
+  type Filters,
+  type Measure,
+  type Member,
+} from "~/lib/credits/stats";
 import { cn } from "~/lib/utils";
 import { counted } from "./chart-slice";
 import { formatDate } from "./dates";
@@ -28,7 +35,7 @@ export function SlicePanel({
   caption,
   measure,
   members,
-  roles,
+  filters,
   onClose,
   restoreFocus,
 }: {
@@ -36,8 +43,8 @@ export function SlicePanel({
   caption: string;
   measure: Measure;
   members: Member[];
-  /** the role filter, which says whose names an article's row shows */
-  roles: Role[];
+  /** whose contributions count, which says whose names an article's row shows */
+  filters: Filters;
   onClose: () => void;
   restoreFocus: () => HTMLElement | null;
 }) {
@@ -50,7 +57,7 @@ export function SlicePanel({
     >
       <div className="-mt-3 space-y-3">
         <p className="text-muted-foreground text-sm">{caption}</p>
-        <Rows measure={measure} members={members} roles={roles} />
+        <Rows measure={measure} members={members} filters={filters} />
       </div>
     </SidePanel>
   );
@@ -59,14 +66,14 @@ export function SlicePanel({
 function Rows({
   measure,
   members,
-  roles,
+  filters,
 }: {
   measure: Measure;
   members: Member[];
-  roles: Role[];
+  filters: Filters;
 }) {
   const [all, setAll] = useState(false);
-  const rows = rowsOf(measure, members, roles, useTrail());
+  const rows = rowsOf(measure, members, filters, useTrail());
   if (rows.length === 0)
     return <p className="text-muted-foreground text-sm">Nothing here.</p>;
   const shown = all ? rows : rows.slice(0, FIRST);
@@ -93,7 +100,7 @@ type Row = { key: string; content: ReactNode };
 function rowsOf(
   measure: Measure,
   members: Member[],
-  roles: Role[],
+  filters: Filters,
   trail: Trail,
 ): Row[] {
   if (measure === "articles")
@@ -107,18 +114,9 @@ function rowsOf(
             <Title article={article} />
             <Meta article={article}>
               <Names
-                names={[
-                  ...new Set(
-                    article.credits
-                      .filter(
-                        (credit) =>
-                          roles.length === 0 || roles.includes(credit.role),
-                      )
-                      .flatMap((credit) =>
-                        credit.contributors.map((c) => c.name),
-                      ),
-                  ),
-                ].map((name) => ({ name }))}
+                names={contributionsOn(article)
+                  .filter(isCounted(filters))
+                  .map((c) => ({ name: c.person }))}
               />
             </Meta>
           </>

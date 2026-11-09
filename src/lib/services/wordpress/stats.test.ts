@@ -138,38 +138,66 @@ test("asks for every month since counting began, and one more", () => {
   });
 });
 
+/* an answer to `postViewsUrl()` asked on 9 November 2026: every month since
+   counting began, empty unless `months` says otherwise */
+const NOW = new Date("2026-11-09T15:00:00Z");
+function answered(months: Record<string, object[]> = {}) {
+  const days: Record<string, { postviews: object[] }> = {};
+  for (const at = new Date("2022-12-01T00:00:00Z"); at <= NOW;) {
+    const key = at.toISOString().slice(0, 10);
+    days[key] = { postviews: months[key.slice(0, 7)] ?? [] };
+    at.setUTCMonth(at.getUTCMonth() + 1);
+  }
+  return { date: "2026-11-09", days };
+}
+const row = (id: number, views: unknown, type: unknown = "post") => ({
+  id,
+  type,
+  views,
+  title: "Invented",
+});
+
 test("reads each post's views by month, and leaves out what is not an article", () => {
-  const row = (id: number, views: number, type = "post") => ({
-    id,
-    type,
-    views,
-    title: "Invented",
-  });
   expect(
-    postViewsOf({
-      date: "2026-11-09",
-      days: {
-        "2026-11-01": {
-          postviews: [row(0, 50, "homepage"), row(901, 4, "page"), row(7, 3)],
-        },
-        "2026-10-01": { postviews: [row(7, 10), row(8, 2)] },
-        "2022-12-01": { postviews: [] },
-      },
-    }),
+    postViewsOf(
+      answered({
+        "2026-11": [row(0, 50, "homepage"), row(901, 4, "page"), row(7, 3)],
+        "2026-10": [row(7, 10), row(8, 2)],
+      }),
+      NOW,
+    ),
   ).toEqual({ 7: { "2026-11": 3, "2026-10": 10 }, 8: { "2026-10": 2 } });
 });
 
 /* read wrong, any of these would count as nobody having read anything */
 test("an answer of any other shape is an error, not an empty count", () => {
-  expect(() => postViewsOf({ code: "rest_forbidden" })).toThrow();
-  expect(() => postViewsOf(null)).toThrow();
-  expect(() => postViewsOf({ days: { "2026-11-01": {} } })).toThrow();
-  expect(() =>
-    postViewsOf({ days: { "2026-11-09": { postviews: [] } } }),
-  ).toThrow();
-  expect(() =>
-    postViewsOf({
-      days: { "2026-11-01": { postviews: [{ id: 7, type: "post" }] } },
+  const read = (body: unknown) => () => postViewsOf(body, NOW);
+  expect(read({ code: "rest_forbidden" })).toThrow();
+  expect(read(null)).toThrow();
+  expect(
+    read({
+      ...answered(),
+      days: { ...answered().days, "2026-11-09": { postviews: [] } },
     }),
   ).toThrow();
+  expect(
+    read({ ...answered(), days: { ...answered().days, "2026-11-01": {} } }),
+  ).toThrow();
+});
+
+/* asked for every month, an answer short of one would make a post read only
+   in that month a post read by nobody */
+test("an answer missing any month since counting began is an error", () => {
+  const read = (body: unknown) => () => postViewsOf(body, NOW);
+  const short = answered().days;
+  delete short["2026-10-01"];
+
+  expect(read({ date: "2026-11-09", days: {} })).toThrow();
+  expect(read({ date: "2026-11-09", days: [] })).toThrow();
+  expect(read({ date: "2026-11-09", days: short })).toThrow("2026-10");
+  /* without its own date, nothing says which months it should have */
+  expect(read({ days: answered().days })).toThrow();
+  /* nor is an answer as of some other day this one */
+  expect(read({ ...answered(), date: "2026-10-09" })).toThrow();
+  expect(read(answered())).not.toThrow();
 });

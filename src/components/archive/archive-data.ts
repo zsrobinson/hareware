@@ -120,8 +120,9 @@ async function readSnapshot(fresh = false): Promise<Snapshot> {
 /* every post's views, by month; never asked past a cache, since WordPress
    answers a signed-in read from its server anyway */
 async function readViews(): Promise<Views> {
+  const asked = new Date();
   const views: Views = {
-    posts: postViewsOf(await fetchGated<unknown>(postViewsUrl())),
+    posts: postViewsOf(await fetchGated<unknown>(postViewsUrl(asked)), asked),
     fetchedAt: new Date().toISOString(),
   };
   void toStorage(VIEWS_STORED, views);

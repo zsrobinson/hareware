@@ -129,20 +129,48 @@ export function postViewsUrl(now = new Date()): string {
 }
 
 type TopPosts = {
+  /** the site's own today, `YYYY-MM-DD` */
+  date?: unknown;
   days?: Record<
     string,
     { postviews?: { id: number; type: string; views: number }[] }
   >;
 };
 
+const DAY_MS = 24 * 60 * 60_000;
+
+/* every month from `COUNTED_SINCE` through `last`'s, as `YYYY-MM` */
+function monthsThrough(last: string): string[] {
+  const months: string[] = [];
+  let [year, month] = COUNTED_SINCE.split("-").map(Number) as [number, number];
+  for (;;) {
+    const key = `${year}-${String(month).padStart(2, "0")}`;
+    if (key > last.slice(0, 7)) return months;
+    months.push(key);
+    if (++month > 12) [year, month] = [year + 1, 1];
+  }
+}
+
 /**
- * `top-posts` by month, as views per post. Throws on any other shape: an
- * answer read wrong would count as nobody having read anything
+ * `top-posts` by month, as views per post, from an answer to `postViewsUrl()`
+ * asked at `now`. Throws on any other shape, and on an answer missing a month
+ * since counting began: a post read only in that month would count as read by
+ * nobody
  */
-export function postViewsOf(body: unknown): PostViews {
-  const days = (body as TopPosts | null)?.days;
-  if (!days || typeof days !== "object")
+export function postViewsOf(body: unknown, now = new Date()): PostViews {
+  const { date, days } = (body ?? {}) as TopPosts;
+  if (!days || typeof days !== "object" || Array.isArray(days))
     throw new Error("WordPress stats answered without any months");
+  /* the site's today is a day either side of anyone's */
+  if (
+    typeof date !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+    Math.abs(Date.parse(`${date}T12:00:00Z`) - now.getTime()) > 2 * DAY_MS
+  )
+    throw new Error(`WordPress stats answered as of ${String(date)}`);
+  const missing = monthsThrough(date).filter((m) => !(`${m}-01` in days));
+  if (missing.length > 0)
+    throw new Error(`WordPress stats answered without ${missing.join(", ")}`);
 
   const views: PostViews = {};
   for (const [day, { postviews } = {}] of Object.entries(days)) {

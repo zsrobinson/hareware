@@ -30,10 +30,27 @@ const snapshot = (fetchedAt: string) => ({
   fetchedAt,
 });
 
-/* Jetpack's count of it, by month */
-const COUNTED = {
-  days: { "2026-10-01": { postviews: [{ id: 7, type: "post", views: 30 }] } },
-};
+/* Jetpack's answer as of today: every month since counting began, with
+   `october` in October 2026 */
+function jetpack(october: object[] = [], months = monthsSince2023()) {
+  const days = Object.fromEntries(
+    months.map((m) => [
+      `${m}-01`,
+      { postviews: m === "2026-10" ? october : [] },
+    ]),
+  );
+  return { date: new Date().toISOString().slice(0, 10), days };
+}
+function monthsSince2023() {
+  const months: string[] = [];
+  const at = new Date("2023-01-01T00:00:00Z");
+  while (at <= new Date()) {
+    months.push(at.toISOString().slice(0, 7));
+    at.setUTCMonth(at.getUTCMonth() + 1);
+  }
+  return months;
+}
+const COUNTED = jetpack([{ id: 7, type: "post", views: 30 }]);
 
 /* fetch answers the gate as given, and the stats with `stats`, and records
    everything asked for; Cache Storage holds `stored`, and records whether it
@@ -181,6 +198,15 @@ test("views WordPress will not give are unavailable, never zero", async () => {
     () => new Response("WordPress stats aren't set up", { status: 503 }),
     /* answered, but not a count */
     () => Response.json([]),
+    /* a count, but of no months, or not of October */
+    () => Response.json({ ...jetpack(), days: {} }),
+    () =>
+      Response.json(
+        jetpack(
+          [],
+          monthsSince2023().filter((m) => m !== "2026-10"),
+        ),
+      ),
   ]) {
     const { wrapper } = setUp(
       Response.json(SHEET),

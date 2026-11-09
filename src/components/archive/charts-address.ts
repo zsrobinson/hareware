@@ -4,7 +4,7 @@
   nothing the archive needs to draw.
 */
 
-import { VIEWS } from "./views";
+import { RENAMED, VIEWS } from "./views";
 
 /** where an address on the old Charts page goes now: its view's page, with the rest of its query */
 export function chartsAddress(search: string): string {
@@ -14,8 +14,13 @@ export function chartsAddress(search: string): string {
     asked === "custom"
       ? (params.get("base") ?? "sections")
       : (asked ?? "sections");
-  const view = VIEWS.find((v) => v.id === id && v.layout.type === "chart");
+  /* each of its views was a chart, or has been merged into another since */
+  const view = RENAMED[id]
+    ? VIEWS.find((v) => v.id === RENAMED[id])
+    : VIEWS.find((v) => v.id === id && v.layout.type === "chart");
+  if (view && asked === "custom") params.set("base", view.id);
   /* Charts opened on Sections, which is no longer a page's first view */
-  if (asked === null || !view) params.set("view", view?.id ?? "sections");
+  else if (asked === null || !view || view.id !== asked)
+    params.set("view", view?.id ?? "sections");
   return `/${view?.source ?? "articles"}?${params}`;
 }

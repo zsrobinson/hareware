@@ -328,7 +328,7 @@ test("a search for a name is cleared on a chart, which would read it as a title"
   render(<PeoplePage />);
   /* the table finds Ada by name, though no article prints it */
   await screen.findByRole("button", { name: /Ada Example/ });
-  await user.click(screen.getByRole("tab", { name: "Contributors" }));
+  await user.click(screen.getByRole("tab", { name: "Top contributors" }));
   await waitFor(() =>
     expect(new URLSearchParams(window.location.search).has("q")).toBe(false),
   );

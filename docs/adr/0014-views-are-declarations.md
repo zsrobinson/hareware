@@ -23,8 +23,8 @@ into another and share.
 
 **Each table is a page, and its views are its tabs.** Articles and People each
 have a row of views over the filters: Articles has All, Sections, Section
-share, History, Most read and Read by section; People has Everyone, Contributors, Top this semester, New
-this semester, Newcomers, Headcount and Retention. A chart is on the
+share, History, Most read and Read by section; People has Everyone, Top
+contributors, New people, Headcount and Retention. A chart is on the
 page of the table it counts. Problems and Settings are pages as before, without
 views. There is no Contributions page: a contribution is what People's views
 count, and what an article's credits are made of.
@@ -81,6 +81,11 @@ nobody could reproduce.
 the legend, People's Show and the columns the Columns menu took out. What a
 view cannot hold, a fixed range of dates, a search, or articles a mark chose,
 is left out and said in the copy.
+
+**A view merged into another keeps its link**: `RENAMED` in `views.ts` maps
+its id to the view it became (Contributors and Top this semester are Top
+contributors; New this semester and Newcomers are New people, a table whose
+Customize switch to a chart or a pivot counts new people again).
 
 **No view is stored anywhere else**: not in the Sheet (ADR 0011: it holds only
 what WordPress lacks), not in D1 (the invocation log alone), and not in the

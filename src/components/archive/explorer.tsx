@@ -12,8 +12,6 @@ import {
   SproutIcon,
   TableIcon,
   TrophyIcon,
-  UserPlusIcon,
-  UsersIcon,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ComponentType } from "react";
@@ -85,10 +83,8 @@ const ICONS: Record<string, LucideIcon> = {
   sections: NewspaperIcon,
   "section-share": ChartPieIcon,
   history: HistoryIcon,
-  contributors: UsersIcon,
   top: TrophyIcon,
   new: SproutIcon,
-  newcomers: UserPlusIcon,
   headcount: ActivityIcon,
   [CUSTOM]: SlidersHorizontalIcon,
 };

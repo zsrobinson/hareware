@@ -114,6 +114,12 @@ type ViewOf<S extends Source> = {
 
 export type View = { [S in Source]: ViewOf<S> }[Source];
 
+/** views merged into another, whose links open the one they became */
+export const RENAMED: Record<string, string> = {
+  contributors: "top",
+  newcomers: "new",
+};
+
 export const VIEWS = [
   {
     id: "all",
@@ -243,28 +249,8 @@ export const VIEWS = [
     },
   },
   {
-    id: "contributors",
-    label: "Contributors",
-    question: "Who has been doing the work, and what work?",
-    source: "people",
-    range: "3m",
-    layout: {
-      type: "chart",
-      chart: {
-        count: "contributions",
-        by: "person",
-        split: "role",
-        draw: "stacked",
-        values: "number",
-        order: "largest",
-        top: 25,
-        compare: "none",
-      },
-    },
-  },
-  {
     id: "top",
-    label: "Top this semester",
+    label: "Top contributors",
     question: "Who has done the most this semester, and what?",
     source: "people",
     range: "semester",
@@ -284,7 +270,7 @@ export const VIEWS = [
   },
   {
     id: "new",
-    label: "New this semester",
+    label: "New people",
     question:
       "Who made their first contribution this semester, where, and as what?",
     source: "people",
@@ -295,26 +281,6 @@ export const VIEWS = [
         columns: ["name", "first", "sections", "roles", "contributions"],
         sort: { id: "first", desc: true },
         only: "new",
-      },
-    },
-  },
-  {
-    id: "newcomers",
-    label: "Newcomers",
-    question: "Who joined lately, where did they start, and as what?",
-    source: "people",
-    range: "3m",
-    layout: {
-      type: "chart",
-      chart: {
-        count: "newcomers",
-        by: "section",
-        split: "role",
-        draw: "stacked",
-        values: "number",
-        order: "natural",
-        top: 25,
-        compare: "none",
       },
     },
   },

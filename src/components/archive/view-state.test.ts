@@ -235,20 +235,17 @@ test("a table's sort is the view's own until changed, and a change stands", () =
   const byName = { ...everyone, sort: { id: "name" as const, desc: false } };
   expect(link(byName, clearedState("3m"), "people")).toBe("?sort=name");
   /* a chart holds it for the table after, and so does its link */
-  const chart = chooseView(byName, "contributors", "people");
-  const held = link(chart, clearedState("3m"), "people");
-  expect(held).toBe("?view=contributors&sort=name");
+  const chart = chooseView(byName, "top", "people");
+  const held = link(chart, clearedState("semester"), "people");
+  expect(held).toBe("?view=top&sort=name");
   expect(chooseView(chart, "everyone", "people").sort).toEqual(byName.sort);
   expect(
     chooseView(readView(held, "people"), "everyone", "people").sort,
   ).toEqual(byName.sort);
   /* unchanged, each view opens on its own */
   expect(
-    chooseView(
-      chooseView(everyone, "contributors", "people"),
-      "everyone",
-      "people",
-    ).sort,
+    chooseView(chooseView(everyone, "top", "people"), "everyone", "people")
+      .sort,
   ).toEqual(everyone.sort);
 });
 
@@ -440,8 +437,15 @@ test("a link to the old Charts page opens its view on that view's page", () => {
   expect(chartsAddress("?view=headcount&range=12m&slice=2026-1")).toBe(
     "/people?view=headcount&range=12m&slice=2026-1",
   );
-  expect(chartsAddress("?view=custom&base=contributors&count=people")).toBe(
-    "/people?view=custom&base=contributors&count=people",
+  expect(chartsAddress("?view=custom&base=headcount&count=people")).toBe(
+    "/people?view=custom&base=headcount&count=people",
+  );
+  /* Contributors and Newcomers are People's merged views now */
+  expect(chartsAddress("?view=contributors&range=12m")).toBe(
+    "/people?view=top&range=12m",
+  );
+  expect(chartsAddress("?view=custom&base=newcomers")).toBe(
+    "/people?view=custom&base=new",
   );
   /* Mix went before Headcount came; it opens the first chart */
   expect(chartsAddress("?view=mix")).toBe("/articles?view=sections");
@@ -454,6 +458,41 @@ test("a link to the old Charts page opens its view on that view's page", () => {
         view.id,
       );
     }
+});
+
+test("a link to a view merged into another opens the one it became", () => {
+  expect(viewOf(readView("?view=contributors", "people"), "people").id).toBe(
+    "top",
+  );
+  expect(readView("?view=newcomers", "people").view).toBe("new");
+  const custom = readView(
+    "?view=custom&base=newcomers&layout=table&columns=name",
+    "people",
+  );
+  expect(custom.base).toBe("new");
+  expect(link(custom, clearedState("semester"), "people")).toContain(
+    "base=new",
+  );
+});
+
+test("a list of new people switched to a chart or a pivot counts new people", () => {
+  const fresh = shapeOf(readView("?view=new", "people"), "people");
+  const chart = switchLayout(fresh, "chart", "people");
+  expect(chart.type === "chart" && chart.chart).toMatchObject({
+    count: "newcomers",
+    by: "section",
+    split: "role",
+  });
+  const pivot = switchLayout(fresh, "pivot", "people");
+  expect(pivot.type === "pivot" && pivot.pivot).toMatchObject({
+    count: "newcomers",
+    rows: "section",
+    columns: "role",
+  });
+  /* everyone, as the page's first chart */
+  const everyone = shapeOf(readView("", "people"), "people");
+  const first = switchLayout(everyone, "chart", "people");
+  expect(first.type === "chart" && first.chart.count).toBe("contributions");
 });
 
 test("Copy as view keeps the legend's series off, People's Show and the Columns menu", () => {

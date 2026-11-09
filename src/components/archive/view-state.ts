@@ -29,6 +29,7 @@ import {
 import {
   COLUMNS,
   MINIMUMS,
+  RENAMED,
   VIEWS,
   type ColumnId,
   type Minimum,
@@ -68,7 +69,7 @@ export const viewsOn = (source: Source): View[] =>
 const firstView = (source: Source) => viewsOn(source)[0]!;
 
 const find = (source: Source, id: string | null) =>
-  viewsOn(source).find((view) => view.id === id);
+  viewsOn(source).find((view) => view.id === (RENAMED[id ?? ""] ?? id));
 
 /** the view on screen, or the one Custom was made from */
 export const viewOf = (
@@ -381,7 +382,11 @@ export const resetView = (state: ViewState, source: Source): ViewState => ({
   hidden: openingHidden({ view: state.base, base: state.base }, source),
 });
 
-/** the builder's Layout: the page's own table, or its first chart or pivot */
+/**
+ * The builder's Layout: the page's own table, or its first chart or pivot.
+ * A list of new people stays one: it is drawn as where they started, and
+ * as what.
+ */
 export function switchLayout(
   shape: Shape,
   type: Shape["type"],
@@ -389,8 +394,35 @@ export function switchLayout(
 ): Shape {
   if (shape.type === type) return shape;
   if (type === "table") return { type, columns: firstColumns(source) };
-  if (type === "pivot") return { type, pivot: settlePivot(firstPivot(source)) };
-  return { type, chart: settle(firstChart(source)) };
+  const fresh = shape.type === "table" && shape.only === "new";
+  if (type === "pivot")
+    return {
+      type,
+      pivot: settlePivot(
+        fresh
+          ? {
+              ...firstPivot(source),
+              count: "newcomers",
+              rows: "section",
+              columns: "role",
+            }
+          : firstPivot(source),
+      ),
+    };
+  return {
+    type,
+    chart: settle(
+      fresh
+        ? {
+            ...firstChart(source),
+            count: "newcomers",
+            by: "section",
+            split: "role",
+            order: "natural",
+          }
+        : firstChart(source),
+    ),
+  };
 }
 
 /** a column shown or taken out; a table keeps one at least */

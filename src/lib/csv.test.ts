@@ -40,7 +40,7 @@ describe("csvCell", () => {
   });
 
   /* the injection cases: a spreadsheet evaluates any of these on open */
-  it.each(["=1+1", "+1", "-1", "@SUM(A1)", "\t=1+1"])(
+  it.each(["=1+1", "+1", "-1", "@SUM(A1)", "\t=1+1", " =1+1", "  +4"])(
     "neutralises %j so a spreadsheet reads it as text",
     (formula) => {
       expect(csvCell(formula).replace(/^"|"$/g, "")).toMatch(/^'/);

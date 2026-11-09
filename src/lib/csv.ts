@@ -1,22 +1,22 @@
-/* rows as a csv a spreadsheet opens safely. */
+/* rows as a csv, or a cell to paste, that a spreadsheet opens safely. */
 
 /**
- * a cell starting with one of these is evaluated as a formula on open (CSV
- * injection; kiosk input reaches exports). Sheets strips leading whitespace
- * first, so `\t=1+1` counts too
+ * a cell starting with one of these is evaluated as a formula on open or on
+ * paste (CSV injection; kiosk input and printed bylines reach exports).
+ * Sheets strips leading whitespace first, so ` =1+1` and `\t=1+1` count too
  */
-const FORMULA = ["=", "+", "-", "@", "\t", "\r"];
+const FORMULA = /^\s*[=+\-@]|^[\t\r]/;
+
+/** a cell's text as a spreadsheet must read it, as text: a formula start gets a `'` guard */
+export const spreadsheetCell = (raw: string): string =>
+  FORMULA.test(raw) ? `'${raw}` : raw;
 
 /**
- * one value, escaped: a leading formula character gets a `'` guard, added
- * before RFC 4180 quoting so the guard lands inside the quotes
+ * one value, escaped: the guard is added before RFC 4180 quoting so it
+ * lands inside the quotes
  */
 function csvCell(value: unknown): string {
-  const raw = text(value);
-
-  const guarded = FORMULA.some((char) => raw.startsWith(char))
-    ? `'${raw}`
-    : raw;
+  const guarded = spreadsheetCell(text(value));
 
   return /["\n\r,]/.test(guarded)
     ? `"${guarded.replaceAll('"', '""')}"`

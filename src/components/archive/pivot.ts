@@ -7,6 +7,7 @@
 
 import type { ArchiveArticle } from "~/lib/credits/archive";
 import { ROLE_NAMES, type Role } from "~/lib/credits/labels";
+import { spreadsheetCell } from "~/lib/csv";
 import {
   group,
   membersAcross,
@@ -361,8 +362,13 @@ export function pivotMatrix(pivot: Pivot): string[][] {
   ];
 }
 
-/** the matrix as a sheet takes a paste: tab between cells, a line a row */
+/** the matrix as a sheet takes a paste: tab between cells, a line a row,
+    and every cell guarded as the CSV's are */
 export const toTsv = (matrix: string[][]) =>
   matrix
-    .map((row) => row.map((cell) => cell.replace(/[\t\r\n]+/g, " ")).join("\t"))
+    .map((row) =>
+      row
+        .map((cell) => spreadsheetCell(cell.replace(/[\t\r\n]+/g, " ")))
+        .join("\t"),
+    )
     .join("\n");

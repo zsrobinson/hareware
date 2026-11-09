@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { toCsv } from "~/lib/csv";
 import { contributionsOn } from "~/lib/credits/person";
 import {
   applyFilters,
@@ -13,7 +14,7 @@ import {
 } from "~/lib/credits/stats";
 import { COUNTS, TOPS } from "./chart-config";
 import { clearedState } from "./filters";
-import { archive, listed, onPeople } from "./invented-archive";
+import { archive, credit, listed, onPeople, post } from "./invented-archive";
 import {
   DIMENSIONS,
   PIVOT_VALUES,
@@ -453,4 +454,56 @@ test("a cell's link survives a name with the pivot's own marks in it", () => {
   expect(readPivotSlice(pivotKey(slice), pivot)).toEqual(slice);
   expect(readPivotSlice("A~B~C", pivot)).toBeNull();
   expect(readPivotSlice("Nobody~*", pivot)).toBeNull();
+});
+
+test("a copied or downloaded pivot reads every cell as text, a name like a formula too", () => {
+  /* printed bylines are anyone's to write */
+  const hostile = [
+    post(1, "2026-03-01", "News", [credit("writer", ["=1+1"])]),
+    post(2, "2026-03-02", "Sports", [credit("writer", [" -2+3"])]),
+    post(3, "2026-03-03", "News", [credit("image", ["@SUM(A1)"])]),
+  ];
+  const config: PivotConfig = {
+    count: "contributions",
+    rows: "person",
+    columns: "none",
+    values: "number",
+    top: 25,
+    compare: "none",
+  };
+  const tsv = (pivot: Pivot) => toTsv(pivotMatrix(pivot)).split("\n");
+  const byPerson = tsv(pivotOf(config, hostile, NO_FILTERS, hostile));
+  expect(byPerson).toContain("'=1+1\t1");
+  expect(byPerson).toContain("' -2+3\t1");
+  /* and as columns */
+  const across = tsv(
+    pivotOf(
+      { ...config, rows: "section", columns: "person" },
+      hostile,
+      NO_FILTERS,
+      hostile,
+    ),
+  );
+  expect([...across[0]!.split("\t")].sort()).toEqual(
+    ["Section", "' -2+3", "'=1+1", "'@SUM(A1)", "Total"].sort(),
+  );
+  /* a CSV guards the same cells */
+  const [header, ...body] = pivotMatrix(
+    pivotOf(config, hostile, NO_FILTERS, hostile),
+  );
+  expect(toCsv(header!, body)).toContain("\r\n'=1+1,1\r\n");
+
+  /* a difference that went up starts with a plus */
+  const spring = { ...NO_FILTERS, from: "2026-01-01", to: "2026-05-31" };
+  const compared = pivotOf(
+    { ...config, count: "articles", rows: "section", compare: "previous" },
+    applyFilters(archive, spring),
+    spring,
+    archive,
+    "2026-11-09",
+  );
+  const rows = tsv(compared).map((line) => line.split("\t"));
+  const differences = rows.slice(1).map((cells) => cells.at(-1)!);
+  expect(differences.some((cell) => cell.startsWith("+"))).toBe(false);
+  expect(differences.filter((cell) => cell.startsWith("'+"))).not.toEqual([]);
 });

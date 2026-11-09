@@ -1,6 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { UsersRoundIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { DataTable, sortable } from "~/components/data-table";
 import { SidePanel, useIsPhone } from "~/components/panel";
 import {
@@ -28,6 +28,7 @@ import {
   RowOpener,
   useOpenRow,
 } from "./open-row";
+import { useChoice, useSort } from "./page-state";
 import { SectionName } from "./section-name";
 import { ShellTableControls } from "./table-controls";
 
@@ -74,6 +75,7 @@ const MINIMUMS = ["1", "2", "3", "5", "10"].map((n) => ({
   id: n,
   label: n === "1" ? "All people" : `${n}+ contributions`,
 }));
+const MINIMUM_IDS = MINIMUMS.map((m) => m.id);
 
 /* never depend on which row is open, so its name is never redrawn as a new
    button (see open-row.tsx) */
@@ -155,7 +157,8 @@ function scopeOf(filters: Filters, filterNote: string): string {
 
 function People({ archive, filters, filterNote }: ViewProps) {
   const phone = useIsPhone();
-  const [minimum, setMinimum] = useState("1");
+  const [minimum, setMinimum] = useChoice("min", MINIMUM_IDS, "1");
+  const [sorting, setSorting] = useSort(COLUMNS);
   const openRow = useOpenRow("person");
   const { open } = openRow;
 
@@ -220,6 +223,8 @@ function People({ archive, filters, filterNote }: ViewProps) {
         searchable={false}
         empty="Nobody matches these filters."
         csv="people"
+        sorting={sorting}
+        onSortingChange={setSorting}
         controls={(controls) => <ShellTableControls {...controls} />}
         selected={(row) => row.name === open}
         hidden={phone ? ON_PHONE : selected ? BESIDE_PANEL : []}

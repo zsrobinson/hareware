@@ -28,6 +28,7 @@ import { ArchiveShell, type ViewProps } from "./archive-shell";
 import { formatDate } from "./dates";
 import { PeoplePicker, PersonPicker } from "./person-picker";
 import { OpenRowProvider, RowDetails, RowOpener, useOpenRow } from "./open-row";
+import { useSort } from "./page-state";
 import { SectionName } from "./section-name";
 import { ShellTableControls } from "./table-controls";
 import { useEdit } from "./use-edit";
@@ -174,6 +175,7 @@ function Articles({ archive, filters, filterNote }: ViewProps) {
   const article = editing
     ? archive.articles.find((a) => a.id === editing)
     : undefined;
+  const [sorting, setSorting] = useSort(columns, ["other"]);
 
   return (
     <OpenRowProvider value={openRow}>
@@ -183,6 +185,8 @@ function Articles({ archive, filters, filterNote }: ViewProps) {
         searchable={false}
         empty="No articles match these filters."
         csv="articles"
+        sorting={sorting}
+        onSortingChange={setSorting}
         controls={(controls) => <ShellTableControls {...controls} />}
         selected={(row) => row.id === editing}
         hidden={phone ? ON_PHONE : article ? BESIDE_PANEL : []}

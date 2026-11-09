@@ -144,6 +144,9 @@ type Props<T> = {
   controls?: (controls: TableControls) => ReactNode;
   /** the row whose details are open beside the table */
   selected?: (row: T) => boolean;
+  /** the sort, when the page keeps it (in the address); the table's own otherwise */
+  sorting?: SortingState;
+  onSortingChange?: (sorting: SortingState) => void;
   /**
    * columns hidden until someone shows them from the Columns menu, as where
    * the table is narrow (a phone, a panel open beside it) and would otherwise
@@ -173,9 +176,12 @@ export function DataTable<T>({
   csv,
   controls,
   selected,
+  sorting: kept,
+  onSortingChange: keep,
   hidden = [],
 }: Props<T>) {
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const [unkept, setUnkept] = useState<SortingState>([]);
+  const sorting = kept ?? unkept;
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   /* only what someone chose in the Columns menu: `hidden` is a default that
      moves with the width, so it is laid under the choices rather than kept */
@@ -192,7 +198,8 @@ export function DataTable<T>({
     data,
     columns,
     state: { sorting, columnFilters, columnVisibility, globalFilter: search },
-    onSortingChange: setSorting,
+    onSortingChange: (updater) =>
+      (keep ?? setUnkept)(functionalUpdate(updater, sorting)),
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: (updater) => {
       const next = functionalUpdate(updater, columnVisibility);

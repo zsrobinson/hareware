@@ -24,7 +24,8 @@ import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import { peopleOf } from "~/lib/credits/person";
 import { same } from "~/lib/credits/sheet";
 import { applyFilters, easternDate } from "~/lib/credits/stats";
-import { ArchiveShell, useTrail, type ViewProps } from "./archive-shell";
+import { useTrail } from "./archive-shell";
+import { ExplorerPage, type TableViewProps } from "./explorer";
 import { formatDate } from "./dates";
 import { PeoplePicker, PersonPicker } from "./person-picker";
 import {
@@ -32,18 +33,17 @@ import {
   OpenRowProvider,
   RowDetails,
   RowOpener,
-  useOpenRow,
 } from "./open-row";
-import { useSort } from "./page-state";
 import { SectionName } from "./section-name";
 import { ShellTableControls } from "./table-controls";
 import { useEdit } from "./use-edit";
+import { COLUMN_NAMES, type ColumnId } from "./views";
 
 const EDIT_IN_WORDPRESS = (id: number) =>
   `https://theumdhare.com/wp-admin/post.php?post=${id}&action=edit`;
 
 export function ArticlesPage() {
-  return <ArchiveShell>{(props) => <Articles {...props} />}</ArchiveShell>;
+  return <ExplorerPage source="articles" table={Articles} />;
 }
 
 const SAVED: Record<Role, (title: string) => string> = {
@@ -113,9 +113,86 @@ const CREDIT_COLUMN: Partial<Record<ProblemKind, Role>> = {
 };
 const ON_PHONE = ["writer", ...BESIDE_PANEL];
 
-function Articles({ archive, filters, filterNote }: ViewProps) {
+/* every column a view of articles can show, by its id in ./views; none
+   depends on which row is open (see open-row.tsx) */
+const EVERY_COLUMN: ColumnDef<ArchiveArticle, unknown>[] = [
+  {
+    id: "date",
+    accessorFn: (article) => easternDate(article.publishedAt),
+    header: sortable(COLUMN_NAMES.date),
+    meta: { csvHeader: COLUMN_NAMES.date },
+    cell: ({ row }) => (
+      <span className="text-muted-foreground whitespace-nowrap tabular-nums">
+        {formatDate(row.original.publishedAt)}
+      </span>
+    ),
+  },
+  {
+    id: "title",
+    accessorKey: "title",
+    header: sortable(COLUMN_NAMES.title),
+    meta: { csvHeader: COLUMN_NAMES.title },
+    cell: ({ row, table }) => {
+      /* a missing credit shows as "—" in its column; named here only
+           where that column is hidden (a phone, or beside a panel) */
+      const said = (kind: ProblemKind) => {
+        const column = CREDIT_COLUMN[kind];
+        return !column || !table.getColumn(column)?.getIsVisible();
+      };
+      const problems = row.original.ignored
+        ? []
+        : row.original.problems.filter((p) => said(p.kind));
+      return (
+        /* fits beside the date on a phone-wide window that shows a
+             scrollbar, so the table only scrolls when it must */
+        <div className="max-w-md min-w-52 whitespace-normal">
+          <RowOpener rowKey={String(row.original.id)} className="font-medium">
+            {row.original.title}
+          </RowOpener>
+          {problems.length > 0 && (
+            <ProblemsLink title={row.original.title}>
+              {problems.map((p) => PROBLEM_KINDS[p.kind]).join(" · ")}
+            </ProblemsLink>
+          )}
+        </div>
+      );
+    },
+  },
+  {
+    id: "section",
+    accessorKey: "section",
+    header: sortable(COLUMN_NAMES.section),
+    meta: { csvHeader: COLUMN_NAMES.section },
+    cell: ({ row }) => <SectionName section={row.original.section} />,
+  },
+  ...ROLES.map((role): ColumnDef<ArchiveArticle, unknown> => ({
+    id: role,
+    accessorFn: (article) => namesFor(article, role),
+    header: sortable(ROLE_NAMES[role]),
+    meta: { csvHeader: ROLE_NAMES[role] },
+    cell: ({ row }) => (
+      <div className="min-w-36 whitespace-normal">
+        <Contributors
+          credits={row.original.credits.filter((c) => c.role === role)}
+        />
+      </div>
+    ),
+  })),
+];
+const DEFS = Object.fromEntries(
+  EVERY_COLUMN.map((column) => [column.id, column]),
+) as Record<ColumnId<"articles">, ColumnDef<ArchiveArticle, unknown>>;
+
+function Articles({
+  archive,
+  filters,
+  filterNote,
+  columns: shown,
+  sorting: held,
+  setSorting,
+  opened: openRow,
+}: TableViewProps) {
   const phone = useIsPhone();
-  const openRow = useOpenRow("open", "article");
   const editing = openRow.open === null ? null : Number(openRow.open);
 
   const rows = useMemo(
@@ -123,85 +200,25 @@ function Articles({ archive, filters, filterNote }: ViewProps) {
     [archive, filters],
   );
 
-  /* "other" credits are rare, so their column waits until someone asks for
-     them. Nothing else here depends on which row is open (see open-row.tsx) */
+  /* "other" credits are rare, so a view seldom shows their column; it
+     joins one whenever the Roles filter asks for them */
   const anyOther = filters.roles.includes("other");
-
-  const columns = useMemo<ColumnDef<ArchiveArticle, unknown>[]>(
-    () => [
-      {
-        id: "date",
-        accessorFn: (article) => easternDate(article.publishedAt),
-        header: sortable("Published"),
-        meta: { csvHeader: "Published" },
-        cell: ({ row }) => (
-          <span className="text-muted-foreground whitespace-nowrap tabular-nums">
-            {formatDate(row.original.publishedAt)}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "title",
-        header: sortable("Title"),
-        meta: { csvHeader: "Title" },
-        cell: ({ row, table }) => {
-          /* a missing credit shows as "—" in its column; named here only
-             where that column is hidden (a phone, or beside a panel) */
-          const said = (kind: ProblemKind) => {
-            const column = CREDIT_COLUMN[kind];
-            return !column || !table.getColumn(column)?.getIsVisible();
-          };
-          const problems = row.original.ignored
-            ? []
-            : row.original.problems.filter((p) => said(p.kind));
-          return (
-            /* fits beside the date on a phone-wide window that shows a
-               scrollbar, so the table only scrolls when it must */
-            <div className="max-w-md min-w-52 whitespace-normal">
-              <RowOpener
-                rowKey={String(row.original.id)}
-                className="font-medium"
-              >
-                {row.original.title}
-              </RowOpener>
-              {problems.length > 0 && (
-                <ProblemsLink title={row.original.title}>
-                  {problems.map((p) => PROBLEM_KINDS[p.kind]).join(" · ")}
-                </ProblemsLink>
-              )}
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: "section",
-        header: sortable("Section"),
-        meta: { csvHeader: "Section" },
-        cell: ({ row }) => <SectionName section={row.original.section} />,
-      },
-      ...ROLES.filter((role) => role !== "other" || anyOther).map(
-        (role): ColumnDef<ArchiveArticle, unknown> => ({
-          id: role,
-          accessorFn: (article) => namesFor(article, role),
-          header: sortable(ROLE_NAMES[role]),
-          meta: { csvHeader: ROLE_NAMES[role] },
-          cell: ({ row }) => (
-            <div className="min-w-36 whitespace-normal">
-              <Contributors
-                credits={row.original.credits.filter((c) => c.role === role)}
-              />
-            </div>
-          ),
-        }),
-      ),
-    ],
-    [anyOther],
+  const columns = useMemo(
+    () =>
+      (anyOther && !shown.includes("other") ? [...shown, "other"] : shown)
+        .filter((id): id is ColumnId<"articles"> => id in DEFS)
+        .map((id) => DEFS[id]),
+    [shown, anyOther],
+  );
+  /* a sort on a column this table does not show now is held, and comes
+     back with it */
+  const sorting = held.filter((by) =>
+    columns.some((column) => column.id === by.id),
   );
 
   const article = editing
     ? archive.articles.find((a) => a.id === editing)
     : undefined;
-  const [sorting, setSorting] = useSort(columns, ["other"]);
 
   return (
     <OpenRowProvider value={openRow}>

@@ -1,6 +1,5 @@
 import {
   BellIcon,
-  ChartColumnIcon,
   FileTextIcon,
   ImageIcon,
   MailIcon,
@@ -36,9 +35,8 @@ export const toolsNav: NavItem[] = [
 /* The board's tools, shown to everybody: what they show is gated by the APIs
    they ask, which say why when they refuse (ADR 0007, ADR 0012). */
 export const adminNav: NavItem[] = [
-  { href: "/charts", label: "Charts", icon: ChartColumnIcon },
-  { href: "/people", label: "People", icon: UsersIcon },
   { href: "/articles", label: "Articles", icon: NewspaperIcon },
+  { href: "/people", label: "People", icon: UsersIcon },
   { href: "/problems", label: "Problems", icon: TriangleAlertIcon },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
   { href: "/reminder", label: "Social Reminder", icon: BellIcon },

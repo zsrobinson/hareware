@@ -1,7 +1,7 @@
 /*
   One QueryClient for every island. Astro's client router keeps this window
   between pages, so what one page read is already there when the next opens:
-  back from the slides to the list, or from Charts to People, nothing is read
+  back from the slides to the list, or from Articles to People, nothing is read
   twice. Signing out reloads the page, which empties it.
 */
 

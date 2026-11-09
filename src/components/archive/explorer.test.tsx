@@ -8,7 +8,8 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { ChartsPage } from "./charts";
+import { ArticlesPage } from "./articles";
+import { PeoplePage } from "./people";
 
 /*
   A count in the chart's table opens what it counts beside the chart: the
@@ -78,8 +79,9 @@ afterEach(() => {
 });
 
 test("a count in the table lists what it counts, and Escape returns to it", async () => {
+  window.history.replaceState(null, "", "/articles?view=sections");
   const user = userEvent.setup();
-  render(<ChartsPage />);
+  render(<ArticlesPage />);
   await user.click(
     await screen.findByRole("button", { name: "Show as table" }),
   );
@@ -104,14 +106,18 @@ test("a count in the table lists what it counts, and Escape returns to it", asyn
 });
 
 test("a link to a slice opens it, and one to nothing opens nothing", async () => {
-  window.history.replaceState(null, "", "/charts?slice=Sports");
-  const { unmount } = render(<ChartsPage />);
+  window.history.replaceState(null, "", "/articles?view=sections&slice=Sports");
+  const { unmount } = render(<ArticlesPage />);
   const panel = await screen.findByRole("complementary", { name: "Sports" });
   expect(within(panel).getAllByRole("listitem")).toHaveLength(1);
   unmount();
 
-  window.history.replaceState(null, "", "/charts?slice=Rabbithole");
-  render(<ChartsPage />);
+  window.history.replaceState(
+    null,
+    "",
+    "/articles?view=sections&slice=Rabbithole",
+  );
+  render(<ArticlesPage />);
   await screen.findByRole("button", { name: "Show as table" });
   await waitFor(() => expect(window.location.search).not.toContain("slice"));
   expect(screen.queryByRole("complementary")).toBeNull();
@@ -122,25 +128,27 @@ test("a view brings its own time range, unless Time was chosen", async () => {
   const time = () => screen.getByRole("combobox", { name: "Time" }).textContent;
   const range = () => new URLSearchParams(window.location.search).get("range");
 
-  const { unmount } = render(<ChartsPage />);
+  window.history.replaceState(null, "", "/articles");
+  const { unmount } = render(<ArticlesPage />);
   await user.click(await screen.findByRole("tab", { name: "History" }));
   await waitFor(() => expect(time()).toContain("All time"));
-  await user.click(screen.getByRole("tab", { name: "Contributors" }));
+  await user.click(screen.getByRole("tab", { name: "Sections" }));
   await waitFor(() => expect(time()).toContain("Last 3 months"));
   unmount();
 
-  /* a year chosen on Sections stays through the views, and in the link */
-  window.history.replaceState(null, "", "/charts?range=12m");
-  render(<ChartsPage />);
+  /* a year chosen on All stays through the views, and in the link */
+  window.history.replaceState(null, "", "/articles?range=12m");
+  render(<ArticlesPage />);
   await user.click(await screen.findByRole("tab", { name: "History" }));
-  await user.click(screen.getByRole("tab", { name: "Contributors" }));
+  await user.click(screen.getByRole("tab", { name: "Sections" }));
   expect(time()).toContain("Last 12 months");
   expect(range()).toBe("12m");
 });
 
 test("a list opened over Customize gives Customize back when it closes", async () => {
+  window.history.replaceState(null, "", "/articles?view=sections");
   const user = userEvent.setup();
-  render(<ChartsPage />);
+  render(<ArticlesPage />);
   const customize = await screen.findByRole("button", { name: "Customize" });
   await user.click(customize);
   await screen.findByRole("complementary", { name: "Customize" });
@@ -168,10 +176,10 @@ test("Reset in Customize leaves focus in the panel, not on the page", async () =
   window.history.replaceState(
     null,
     "",
-    "/charts?view=custom&count=articles&by=section&split=none&draw=stacked&values=share&order=natural&top=25",
+    "/articles?view=custom&base=sections&layout=chart&count=articles&by=section&split=none&draw=stacked&values=share&order=natural&top=25",
   );
   const user = userEvent.setup();
-  render(<ChartsPage />);
+  render(<ArticlesPage />);
   await user.click(await screen.findByRole("button", { name: "Customize" }));
   const panel = await screen.findByRole("complementary", { name: "Customize" });
   await user.click(within(panel).getByRole("button", { name: "Reset" }));
@@ -184,8 +192,9 @@ test("Reset in Customize leaves focus in the panel, not on the page", async () =
 });
 
 test("a chart of one series names its count for what it is", async () => {
+  window.history.replaceState(null, "", "/articles?view=sections");
   const user = userEvent.setup();
-  render(<ChartsPage />);
+  render(<ArticlesPage />);
   await user.click(
     await screen.findByRole("button", { name: "Show as table" }),
   );
@@ -195,9 +204,9 @@ test("a chart of one series names its count for what it is", async () => {
 });
 
 test("a name searched for says what it matched, and can count that person alone", async () => {
-  window.history.replaceState(null, "", "/charts?view=contributors&q=ada");
+  window.history.replaceState(null, "", "/people?view=contributors&q=ada");
   const user = userEvent.setup();
-  render(<ChartsPage />);
+  render(<PeoplePage />);
   const caption = () => document.querySelector("figcaption")!.textContent;
   /* both of Ada's articles, and Ben's half of the one they wrote together */
   await waitFor(() => expect(caption()).toContain("3 contributions"));
@@ -215,4 +224,29 @@ test("a name searched for says what it matched, and can count that person alone"
   );
   await waitFor(() => expect(caption()).toContain("4 contributions"));
   expect(new URLSearchParams(window.location.search).has("people")).toBe(false);
+});
+
+test("the builder turns a table into a chart, as Custom, and Reset brings the table back", async () => {
+  window.history.replaceState(null, "", "/people");
+  const user = userEvent.setup();
+  render(<PeoplePage />);
+  await user.click(await screen.findByRole("button", { name: "Customize" }));
+  const panel = await screen.findByRole("complementary", { name: "Customize" });
+  await user.click(within(panel).getByRole("combobox", { name: "Show as" }));
+  await user.click(await screen.findByRole("option", { name: "Chart" }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("tab", { name: "Custom" }).getAttribute("aria-selected"),
+    ).toBe("true"),
+  );
+  const params = new URLSearchParams(window.location.search);
+  expect(params.get("view")).toBe("custom");
+  expect(params.get("layout")).toBe("chart");
+  expect(document.querySelector("figcaption")).toBeTruthy();
+
+  await user.click(within(panel).getByRole("button", { name: "Reset" }));
+  expect(
+    screen.getByRole("tab", { name: "Everyone" }).getAttribute("aria-selected"),
+  ).toBe("true");
+  expect(screen.getByRole("columnheader", { name: /Name/ })).toBeTruthy();
 });

@@ -33,6 +33,7 @@ test("a list of contributions names a person once, with every role", () => {
     <SlicePanel
       title="News"
       caption="3 contributions on 1 article"
+      back="Contributors"
       measure="contributions"
       members={members}
       filters={NO_FILTERS}
@@ -72,6 +73,7 @@ test("a list of articles names only who the filters count on each", () => {
     <SlicePanel
       title="News"
       caption="1 article"
+      back="Sections"
       measure="articles"
       members={[{ id: 1, units: [{ article: written }] }]}
       filters={{ ...NO_FILTERS, people: ["Bo Sample"] }}

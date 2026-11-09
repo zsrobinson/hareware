@@ -29,8 +29,8 @@ export function AccessCheck() {
             This account can use the Editorial Board's tools.
           </p>
         </div>
-        <a href="/charts" className={buttonVariants()}>
-          Open Charts
+        <a href="/articles" className={buttonVariants()}>
+          Open Articles
         </a>
       </section>
     );

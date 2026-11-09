@@ -1,7 +1,8 @@
 /* A page's own state in the address beside the filters, left out at its
-   default: `sort=first`, `sort=-first` the other way, and `min` on People. */
+   default: `sort=first`, `sort=-first` the other way (./view-state keeps
+   it), and `min` on People. */
 
-import type { ColumnDef, SortingState } from "@tanstack/react-table";
+import type { SortingState } from "@tanstack/react-table";
 import { useEffect, useState } from "react";
 
 export function readSort(
@@ -58,24 +59,6 @@ export function useInAddress<T>(
       window.history.replaceState(window.history.state, "", url);
   });
   return [value, setValue] as const;
-}
-
-const idOf = <T>(column: ColumnDef<T, unknown>) =>
-  column.id ?? ("accessorKey" in column ? String(column.accessorKey) : "");
-
-/* a sort on a column the table does not have now (Other, until the Roles
-   filter asks for it) is held, and comes back with the column */
-export function useSort<T>(
-  columns: readonly ColumnDef<T, unknown>[],
-  /** the columns the table has only sometimes, which a link may sort by */
-  sometimes: readonly string[] = [],
-) {
-  const ids = columns.map(idOf);
-  const [sorting, setSorting] = useInAddress(
-    (search) => readSort(search, [...ids, ...sometimes]),
-    writeSort,
-  );
-  return [sorting.filter((by) => ids.includes(by.id)), setSorting] as const;
 }
 
 export function useChoice<T extends string>(

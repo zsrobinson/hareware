@@ -71,7 +71,7 @@ export function ChartBuilder({
 
   return (
     <FieldRows>
-      <Row icon={HashIcon} label="Count">
+      <BuilderRow icon={HashIcon} label="Count">
         <Choice
           label="Count"
           hideLabel
@@ -80,8 +80,8 @@ export function ChartBuilder({
           options={COUNTS.map((c) => ({ ...c, disabled: !ok.count[c.id] }))}
           onChange={(count) => set({ count })}
         />
-      </Row>
-      <Row icon={GroupIcon} label="Group by">
+      </BuilderRow>
+      <BuilderRow icon={GroupIcon} label="Group by">
         <Choice
           label="Group by"
           hideLabel
@@ -90,8 +90,8 @@ export function ChartBuilder({
           options={GROUPINGS.map((g) => ({ ...g, disabled: !ok.by[g.id] }))}
           onChange={(by) => set({ by })}
         />
-      </Row>
-      <Row icon={LayersIcon} label="Split by">
+      </BuilderRow>
+      <BuilderRow icon={LayersIcon} label="Split by">
         <Choice
           label="Split by"
           hideLabel
@@ -100,9 +100,9 @@ export function ChartBuilder({
           options={SPLITS.map((s) => ({ ...s, disabled: !ok.split[s.id] }))}
           onChange={(split) => set({ split })}
         />
-      </Row>
+      </BuilderRow>
       {draws.length > 1 && (
-        <Row icon={ChartColumnIcon} label="Draw as">
+        <BuilderRow icon={ChartColumnIcon} label="Draw as">
           <Choice
             label="Draw as"
             hideLabel
@@ -115,9 +115,9 @@ export function ChartBuilder({
             }))}
             onChange={(draw) => set({ draw })}
           />
-        </Row>
+        </BuilderRow>
       )}
-      <Row icon={PercentIcon} label="Values">
+      <BuilderRow icon={PercentIcon} label="Values">
         <Choice
           label="Values"
           hideLabel
@@ -132,9 +132,9 @@ export function ChartBuilder({
           )}
           onChange={(values) => set({ values })}
         />
-      </Row>
+      </BuilderRow>
       {ok.order && (
-        <Row icon={ArrowDownWideNarrowIcon} label="Order">
+        <BuilderRow icon={ArrowDownWideNarrowIcon} label="Order">
           <Choice
             label="Order"
             hideLabel
@@ -146,10 +146,10 @@ export function ChartBuilder({
             }))}
             onChange={(order) => set({ order })}
           />
-        </Row>
+        </BuilderRow>
       )}
       {ok.top && (
-        <Row icon={UsersIcon} label="Show">
+        <BuilderRow icon={UsersIcon} label="Show">
           <Choice
             label="Show"
             hideLabel
@@ -161,13 +161,14 @@ export function ChartBuilder({
             }))}
             onChange={(top) => set({ top: Number(top) })}
           />
-        </Row>
+        </BuilderRow>
       )}
     </FieldRows>
   );
 }
 
-function Row({
+/** one setting in the Customize panel: its icon, its name, its control */
+export function BuilderRow({
   icon,
   label,
   children,

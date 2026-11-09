@@ -16,14 +16,10 @@ import {
   searchable,
   type PersonRow,
 } from "~/lib/credits/stats";
-import {
-  ArchiveShell,
-  ToolbarFilters,
-  useTrail,
-  type ViewProps,
-} from "./archive-shell";
+import { ToolbarFilters, useTrail } from "./archive-shell";
 import { counted } from "./chart-slice";
 import { Choice } from "./choice";
+import { ExplorerPage, type TableViewProps } from "./explorer";
 import { formatDate, formatMonth } from "./dates";
 import { isRolling, periodNamed, PRESETS, type FilterState } from "./filters";
 import {
@@ -31,50 +27,48 @@ import {
   OpenRowProvider,
   RowDetails,
   RowOpener,
-  useOpenRow,
 } from "./open-row";
-import { useChoice, useSort } from "./page-state";
+import { useChoice } from "./page-state";
 import { SectionName } from "./section-name";
 import { ShellTableControls } from "./table-controls";
+import { COLUMN_NAMES, type ColumnId } from "./views";
 
 export function PeoplePage() {
-  return (
-    <ArchiveShell searching="people">
-      {(props) => <People {...props} />}
-    </ArchiveShell>
-  );
+  return <ExplorerPage source="people" table={People} />;
 }
 
 /** a number column, right-aligned so the digits line up */
 const count = (
   id: "contributions" | Role,
-  label: string,
   title?: string,
-): ColumnDef<PersonRow, unknown> => ({
-  id,
-  accessorFn: (row) =>
-    id === "contributions" ? row.contributions : row.counts[id],
-  header: ({ column }) => (
-    <div className="flex justify-end" title={title}>
-      {sortable(label, "right")({ column })}
-    </div>
-  ),
-  meta: { csvHeader: label },
-  cell: ({ getValue }) => {
-    const value = getValue() as number;
-    return (
-      <div
-        className={
-          value === 0
-            ? "text-muted-foreground/40 text-right tabular-nums"
-            : "text-right tabular-nums"
-        }
-      >
-        {value}
+): ColumnDef<PersonRow, unknown> => {
+  const label = COLUMN_NAMES[id];
+  return {
+    id,
+    accessorFn: (row) =>
+      id === "contributions" ? row.contributions : row.counts[id],
+    header: ({ column }) => (
+      <div className="flex justify-end" title={title}>
+        {sortable(label, "right")({ column })}
       </div>
-    );
-  },
-});
+    ),
+    meta: { csvHeader: label },
+    cell: ({ getValue }) => {
+      const value = getValue() as number;
+      return (
+        <div
+          className={
+            value === 0
+              ? "text-muted-foreground/40 text-right tabular-nums"
+              : "text-right tabular-nums"
+          }
+        >
+          {value}
+        </div>
+      );
+    },
+  };
+};
 
 const MINIMUMS = ["1", "2", "3", "5", "10"].map((n) => ({
   id: n,
@@ -82,13 +76,15 @@ const MINIMUMS = ["1", "2", "3", "5", "10"].map((n) => ({
 }));
 const MINIMUM_IDS = MINIMUMS.map((m) => m.id);
 
-/* never depend on which row is open, so its name is never redrawn as a new
+/* every column a view of people can show, by its id in ./views. None
+   depends on which row is open, so its name is never redrawn as a new
    button (see open-row.tsx) */
-const COLUMNS: ColumnDef<PersonRow, unknown>[] = [
+const EVERY_COLUMN: ColumnDef<PersonRow, unknown>[] = [
   {
+    id: "name",
     accessorKey: "name",
-    header: sortable("Name"),
-    meta: { csvHeader: "Name" },
+    header: sortable(COLUMN_NAMES.name),
+    meta: { csvHeader: COLUMN_NAMES.name },
     cell: ({ row }) => (
       <RowOpener rowKey={row.original.name}>
         <span className="font-medium">{row.original.name}</span>
@@ -100,18 +96,15 @@ const COLUMNS: ColumnDef<PersonRow, unknown>[] = [
       </RowOpener>
     ),
   },
-  count(
-    "contributions",
-    "Contributions",
-    "One per person, per role, per article",
-  ),
-  count("writer", ROLE_NAMES.writer),
-  count("image", ROLE_NAMES.image),
-  count("other", ROLE_NAMES.other),
+  count("contributions", "One per person, per role, per article"),
+  count("writer"),
+  count("image"),
+  count("other"),
   {
+    id: "first",
     accessorKey: "first",
-    header: sortable("First"),
-    meta: { csvHeader: "First" },
+    header: sortable(COLUMN_NAMES.first),
+    meta: { csvHeader: COLUMN_NAMES.first },
     cell: ({ row }) => (
       <span className="text-muted-foreground whitespace-nowrap">
         {formatMonth(row.original.first)}
@@ -119,9 +112,10 @@ const COLUMNS: ColumnDef<PersonRow, unknown>[] = [
     ),
   },
   {
+    id: "last",
     accessorKey: "last",
-    header: sortable("Latest"),
-    meta: { csvHeader: "Latest" },
+    header: sortable(COLUMN_NAMES.last),
+    meta: { csvHeader: COLUMN_NAMES.last },
     cell: ({ row }) => (
       <span className="text-muted-foreground whitespace-nowrap">
         {formatMonth(row.original.last)}
@@ -162,12 +156,32 @@ function scopeOf({ sections, preset, from, to }: FilterState): string {
   return parts.join(" ");
 }
 
-function People({ archive, filters, filterNote, filterState }: ViewProps) {
+const DEFS = Object.fromEntries(
+  EVERY_COLUMN.map((column) => [column.id, column]),
+) as Record<ColumnId<"people">, ColumnDef<PersonRow, unknown>>;
+
+function People({
+  archive,
+  filters,
+  filterNote,
+  filterState,
+  columns: shown,
+  sorting: held,
+  setSorting,
+  opened: openRow,
+}: TableViewProps) {
   const phone = useIsPhone();
   const [minimum, setMinimum] = useChoice("min", MINIMUM_IDS, "1");
-  const [sorting, setSorting] = useSort(COLUMNS);
-  const openRow = useOpenRow("open", "person");
   const { open } = openRow;
+  const columns = useMemo(
+    () =>
+      shown
+        .filter((id): id is ColumnId<"people"> => id in DEFS)
+        .map((id) => DEFS[id]),
+    [shown],
+  );
+  /* a sort on a column this view does not show is held, for the next */
+  const sorting = held.filter((by) => shown.includes(by.id as ColumnId));
 
   /* the search box here looks for a person or a byline they use */
   const all = useMemo(
@@ -218,7 +232,7 @@ function People({ archive, filters, filterNote, filterState }: ViewProps) {
         {show}
       </ToolbarFilters>
       <DataTable
-        columns={COLUMNS}
+        columns={columns}
         data={rows}
         searchable={false}
         empty="Nobody matches these filters."

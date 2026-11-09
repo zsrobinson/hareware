@@ -1,7 +1,9 @@
 /*
   The archive's default views, as plain data: the question each answers,
-  the table it counts, where its filters start, and how it is drawn. A new
-  default is a declaration added here, and nothing else.
+  the table it counts, where its filters start, and how it is shown. Each
+  table is a page, and its views are its tabs, in this order. A new default
+  is a declaration added here, and nothing else; Copy as view writes one
+  from whatever is on screen (ADR 0014).
 
   The editors' questions are mostly about the last three months; the
   long-run views keep a range where three months would be a sliver.
@@ -10,26 +12,89 @@
 import type { ChartConfig } from "./chart-config";
 import type { FilterState, Preset } from "./filters";
 
-/** how a view shows what it counts */
-export type Layout = { type: "chart"; chart: ChartConfig };
+/** each table's columns, in the order a new view lists them */
+export const COLUMNS = {
+  articles: ["date", "title", "section", "writer", "image", "other"],
+  people: [
+    "name",
+    "contributions",
+    "writer",
+    "image",
+    "other",
+    "first",
+    "last",
+  ],
+} as const;
 
-export type View = {
+/** what a page counts, and so which page a view is on */
+export type Source = keyof typeof COLUMNS;
+
+export type ColumnId<S extends Source = Source> = (typeof COLUMNS)[S][number];
+
+export const COLUMN_NAMES: Record<ColumnId, string> = {
+  date: "Published",
+  title: "Title",
+  section: "Section",
+  writer: "Writing",
+  image: "Image",
+  other: "Other",
+  name: "Name",
+  contributions: "Contributions",
+  first: "First",
+  last: "Latest",
+};
+
+/** a table's sort: one column, either way */
+export type TableSort<S extends Source = Source> = {
+  id: ColumnId<S>;
+  desc: boolean;
+};
+
+export type TableLayout<S extends Source = Source> = {
+  /** which columns, in order */
+  columns: readonly ColumnId<S>[];
+  /** the sort it opens on; a header changes it and leaves the view as it is */
+  sort: TableSort<S>;
+};
+
+/** how a view shows what it counts */
+export type Layout<S extends Source = Source> =
+  | { type: "table"; table: TableLayout<S> }
+  | { type: "chart"; chart: ChartConfig };
+
+type ViewOf<S extends Source> = {
   id: string;
   label: string;
   /** what it answers, shown under it */
   question: string;
   /** what it counts: articles, or the people credited on them */
-  source: "articles" | "people";
+  source: S;
   /** the Time filter it opens on */
-  range: Preset;
+  range: Exclude<Preset, "custom">;
   /** what else it narrows to as it opens; changing them leaves the view as it is */
   filters?: {
     readonly [K in "sections" | "roles" | "people"]?: Readonly<FilterState[K]>;
   };
-  layout: Layout;
+  layout: Layout<S>;
 };
 
+export type View = { [S in Source]: ViewOf<S> }[Source];
+
 export const VIEWS = [
+  {
+    id: "all",
+    label: "All",
+    question: "What have we published, and who made it?",
+    source: "articles",
+    range: "3m",
+    layout: {
+      type: "table",
+      table: {
+        columns: ["date", "title", "section", "writer", "image"],
+        sort: { id: "date", desc: true },
+      },
+    },
+  },
   {
     id: "sections",
     label: "Sections",
@@ -46,6 +111,47 @@ export const VIEWS = [
         values: "number",
         order: "natural",
         top: 25,
+      },
+    },
+  },
+  {
+    id: "history",
+    label: "History",
+    question: "What has the paper published since the archive began?",
+    source: "articles",
+    range: "all",
+    layout: {
+      type: "chart",
+      chart: {
+        count: "articles",
+        by: "semester",
+        split: "section",
+        draw: "stacked",
+        values: "number",
+        order: "largest",
+        top: 25,
+      },
+    },
+  },
+  {
+    id: "everyone",
+    label: "Everyone",
+    question: "Who has contributed, and how much?",
+    source: "people",
+    range: "3m",
+    layout: {
+      type: "table",
+      table: {
+        columns: [
+          "name",
+          "contributions",
+          "writer",
+          "image",
+          "other",
+          "first",
+          "last",
+        ],
+        sort: { id: "contributions", desc: true },
       },
     },
   },
@@ -99,25 +205,6 @@ export const VIEWS = [
         count: "people",
         by: "semester",
         split: "none",
-        draw: "stacked",
-        values: "number",
-        order: "largest",
-        top: 25,
-      },
-    },
-  },
-  {
-    id: "history",
-    label: "History",
-    question: "What has the paper published since the archive began?",
-    source: "articles",
-    range: "all",
-    layout: {
-      type: "chart",
-      chart: {
-        count: "articles",
-        by: "semester",
-        split: "section",
         draw: "stacked",
         values: "number",
         order: "largest",

@@ -1,12 +1,7 @@
 /*
-  What the Charts page draws, kept in the url beside the filters so a link
-  reproduces the chart. A saved view is one of ./views, a configuration and
-  the filters it opens on; Custom is whatever the builder last made, on the
-  filters of the view it was made from. Every view is a configuration the
-  builder can show, so choosing one and then changing a setting starts from
-  exactly what was on screen. The range is only where Time starts: changing
-  it is a filter, and leaves the view as it is. The series the legend has
-  off are kept too, so a link shows what was on screen.
+  What a chart counts and how it is drawn, and what the options mean for one
+  another. A view (./views) declares one as its layout; ./view-state keeps
+  the one on screen in the address.
 */
 
 import type { ArchiveArticle } from "~/lib/credits/archive";
@@ -19,8 +14,6 @@ import {
   type Measure,
   type Order,
 } from "~/lib/credits/stats";
-import { clearedState, type FilterState, type Preset } from "./filters";
-import { VIEWS, type View } from "./views";
 
 export type Split = "none" | "section" | "role";
 export type Draw = "stacked" | "grouped" | "lines";
@@ -65,56 +58,6 @@ export const DRAWS: Draw[] = ["stacked", "grouped", "lines"];
 export const VALUES: Values[] = ["number", "share", "running"];
 export const ORDERS: Order[] = ["largest", "natural"];
 export const TOPS = [10, 25, 50, 0];
-
-export type ViewId = (typeof VIEWS)[number]["id"] | "custom";
-
-export type SavedId = (typeof VIEWS)[number]["id"];
-
-export type ChartState = {
-  view: ViewId;
-  /** null until the builder has been used, so Custom starts from what was on screen */
-  custom: ChartConfig | null;
-  /** the saved view Custom was made from, which Reset goes back to */
-  base: SavedId;
-  /** the series the legend has off */
-  hidden: string[];
-};
-
-const FIRST = VIEWS[0];
-const DEFAULT_CONFIG: ChartConfig = FIRST.layout.chart;
-
-const savedView = (id: SavedId) => VIEWS.find((view) => view.id === id)!;
-const viewOf = (state: Pick<ChartState, "view" | "base">) =>
-  savedView(state.view === "custom" ? state.base : state.view);
-
-export function configOf(state: ChartState): ChartConfig {
-  if (state.view === "custom") return state.custom ?? DEFAULT_CONFIG;
-  return savedView(state.view).layout.chart;
-}
-
-/** what a saved view answers; Custom answers whatever was asked of it */
-export function questionOf(state: Pick<ChartState, "view">): string | null {
-  return state.view === "custom" ? null : savedView(state.view).question;
-}
-
-/** the Time filter the chart opens on, which its link leaves out */
-export function rangeOfView(state: Pick<ChartState, "view" | "base">): Preset {
-  return viewOf(state).range;
-}
-
-/** every filter as the chart's view opens on it */
-export function openingOf(
-  state: Pick<ChartState, "view" | "base">,
-): FilterState {
-  const view: View = viewOf(state);
-  const { sections = [], roles = [], people = [] } = view.filters ?? {};
-  return {
-    ...clearedState(view.range),
-    sections: [...sections],
-    roles: [...roles],
-    people: [...people],
-  };
-}
 
 /**
  * What the options mean for one another, as the builder offers them. An
@@ -207,44 +150,34 @@ const pick = <T extends string>(
   fallback: T,
 ): T => (options.includes(value as T) ? (value as T) : fallback);
 
-const savedId = (id: string | null): SavedId =>
-  VIEWS.find((v) => v.id === id)?.id ?? FIRST.id;
-
-export function readChart(search: string): ChartState {
-  const params = new URLSearchParams(search);
-  const view = params.get("view");
-  const hidden = (params.get("hide") ?? "").split(",").filter(Boolean);
-  /* a view no longer offered (Mix, before Headcount) opens the first */
-  if (view !== "custom")
-    return { view: savedId(view), custom: null, base: savedId(view), hidden };
-  const d = DEFAULT_CONFIG;
+/** a chart a link names, settled; a setting it leaves out is `fallback`'s */
+export function readChart(
+  params: URLSearchParams,
+  fallback: ChartConfig,
+): ChartConfig {
+  const d = fallback;
   const top = Number(params.get("top"));
-  return {
-    view: "custom",
-    base: savedId(params.get("base")),
-    hidden,
-    custom: settle({
-      count: pick(
-        params.get("count"),
-        COUNTS.map((c) => c.id),
-        d.count,
-      ),
-      by: pick(
-        params.get("by"),
-        GROUPINGS.map((g) => g.id),
-        d.by,
-      ),
-      split: pick(
-        params.get("split"),
-        SPLITS.map((s) => s.id),
-        d.split,
-      ),
-      draw: pick(params.get("draw"), DRAWS, d.draw),
-      values: pick(params.get("values"), VALUES, d.values),
-      order: pick(params.get("order"), ORDERS, d.order),
-      top: params.has("top") && TOPS.includes(top) ? top : d.top,
-    }),
-  };
+  return settle({
+    count: pick(
+      params.get("count"),
+      COUNTS.map((c) => c.id),
+      d.count,
+    ),
+    by: pick(
+      params.get("by"),
+      GROUPINGS.map((g) => g.id),
+      d.by,
+    ),
+    split: pick(
+      params.get("split"),
+      SPLITS.map((s) => s.id),
+      d.split,
+    ),
+    draw: pick(params.get("draw"), DRAWS, d.draw),
+    values: pick(params.get("values"), VALUES, d.values),
+    order: pick(params.get("order"), ORDERS, d.order),
+    top: params.has("top") && TOPS.includes(top) ? top : d.top,
+  });
 }
 
 const KEYS = [
@@ -257,16 +190,9 @@ const KEYS = [
   "top",
 ] as const;
 
-/** writes the chart into `params`, leaving the filters' own parameters alone */
-export function writeChart(state: ChartState, params: URLSearchParams) {
-  if (state.view === FIRST.id) params.delete("view");
-  else params.set("view", state.view);
-  const custom = state.view === "custom" ? configOf(state) : null;
+/** writes a chart into `params`, or takes one out (null) */
+export function writeChart(chart: ChartConfig | null, params: URLSearchParams) {
   for (const key of KEYS)
-    if (custom) params.set(key, String(custom[key]));
+    if (chart) params.set(key, String(chart[key]));
     else params.delete(key);
-  if (custom && state.base !== FIRST.id) params.set("base", state.base);
-  else params.delete("base");
-  if (state.hidden.length > 0) params.set("hide", state.hidden.join(","));
-  else params.delete("hide");
 }

@@ -27,7 +27,7 @@ import { useIsPhone } from "~/components/panel";
 import { cn } from "~/lib/utils";
 import { writeState, type FilterState, type Searching } from "./filters";
 
-type OpenRow = {
+export type OpenRow = {
   open: string | null;
   show: (key: string) => void;
   close: () => void;

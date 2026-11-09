@@ -33,6 +33,7 @@ const newest = (a: ArchiveArticle, b: ArchiveArticle) =>
 export function SlicePanel({
   title,
   caption,
+  back,
   measure,
   members,
   filters,
@@ -41,6 +42,8 @@ export function SlicePanel({
 }: {
   title: string;
   caption: string;
+  /** the phone's Back, named for the view the slice is on */
+  back: string;
   measure: Measure;
   members: Member[];
   /** whose contributions count, which says whose names an article's row shows */
@@ -51,7 +54,7 @@ export function SlicePanel({
   return (
     <SidePanel
       title={title}
-      back="Charts"
+      back={back}
       onClose={onClose}
       restoreFocus={restoreFocus}
     >

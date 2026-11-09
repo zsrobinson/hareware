@@ -1,16 +1,29 @@
 ---
-import Dashboard from "~/layouts/dashboard.astro";
-import EarlyFetch from "~/components/early-fetch.astro";
-import { ChartsPage } from "~/components/archive/charts";
-
-/* a static shell: the island asks the gated /api/archive.json for the data,
-   and draws the refusal itself if the answer is no (ADR 0012) */
+/*
+  Charts was a page of its own until each chart moved to the table it
+  counts (ADR 0014). Links to it are in Discord and people's bookmarks, so
+  this static file sends each to its view's new page, with the rest of its
+  query; it costs the Worker nothing.
+*/
 export const prerender = true;
 ---
 
-<Dashboard title="Charts">
-  <EarlyFetch slot="head" early={{ api: "/api/archive.json" }} />
-  <div class="space-y-6">
-    <ChartsPage client:load />
-  </div>
-</Dashboard>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="robots" content="noindex" />
+    <title>HareWare: Charts</title>
+  </head>
+  <body>
+    <p>Charts are on Articles and People now…</p>
+    <script>
+      import { chartsAddress } from "~/components/archive/charts-address";
+
+      window.location.replace(
+        chartsAddress(window.location.search) + window.location.hash,
+      );
+    </script>
+  </body>
+</html>

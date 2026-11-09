@@ -1,18 +1,6 @@
-import {
-  ActivityIcon,
-  ChevronRightIcon,
-  DownloadIcon,
-  HistoryIcon,
-  LinkIcon,
-  NewspaperIcon,
-  SlidersHorizontalIcon,
-  UserPlusIcon,
-  UsersIcon,
-  type LucideIcon,
-} from "lucide-react";
+import { ChevronRightIcon, DownloadIcon } from "lucide-react";
 import {
   useEffect,
-  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -23,9 +11,6 @@ import {
   type PointerEvent,
   type RefObject,
 } from "react";
-import { CopyTextButton } from "~/components/copy-button";
-import { PageActions } from "~/components/page-actions";
-import { PanelGroup, SidePanel, useIsPhone } from "~/components/panel";
 import { Button } from "~/components/ui/button";
 import {
   Collapsible,
@@ -40,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+import { useIsPhone } from "~/components/panel";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
 import {
   applyFilters,
@@ -54,31 +40,14 @@ import {
 import { toCsv } from "~/lib/csv";
 import { saveFile } from "~/lib/save-file";
 import { cn } from "~/lib/utils";
+import type { ViewProps } from "./archive-shell";
 import {
-  AboveToolbar,
-  ArchiveShell,
-  SearchRowEnd,
-  SheetGroup,
-  ToolbarEnd,
-  type ViewProps,
-} from "./archive-shell";
-import { ChartBuilder } from "./chart-builder";
-import {
-  configOf,
   COUNTS,
   GROUPINGS,
   groupOf,
-  openingOf,
-  questionOf,
-  rangeOfView,
-  readChart,
   SPLITS,
-  writeChart,
   type ChartConfig,
-  type ChartState,
-  type ViewId,
 } from "./chart-config";
-import { VIEWS } from "./views";
 import {
   chartCount,
   columnSeries,
@@ -91,39 +60,8 @@ import {
   type Slice,
 } from "./chart-slice";
 import { NEUTRAL, seriesColor } from "./colors";
-import { carryOver } from "./filters";
-import { RowDetails, useOpenRow } from "./open-row";
-import { useInAddress } from "./page-state";
+import { RowDetails, type OpenRow } from "./open-row";
 import { SlicePanel } from "./slice-panel";
-
-/* the shell's Time filter starts from the view's range, so the view is kept
-   here, over the shell, rather than in the chart */
-export function ChartsPage() {
-  const [chart, setChart] = useInAddress(readChart, writeChart);
-  const { by } = configOf(chart);
-  return (
-    <ArchiveShell
-      defaultPreset={rangeOfView(chart)}
-      period={isPeriod(by) ? by : undefined}
-    >
-      {(props) => <Charts {...props} chart={chart} setChart={setChart} />}
-    </ArchiveShell>
-  );
-}
-
-const ICONS: Record<ViewId, LucideIcon> = {
-  sections: NewspaperIcon,
-  contributors: UsersIcon,
-  newcomers: UserPlusIcon,
-  headcount: ActivityIcon,
-  history: HistoryIcon,
-  custom: SlidersHorizontalIcon,
-};
-
-const TABS: { id: ViewId; label: string }[] = [
-  ...VIEWS,
-  { id: "custom", label: "Custom" },
-];
 
 /** what a chart counts, as its one series and its table's column are named */
 const measureName = (measure: Measure) =>
@@ -176,60 +114,39 @@ function partialKeys(
   return partial;
 }
 
-function Charts({
+export type ChartViewProps = ViewProps & {
+  config: ChartConfig;
+  /** what the view answers, under the chart's title */
+  question: string | null;
+  /** the series the legend has off */
+  hidden: string[];
+  setHidden: (hidden: string[]) => void;
+  /** the slice open beside the chart, kept in the address as `?slice=` */
+  opened: OpenRow;
+  /** what a phone's Back from a slice says: the view it is on */
+  back: string;
+};
+
+/** a chart, the numbers it is drawn from, and what any of them counts */
+export function ChartView({
   archive,
   filters,
   filterNote,
-  filterState,
-  setFilterState,
-  chart: state,
-  setChart: setState,
-}: ViewProps & {
-  chart: ChartState;
-  setChart: (state: ChartState) => void;
-}) {
-  const config = configOf(state);
-  const question = questionOf(state);
-  const { hidden } = state;
-  const setHidden = (next: string[]) => setState({ ...state, hidden: next });
-  const [customizing, setCustomizing] = useState(false);
-  const phone = useIsPhone();
-  /* the slice open beside the chart, kept in the address as `?slice=` */
-  const opened = useOpenRow("slice");
-
-  /* another chart's series are other things, so all of them start on */
-  const show = (next: Omit<ChartState, "hidden">) =>
-    setState({ ...next, hidden: [] });
-  /* changing a saved view makes a custom one from it; the saved one stays */
-  const change = (next: ChartConfig) =>
-    show({
-      view: "custom",
-      custom: next,
-      base: state.view === "custom" ? state.base : state.view,
-    });
-  /* Custom starts from what was on screen until the builder has made one.
-     a view brings its own filters (`carryOver`) */
-  const choose = (view: ViewId) => {
-    if (view === state.view) return;
-    /* another view's marks count other things, whatever their keys */
-    opened.close();
-    const next =
-      view === "custom" && !state.custom && state.view !== "custom"
-        ? { view, custom: config, base: state.view }
-        : { view, custom: state.custom, base: state.base };
-    show(next);
-    setFilterState(carryOver(filterState, openingOf(state), openingOf(next)));
-  };
-
+  config,
+  question,
+  hidden,
+  setHidden,
+  opened,
+  back,
+}: ChartViewProps) {
   const shown = useMemo(
     () => applyFilters(archive.articles, filters),
     [archive, filters],
   );
   const { grouped, partial } = useMemo(() => {
-    const config = configOf(state);
     const grouped = groupOf(config, shown, filters, archive.articles);
     return { grouped, partial: partialKeys(grouped, config.by, filters) };
-  }, [shown, state, filters, archive]);
+  }, [shown, config, filters, archive]);
   /* the one section the filters leave, whose colour one series takes */
   const section =
     filters.sections.length === 1 ? filters.sections[0] : undefined;
@@ -244,125 +161,18 @@ function Charts({
   useEffect(() => {
     if (missing) opened.close();
   });
-  /* one side panel at a time: a list opened over Customize gives it back on
-     closing, which takes focus as Customize does when its button opens it */
-  const customizeButton = useRef<HTMLButtonElement>(null);
-  const reopen = useRef(false);
-  const sliceOpen = slice !== null;
-  useEffect(() => {
-    if (sliceOpen || !reopen.current) return;
-    reopen.current = false;
-    customizeButton.current?.focus({ preventScroll: true });
-    setCustomizing(true);
-  }, [sliceOpen]);
   const openSlice = (next: Slice, from: "chart" | "table") => {
     /* the table has every series, so the chart shows them all to match it */
     const drawn = from === "table" ? [] : hidden;
     /* an empty period has nothing to list */
     if (sliceMembers(grouped, next, drawn).length === 0) return;
-    if (customizing) reopen.current = true;
     setHidden(drawn);
-    setCustomizing(false);
     opened.show(sliceKey(next));
   };
-  const customize = (open: boolean) => {
-    reopen.current = false;
-    if (open) opened.close();
-    setCustomizing(open);
-  };
-
-  const builder = <ChartBuilder config={config} onChange={change} />;
-  const panelId = useId();
-  /* the address holds the whole chart, which a button says out loud */
-  const copyLink = (
-    <CopyTextButton
-      text={() => window.location.href}
-      label="Copy link"
-      what="the link to this chart"
-      icon={LinkIcon}
-      failed="Copy it from the address bar."
-    />
-  );
 
   return (
     <div className="space-y-4">
-      {/* in the title row, as a table's Download CSV is */}
-      <PageActions>
-        <span className="contents max-md:hidden">{copyLink}</span>
-      </PageActions>
-      {phone && (
-        <SearchRowEnd>
-          <CopyTextButton
-            text={() => window.location.href}
-            label="Copy link"
-            what="the link to this chart"
-            icon={LinkIcon}
-            failed="Copy it from the address bar."
-            iconOnly
-          />
-        </SearchRowEnd>
-      )}
-      {!phone && (
-        <ToolbarEnd>
-          <Button
-            ref={customizeButton}
-            variant="outline"
-            aria-expanded={customizing}
-            className={cn(customizing && "bg-muted")}
-            onClick={() => customize(!customizing)}
-          >
-            Customize
-          </Button>
-        </ToolbarEnd>
-      )}
-      {!phone && customizing && (
-        <SidePanel
-          title="Customize"
-          back="Charts"
-          onClose={() => setCustomizing(false)}
-          actions={
-            <Button
-              variant="ghost"
-              disabled={state.view !== "custom"}
-              onClick={(event) => {
-                /* Reset turns itself off, which would drop focus to the page */
-                event.currentTarget
-                  .closest("aside")
-                  ?.querySelector<HTMLElement>("h2")
-                  ?.focus();
-                show({ view: state.base, custom: null, base: state.base });
-              }}
-            >
-              Reset
-            </Button>
-          }
-        >
-          {builder}
-        </SidePanel>
-      )}
-      {phone && (
-        <SheetGroup
-          onReset={
-            state.view === "custom"
-              ? () => show({ view: state.base, custom: null, base: state.base })
-              : undefined
-          }
-        >
-          <PanelGroup label="Chart">{builder}</PanelGroup>
-        </SheetGroup>
-      )}
-
-      {/* which chart outranks how it is cut, so the views come first */}
-      <AboveToolbar>
-        <ViewTabs
-          view={state.view}
-          panelId={panelId}
-          onChoose={choose}
-          onClickCustom={() => !phone && customize(true)}
-        />
-      </AboveToolbar>
-
-      <figure id={panelId} role="tabpanel" className="space-y-4">
+      <figure className="space-y-4">
         <figcaption className="space-y-0.5">
           <div className="font-medium">{titleOf(plot)}</div>
           {question && (
@@ -426,6 +236,7 @@ function Charts({
           <SlicePanel
             key={sliceKey(slice)}
             {...sliceText(plot, slice, filterNote)}
+            back={back}
             measure={grouped.measure}
             members={plot.members(slice)}
             filters={filters}
@@ -474,121 +285,6 @@ function sliceText(plot: Plot, slice: Slice, filterNote: string) {
       .filter(Boolean)
       .join(" · "),
   };
-}
-
-function ViewTabs({
-  view,
-  panelId,
-  onChoose,
-  onClickCustom,
-}: {
-  view: ViewId;
-  panelId: string;
-  onChoose: (view: ViewId) => void;
-  /** a click on Custom opens the builder; arriving by arrow key does not,
-      or the panel would take focus from the tabs */
-  onClickCustom: () => void;
-}) {
-  const list = useRef<HTMLDivElement>(null);
-  /* which ends have views scrolled past them, faded to say so */
-  const [past, setPast] = useState({ start: false, end: false });
-
-  /* a phone scrolls the views sideways, and a link may open on one past the
-     edge. Only the strip moves: scrollIntoView would also move where the
-     page's first Tab starts from */
-  useEffect(() => {
-    const strip = list.current;
-    const tab = strip?.querySelector<HTMLElement>('[aria-selected="true"]');
-    if (!strip || !tab) return;
-    const left = tab.offsetLeft;
-    const right = left + tab.offsetWidth;
-    if (left < strip.scrollLeft) strip.scrollLeft = left;
-    else if (right > strip.scrollLeft + strip.clientWidth)
-      strip.scrollLeft = right - strip.clientWidth;
-  }, [view]);
-
-  useEffect(() => {
-    const strip = list.current;
-    if (!strip) return;
-    const measure = () =>
-      setPast({
-        start: strip.scrollLeft > 1,
-        end: strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1,
-      });
-    measure();
-    strip.addEventListener("scroll", measure, { passive: true });
-    const observer = new ResizeObserver(measure);
-    observer.observe(strip);
-    return () => {
-      strip.removeEventListener("scroll", measure);
-      observer.disconnect();
-    };
-  }, []);
-  const fade =
-    past.start || past.end
-      ? `linear-gradient(to right, ${past.start ? "transparent" : "#000"}, #000 2rem, #000 calc(100% - 2rem), ${past.end ? "transparent" : "#000"})`
-      : undefined;
-
-  return (
-    /* a container, so the icons go before the labels are cut off */
-    <div className="@container">
-      <div
-        ref={list}
-        role="tablist"
-        aria-label="Chart views"
-        /* a mouse wraps the views onto another row where they do not fit,
-           so none is out of reach without a scrollbar; a touch screen
-           swipes them, faded at the end that has more. The rule under each
-           row is a background, not a border: tabs pulled over a border made
-           the strip scroll down by a pixel */
-        className="relative flex [scrollbar-width:none] flex-wrap gap-x-1 overflow-x-auto overflow-y-hidden bg-[repeating-linear-gradient(to_bottom,transparent_0_39px,var(--color-border)_39px_40px)] pointer-coarse:flex-nowrap"
-        style={{ maskImage: fade }}
-        onKeyDown={(event) => {
-          /* the tabs pattern: arrows move between the views, and choose */
-          const step =
-            event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-          if (!step) return;
-          event.preventDefault();
-          const at = TABS.findIndex((tab) => tab.id === view);
-          const next = TABS[(at + step + TABS.length) % TABS.length]!;
-          onChoose(next.id);
-          list.current
-            ?.querySelector<HTMLElement>(`[data-view="${next.id}"]`)
-            ?.focus();
-        }}
-      >
-        {TABS.map((tab) => {
-          const selected = view === tab.id;
-          const Icon = ICONS[tab.id];
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              data-view={tab.id}
-              aria-selected={selected}
-              aria-controls={panelId}
-              tabIndex={selected ? 0 : -1}
-              onClick={() => {
-                onChoose(tab.id);
-                if (tab.id === "custom") onClickCustom();
-              }}
-              className={cn(
-                /* the chosen view is underlined, so a hovered tab never looks chosen */
-                "focus-visible:ring-ring/50 flex h-10 shrink-0 items-center gap-1.5 rounded-t-md border-b-2 px-2.5 text-sm whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-inset @2xl:px-3 [&_svg]:size-4 [&_svg]:shrink-0 @max-2xl:[&_svg]:hidden",
-                selected
-                  ? "border-foreground text-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground border-transparent",
-              )}
-            >
-              <Icon aria-hidden />
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 type Series = { key: string; label: string };

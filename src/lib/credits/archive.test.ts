@@ -442,6 +442,34 @@ test("counts every word of a nested list once, and keeps blocks apart", () => {
   expect(words("<p>wo<em>r</em>d</p>")).toBe(1);
 });
 
+/* a caption is often a paragraph: the classic editor's always is */
+test("leaves out captions and embeds, even the paragraphs inside them", () => {
+  const words = (html: string) =>
+    build([fromHtml(1, `<p>Two words</p>${html}`)]).articles[0]!.words;
+
+  expect(
+    words(
+      `<div class="wp-caption"><img src="x"><p class="wp-caption-text">A photo caption</p></div>`,
+    ),
+  ).toBe(2);
+  expect(words(`<p class="wp-caption-text">A caption on its own</p>`)).toBe(2);
+  expect(
+    words(
+      `<figure class="wp-block-image"><img src="x"><figcaption><p>A paragraph caption</p></figcaption></figure>`,
+    ),
+  ).toBe(2);
+  expect(
+    words(
+      `<figure class="wp-block-embed"><div class="wp-block-embed__wrapper"><p>Embedded words here</p></div></figure>`,
+    ),
+  ).toBe(2);
+  expect(
+    words(
+      `<div class="wp-block-embed"><blockquote><p>A quoted tweet</p></blockquote></div>`,
+    ),
+  ).toBe(2);
+});
+
 test("a credit line counts as prose until a label makes it one", () => {
   const html = `<p>Article by: Penn Name</p><p>Squirrel wrangling: Sam Squirrel</p><p>Five words of real prose.</p>`;
   const words = (labels = DEFAULT_LABELS) =>

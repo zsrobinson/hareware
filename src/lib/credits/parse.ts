@@ -93,13 +93,32 @@ export function paragraphs(html: string): string[] {
 const PROSE = new Set(["P", "H2", "H3", "LI"]);
 /* where one run of text ends and the next begins; any other element is
    inline, and "wo<em>r</em>d" is one word */
+/* not the article's prose, whatever paragraphs they hold: captions, the
+   classic editor's and the block editor's, and what a figure frames (an
+   image, a pull quote repeating the text, a table) or an embed shows */
+const NOT_PROSE = [
+  "figure",
+  "figcaption",
+  ".wp-caption",
+  ".wp-caption-text",
+  ".wp-block-embed",
+  "iframe",
+  "object",
+  "video",
+  "audio",
+  "svg",
+  "script",
+  "style",
+  "noscript",
+  "template",
+].join(", ");
 const BLOCK =
   /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DD|DIV|DL|DT|FIGCAPTION|FIGURE|FOOTER|H[1-6]|HEADER|HR|LI|OL|P|PRE|SECTION|TABLE|TBODY|TD|TH|THEAD|TR|UL)$/;
 
 /**
  * the words of a post's prose: the text of its paragraphs, subheadings and
  * list items, each run of text ending where a block does, and a block inside
- * another counted once. Credit lines are counted here, since which lines are
+ * another counted once. Captions and embeds are not prose, even in a `<p>`. Credit lines are counted here, since which lines are
  * credits depends on the labels: `creditParagraphs()` is what to take off.
  * In the browser, with its own parser (~/lib/services/wordpress/parse-document)
  */
@@ -120,6 +139,7 @@ export function bodyWords(html: string): number {
         continue;
       }
       if (child.nodeType !== child.ELEMENT_NODE) continue;
+      if ((child as Element).matches(NOT_PROSE)) continue;
       const tag = (child as Element).tagName.toUpperCase();
       if (tag === "BR") {
         run += " ";

@@ -1751,6 +1751,19 @@ function fitted(label: string, room: number) {
   return "…";
 }
 
+/** a name in up to two lines of `room`, broken between words, and cut
+    only where two lines are not enough */
+function wrapped(label: string, room: number): string[] {
+  if (textWidth(label) <= room) return [label];
+  const words = label.split(" ");
+  for (let n = words.length - 1; n > 0; n--) {
+    const first = words.slice(0, n).join(" ");
+    if (textWidth(first) <= room)
+      return [first, fitted(words.slice(n).join(" "), room)];
+  }
+  return [fitted(label, room)];
+}
+
 function BarChart({
   plot,
   selected,
@@ -1765,16 +1778,23 @@ function BarChart({
   const { categories, series, config } = plot;
   const sideBySide = config.draw === "grouped" && series.length > 1;
   const { max, ticks } = scaleOf(plot);
-  const row = sideBySide ? Math.max(26, series.length * 8 + 12) : 26;
   /* a stack of shares is always 100: the value at its end says nothing */
   const ends = !sideBySide && !(plot.share && config.split !== "none");
-  const labelW = Math.min(180, width * 0.36);
+  /* names are what a reader looks for: on a phone they take nearly half */
+  const labelW = Math.min(180, width * 0.45);
+  /* each name in two lines before it is cut, never drawn past the chart's edge */
+  const labels = categories.map((c) => wrapped(c.label, labelW - 14));
+  const twoLines = labels.some((lines) => lines.length > 1);
+  const row = Math.max(
+    sideBySide ? series.length * 8 + 12 : 0,
+    twoLines ? 38 : 26,
+  );
+  /* a stacked bar, in the middle of its row */
+  const barTop = (row - 16) / 2;
   const plotW = Math.max(60, width - labelW - (ends ? 48 : 20));
   const plotH = categories.length * row;
   const height = plotH + 22;
   const x = (v: number) => labelW + (v / max) * plotW;
-  /* each name cut to the label column, never drawn past the chart's edge */
-  const labels = categories.map((c) => fitted(c.label, labelW - 14));
   const endText = (key: string, sum: number) =>
     plot.share ? percentText(sum) : plot.figure(key, null, plot.total(key));
 
@@ -1802,7 +1822,7 @@ function BarChart({
         ];
       });
     }
-    const top = index * row + 5;
+    const top = index * row + barTop;
     const present = series.filter((_, i) => values[i]! > 0);
     let base = 0;
     return present.map((s, i) => {
@@ -1906,17 +1926,29 @@ function BarChart({
           return (
             <g key={category.key} pointerEvents="none">
               <text
-                x={labelW - 10}
                 y={index * row + row / 2}
-                dy="0.32em"
                 textAnchor="end"
                 className={cn(
                   "fill-foreground text-sm",
                   (active === index || chosen === index) && "font-medium",
                 )}
               >
-                {labels[index]}
-                {labels[index] !== category.label && (
+                {labels[index]!.map((line, at) => (
+                  <tspan
+                    key={at}
+                    x={labelW - 10}
+                    dy={
+                      at > 0
+                        ? "1.1em"
+                        : labels[index]!.length > 1
+                          ? "-0.23em"
+                          : "0.32em"
+                    }
+                  >
+                    {line}
+                  </tspan>
+                ))}
+                {labels[index]!.join(" ") !== category.label && (
                   <title>{category.label}</title>
                 )}
               </text>

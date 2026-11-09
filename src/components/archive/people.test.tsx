@@ -158,3 +158,24 @@ test("a phone's table keeps what it is sorted by, a date under each name", async
     "Sam SampleFirst Mar 1, 2026",
   );
 });
+
+test("a chart's long name breaks onto a second line before it is cut", async () => {
+  stubArchive({
+    posts: [
+      {
+        id: 1,
+        title: "An invented headline",
+        publishedAt: "2026-03-01T16:00:00Z",
+        paragraphs: ["Article by: Maximiliana Invented-Placeholder"],
+      },
+    ],
+  });
+  window.history.replaceState(null, "", "/people?view=top&range=all");
+  render(<PeoplePage />);
+  await screen.findByText("Who did the most, and as what");
+  const chart = document.querySelector("svg[role=group]")!;
+  const lines = [...chart.querySelectorAll("tspan")].map((t) => t.textContent);
+  expect(lines).toEqual(["Maximiliana", "Invented-Placeholder"]);
+  /* whole, so nothing in it needs a tooltip to read */
+  expect(chart.querySelector("title")).toBeNull();
+});

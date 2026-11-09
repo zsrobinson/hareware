@@ -25,6 +25,9 @@ export type Filters = {
   /** names, exactly: only these people's own contributions count. Empty
       means everyone */
   people: string[];
+  /** post ids, exactly: only these articles count, as a chart's mark picked
+      them. Absent or empty means every article */
+  articles?: readonly number[];
   /** a substring of a title or a credit line as printed */
   search?: string;
 };
@@ -97,7 +100,9 @@ export function applyFilters(
     ? searchable(filters.search.trim())
     : "";
 
+  const picked = filters.articles?.length ? new Set(filters.articles) : null;
   return articles.filter((article) => {
+    if (picked && !picked.has(article.id)) return false;
     const date = easternDate(article.publishedAt);
     if (filters.from && date < filters.from) return false;
     if (filters.to && date > filters.to) return false;

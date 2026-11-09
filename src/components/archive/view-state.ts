@@ -392,6 +392,8 @@ export function declarationOf(
     );
   if (filters.search.trim())
     left.push(`the search for “${filters.search.trim()}”`);
+  if (filters.articles.length > 0)
+    left.push(`the ${filters.articles.length} articles a chart's mark chose`);
   return {
     view: {
       id: custom ? "new-view" : view.id,

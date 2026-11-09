@@ -58,11 +58,14 @@ link names each only where it is not the view's own.
 
 **Selections become filters, and filters travel.** What a chart's mark counts
 can be opened on either table as ordinary filters: a period is the part of it
-the range covers, a section, role or person is that filter, and the people a
-mark counts by name when nothing else says who they are (new people, or what a
-search found). Every link between archive pages carries the filters on screen
-and names the range, since each page opens on its own; a search goes only
-where it looks at the same thing.
+the range covers, and a section, role or person is that filter. Where newness
+or a search picked what it counts, which People cannot read (its search is of
+names), the mark's articles go by post id (`?articles=`), an exact filter with
+a chip of its own, beside the new people's names. Past 250 ids the link names
+the people instead, and the list says it opens on their whole record. Every
+link between archive pages carries the filters on screen and names the range
+as the page counted it, since each page opens on its own and rounds its own; a
+search goes only where it looks at the same thing.
 
 **An open panel is `?open=`, apart from the `people` filter.** `?people=Ada`
 counts Ada alone; `?open=Ada` opens her panel and counts everyone. Links from

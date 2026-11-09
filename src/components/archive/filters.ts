@@ -48,6 +48,8 @@ export type FilterState = {
   roles: Role[];
   /** exact names, whose own contributions alone count */
   people: string[];
+  /** post ids, exactly, as a chart's mark picked them; empty for every article */
+  articles: number[];
   search: string;
 };
 
@@ -57,6 +59,7 @@ export const clearedState = (preset: Preset): FilterState => ({
   sections: [],
   roles: [],
   people: [],
+  articles: [],
   search: "",
 });
 
@@ -70,7 +73,9 @@ export function carryOver(
   from: FilterState,
   to: FilterState,
 ): FilterState {
-  const kept = <T>(key: "preset" | "sections" | "roles" | "people"): T =>
+  const kept = <T>(
+    key: "preset" | "sections" | "roles" | "people" | "articles",
+  ): T =>
     (JSON.stringify(now[key]) === JSON.stringify(from[key])
       ? to[key]
       : now[key]) as T;
@@ -80,6 +85,7 @@ export function carryOver(
     sections: kept("sections"),
     roles: kept("roles"),
     people: kept("people"),
+    articles: kept("articles"),
   };
 }
 
@@ -202,6 +208,7 @@ export function toFilters(state: FilterState, period?: Period): Filters {
     sections: state.sections,
     roles: state.roles,
     people: state.people,
+    articles: state.articles,
     search: state.search,
   };
 }
@@ -242,6 +249,9 @@ export function readState(
     people: params.has("people")
       ? params.getAll("people").filter(Boolean)
       : [...own.people],
+    articles: list(params.get("articles"))
+      .map(Number)
+      .filter((id) => Number.isInteger(id) && id > 0),
     search: params.get("q") ?? "",
   };
 }
@@ -280,5 +290,6 @@ export function writeState(
   if (!sameList(state.people, own?.people ?? []))
     if (state.people.length === 0) params.set("people", "");
     else for (const name of state.people) params.append("people", name);
+  set("articles", state.articles.join(","));
   set("q", state.search);
 }

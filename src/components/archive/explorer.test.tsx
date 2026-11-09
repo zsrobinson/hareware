@@ -371,3 +371,21 @@ test("a link from a chart rounded to semesters takes the range as it counted it"
     vi.useRealTimers();
   }
 });
+
+test("articles a mark chose are a filter of their own, which a chip takes off", async () => {
+  window.history.replaceState(null, "", "/articles?articles=1,3");
+  const user = userEvent.setup();
+  render(<ArticlesPage />);
+  expect((await screen.findByText(/^2 articles/)).textContent).toContain(
+    "2 chosen articles",
+  );
+  await user.click(
+    screen.getByRole("button", { name: /^2 chosen articles, remove/ }),
+  );
+  expect((await screen.findByText(/^3 articles/)).textContent).not.toContain(
+    "chosen",
+  );
+  expect(new URLSearchParams(window.location.search).has("articles")).toBe(
+    false,
+  );
+});

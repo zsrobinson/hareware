@@ -233,6 +233,9 @@ function customRange({ from, to }: FilterState): string {
   return "Custom range";
 }
 
+const chosenArticles = (ids: readonly number[]) =>
+  `${ids.length} chosen ${ids.length === 1 ? "article" : "articles"}`;
+
 /** the filters that are set, in words, for a view's caption */
 export function describeFilters(
   state: FilterState,
@@ -265,6 +268,7 @@ export function describeFilters(
         ? state.people.join(" and ")
         : `${state.people.length} people`,
     );
+  if (state.articles.length > 0) parts.push(chosenArticles(state.articles));
   if (state.search.trim())
     parts.push(`“${state.search.trim()}” ${SEARCHES[searching].note}`);
   return parts.filter(Boolean).join(" · ");
@@ -698,9 +702,27 @@ function PeopleFilter({
       .slice(0, SUGGESTED);
   }, [archive, typed, state.people]);
 
-  if (state.people.length === 0 && suggested.length === 0) return null;
+  if (
+    state.people.length === 0 &&
+    state.articles.length === 0 &&
+    suggested.length === 0
+  )
+    return null;
   return (
     <div role="group" aria-label="People" className="flex flex-wrap gap-2">
+      {state.articles.length > 0 && (
+        <Button
+          variant="secondary"
+          size="sm"
+          title="Count every article, not only those a chart's mark picked"
+          onClick={() => setState({ ...state, articles: [] })}
+        >
+          <NewspaperIcon />
+          {chosenArticles(state.articles)}
+          <XIcon aria-hidden />
+          <span className="sr-only">, remove</span>
+        </Button>
+      )}
       {state.people.map((name) => (
         <Button
           key={name}
@@ -879,8 +901,14 @@ function FilterBar({
   );
 
   if (phone) {
-    /* the search and the people are outside the sheet, so its Reset leaves them */
-    const cleared = { ...clear, search: state.search, people: state.people };
+    /* the search, the people and the chosen articles are outside the sheet, so
+       its Reset leaves them */
+    const cleared = {
+      ...clear,
+      search: state.search,
+      people: state.people,
+      articles: state.articles,
+    };
     const reset = () => {
       setState(cleared);
       for (const each of resets) each();

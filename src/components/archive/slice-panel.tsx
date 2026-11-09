@@ -97,6 +97,12 @@ function SeeIn({ seeing }: { seeing: SliceFilters }) {
         <UsersIcon />
         See the people
       </a>
+      {seeing.broader && (
+        <p className="text-muted-foreground w-full text-xs">
+          Too many articles to name in a link, so these open on the people's
+          whole record in these filters, not on these articles alone.
+        </p>
+      )}
     </div>
   );
 }

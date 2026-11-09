@@ -7,6 +7,7 @@ import {
   isCounted,
   isPeriod,
   NO_FILTERS,
+  people,
   periodOf,
   type Dimension,
   type Filters,
@@ -33,6 +34,7 @@ import {
   drawnMembers,
   readSlice,
   sliceCount,
+  MOST_ARTICLES,
   sliceFilters,
   sliceKey,
   sliceMembers,
@@ -476,6 +478,16 @@ function listed(state: FilterState) {
   };
 }
 
+/* who People lists on these filters, and what it counts of each */
+function onPeople(state: FilterState, articles = archive) {
+  const filters = toFilters(state);
+  return people(
+    applyFilters(articles, { ...filters, search: undefined }),
+    filters,
+    articles,
+  );
+}
+
 test("every mark, as filters, lists on a table exactly what it counts", () => {
   const state = clearedState("all");
   const filters = toFilters(state);
@@ -513,11 +525,15 @@ test("every mark, as filters, lists on a table exactly what it counts", () => {
             JSON.stringify(a) === JSON.stringify(b);
           let ok: boolean;
           if (grouped.measure === "newcomers")
-            /* new people are named, so only they are on People */
-            ok = same(
-              [...seeing.people.people].sort(),
-              [...new Set(units.map((u) => u.person!))].sort(),
-            );
+            /* new people are their first articles, with them named */
+            ok =
+              same(listed(seeing.articles).articles, ids(units)) &&
+              same(
+                onPeople(seeing.people)
+                  .map((row) => row.name)
+                  .sort(),
+                [...new Set(units.map((u) => u.person!))].sort(),
+              );
           else {
             const table = listed(seeing.articles);
             ok =
@@ -528,12 +544,16 @@ test("every mark, as filters, lists on a table exactly what it counts", () => {
                 ids(units),
               ) &&
               (grouped.measure === "articles" ||
-                same(
-                  table.contributions,
-                  units
-                    .map((u) => `${u.article.id} ${u.role} ${u.person}`)
-                    .sort(),
-                ));
+                (onPeople(seeing.people).reduce(
+                  (n, row) => n + row.contributions,
+                  0,
+                ) === units.length &&
+                  same(
+                    table.contributions,
+                    units
+                      .map((u) => `${u.article.id} ${u.role} ${u.person}`)
+                      .sort(),
+                  )));
           }
           if (!ok)
             wrong.push(
@@ -596,14 +616,56 @@ test("a period as filters is the part of it the range covers, and a running tota
   });
 });
 
-test("a search goes to People as the people it found, whose own search is of names", () => {
-  const config = chartOf("sections");
-  const state = { ...clearedState("all"), search: "headline 9" };
+/* a contributions chart by section, searched for one title */
+function searched(articles: ArchiveArticle[], search: string) {
+  const config = { ...chartOf("sections"), count: "contributions" as const };
+  const state = { ...clearedState("all"), search };
+  const filters = toFilters(state);
   const grouped = groupOf(
     config,
-    applyFilters(archive, toFilters(state)),
-    toFilters(state),
-    archive,
+    applyFilters(articles, filters),
+    filters,
+    articles,
+  );
+  const slice = { category: "News", series: null };
+  const members = sliceMembers(grouped, slice, []);
+  return {
+    members,
+    seeing: sliceFilters(grouped, config, slice, members, [], state),
+  };
+}
+
+test("a search goes to People as the articles it found, whose own search is of names", () => {
+  const articles = [
+    post(1, "2026-10-01", "News", [credit("writer", ["Ada Example"])]),
+    post(2, "2026-10-02", "News", [credit("writer", ["Ada Example"])]),
+  ];
+  const { members, seeing } = searched(articles, "headline 1");
+  expect(members).toHaveLength(1);
+  expect(seeing.articles.search).toBe("headline 1");
+  expect(seeing.people).toMatchObject({ search: "", articles: [1] });
+  /* Ada wrote both; the search counted one */
+  expect(
+    onPeople(seeing.people, articles).map((row) => [
+      row.name,
+      row.contributions,
+    ]),
+  ).toEqual([["Ada Example", 1]]);
+});
+
+test("an article found with nobody credited on it is nobody on People", () => {
+  const articles = [
+    post(1, "2026-10-01", "News", []),
+    post(2, "2026-10-02", "News", [credit("writer", ["Ada Example"])]),
+  ];
+  const config = chartOf("sections");
+  const state = { ...clearedState("all"), search: "headline 1" };
+  const filters = toFilters(state);
+  const grouped = groupOf(
+    config,
+    applyFilters(articles, filters),
+    filters,
+    articles,
   );
   const slice = { category: "News", series: null };
   const seeing = sliceFilters(
@@ -614,9 +676,18 @@ test("a search goes to People as the people it found, whose own search is of nam
     [],
     state,
   );
-  expect(seeing.articles.search).toBe("headline 9");
+  expect(onPeople(seeing.people, articles)).toEqual([]);
+});
+
+test("too many articles for a link open on the people's whole record, and say so", () => {
+  const articles = Array.from({ length: MOST_ARTICLES + 1 }, (_, i) =>
+    post(i + 1, "2026-10-01", "News", [credit("writer", ["Ada Example"])]),
+  );
+  const { seeing } = searched(articles, "headline");
+  expect(seeing.broader).toBe(true);
   expect(seeing.people).toMatchObject({
-    search: "",
-    people: ["Ada Example", "Mo Newname"],
+    people: ["Ada Example"],
+    articles: [],
   });
+  expect(searched(articles.slice(1), "headline").seeing.broader).toBe(false);
 });

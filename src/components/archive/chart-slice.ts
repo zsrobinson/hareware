@@ -163,15 +163,27 @@ export function sliceCount(
 }
 
 /** a slice as filters, for each table to list it */
-export type SliceFilters = { articles: FilterState; people: FilterState };
+export type SliceFilters = {
+  articles: FilterState;
+  people: FilterState;
+  /** too many articles to name in a link: the tables have more than the mark */
+  broader: boolean;
+};
+
+/** the most post ids a link names, about two kilobytes of address */
+export const MOST_ARTICLES = 250;
 
 /**
  * What a slice counts, as the filters a table would need to list it: a
  * period is the part of it the range covers, and a section, role or person
  * is that filter, so the table counts what the mark did (Articles lists an
- * article nobody is credited on too, which no count of people has). New people are not
- * a filter, so they are named in the people filter; and so, for People, is
- * everyone a search found, since People's own search looks at names.
+ * article nobody is credited on too, which no count of people has).
+ *
+ * New people are not a filter, and People's search is of names, not of what
+ * an article prints. So where either picked what the mark counts, the tables
+ * are given its articles by post id: their first articles, with the people,
+ * for new people; the articles found, for a search. Past `MOST_ARTICLES`
+ * they are given the people by name, and `broader` says so.
  */
 export function sliceFilters(
   grouped: Grouped,
@@ -211,25 +223,39 @@ export function sliceFilters(
     if (keys.length < grouped.series.length) narrow(config.split, keys);
   }
 
+  const units = members.flatMap((m) => m.units);
+  const ids = [...new Set(units.map((unit) => unit.article.id))].sort(
+    (a, b) => a - b,
+  );
   /* an article counted is everyone the filters count on it */
   const counted = isCounted(toFilters(state));
   const names = [
     ...new Set(
-      members.flatMap((m) =>
-        m.units.flatMap((unit) =>
-          unit.person
-            ? [unit.person]
-            : contributionsOn(unit.article)
-                .filter(counted)
-                .map((c) => c.person),
-        ),
+      units.flatMap((unit) =>
+        unit.person
+          ? [unit.person]
+          : contributionsOn(unit.article)
+              .filter(counted)
+              .map((c) => c.person),
       ),
     ),
   ];
+  const fits = ids.length <= MOST_ARTICLES;
+  const chosen = { ...next, articles: ids, search: "" };
   const named = { ...next, people: names, search: "" };
   const newcomers = grouped.measure === "newcomers";
+  const searched = Boolean(state.search.trim());
   return {
-    articles: newcomers ? named : next,
-    people: newcomers || state.search.trim() ? named : next,
+    /* Articles' own search reads a chart's as the chart did */
+    articles: !newcomers ? next : fits ? chosen : named,
+    people:
+      newcomers && fits
+        ? { ...chosen, people: names }
+        : newcomers || searched
+          ? fits
+            ? chosen
+            : named
+          : next,
+    broader: !fits && (newcomers || searched),
   };
 }

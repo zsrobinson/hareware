@@ -20,6 +20,7 @@ import {
   percentText,
   perArticleText,
   sliceCount,
+  tooNewText,
   unitOf,
 } from "./chart-slice";
 import {
@@ -49,7 +50,7 @@ import {
 } from "./pivot";
 import { SectionName } from "./section-name";
 import { SlicePanel } from "./slice-panel";
-import { ThinViews } from "./views-notes";
+import { ThinViews, TooNew } from "./views-notes";
 
 export type PivotViewProps = ViewProps & {
   config: PivotConfig;
@@ -142,6 +143,10 @@ export function PivotView({
                 [config.rows, config.columns],
                 pivot.members({ row: null, column: null }),
               ),
+              tooNewText(
+                pivot.members({ row: null, column: null }),
+                pivot.grouped.measure,
+              ),
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -214,6 +219,7 @@ export function PivotView({
                 perArticleText(pivot.members(slice), pivot.grouped.measure),
               /* the earlier range's dates are in the title, and are not the filters' */
               slice.column !== "then" && filterNote,
+              tooNewText(pivot.members(slice), pivot.grouped.measure),
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -387,6 +393,12 @@ function PivotTable({
               : share === null
                 ? count.toLocaleString()
                 : percentText(share))}
+        {content === null && (
+          <TooNew
+            members={pivot.members(slice)}
+            measure={pivot.grouped.measure}
+          />
+        )}
       </button>
     );
   };

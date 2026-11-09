@@ -733,7 +733,7 @@ test("a pivot of views has every section, an empty one 0 and an unread one blank
     Rabbithole: "0",
     Total: "370",
   });
-  expect(pivotCount(pivot)).toBe("370 views · 1 article without views");
+  expect(pivotCount(pivot)).toBe("370 views");
 });
 
 /* Sports is posts 3, 6 and 10: 111, 222 and 370 views */
@@ -783,12 +783,12 @@ test("a pivot of views per article heads each column so, with its articles besid
     "Fall 2025 per article",
     "Spring 2026 per article",
     "Spring 2026: articles counted",
-    "Spring 2026: articles without views",
+    "Spring 2026: articles too new to count",
     "Fall 2026 per article",
     "Fall 2026: articles counted",
-    "Fall 2026: articles without views",
+    "Fall 2026: articles too new to count",
     "Total per article",
     "Total: articles counted",
-    "Total: articles without views",
+    "Total: articles too new to count",
   ]);
 });

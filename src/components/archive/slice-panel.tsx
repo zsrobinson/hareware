@@ -186,7 +186,7 @@ function rowsOf(
               <Title article={article} className="min-w-0 flex-1" />
               <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
                 {own === null
-                  ? "views unavailable"
+                  ? "not counted yet"
                   : counted(own, unit, `${unit}s`)}
               </span>
             </div>

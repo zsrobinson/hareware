@@ -60,6 +60,7 @@ import {
   perArticle,
   perArticleText,
   drawnMembers,
+  tooNewText,
   percentText,
   readSlice,
   sliceCount,
@@ -81,7 +82,7 @@ import {
 } from "./compare";
 import { RowDetails, type OpenRow } from "./open-row";
 import { SlicePanel } from "./slice-panel";
-import { ThinViews } from "./views-notes";
+import { ThinViews, TooNew } from "./views-notes";
 
 /** what a chart counts, as its one series and its table's column are named */
 const measureName = (measure: Measure) =>
@@ -249,6 +250,7 @@ export function ChartView({
                 [config.by, config.split],
                 drawnMembers(grouped, hidden),
               ),
+              tooNewText(drawnMembers(grouped, hidden), grouped.measure),
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -431,6 +433,7 @@ function sliceText(plot: Plot, slice: Slice, filterNote: string) {
         perArticleText(plot.members(slice), plot.grouped.measure),
       /* the earlier range's dates are in the title, and are not the filters' */
       slice.series !== "then" && filterNote,
+      tooNewText(plot.members(slice), plot.grouped.measure),
     ]
       .filter(Boolean)
       .join(" · "),
@@ -1037,7 +1040,7 @@ function Card({
               disabled={!opens}
               aria-label={`${s.label}: see ${
                 plot.unread(category.key, s.key)
-                  ? "articles without views"
+                  ? "articles not counted yet"
                   : plot.unit(n)
               }`}
               className={cn(row(false), !opens && "opacity-50")}
@@ -1085,7 +1088,7 @@ function Card({
         >
           See{" "}
           {plot.unread(category.key, null)
-            ? "the articles without views"
+            ? "the articles not counted yet"
             : plot.unit(total)}
         </Button>
       )}
@@ -2116,7 +2119,7 @@ function numbersMatrix(plot: Plot): {
     if (plot.categories.some((c) => read(c.key).missing > 0)) {
       header.push(
         `${column.label}: articles counted`,
-        `${column.label}: articles without views`,
+        `${column.label}: articles too new to count`,
       );
       cells.push(
         (category) => read(category).counted,
@@ -2301,6 +2304,7 @@ function CountButton({
       onClick={() => onOpen(slice)}
     >
       {counted === 0 && missing > 0 ? "–" : n.toLocaleString()}
+      <TooNew members={members} measure={plot.grouped.measure} />
     </button>
   );
 }

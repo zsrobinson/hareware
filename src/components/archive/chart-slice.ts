@@ -49,11 +49,32 @@ export const unitOf = (n: number, measure: Measure) =>
 /* the day Jetpack began counting */
 const COUNTED_FROM = `${COUNTED_SINCE}-01`;
 
-/** "3 articles without views", where views were left out of a sum */
-const missingText = (members: readonly Member[], measure: Measure) => {
+/**
+ * "1 article too new to count yet": the articles left out of a sum of
+ * views, which a read that answered can only be for being newer than it.
+ * Said last in a caption, after what it qualifies
+ */
+/**
+ * A number's mark where some of its articles are too new to count: a faint
+ * dagger whose title says how many, so the caveat in the caption is tied to
+ * the numbers it qualifies. Null where all were counted, or none were
+ */
+export function tooNewMark(
+  members: readonly Member[],
+  measure: Measure,
+): string | null {
+  const { counted, missing } = amountOf(members, measure);
+  return counted > 0 && missing > 0 ? tooNewText(members, measure) : null;
+}
+
+export const tooNewText = (members: readonly Member[], measure: Measure) => {
   const { missing } = amountOf(members, measure);
   return missing > 0
-    ? counted(missing, "article without views", "articles without views")
+    ? counted(
+        missing,
+        "article too new to count yet",
+        "articles too new to count yet",
+      )
     : "";
 };
 
@@ -190,8 +211,7 @@ export function chartCount(grouped: Grouped, hidden: readonly string[]) {
     grouped.measure === "people"
       ? counted(n, "person", "different people")
       : unitOf(n, grouped.measure);
-  const drawnList = drawnMembers(grouped, hidden);
-  const drawn = amountOf(drawnList, grouped.measure).value;
+  const drawn = amountOf(drawnMembers(grouped, hidden), grouped.measure).value;
   const whole = amountOf(
     membersAcross(
       grouped,
@@ -211,8 +231,7 @@ export function chartCount(grouped: Grouped, hidden: readonly string[]) {
       ? unit(whole)
       : `${drawn.toLocaleString()} of ${unit(whole)}`,
   );
-  parts.push(missingText(drawnList, grouped.measure));
-  return parts.filter(Boolean).join(" · ");
+  return parts.join(" · ");
 }
 
 /** two ranges' count in words: "64 articles, against 58", or of a top few, "Top 25 of 40 people · 60 contributions, against 75" */
@@ -231,9 +250,9 @@ export function pairCount(grouped: Grouped): string {
 
 /**
  * The slice's count in words: "12 articles", "18 contributions on 12
- * articles", "4,210 words on 9 articles", "980 views on 9 articles · 2
- * articles without views", or, on a chart of shares, "12 of 40 articles ·
- * 30%".
+ * articles", "4,210 words on 9 articles", "980 views on 9 articles", or,
+ * on a chart of shares, "12 of 40 articles · 30%". Articles too new to
+ * count are said after it (`tooNewText`)
  */
 export function sliceCount(
   measure: Measure,
@@ -242,23 +261,12 @@ export function sliceCount(
   whole?: number,
 ): string {
   const { value: n, counted: on } = amountOf(members, measure);
-  const missing = missingText(members, measure);
   if (whole !== undefined && whole !== n)
-    return [
-      `${n.toLocaleString()} of ${unitOf(whole, measure)} · ${percentText(
-        whole ? (n / whole) * 100 : 0,
-      )}`,
-      missing,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    return `${n.toLocaleString()} of ${unitOf(whole, measure)} · ${percentText(
+      whole ? (n / whole) * 100 : 0,
+    )}`;
   if (isQuantity(measure))
-    return [
-      `${unitOf(n, measure)} on ${counted(on, "article", "articles")}`,
-      missing,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    return `${unitOf(n, measure)} on ${counted(on, "article", "articles")}`;
   if (measure !== "contributions") return unitOf(n, measure);
   const articles = new Set(
     members.flatMap((m) => m.units.map((unit) => unit.article.id)),

@@ -30,7 +30,8 @@ Someone's words are those of the Articles they are credited on, however many
 roles they had on each, never once a contribution. Views of a period are the
 lifetime views of the Articles published in it, not the views it received.
 **Per article** is a sum over the Articles in it; an Article without views is
-in neither half, and is counted beside the sum ("3 articles without views").
+in neither half, and is counted after the sum ("1 article too new to count
+yet": a read of views that answered leaves out only what it is older than).
 
 ## Section
 

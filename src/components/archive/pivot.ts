@@ -345,14 +345,6 @@ export function pivotCount(pivot: Pivot): string {
       ? unit(whole)
       : `${shown.toLocaleString()} of ${unit(whole)}`,
   );
-  const { missing } = amountOf(
-    pivot.members({ row: null, column: null }),
-    grouped.measure,
-  );
-  if (missing > 0)
-    parts.push(
-      counted(missing, "article without views", "articles without views"),
-    );
   return parts.join(" · ");
 }
 
@@ -432,7 +424,7 @@ export function pivotMatrix(pivot: Pivot): string[][] {
       ? {
           header: [
             `${label}: articles counted`,
-            `${label}: articles without views`,
+            `${label}: articles too new to count`,
           ],
           cells: (row: string | null) => {
             const { counted, missing } = read({ row, column });

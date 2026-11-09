@@ -45,6 +45,8 @@ import {
   chartCount,
   drawnMembers,
   measureNote,
+  tooNewMark,
+  tooNewText,
   perArticle,
   perArticleText,
   readSlice,
@@ -732,10 +734,11 @@ test("views unavailable are left out of a sum and counted beside it, never as ze
 
   expect(news).toHaveLength(4);
   expect(grouped.totals.News).toBe(37);
-  expect(sliceCount("views", news)).toBe(
-    "37 views on 2 articles · 2 articles without views",
-  );
-  expect(chartCount(grouped, [])).toMatch(/· 2 articles without views$/);
+  expect(sliceCount("views", news)).toBe("37 views on 2 articles");
+  /* said once, last, after what it qualifies, and marked on the number */
+  expect(tooNewText(news, "views")).toBe("2 articles too new to count yet");
+  expect(tooNewMark(news, "views")).toBe("2 articles too new to count yet");
+  expect(chartCount(grouped, [])).not.toMatch(/too new/);
   expect(measureNote("views", ["section", "none"])).toMatch(/^Lifetime views/);
 });
 
@@ -792,7 +795,7 @@ test("a CSV of views per article says so, with the articles each counted beside 
     "Section",
     "Views per article",
     "Views: articles counted",
-    "Views: articles without views",
+    "Views: articles too new to count",
   ]);
   /* 37 views over posts 1 and 7 */
   expect(body.find(([label]) => label === "News")).toEqual(["News", 19, 2, 2]);

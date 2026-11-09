@@ -1,4 +1,6 @@
 import type { ArchiveArticle } from "~/lib/credits/archive";
+import type { Measure, Member } from "~/lib/credits/stats";
+import { tooNewMark } from "./chart-slice";
 import { thinText, thinViews, type ViewsSummary } from "~/lib/credits/views";
 
 /**
@@ -19,5 +21,22 @@ export function ThinViews({
     <span className="text-muted-foreground block text-xs" role="note">
       {thinText(thin)}
     </span>
+  );
+}
+
+/** a faint dagger beside a number some of whose articles are too new to count */
+export function TooNew({
+  members,
+  measure,
+}: {
+  members: readonly Member[];
+  measure: Measure;
+}) {
+  const said = tooNewMark(members, measure);
+  if (!said) return null;
+  return (
+    <sup className="text-muted-foreground/70 ml-0.5" title={said}>
+      †<span className="sr-only">, {said}</span>
+    </sup>
   );
 }

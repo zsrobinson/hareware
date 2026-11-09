@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SquareIcon } from "lucide-react";
 import { useState } from "react";
@@ -116,4 +116,54 @@ test("a touch screen keeps every view in the row, to swipe", () => {
   render(<Row />);
   expect(shown()).toHaveLength(6);
   expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
+});
+
+test("a touch screen narrowed keeps the chosen view in sight", async () => {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(pointer: coarse)",
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+  const observed: (() => void)[] = [];
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private callback: () => void) {}
+      observe() {
+        observed.push(this.callback);
+      }
+      disconnect() {}
+    },
+  );
+  /* each tab 100 wide, side by side, in a strip 600 wide */
+  let width = 600;
+  const scrolled = new WeakMap<Element, number>();
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(
+    () => width,
+  );
+  vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(
+    function (this: HTMLElement) {
+      return [...(this.parentElement?.children ?? [])].indexOf(this) * 100;
+    },
+  );
+  vi.spyOn(Element.prototype, "scrollLeft", "get").mockImplementation(function (
+    this: Element,
+  ) {
+    return scrolled.get(this) ?? 0;
+  });
+  vi.spyOn(Element.prototype, "scrollLeft", "set").mockImplementation(function (
+    this: Element,
+    value: number,
+  ) {
+    scrolled.set(this, value);
+  });
+  const user = userEvent.setup();
+  render(<Row />);
+  await user.click(screen.getByRole("tab", { name: "Retention" }));
+  const strip = screen.getByRole("tablist");
+  expect(strip.scrollLeft).toBe(0);
+  /* Retention runs from 400 to 500, past a strip 300 wide */
+  width = 300;
+  act(() => observed.forEach((callback) => callback()));
+  expect(strip.scrollLeft).toBe(200);
 });

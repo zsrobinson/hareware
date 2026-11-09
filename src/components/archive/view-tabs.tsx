@@ -158,17 +158,24 @@ export function ViewTabs({
   };
 
   /* a phone swipes the views sideways, and a link may open on one past the
-     edge. Only the strip moves: scrollIntoView would also move where the
-     page's first Tab starts from */
+     edge, or a narrower window leave it there. Only the strip moves:
+     scrollIntoView would also move where the page's first Tab starts from */
   useEffect(() => {
     const strip = list.current;
-    const tab = strip?.querySelector<HTMLElement>('[aria-selected="true"]');
-    if (!touch || !strip || !tab) return;
-    const left = tab.offsetLeft;
-    const right = left + tab.offsetWidth;
-    if (left < strip.scrollLeft) strip.scrollLeft = left;
-    else if (right > strip.scrollLeft + strip.clientWidth)
-      strip.scrollLeft = right - strip.clientWidth;
+    if (!touch || !strip) return;
+    const reveal = () => {
+      const tab = strip.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (!tab) return;
+      const left = tab.offsetLeft;
+      const right = left + tab.offsetWidth;
+      if (left < strip.scrollLeft) strip.scrollLeft = left;
+      else if (right > strip.scrollLeft + strip.clientWidth)
+        strip.scrollLeft = right - strip.clientWidth;
+    };
+    reveal();
+    const observer = new ResizeObserver(reveal);
+    observer.observe(strip);
+    return () => observer.disconnect();
   }, [view, touch]);
 
   /* which ends have views scrolled past them, faded to say so */

@@ -84,16 +84,30 @@ const EVERY_COLUMN: ColumnDef<PersonRow, unknown>[] = [
     accessorKey: "name",
     header: sortable(COLUMN_NAMES.name),
     meta: { csvHeader: COLUMN_NAMES.name },
-    cell: ({ row }) => (
-      <RowOpener rowKey={row.original.name}>
-        <span className="font-medium">{row.original.name}</span>
-        {row.original.bylines.length > 0 && (
-          <span className="text-muted-foreground block text-xs">
-            as {row.original.bylines.join(", ")}
-          </span>
-        )}
-      </RowOpener>
-    ),
+    cell: ({ row, table }) => {
+      /* a date the table is sorted by but has no room for, as on a phone */
+      const by = table.getState().sorting[0]?.id;
+      const date =
+        (by === "first" || by === "last") &&
+        !table.getColumn(by)?.getIsVisible()
+          ? by
+          : null;
+      return (
+        <RowOpener rowKey={row.original.name}>
+          <span className="font-medium">{row.original.name}</span>
+          {row.original.bylines.length > 0 && (
+            <span className="text-muted-foreground block text-xs">
+              as {row.original.bylines.join(", ")}
+            </span>
+          )}
+          {date && (
+            <span className="text-muted-foreground block text-xs tabular-nums">
+              {COLUMN_NAMES[date]} {formatDate(row.original[date])}
+            </span>
+          )}
+        </RowOpener>
+      );
+    },
   },
   count("contributions", "One per person, per role, per article"),
   count("writer"),
@@ -279,7 +293,18 @@ function People({
         onPickedChange={setPicked}
         controls={(controls) => <ShellTableControls {...controls} />}
         selected={(row) => row.name === open}
-        hidden={phone ? ON_PHONE : person && !roomy ? BESIDE_PANEL : []}
+        /* the column a table is sorted by is never one it leaves out; a
+           phone writes a date sorted by under the name instead */
+        hidden={(phone
+          ? ON_PHONE
+          : person && !roomy
+            ? BESIDE_PANEL
+            : []
+        ).filter(
+          (id) =>
+            id !== sorting[0]?.id ||
+            (phone && (id === "first" || id === "last")),
+        )}
         caption={
           <ViewHeading
             title={heading.title}

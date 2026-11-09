@@ -122,7 +122,8 @@ const CREDIT_COLUMN: Partial<Record<ProblemKind, Role>> = {
   "no-writer": "writer",
   "no-image": "image",
 };
-const ON_PHONE = ["writer", ...BESIDE_PANEL];
+/* a phone writes the date under the title, unless the table is sorted by it */
+const ON_PHONE = ["date", "writer", ...BESIDE_PANEL];
 
 /* every column a view of articles can show, by its id in ./views; none
    depends on which row is open (see open-row.tsx) */
@@ -153,6 +154,7 @@ const EVERY_COLUMN: ColumnDef<ArchiveArticle, unknown>[] = [
       const problems = row.original.ignored
         ? []
         : row.original.problems.filter((p) => said(p.kind));
+      const dated = !table.getColumn("date")?.getIsVisible();
       return (
         /* fits beside the date on a phone-wide window that shows a
              scrollbar, so the table only scrolls when it must */
@@ -160,6 +162,17 @@ const EVERY_COLUMN: ColumnDef<ArchiveArticle, unknown>[] = [
           <RowOpener rowKey={String(row.original.id)} className="font-medium">
             {row.original.title}
           </RowOpener>
+          {dated && (
+            <div className="text-muted-foreground text-xs tabular-nums">
+              {formatDate(row.original.publishedAt)}
+              {!table.getColumn("section")?.getIsVisible() && (
+                <>
+                  {" · "}
+                  <SectionName section={row.original.section} />
+                </>
+              )}
+            </div>
+          )}
           {problems.length > 0 && (
             <ProblemsLink title={row.original.title}>
               {problems.map((p) => PROBLEM_KINDS[p.kind]).join(" · ")}
@@ -292,7 +305,13 @@ function Articles({
         onPickedChange={setPicked}
         controls={(controls) => <ShellTableControls {...controls} />}
         selected={(row) => row.id === editing}
-        hidden={phone ? ON_PHONE : article && !roomy ? BESIDE_PANEL : []}
+        /* the column a table is sorted by is never one it leaves out */
+        hidden={(phone
+          ? ON_PHONE
+          : article && !roomy
+            ? BESIDE_PANEL
+            : []
+        ).filter((id) => id !== sorting[0]?.id)}
         caption={
           <ViewHeading
             title={heading.title}

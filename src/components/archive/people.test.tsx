@@ -122,3 +122,39 @@ test("New lists only whoever was first credited in the range, a pen name's perso
   ).toEqual(["Sam Sample", "Mar 1, 2026", "NewsSports", "Writing, Image", "2"]);
   expect(screen.getByText(/^1 new person/)).toBeTruthy();
 });
+
+test("a phone's table keeps what it is sorted by, a date under each name", async () => {
+  stubArchive({
+    posts: [
+      {
+        id: 1,
+        title: "An invented headline",
+        publishedAt: "2026-03-01T16:00:00Z",
+        paragraphs: ["Article by: Sam Sample"],
+      },
+    ],
+  });
+  /* a phone's width, after the stub's laptop */
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(max-width: 767px)",
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+  window.history.replaceState(
+    null,
+    "",
+    "/people?view=new&range=custom&from=2026-01-01&to=2026-05-31",
+  );
+  render(<PeoplePage />);
+  const table = await screen.findByRole("table");
+  /* New people are sorted by when each first contributed */
+  expect(
+    within(table)
+      .getAllByRole("columnheader")
+      .map((cell) => cell.textContent),
+  ).toEqual(["Name", "Contributions"]);
+  /* and the date it is sorted by goes under each name */
+  expect(within(table).getAllByRole("row")[1]!.textContent).toContain(
+    "Sam SampleFirst Mar 1, 2026",
+  );
+});

@@ -415,3 +415,27 @@ test("a chart of one series still says its pale period is so far", async () => {
   expect(await screen.findByText(/^(Spring|Fall) \d{4} so far$/)).toBeTruthy();
   expect(screen.queryByRole("toolbar", { name: "Series" })).toBeNull();
 });
+
+test("a phone writes an article's date under its title, unless sorted by it", async () => {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(max-width: 767px)",
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+  window.history.replaceState(null, "", "/articles");
+  const first = render(<ArticlesPage />);
+  const headers = async () =>
+    within(await screen.findByRole("table"))
+      .getAllByRole("columnheader")
+      .map((cell) => cell.textContent);
+  expect(await headers()).toEqual(["Published", "Title"]);
+  first.unmount();
+
+  window.history.replaceState(null, "", "/articles?sort=title");
+  render(<ArticlesPage />);
+  expect(await headers()).toEqual(["Title"]);
+  const row = screen.getByRole("row", { name: /A third invented headline/ });
+  expect(row.textContent).toMatch(
+    /A third invented headline\w{3} \d+, \d{4} · Sports/,
+  );
+});

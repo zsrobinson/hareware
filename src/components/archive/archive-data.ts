@@ -51,7 +51,7 @@ const STALE_MS = 24 * 60 * 60_000;
    is not read */
 const CACHE = "hareware-wordpress";
 const SNAPSHOT_STORED = "/wordpress-snapshot-v3";
-const VIEWS_STORED = "/wordpress-views-v1";
+const VIEWS_STORED = "/wordpress-views-v2";
 
 export const SHEET_KEY = ["sheet"] as const;
 const WORDPRESS_KEY = ["wordpress"] as const;
@@ -65,7 +65,7 @@ type Snapshot = Stored & {
   categories: [number, string][];
 };
 
-type Views = Stored & { posts: PostViews };
+type Views = Stored & { posts: PostViews; askedAt: string };
 
 /* ------------------------------------------------------------------------ */
 /* the read in flight, page by page, for the first load's message */
@@ -123,6 +123,7 @@ async function readViews(): Promise<Views> {
   const asked = new Date();
   const views: Views = {
     posts: postViewsOf(await fetchGated<unknown>(postViewsUrl(asked)), asked),
+    askedAt: asked.toISOString(),
     fetchedAt: new Date().toISOString(),
   };
   void toStorage(VIEWS_STORED, views);

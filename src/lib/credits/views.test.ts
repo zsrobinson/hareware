@@ -35,6 +35,7 @@ test("merges each article's views by post id, and its total", () => {
   const merged = withViews(archive, {
     status: "read",
     posts: { 1: { "2026-09": 40, "2026-10": 2 }, 2: { "2026-10": 7 } },
+    askedAt: "2026-11-09T16:59:58Z",
     fetchedAt: "2026-11-09T17:00:00Z",
   });
 
@@ -49,10 +50,13 @@ test("merges each article's views by post id, and its total", () => {
 });
 
 /* Jetpack leaves out a post nobody read; one published after the count was
-   read is not in it either, and nobody has said it was not read */
-test("an article missing from the count was read by nobody, unless it is newer than the count", () => {
-  const read = (fetchedAt: string) =>
-    views(withViews(archive, { status: "read", posts: {}, fetchedAt }))[2];
+   asked for is not in it either, and nobody has said it was not read */
+test("an article missing from the count was read by nobody, unless it is newer than the ask", () => {
+  /* post 3 was published at 15:00 */
+  const read = (askedAt: string, fetchedAt = askedAt) =>
+    views(
+      withViews(archive, { status: "read", posts: {}, askedAt, fetchedAt }),
+    )[2];
 
   expect(read("2026-11-09T17:00:00Z")).toEqual({
     status: "counted",
@@ -60,12 +64,19 @@ test("an article missing from the count was read by nobody, unless it is newer t
     byMonth: {},
   });
   expect(read("2026-11-09T14:00:00Z")).toEqual({ status: "unavailable" });
+  /* asked before it was published, answered after: no proof either way */
+  expect(read("2026-11-09T14:59:59Z", "2026-11-09T15:00:02Z")).toEqual({
+    status: "unavailable",
+  });
+  /* nor within ten minutes of it, since the two clocks may differ */
+  expect(read("2026-11-09T15:05:00Z")).toEqual({ status: "unavailable" });
 });
 
 test("views that could not be read are unavailable on every article, never zero", () => {
   const counted = withViews(archive, {
     status: "read",
     posts: { 1: { "2026-09": 40 } },
+    askedAt: "2026-11-09T16:59:58Z",
     fetchedAt: "2026-11-09T17:00:00Z",
   });
   const failed = withViews(counted, {

@@ -11,14 +11,14 @@ const minutesAgo = (minutes: number) =>
 
 /* the stored reads, by their keys in Cache Storage */
 const SNAPSHOT = "/wordpress-snapshot-v3";
-const VIEWS = "/wordpress-views-v1";
+const VIEWS = "/wordpress-views-v2";
 
 /* one invented article, as a stored read of WordPress keeps it */
-const snapshot = (fetchedAt: string) => ({
+const snapshot = (fetchedAt: string, publishedAt = "2026-10-01T10:00:00Z") => ({
   posts: [
     {
       id: 7,
-      publishedAt: "2026-10-01T10:00:00Z",
+      publishedAt,
       link: "https://theumdhare.com/7/",
       title: "Post 7",
       categoryIds: [103],
@@ -58,7 +58,7 @@ const COUNTED = jetpack([{ id: 7, type: "post", views: 30 }]);
 function setUp(
   gate: Response,
   stored: Record<string, object> = {},
-  stats: () => Response = () => Response.json(COUNTED),
+  stats: () => Response | Promise<Response> = () => Response.json(COUNTED),
 ) {
   const asked: string[] = [];
   vi.stubGlobal(
@@ -107,7 +107,7 @@ test("a refused viewer never reads WordPress, nor the copy kept from it", async 
 test("a recent copy is used as it is, without asking WordPress", async () => {
   const { asked, wrapper } = setUp(Response.json(SHEET), {
     [SNAPSHOT]: snapshot(minutesAgo(2)),
-    [VIEWS]: { posts: {}, fetchedAt: minutesAgo(2) },
+    [VIEWS]: { posts: {}, askedAt: minutesAgo(2), fetchedAt: minutesAgo(2) },
   });
   const { result } = renderHook(() => useArchive(), { wrapper });
 
@@ -227,7 +227,11 @@ test("a kept count is shown while it is read again, and says so when that fails"
     Response.json(SHEET),
     {
       [SNAPSHOT]: snapshot(minutesAgo(2)),
-      [VIEWS]: { posts: { 7: { "2026-10": 12 } }, fetchedAt: minutesAgo(60) },
+      [VIEWS]: {
+        posts: { 7: { "2026-10": 12 } },
+        askedAt: minutesAgo(60),
+        fetchedAt: minutesAgo(60),
+      },
     },
     () => new Response("WordPress stats are busy", { status: 429 }),
   );
@@ -242,4 +246,29 @@ test("a kept count is shown while it is read again, and says so when that fails"
   const ready = result.current;
   if (ready.status !== "ready") throw new Error("not ready");
   expect(ready.archive.articles[0]!.views).toMatchObject({ total: 12 });
+});
+
+/* Jetpack's answer takes a while; an article published while it is on its
+   way is in WordPress's read and cannot be in Jetpack's */
+test("an article published while the count was being read is unavailable, not zero", async () => {
+  const published = new Date(Date.now() + 150).toISOString();
+  const { wrapper } = setUp(
+    Response.json(SHEET),
+    { [SNAPSHOT]: snapshot(minutesAgo(2), published) },
+    async () => {
+      await new Promise((wake) => setTimeout(wake, 400));
+      return Response.json(jetpack());
+    },
+  );
+  const ready = await shown(wrapper);
+
+  expect(ready.archive.views.status).toBe("read");
+  expect(Date.parse(published)).toBeLessThan(
+    Date.parse(
+      ready.archive.views.status === "read"
+        ? ready.archive.views.fetchedAt
+        : "",
+    ),
+  );
+  expect(ready.archive.articles[0]!.views).toEqual({ status: "unavailable" });
 });

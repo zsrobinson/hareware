@@ -621,12 +621,36 @@ function Legend({
 }) {
   const [stop, setStop] = useState(0);
   const toggles = useRef<HTMLDivElement>(null);
-  /* one series is named by the title, and its faded marks say they are partial */
-  if (plot.all.length <= 1) return null;
   const lines = plot.config.draw === "lines";
   const at = Math.min(stop, plot.all.length - 1);
   /* a period's marks are faded where it is partial, so its swatch is too */
   const faded = plot.series.slice(0, 3).map((s) => plot.color("", s.key));
+  /* said even with one series, which the title names: a pale mark with
+     nothing to say why reads as one switched off */
+  const partial = plot.partial.size > 0 && (
+    <span className="text-muted-foreground flex items-center gap-1.5 px-1.5 py-0.5">
+      {lines ? (
+        <span
+          aria-hidden
+          className="w-3.5 border-t-2 border-dotted border-current"
+        />
+      ) : (
+        <span
+          aria-hidden
+          className="size-3 rounded-sm opacity-45"
+          style={{
+            background:
+              faded.length > 1
+                ? `linear-gradient(90deg, ${faded.join(", ")})`
+                : faded[0],
+          }}
+        />
+      )}
+      {partialNote(plot)}
+    </span>
+  );
+  if (plot.all.length <= 1)
+    return partial && <div className="flex text-sm">{partial}</div>;
 
   return (
     /* a gap, not a rule, sets the partial periods apart: a rule is left
@@ -685,28 +709,7 @@ function Legend({
           );
         })}
       </div>
-      {plot.partial.size > 0 && (
-        <span className="text-muted-foreground flex items-center gap-1.5 px-1.5 py-0.5">
-          {lines ? (
-            <span
-              aria-hidden
-              className="w-3.5 border-t-2 border-dotted border-current"
-            />
-          ) : (
-            <span
-              aria-hidden
-              className="size-3 rounded-sm opacity-45"
-              style={{
-                background:
-                  faded.length > 1
-                    ? `linear-gradient(90deg, ${faded.join(", ")})`
-                    : faded[0],
-              }}
-            />
-          )}
-          {partialNote(plot)}
-        </span>
-      )}
+      {partial}
     </div>
   );
 }

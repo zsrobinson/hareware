@@ -407,3 +407,11 @@ test("Home and End choose the first and last of the views", async () => {
   await waitFor(() => expect(selected()?.textContent).toBe("All"));
   expect(document.activeElement).toBe(selected());
 });
+
+test("a chart of one series still says its pale period is so far", async () => {
+  window.history.replaceState(null, "", "/people?view=headcount");
+  render(<PeoplePage />);
+  /* every invented article is this semester's, which is not over */
+  expect(await screen.findByText(/^(Spring|Fall) \d{4} so far$/)).toBeTruthy();
+  expect(screen.queryByRole("toolbar", { name: "Series" })).toBeNull();
+});

@@ -43,6 +43,9 @@ as printed. The Sheet also holds the credit labels, so a new label
 is made from the signed-in pages; a save rewrites only the rows it means to.
 The Sheet is owned by the club's account and reached by a service account; the
 mapping never reaches WordPress, the repository, the log or a public page.
+A real name may sit in a signed-in page's address (`?people=`, `?person=`):
+those links and the files the pages download are for the board, and stay
+inside it.
 
 **People are counted in contributions**: one person in one role on one
 article. The editors settled that writing and illustrating an article is two

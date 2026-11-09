@@ -348,7 +348,7 @@ function PairRow({
           <span key={name}>
             {i > 0 && <span className="text-muted-foreground"> and </span>}
             <a
-              href={`/articles?q=${encodeURIComponent(name)}`}
+              href={`/articles?${new URLSearchParams({ people: name })}`}
               className="font-medium underline-offset-4 hover:underline"
             >
               {name}

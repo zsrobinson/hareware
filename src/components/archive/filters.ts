@@ -43,6 +43,8 @@ export type FilterState = {
   to?: string;
   sections: string[];
   roles: Role[];
+  /** exact names, whose own contributions alone count */
+  people: string[];
   search: string;
 };
 
@@ -51,6 +53,7 @@ export const clearedState = (preset: Preset): FilterState => ({
   preset,
   sections: [],
   roles: [],
+  people: [],
   search: "",
 });
 
@@ -145,6 +148,7 @@ export function toFilters(state: FilterState, period?: Period): Filters {
     ...rangeOf(state, new Date(), period),
     sections: state.sections,
     roles: state.roles,
+    people: state.people,
     search: state.search,
   };
 }
@@ -162,6 +166,8 @@ export function readState(search: string, fallback: Preset): FilterState {
     to: params.get("to") ?? undefined,
     sections: list(params.get("sections")),
     roles: list(params.get("roles")).filter(isRole),
+    /* repeated rather than joined: a name can hold a comma */
+    people: params.getAll("people").filter(Boolean),
     search: params.get("q") ?? "",
   };
 }
@@ -180,5 +186,7 @@ export function writeState(
   set("to", state.preset === "custom" ? state.to : undefined);
   set("sections", state.sections.join(","));
   set("roles", state.roles.join(","));
+  params.delete("people");
+  for (const name of state.people) params.append("people", name);
   set("q", state.search);
 }

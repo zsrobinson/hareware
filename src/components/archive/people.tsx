@@ -33,7 +33,7 @@ import { ShellTableControls } from "./table-controls";
 
 export function PeoplePage() {
   return (
-    <ArchiveShell searchPlaceholder="Search">
+    <ArchiveShell searching="people">
       {(props) => <People {...props} />}
     </ArchiveShell>
   );

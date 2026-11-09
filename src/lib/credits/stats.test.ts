@@ -7,7 +7,9 @@ import {
   people,
   periodBounds,
   periodOf,
+  periodsOf,
 } from "./stats";
+import { peopleOf } from "./person";
 
 /** a credit line; `bylines` are what it prints when the Sheet changes a name */
 const credit = (
@@ -17,7 +19,7 @@ const credit = (
 ): Credit => ({
   role,
   label: role,
-  printed: names.join(" and "),
+  printed: names.map((name, i) => bylines[i] ?? name).join(" and "),
   bylines: names.map((name, i) => bylines[i] ?? name),
   contributors: names.map((name, i) => ({
     name,
@@ -156,6 +158,62 @@ test("search ignores accents and curly quotes", () => {
     { ...NO_FILTERS, search: "perial" },
   );
   expect(found).toHaveLength(1);
+});
+
+test("a person filter counts that person's own contributions, and no one else's", () => {
+  const filters = { ...NO_FILTERS, people: ["Ann"] };
+  const shown = applyFilters(archive, filters);
+  const ann = peopleOf(archive).get("Ann")!;
+  for (const by of ["semester", "month"] as const) {
+    const grouped = group(shown, {
+      measure: "contributions",
+      by,
+      breakdown: "none",
+      filters,
+    });
+    expect(new Map(Object.entries(grouped.totals)), `by ${by}`).toEqual(
+      periodsOf(ann, by),
+    );
+    expect(grouped.total).toBe(ann.contributions.length);
+  }
+
+  /* Cy wrote article 2 with her; she is on it, and he is not counted */
+  const byPerson = group(shown, {
+    measure: "contributions",
+    by: "person",
+    breakdown: "none",
+    filters,
+  });
+  expect(byPerson.categories.map((c) => c.key)).toEqual(["Ann"]);
+  expect(people(shown, filters).map((row) => row.name)).toEqual(["Ann"]);
+});
+
+test("a person filter and a role filter count what both allow", () => {
+  const filters = { ...NO_FILTERS, roles: ["image" as const], people: ["Ann"] };
+  const shown = applyFilters(archive, filters);
+  /* article 1 is Bo's image; Ann drew only article 2 */
+  expect(shown.map((a) => a.id)).toEqual([2]);
+  expect(
+    group(shown, {
+      measure: "articles",
+      by: "section",
+      breakdown: "none",
+      filters,
+    }).total,
+  ).toBe(1);
+});
+
+test("search looks at what an article prints, not who the Sheet says it is", () => {
+  const search = (text: string) =>
+    applyFilters(archive, { ...NO_FILTERS, search: text }).map((a) => a.id);
+  expect(search("penn")).toEqual([3]);
+  expect(search("riley")).toEqual([]);
+  expect(search("post 2")).toEqual([2]);
+  expect(
+    applyFilters(archive, { ...NO_FILTERS, people: ["Riley Real"] }).map(
+      (a) => a.id,
+    ),
+  ).toEqual([3]);
 });
 
 test("summer belongs to Fall, so the semester axis has no near-empty summers", () => {

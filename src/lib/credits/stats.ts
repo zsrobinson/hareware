@@ -22,11 +22,14 @@ export type Filters = {
   sections: string[];
   /** empty means every role */
   roles: Role[];
-  /** a substring of a title or a credited name */
+  /** names, exactly: only these people's own contributions count. Empty
+      means everyone */
+  people: string[];
+  /** a substring of a title or a credit line as printed */
   search?: string;
 };
 
-export const NO_FILTERS: Filters = { sections: [], roles: [] };
+export const NO_FILTERS: Filters = { sections: [], roles: [], people: [] };
 
 const PERIODS = ["month", "semester", "school-year", "year"] as const;
 export type Period = (typeof PERIODS)[number];
@@ -67,18 +70,25 @@ export function searchable(text: string) {
     .toLowerCase();
 }
 
-/** whether the filters count a contribution: in a role picked */
+/** whether the filters count a contribution: in a role and by a person picked */
 const counts =
-  ({ roles }: Filters) =>
-  ({ role }: { role: Role }) =>
-    roles.length === 0 || roles.includes(role);
+  ({ roles, people }: Filters) =>
+  ({ role, person }: { role: Role; person: string }) =>
+    (roles.length === 0 || roles.includes(role)) &&
+    (people.length === 0 || people.includes(person));
 
-/** an article stays under a role filter only with a contribution in it */
+/** an article stays under a role or person filter only with a contribution it counts */
 function hasCounted(article: ArchiveArticle, filters: Filters) {
-  if (filters.roles.length === 0) return true;
+  if (filters.roles.length === 0 && filters.people.length === 0) return true;
   return contributionsOn(article).some(counts(filters));
 }
 
+/**
+ * The articles the filters leave. The search looks at what the article
+ * prints, its title and credit lines, never at who the Sheet says a byline
+ * is: a person's own contributions are the people filter's, and a name
+ * searched for would count everyone on the articles it is on.
+ */
 export function applyFilters(
   articles: ArchiveArticle[],
   filters: Filters,
@@ -100,15 +110,12 @@ export function applyFilters(
       const haystack = searchable(
         [
           article.title,
-          ...article.credits.flatMap((credit) => [
-            credit.printed,
-            ...credit.contributors.map((c) => c.name),
-          ]),
+          ...article.credits.map((credit) => credit.printed),
         ].join(" "),
       );
       if (!haystack.includes(search)) return false;
     }
-    return true;
+    return hasCounted(article, filters);
   });
 }
 
@@ -247,8 +254,8 @@ function units(
   history: ArchiveArticle[],
 ): Unit[] {
   if (measure === "articles")
-    /* every article counts once; with a role picked, only those with a
-       contribution in it */
+    /* every article counts once; with a role or person picked, only those
+       with a contribution the filters count */
     return articles
       .filter((article) => hasCounted(article, filters))
       .map((article) => ({ article }));

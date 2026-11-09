@@ -88,19 +88,10 @@ function Articles({ archive, filters, filterNote }: ViewProps) {
   const openRow = useOpenRow("article");
   const editing = openRow.open === null ? null : Number(openRow.open);
 
-  const rows = useMemo(() => {
-    const shown = applyFilters(archive.articles, filters);
-    /* a role filter keeps the articles with a contribution in that role */
-    return filters.roles.length === 0
-      ? shown
-      : shown.filter((article) =>
-          article.credits.some(
-            (credit) =>
-              filters.roles.includes(credit.role) &&
-              credit.contributors.length > 0,
-          ),
-        );
-  }, [archive, filters]);
+  const rows = useMemo(
+    () => applyFilters(archive.articles, filters),
+    [archive, filters],
+  );
 
   /* "other" credits are rare, so their column waits until someone asks for
      them. Nothing else here depends on which row is open (see open-row.tsx) */

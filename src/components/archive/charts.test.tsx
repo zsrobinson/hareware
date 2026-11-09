@@ -34,7 +34,7 @@ beforeEach(() => {
     posts: [
       post(1, "An invented headline", 1, "Ada Example"),
       post(2, "Another invented headline", 1, "Ben Sample"),
-      post(3, "A third invented headline", 2, "Ada Example"),
+      post(3, "A third invented headline", 2, "Ada Example and Ben Sample"),
     ],
     categories: [
       [1, "News"],
@@ -192,4 +192,27 @@ test("a chart of one series names its count for what it is", async () => {
   expect(
     screen.getAllByRole("columnheader").map((cell) => cell.textContent),
   ).toEqual(["Section", "Articles"]);
+});
+
+test("a name searched for says what it matched, and can count that person alone", async () => {
+  window.history.replaceState(null, "", "/charts?view=contributors&q=ada");
+  const user = userEvent.setup();
+  render(<ChartsPage />);
+  const caption = () => document.querySelector("figcaption")!.textContent;
+  /* both of Ada's articles, and Ben's half of the one they wrote together */
+  await waitFor(() => expect(caption()).toContain("3 contributions"));
+  expect(caption()).toContain("“ada” in a title or byline");
+
+  await user.click(screen.getByRole("button", { name: "Only Ada Example" }));
+  await waitFor(() => expect(caption()).toContain("2 contributions"));
+  expect(caption()).toContain("Ada Example");
+  const params = new URLSearchParams(window.location.search);
+  expect(params.getAll("people")).toEqual(["Ada Example"]);
+  expect(params.has("q")).toBe(false);
+
+  await user.click(
+    screen.getByRole("button", { name: /^Ada Example, remove/ }),
+  );
+  await waitFor(() => expect(caption()).toContain("4 contributions"));
+  expect(new URLSearchParams(window.location.search).has("people")).toBe(false);
 });

@@ -2,7 +2,7 @@
    default: `sort=first`, `sort=-first` the other way, and `min` on People. */
 
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 export function readSort(
   search: string,
@@ -41,21 +41,22 @@ export function writeChoice(
   else params.set(key, value);
 }
 
-function useInAddress<T>(
+/* `write` may read more than `value` (a page's default range), so it runs
+   after every render, and the address is replaced only when it changes */
+export function useInAddress<T>(
   read: (search: string) => T,
   write: (value: T, params: URLSearchParams) => void,
 ) {
-  /* the archive's pages draw once hydrated, so the address is there */
-  const [value, setValue] = useState(() => read(window.location.search));
-  const latest = useRef(write);
-  useLayoutEffect(() => {
-    latest.current = write;
-  });
+  /* the built page has no address; nothing is drawn from it until hydrated */
+  const [value, setValue] = useState(() =>
+    read(typeof window === "undefined" ? "" : window.location.search),
+  );
   useEffect(() => {
     const url = new URL(window.location.href);
-    latest.current(value, url.searchParams);
-    window.history.replaceState(window.history.state, "", url);
-  }, [value]);
+    write(value, url.searchParams);
+    if (url.href !== window.location.href)
+      window.history.replaceState(window.history.state, "", url);
+  });
   return [value, setValue] as const;
 }
 

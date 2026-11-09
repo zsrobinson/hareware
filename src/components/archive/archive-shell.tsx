@@ -61,6 +61,7 @@ import {
   type FilterState,
   type Preset,
 } from "./filters";
+import { useInAddress } from "./page-state";
 import { SectionDot } from "./section-name";
 
 /* where a view puts its own controls: the end of the toolbar on a laptop
@@ -378,19 +379,14 @@ function Ready({
     (next: FilterState) => (roleFilter ? next : { ...next, roles: [] }),
     [roleFilter],
   );
-  /* drawn only once hydrated (Shell), so the address is there */
-  const [state, setRawState] = useState<FilterState>(() =>
-    supported(readState(window.location.search, defaultPreset)),
+  const [state, setRawState] = useInAddress<FilterState>(
+    (search) => supported(readState(search, defaultPreset)),
+    (value, params) => writeState(value, params, defaultPreset),
   );
   const setState = useCallback(
     (next: FilterState) => setRawState(supported(next)),
-    [supported],
+    [supported, setRawState],
   );
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    writeState(state, url.searchParams, defaultPreset);
-    window.history.replaceState(window.history.state, "", url);
-  }, [state, defaultPreset]);
 
   const filters = useMemo(() => toFilters(state, period), [state, period]);
 

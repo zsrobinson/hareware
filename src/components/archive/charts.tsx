@@ -93,16 +93,13 @@ import {
 import { NEUTRAL, seriesColor } from "./colors";
 import { carryOver } from "./filters";
 import { RowDetails, useOpenRow } from "./open-row";
+import { useInAddress } from "./page-state";
 import { SlicePanel } from "./slice-panel";
 
 /* the shell's Time filter starts from the view's range, so the view is kept
    here, over the shell, rather than in the chart */
 export function ChartsPage() {
-  /* the shell draws nothing from it until hydrated, so reading the address
-     in the browser's first render does not disagree with the built page */
-  const [chart, setChart] = useState<ChartState>(() =>
-    readChart(typeof window === "undefined" ? "" : window.location.search),
-  );
+  const [chart, setChart] = useInAddress(readChart, writeChart);
   const { by } = configOf(chart);
   return (
     <ArchiveShell
@@ -191,12 +188,6 @@ function Charts({
   chart: ChartState;
   setChart: (state: ChartState) => void;
 }) {
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    writeChart(state, url.searchParams);
-    window.history.replaceState(window.history.state, "", url);
-  }, [state]);
-
   const config = configOf(state);
   const question = questionOf(state);
   const { hidden } = state;

@@ -330,3 +330,41 @@ test("a search for a name is cleared on a chart, which would read it as a title"
   );
   expect(screen.queryByText("Nothing matches these filters.")).toBeNull();
 });
+
+test("a link from a chart rounded to semesters takes the range as it counted it", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  /* the last three months start in August, so the semester chart counts
+     from Fall's first day */
+  vi.setSystemTime(new Date("2026-11-09T16:00:00Z"));
+  try {
+    stubArchive({
+      posts: [
+        {
+          id: 1,
+          title: "A summer headline",
+          publishedAt: "2026-07-01T16:00:00Z",
+          paragraphs: ["Article by: Ada Example"],
+        },
+      ],
+    });
+    window.history.replaceState(
+      null,
+      "",
+      "/articles?view=history&range=3m&slice=2026-2",
+    );
+    render(<ArticlesPage />);
+    const panel = await screen.findByRole("complementary", {
+      name: /^Fall 2026/,
+    });
+    const to = new URL(
+      within(panel)
+        .getByRole("link", { name: "A summer headline" })
+        .getAttribute("href")!,
+      "https://x.test",
+    );
+    expect(to.searchParams.get("range")).toBe("custom");
+    expect(to.searchParams.get("from")).toBe("2026-06-01");
+  } finally {
+    vi.useRealTimers();
+  }
+});

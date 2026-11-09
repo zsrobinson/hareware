@@ -143,6 +143,22 @@ export function periodNamed(from?: string, to?: string): string | null {
   return null;
 }
 
+/**
+ * The filters as a chart cut into `period` counts them, for a link to take to
+ * a page that would round them otherwise, or not at all: a rolling range that
+ * starts mid-semester is the custom range from where the semester does.
+ */
+export function asCounted(
+  state: FilterState,
+  period: Period | undefined,
+  now = new Date(),
+): FilterState {
+  const rounded = roundedStart(state, period, now);
+  return rounded
+    ? { ...state, preset: "custom", from: rounded.from, to: undefined }
+    : state;
+}
+
 /** the dates a preset means today, with a chart's period rounding it */
 export function rangeOf(
   state: FilterState,

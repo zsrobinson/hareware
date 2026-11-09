@@ -52,6 +52,7 @@ import { useHydrated } from "~/lib/use-hydrated";
 import { useArchive, useReadProgress, type ArchiveState } from "./archive-data";
 import { formatDate, formatDateTime } from "./dates";
 import {
+  asCounted,
   clearedState,
   periodNamed,
   PRESETS,
@@ -406,7 +407,11 @@ function Ready({
   );
 
   const filters = useMemo(() => toFilters(state, period), [state, period]);
-  const trail = useMemo(() => ({ state, searching }), [state, searching]);
+  /* a link takes the range as counted here, which another page would not round */
+  const trail = useMemo(
+    () => ({ state: asCounted(state, period), searching }),
+    [state, period, searching],
+  );
 
   /* stable, so a view that listens for something to refresh on (Problems,
      on coming back from WordPress) is not re-subscribed on every render */

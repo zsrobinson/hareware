@@ -16,6 +16,7 @@ const post = (id: number, days: number, paragraphs: string[]) => ({
   link: `https://example.com/${id}`,
   categoryIds: [1],
   paragraphs,
+  prose: { words: 0, paragraphs: [] },
 });
 
 const mask = (byline: string): Override => ({

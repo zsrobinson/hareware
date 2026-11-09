@@ -15,7 +15,8 @@ export type StubPost = {
   publishedAt: string;
   categoryIds?: number[];
   paragraphs: string[];
-  /** its prose, credit lines included; none unless given */
+  /** the words of its prose, its paragraphs as the credit lines it counts
+      among them; none unless given */
   words?: number;
 };
 
@@ -37,11 +38,11 @@ export function stubArchive({
      test left in it would be drawn instead */
   queryClient.clear();
   const snapshot = {
-    posts: posts.map((post) => ({
+    posts: posts.map(({ words = 0, ...post }) => ({
       categoryIds: [],
       link: `https://example.com/${post.id}`,
-      words: 0,
       ...post,
+      prose: { words, paragraphs: post.paragraphs },
     })),
     categories,
     fetchedAt: new Date().toISOString(),

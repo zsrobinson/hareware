@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { buildArchive, similarNames, type SourcePost } from "./archive";
 import { DEFAULT_LABELS } from "./labels";
-import { bodyWords, paragraphs } from "./parse";
+import { bodyProse, paragraphs } from "./parse";
 import type { Ignored, Override, SheetState, Unscoped } from "./sheet";
 
 /* invented names only: what the Sheet maps is private, so no test may pair a
@@ -19,7 +19,7 @@ const post = (
   title: `Post ${id}`,
   categoryIds,
   paragraphs,
-  words: 0,
+  prose: { words: 0, paragraphs: [] },
 });
 
 const categories = new Map([
@@ -412,7 +412,7 @@ test("the archive lists its sections in the paper's order, not alphabetically", 
 /* a post as the archive's loader makes one out of WordPress's markup */
 const fromHtml = (id: number, html: string): SourcePost => ({
   ...post(id, paragraphs(html)),
-  words: bodyWords(html),
+  prose: bodyProse(html),
 });
 
 test("counts an article's prose: paragraphs, subheadings and list items, not its credits", () => {
@@ -485,4 +485,19 @@ test("a credit line counts as prose until a label makes it one", () => {
   expect(
     words([...DEFAULT_LABELS, { label: "Squirrel wrangling", role: "other" }]),
   ).toBe(5);
+});
+
+/* a credit in a caption is read as a credit, and was never counted as
+   prose, so taking it off would take five words of prose down to one */
+test("takes off only the credit lines it counted, never a caption's", () => {
+  const html = `
+    <p>Article by: Penn Name</p>
+    <p>One two three four five.</p>
+    <figure><img src="x"><figcaption><p>Image Credits: Ida Imager</p></figcaption></figure>
+    <div class="wp-caption"><p class="wp-caption-text">Photo by Cam Era</p></div>`;
+  const archive = build([fromHtml(1, html)]);
+
+  expect(archive.articles[0]!.words).toBe(5);
+  /* and the caption's credit still credits */
+  expect(names(archive, 0, "image")).toEqual(["Ida Imager"]);
 });

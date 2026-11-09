@@ -10,7 +10,7 @@ const post = (id: number, publishedAt: string): SourcePost => ({
   title: `Post ${id}`,
   categoryIds: [103],
   paragraphs: ["Article by: Penn Name"],
-  words: 0,
+  prose: { words: 0, paragraphs: [] },
 });
 
 const archive = buildArchive({

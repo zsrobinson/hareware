@@ -30,6 +30,7 @@ const post = (id: number, title: string, section: number, by: string) => ({
   link: `https://example.com/${id}`,
   categoryIds: [section],
   paragraphs: ["Some text.", `Article by: ${by}`],
+  prose: { words: 0, paragraphs: [] },
 });
 
 beforeEach(() => {

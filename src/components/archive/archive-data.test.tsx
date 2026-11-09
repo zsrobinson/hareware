@@ -10,7 +10,7 @@ const minutesAgo = (minutes: number) =>
   new Date(Date.now() - minutes * 60_000).toISOString();
 
 /* the stored reads, by their keys in Cache Storage */
-const SNAPSHOT = "/wordpress-snapshot-v3";
+const SNAPSHOT = "/wordpress-snapshot-v4";
 const VIEWS = "/wordpress-views-v2";
 
 /* one invented article, as a stored read of WordPress keeps it */
@@ -23,7 +23,7 @@ const snapshot = (fetchedAt: string, publishedAt = "2026-10-01T10:00:00Z") => ({
       title: "Post 7",
       categoryIds: [103],
       paragraphs: ["Article by: Penn Name"],
-      words: 120,
+      prose: { words: 120, paragraphs: ["Article by: Penn Name"] },
     },
   ],
   categories: [[103, "News"]],

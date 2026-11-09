@@ -32,8 +32,10 @@ export type SourcePost = {
   title: string;
   categoryIds: number[];
   paragraphs: string[];
-  /** `bodyWords()` of the body: its prose, credit lines included */
-  words: number;
+  /** `bodyProse()` of the body: the words of its prose, credit lines
+      included, and its short paragraphs among them, which the labels may
+      make credit lines to take off */
+  prose: { words: number; paragraphs: string[] };
 };
 
 /** someone counted for a credit, and why they count as who they do */
@@ -205,8 +207,8 @@ export function buildArchive(input: {
       publishedAt: post.publishedAt,
       section,
       words:
-        post.words -
-        countWords(creditParagraphs(post.paragraphs, labels).join(" ")),
+        post.prose.words -
+        countWords(creditParagraphs(post.prose.paragraphs, labels).join(" ")),
       views: { status: "unavailable" },
       credits,
       problems: problemsOf(

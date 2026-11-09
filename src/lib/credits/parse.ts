@@ -116,18 +116,25 @@ const BLOCK =
   /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DD|DIV|DL|DT|FIGCAPTION|FIGURE|FOOTER|H[1-6]|HEADER|HR|LI|OL|P|PRE|SECTION|TABLE|TBODY|TD|TH|THEAD|TR|UL)$/;
 
 /**
- * the words of a post's prose: the text of its paragraphs, subheadings and
- * list items, each run of text ending where a block does, and a block inside
- * another counted once. Captions and embeds are not prose, even in a `<p>`. Credit lines are counted here, since which lines are
- * credits depends on the labels: `creditParagraphs()` is what to take off.
+ * a post's prose: the words of its paragraphs, subheadings and list items,
+ * each run of text ending where a block does, and a block inside another
+ * counted once; and the paragraphs among them short enough to be credit
+ * lines. Captions and embeds are not prose, even in a `<p>`. Credit lines
+ * are counted here, since which lines are credits depends on the labels:
+ * `creditParagraphs()` of these `paragraphs` is what to take off, and only
+ * these, so a credit in a caption, never counted, is never taken off.
  * In the browser, with its own parser (~/lib/services/wordpress/parse-document)
  */
-export function bodyWords(html: string): number {
+export function bodyProse(html: string): {
+  words: number;
+  paragraphs: string[];
+} {
   const document = parseDocument(
     `<!doctype html><html><body>${html}</body></html>`,
   );
   let words = 0;
   let run = "";
+  const paragraphs: string[] = [];
   const end = () => {
     words += countWords(run);
     run = "";
@@ -148,12 +155,17 @@ export function bodyWords(html: string): number {
       const block = BLOCK.test(tag);
       if (block) end();
       walk(child, prose || PROSE.has(tag));
+      /* a paragraph holds no block, so its run is its text whole */
+      if (tag === "P") {
+        const text = run.replace(/[\s\u00a0]+/g, " ").trim();
+        if (text && text.length <= MAX_CREDIT_LENGTH) paragraphs.push(text);
+      }
       if (block) end();
     }
   };
   walk(document.body, false);
   end();
-  return words;
+  return { words, paragraphs };
 }
 
 /**

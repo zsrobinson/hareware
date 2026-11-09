@@ -28,6 +28,7 @@ const post = (id: number, title: string, writer: string) => ({
   link: `https://example.com/${id}`,
   categoryIds: [],
   paragraphs: ["Some text.", `Article by: ${writer}`],
+  prose: { words: 0, paragraphs: [] },
 });
 
 beforeEach(() => {

@@ -20,7 +20,7 @@ const post = (id: number, byline: string): SourcePost => ({
   title: `Post ${id}`,
   categoryIds: [103],
   paragraphs: [`Article by: ${byline}`, "Image Credits: Ida Imager"],
-  words: 0,
+  prose: { words: 0, paragraphs: [] },
 });
 
 const answered = (postId: number): Override => ({

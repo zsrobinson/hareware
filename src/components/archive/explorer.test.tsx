@@ -10,6 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { ArticlesPage } from "./articles";
 import { PeoplePage } from "./people";
+import { stubArchive } from "./stub-archive";
 
 /*
   A count in the chart's table opens what it counts beside the chart: the
@@ -251,7 +252,8 @@ test("what a mark counts opens as filters on either table", async () => {
 });
 
 test("the builder turns a table into a chart, as Custom, and Reset brings the table back", async () => {
-  window.history.replaceState(null, "", "/people");
+  /* a name searched for on the table is not what a chart's search reads */
+  window.history.replaceState(null, "", "/people?q=ben");
   const user = userEvent.setup();
   render(<PeoplePage />);
   await user.click(await screen.findByRole("button", { name: "Customize" }));
@@ -266,6 +268,7 @@ test("the builder turns a table into a chart, as Custom, and Reset brings the ta
   const params = new URLSearchParams(window.location.search);
   expect(params.get("view")).toBe("custom");
   expect(params.get("layout")).toBe("chart");
+  expect(params.has("q")).toBe(false);
   expect(document.querySelector("figcaption")).toBeTruthy();
 
   await user.click(within(panel).getByRole("button", { name: "Reset" }));
@@ -294,4 +297,36 @@ test("Copy as view takes in the Columns menu and People's Show", async () => {
   expect(copied).toContain("minimum: 5,");
   expect(copied).toContain('"first"]');
   expect(copied).not.toContain('"last"');
+});
+
+test("a search for a name is cleared on a chart, which would read it as a title", async () => {
+  stubArchive({
+    posts: [
+      {
+        id: 1,
+        title: "An invented headline",
+        publishedAt: daysAgo(3),
+        paragraphs: ["Article by: Mask One"],
+      },
+    ],
+    overrides: [
+      {
+        postId: 1,
+        role: "writer",
+        byline: "Mask One",
+        realName: "Ada Example",
+        note: "",
+      },
+    ],
+  });
+  window.history.replaceState(null, "", "/people?q=ada");
+  const user = userEvent.setup();
+  render(<PeoplePage />);
+  /* the table finds Ada by name, though no article prints it */
+  await screen.findByRole("button", { name: /Ada Example/ });
+  await user.click(screen.getByRole("tab", { name: "Contributors" }));
+  await waitFor(() =>
+    expect(new URLSearchParams(window.location.search).has("q")).toBe(false),
+  );
+  expect(screen.queryByText("Nothing matches these filters.")).toBeNull();
 });

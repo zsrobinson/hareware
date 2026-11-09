@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ComponentType } from "react";
+import { toast } from "sonner";
 import { CopyTextButton } from "~/components/copy-button";
 import { PageActions } from "~/components/page-actions";
 import { PanelGroup, SidePanel, useIsPhone } from "~/components/panel";
@@ -28,7 +29,7 @@ import {
   type ViewProps,
 } from "./archive-shell";
 import { ChartView } from "./charts";
-import { carryOver } from "./filters";
+import { carryOver, type FilterState, type Searching } from "./filters";
 import { useOpenRow, type OpenRow } from "./open-row";
 import { useInAddress } from "./page-state";
 import { ViewBuilder } from "./view-builder";
@@ -41,6 +42,7 @@ import {
   questionOf,
   readView,
   resetView,
+  searchingOf,
   shapeOf,
   viewOf,
   viewsOn,
@@ -81,6 +83,11 @@ const ICONS: Record<string, LucideIcon> = {
   [CUSTOM]: SlidersHorizontalIcon,
 };
 
+const SEARCHED_FOR: Record<Searching, string> = {
+  articles: "this view searches titles and bylines",
+  people: "this view searches names and bylines",
+};
+
 /* the name a page's open row had in links from before (see open-row.tsx) */
 const LEGACY: Record<Source, string> = {
   articles: "article",
@@ -103,7 +110,7 @@ export function ExplorerPage({
   const shape = shapeOf(state, source);
   return (
     <ArchiveShell
-      searching={shape.type === "table" ? source : "articles"}
+      searching={searchingOf(shape, source)}
       opening={openingOf(state, source)}
       period={
         shape.type === "chart" && isPeriod(shape.chart.by)
@@ -185,8 +192,24 @@ function Explorer({
     setState(next);
     setPicked({});
     setFilterState(
-      carryOver(filterState, openingOf(state, source), openingOf(next, source)),
+      searchOn(
+        carryOver(
+          filterState,
+          openingOf(state, source),
+          openingOf(next, source),
+        ),
+        shapeOf(next, source),
+      ),
     );
+  };
+  /* a search is of names on People's table and of what articles print on a
+     chart: one the next view would read another way is cleared, and said */
+  const searchOn = (filters: FilterState, to: Shape): FilterState => {
+    const term = filters.search.trim();
+    const searching = searchingOf(to, source);
+    if (!term || searching === searchingOf(shape, source)) return filters;
+    toast(`Cleared the search for “${term}”: ${SEARCHED_FOR[searching]}`);
+    return { ...filters, search: "" };
   };
   const change = (next: Shape) => {
     /* a slice is a chart's, and a row a table's */
@@ -195,8 +218,15 @@ function Explorer({
       slice.close();
     }
     setState(changeView(state, next, source));
+    const filters = searchOn(filterState, next);
+    if (filters !== filterState) setFilterState(filters);
   };
-  const reset = () => setState(resetView(state, source));
+  const reset = () => {
+    const next = resetView(state, source);
+    setState(next);
+    const filters = searchOn(filterState, shapeOf(next, source));
+    if (filters !== filterState) setFilterState(filters);
+  };
 
   const tabs = [
     ...viewsOn(source).map((view) => ({

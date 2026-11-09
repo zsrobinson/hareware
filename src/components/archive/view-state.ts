@@ -17,7 +17,7 @@ import {
   writeChart,
   type ChartConfig,
 } from "./chart-config";
-import { clearedState, type FilterState } from "./filters";
+import { clearedState, type FilterState, type Searching } from "./filters";
 import { readChoice, readSort, writeChoice, writeSort } from "./page-state";
 import {
   COLUMNS,
@@ -74,6 +74,11 @@ const shapeOfView = ({ layout }: View): Shape =>
   layout.type === "table"
     ? { type: "table", columns: layout.table.columns }
     : { type: "chart", chart: layout.chart };
+
+/** what the search box looks at: a person's names on People's table, and
+    what an article prints everywhere else */
+export const searchingOf = (shape: Shape, source: Source): Searching =>
+  shape.type === "table" ? source : "articles";
 
 /** what is on screen, as the builder shows it */
 export function shapeOf(state: ViewState, source: Source): Shape {

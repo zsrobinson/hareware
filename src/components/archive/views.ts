@@ -15,7 +15,16 @@ import type { PivotConfig } from "./pivot-config";
 
 /** each table's columns, in the order a new view lists them */
 export const COLUMNS = {
-  articles: ["date", "title", "section", "writer", "image", "other"],
+  articles: [
+    "date",
+    "title",
+    "section",
+    "writer",
+    "image",
+    "other",
+    "words",
+    "views",
+  ],
   people: [
     "name",
     "contributions",
@@ -41,6 +50,8 @@ export const COLUMN_NAMES: Record<ColumnId, string> = {
   writer: "Writing",
   image: "Image",
   other: "Other",
+  words: "Words",
+  views: "Views",
   name: "Name",
   contributions: "Contributions",
   sections: "Sections",

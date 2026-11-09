@@ -111,7 +111,7 @@ function ProblemsLink({
 
 /* what a narrower table leaves out until someone asks for it, so none of
    it is cut off at the edge: beside a panel, and on a phone */
-const BESIDE_PANEL = ["section", "image", "other"];
+const BESIDE_PANEL = ["section", "image", "other", "words"];
 
 /* the column whose "—" already says a credit is missing */
 const CREDIT_COLUMN: Partial<Record<ProblemKind, Role>> = {
@@ -185,6 +185,45 @@ const EVERY_COLUMN: ColumnDef<ArchiveArticle, unknown>[] = [
       </div>
     ),
   })),
+  {
+    id: "words",
+    accessorKey: "words",
+    header: sortable(COLUMN_NAMES.words, "right"),
+    meta: { csvHeader: COLUMN_NAMES.words },
+    sortDescFirst: true,
+    cell: ({ row }) => (
+      <div className="text-right tabular-nums">
+        {row.original.words.toLocaleString()}
+      </div>
+    ),
+  },
+  {
+    id: "views",
+    /* unavailable is no number: blank in a CSV, last in a sort, and never
+       read as zero */
+    accessorFn: (article) =>
+      article.views.status === "counted" ? article.views.total : undefined,
+    sortUndefined: "last",
+    sortDescFirst: true,
+    header: sortable(COLUMN_NAMES.views, "right"),
+    meta: { csvHeader: COLUMN_NAMES.views },
+    cell: ({ row }) => {
+      const { views } = row.original;
+      return views.status === "counted" ? (
+        <div className="text-right tabular-nums">
+          {views.total.toLocaleString()}
+        </div>
+      ) : (
+        <div
+          className="text-muted-foreground text-right"
+          title="Views unavailable"
+        >
+          <span aria-hidden>–</span>
+          <span className="sr-only">Views unavailable</span>
+        </div>
+      );
+    },
+  },
 ];
 const DEFS = Object.fromEntries(
   EVERY_COLUMN.map((column) => [column.id, column]),

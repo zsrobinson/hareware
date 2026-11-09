@@ -191,9 +191,9 @@ export type ViewProps = {
       empty when nothing is set. A phone hides the filters in a sheet, so the
       caption is where the cut shows */
   filterNote: string;
-  /** the Time filter, which choosing a chart view may set */
-  preset: Preset;
-  setPreset: (preset: Preset) => void;
+  /** the filters as set, which choosing a chart view may change */
+  filterState: FilterState;
+  setFilterState: (state: FilterState) => void;
   /** a phone's Reload, on a page with no filter bar to end: the view puts it
       at the end of its first row. Null where the shell has placed it */
   reloadButton: ReactNode;
@@ -380,10 +380,6 @@ function Ready({
     writeState(state, url.searchParams, defaultPreset);
     window.history.replaceState(window.history.state, "", url);
   }, [state, defaultPreset]);
-  const setPreset = useCallback(
-    (preset: Preset) => setState((now) => ({ ...now, preset })),
-    [],
-  );
 
   /* a page without the Roles filter counts every role, whatever a link says */
   const filters = useMemo(
@@ -518,8 +514,8 @@ function Ready({
               refresh: refreshNow,
               refreshing,
               filterNote: describeFilters(state, period, searching),
-              preset: state.preset,
-              setPreset,
+              filterState: state,
+              setFilterState: setState,
               reloadButton: inView ? freshness(true) : null,
             })}
           </div>

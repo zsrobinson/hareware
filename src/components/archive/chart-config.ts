@@ -1,8 +1,8 @@
 /*
   What the Charts page draws, kept in the url beside the filters so a link
-  reproduces the chart. A saved view is a name for one configuration and the
-  time range it opens on; Custom is whatever the builder last made, on the
-  range of the view it was made from. Every view is a configuration the
+  reproduces the chart. A saved view is one of ./views, a configuration and
+  the filters it opens on; Custom is whatever the builder last made, on the
+  filters of the view it was made from. Every view is a configuration the
   builder can show, so choosing one and then changing a setting starts from
   exactly what was on screen. The range is only where Time starts: changing
   it is a filter, and leaves the view as it is. The series the legend has
@@ -19,7 +19,8 @@ import {
   type Measure,
   type Order,
 } from "~/lib/credits/stats";
-import type { Preset } from "./filters";
+import { clearedState, type FilterState, type Preset } from "./filters";
+import { VIEWS, type View } from "./views";
 
 export type Split = "none" | "section" | "role";
 export type Draw = "stacked" | "grouped" | "lines";
@@ -65,94 +66,6 @@ export const VALUES: Values[] = ["number", "share", "running"];
 export const ORDERS: Order[] = ["largest", "natural"];
 export const TOPS = [10, 25, 50, 0];
 
-/*
-  the questions an editor asks most, most of them about the last three months;
-  the long-run views keep a range where three months would be a sliver
-*/
-export const VIEWS = [
-  {
-    /* what we have published lately, and where */
-    id: "sections",
-    label: "Sections",
-    range: "3m",
-    config: {
-      count: "articles",
-      by: "section",
-      split: "none",
-      draw: "stacked",
-      values: "number",
-      order: "natural",
-      top: 25,
-    },
-  },
-  {
-    /* who has been doing the work, and what work */
-    id: "contributors",
-    label: "Contributors",
-    range: "3m",
-    config: {
-      count: "contributions",
-      by: "person",
-      split: "role",
-      draw: "stacked",
-      values: "number",
-      order: "largest",
-      top: 25,
-    },
-  },
-  {
-    /* who joined lately, where they started, and as what */
-    id: "newcomers",
-    label: "Newcomers",
-    range: "3m",
-    config: {
-      count: "newcomers",
-      by: "section",
-      split: "role",
-      draw: "stacked",
-      values: "number",
-      order: "natural",
-      top: 25,
-    },
-  },
-  {
-    /* how many people the club has had at work, semester to semester */
-    id: "headcount",
-    label: "Headcount",
-    range: "all",
-    config: {
-      count: "people",
-      by: "semester",
-      split: "none",
-      draw: "stacked",
-      values: "number",
-      order: "largest",
-      top: 25,
-    },
-  },
-  {
-    /* the paper's output since the archive begins */
-    id: "history",
-    label: "History",
-    range: "all",
-    config: {
-      count: "articles",
-      by: "semester",
-      split: "section",
-      draw: "stacked",
-      values: "number",
-      order: "largest",
-      top: 25,
-    },
-  },
-] as const satisfies {
-  id: string;
-  label: string;
-  /** the Time filter the view opens on */
-  range: Preset;
-  config: ChartConfig;
-}[];
-
 export type ViewId = (typeof VIEWS)[number]["id"] | "custom";
 
 export type SavedId = (typeof VIEWS)[number]["id"];
@@ -168,18 +81,39 @@ export type ChartState = {
 };
 
 const FIRST = VIEWS[0];
-const DEFAULT_CONFIG: ChartConfig = FIRST.config;
+const DEFAULT_CONFIG: ChartConfig = FIRST.layout.chart;
 
 const savedView = (id: SavedId) => VIEWS.find((view) => view.id === id)!;
+const viewOf = (state: Pick<ChartState, "view" | "base">) =>
+  savedView(state.view === "custom" ? state.base : state.view);
 
 export function configOf(state: ChartState): ChartConfig {
   if (state.view === "custom") return state.custom ?? DEFAULT_CONFIG;
-  return savedView(state.view).config;
+  return savedView(state.view).layout.chart;
+}
+
+/** what a saved view answers; Custom answers whatever was asked of it */
+export function questionOf(state: Pick<ChartState, "view">): string | null {
+  return state.view === "custom" ? null : savedView(state.view).question;
 }
 
 /** the Time filter the chart opens on, which its link leaves out */
 export function rangeOfView(state: Pick<ChartState, "view" | "base">): Preset {
-  return savedView(state.view === "custom" ? state.base : state.view).range;
+  return viewOf(state).range;
+}
+
+/** every filter as the chart's view opens on it */
+export function openingOf(
+  state: Pick<ChartState, "view" | "base">,
+): FilterState {
+  const view: View = viewOf(state);
+  const { sections = [], roles = [], people = [] } = view.filters ?? {};
+  return {
+    ...clearedState(view.range),
+    sections: [...sections],
+    roles: [...roles],
+    people: [...people],
+  };
 }
 
 /**

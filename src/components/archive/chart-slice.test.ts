@@ -22,9 +22,9 @@ import {
   SPLITS,
   TOPS,
   VALUES,
-  VIEWS,
   type ChartConfig,
 } from "./chart-config";
+import { VIEWS } from "./views";
 import {
   chartCount,
   drawnMembers,
@@ -264,11 +264,11 @@ test("the builder makes charts of every kind, so all of them are checked", () =>
   expect(new Set(configs.map((c) => c.draw)).size).toBe(DRAWS.length);
   expect(counting.length).toBeGreaterThan(50);
   /* and the saved views among them */
-  for (const view of VIEWS) expect(configs).toContainEqual(view.config);
+  for (const view of VIEWS) expect(configs).toContainEqual(view.layout.chart);
 });
 
 test("Headcount counts each person once a semester, whatever they did", () => {
-  const headcount = VIEWS.find((view) => view.id === "headcount")!.config;
+  const headcount = VIEWS.find((view) => view.id === "headcount")!.layout.chart;
   const grouped = groupOf(headcount, archive, NO_FILTERS, archive);
   /* Fall 2025: Ada wrote twice and illustrated once, beside Bo, Cy and Dee */
   const fall = sliceMembers(grouped, { category: "2025-2", series: null }, []);
@@ -410,7 +410,7 @@ test("a slice's count says what it is of", () => {
 });
 
 test("the caption counts what is drawn, of all there is", () => {
-  const history = VIEWS.find((view) => view.id === "history")!.config;
+  const history = VIEWS.find((view) => view.id === "history")!.layout.chart;
   const grouped = groupOf(history, archive, NO_FILTERS, archive);
   expect(chartCount(grouped, [])).toBe("10 articles");
   /* four of the ten are News */
@@ -442,7 +442,7 @@ test("a top ten's caption counts the ten people's contributions", () => {
 });
 
 test("Headcount's caption counts each person once, which its columns do not", () => {
-  const headcount = VIEWS.find((view) => view.id === "headcount")!.config;
+  const headcount = VIEWS.find((view) => view.id === "headcount")!.layout.chart;
   const grouped = groupOf(headcount, archive, NO_FILTERS, archive);
   const columns = Object.values(grouped.totals).reduce((a, b) => a + b, 0);
   expect(chartCount(grouped, [])).toBe("13 different people");

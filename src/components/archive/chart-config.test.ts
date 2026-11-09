@@ -3,18 +3,25 @@ import {
   allows,
   configOf,
   COUNTS,
+  openingOf,
   DRAWS,
   GROUPINGS,
   rangeOfView,
   readChart,
   settle,
   SPLITS,
-  VIEWS,
   writeChart,
   type ChartConfig,
   type ChartState,
 } from "./chart-config";
-import { clearedState, readState, writeState, type Preset } from "./filters";
+import { VIEWS } from "./views";
+import {
+  carryOver,
+  clearedState,
+  readState,
+  writeState,
+  type Preset,
+} from "./filters";
 
 const roundTrip = (state: ChartState) => {
   const params = new URLSearchParams("range=semester&q=ann");
@@ -23,7 +30,50 @@ const roundTrip = (state: ChartState) => {
 };
 
 test("every saved view is a configuration the builder could have made", () => {
-  for (const view of VIEWS) expect(settle(view.config)).toEqual(view.config);
+  for (const view of VIEWS)
+    expect(settle(view.layout.chart), view.id).toEqual(view.layout.chart);
+});
+
+test("every saved view opens from its link as declared, and as Custom", () => {
+  for (const view of VIEWS) {
+    const saved: ChartState = {
+      view: view.id,
+      custom: null,
+      base: view.id,
+      hidden: [],
+    };
+    const params = new URLSearchParams();
+    writeChart(saved, params);
+    writeState(openingOf(saved), params, rangeOfView(saved));
+    const chart = readChart(`?${params}`);
+    expect(chart.view, view.id).toBe(view.id);
+    expect(configOf(chart), view.id).toEqual(view.layout.chart);
+    expect(readState(`?${params}`, rangeOfView(chart)), view.id).toEqual(
+      openingOf(saved),
+    );
+
+    const custom = roundTrip({
+      ...saved,
+      view: "custom",
+      custom: view.layout.chart,
+    });
+    expect(configOf(custom.state), view.id).toEqual(view.layout.chart);
+    expect(custom.state.base, view.id).toBe(view.id);
+  }
+});
+
+test("a view opens on its own filters, unless they have been changed", () => {
+  const from = { ...clearedState("3m"), roles: ["writer" as const] };
+  const to = { ...clearedState("all"), sections: ["News"] };
+  /* untouched: the next view's own */
+  expect(carryOver(from, from, to)).toEqual(to);
+  /* Time and a typed search were changed, so they stand */
+  const changed = { ...from, preset: "12m" as const, search: "ada" };
+  expect(carryOver(changed, from, to)).toEqual({
+    ...to,
+    preset: "12m",
+    search: "ada",
+  });
 });
 
 test("a link reproduces a custom chart, and keeps the filters' parameters", () => {
@@ -51,7 +101,7 @@ test("a link reproduces a custom chart, and keeps the filters' parameters", () =
 test("a saved view links by name alone, and the default by nothing", () => {
   const saved = roundTrip({
     view: "headcount",
-    custom: VIEWS[0].config,
+    custom: VIEWS[0].layout.chart,
     base: "headcount",
     hidden: [],
   });
@@ -119,7 +169,7 @@ test("a link leaves out the view's own time range, and keeps any other", () => {
   /* Custom keeps the range of the view it was made from */
   const custom: ChartState = {
     view: "custom",
-    custom: { ...VIEWS[0].config, values: "share" },
+    custom: { ...VIEWS[0].layout.chart, values: "share" },
     base: "headcount",
     hidden: [],
   };
@@ -173,7 +223,7 @@ test("a choice that rules another out moves it", () => {
 
 test("no choice in the builder moves what is counted, grouped or split", () => {
   /* Articles by section: an article has no one role or person */
-  const sections = VIEWS[0].config;
+  const sections = VIEWS[0].layout.chart;
   const ok = allows(sections);
   expect(ok.split.role).toBe(false);
   expect(ok.by.person).toBe(false);

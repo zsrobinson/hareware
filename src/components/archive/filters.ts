@@ -57,6 +57,29 @@ export const clearedState = (preset: Preset): FilterState => ({
   search: "",
 });
 
+/**
+ * The filters once another view is chosen: each as the new view opens on it,
+ * unless it has been changed since the last view opened, when the change
+ * stands until Clear.
+ */
+export function carryOver(
+  now: FilterState,
+  from: FilterState,
+  to: FilterState,
+): FilterState {
+  const kept = <T>(key: "preset" | "sections" | "roles" | "people"): T =>
+    (JSON.stringify(now[key]) === JSON.stringify(from[key])
+      ? to[key]
+      : now[key]) as T;
+  return {
+    ...now,
+    preset: kept("preset"),
+    sections: kept("sections"),
+    roles: kept("roles"),
+    people: kept("people"),
+  };
+}
+
 const SEMESTER_STARTS = ["01-01", "06-01"];
 const SEMESTER_ENDS = ["05-31", "12-31"];
 

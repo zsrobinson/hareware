@@ -68,15 +68,17 @@ import {
   COUNTS,
   GROUPINGS,
   groupOf,
+  openingOf,
+  questionOf,
   rangeOfView,
   readChart,
   SPLITS,
-  VIEWS,
   writeChart,
   type ChartConfig,
   type ChartState,
   type ViewId,
 } from "./chart-config";
+import { VIEWS } from "./views";
 import {
   chartCount,
   columnSeries,
@@ -89,6 +91,7 @@ import {
   type Slice,
 } from "./chart-slice";
 import { NEUTRAL, seriesColor } from "./colors";
+import { carryOver } from "./filters";
 import { RowDetails, useOpenRow } from "./open-row";
 import { SlicePanel } from "./slice-panel";
 
@@ -180,8 +183,8 @@ function Charts({
   archive,
   filters,
   filterNote,
-  preset,
-  setPreset,
+  filterState,
+  setFilterState,
   chart: state,
   setChart: setState,
 }: ViewProps & {
@@ -195,6 +198,7 @@ function Charts({
   }, [state]);
 
   const config = configOf(state);
+  const question = questionOf(state);
   const { hidden } = state;
   const setHidden = (next: string[]) => setState({ ...state, hidden: next });
   const [customizing, setCustomizing] = useState(false);
@@ -213,8 +217,7 @@ function Charts({
       base: state.view === "custom" ? state.base : state.view,
     });
   /* Custom starts from what was on screen until the builder has made one.
-     a view brings its own time range, unless Time has been chosen since the
-     last one brought its own: that choice stands until Clear */
+     a view brings its own filters (`carryOver`) */
   const choose = (view: ViewId) => {
     if (view === state.view) return;
     /* another view's marks count other things, whatever their keys */
@@ -224,7 +227,7 @@ function Charts({
         ? { view, custom: config, base: state.view }
         : { view, custom: state.custom, base: state.base };
     show(next);
-    if (preset === rangeOfView(state)) setPreset(rangeOfView(next));
+    setFilterState(carryOver(filterState, openingOf(state), openingOf(next)));
   };
 
   const shown = useMemo(
@@ -371,6 +374,9 @@ function Charts({
       <figure id={panelId} role="tabpanel" className="space-y-4">
         <figcaption className="space-y-0.5">
           <div className="font-medium">{titleOf(plot)}</div>
+          {question && (
+            <div className="text-muted-foreground text-sm">{question}</div>
+          )}
           {/* what is drawn, and which filters cut it */}
           <div className="text-muted-foreground text-sm">
             {[chartCount(grouped, hidden), filterNote]

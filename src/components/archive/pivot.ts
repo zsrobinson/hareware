@@ -401,16 +401,60 @@ export function pivotMatrix(pivot: Pivot): string[][] {
       ? [String(cellValue(pivot, { row, column: null }).average ?? "")]
       : [];
   const measure = COUNTS.find((c) => c.id === pivot.grouped.measure)!.label;
+  /* a cell of averages says so in its header, as one standing alone must */
+  const averaged = pivot.config.values === "per-article" && split;
+  const named = (label: string) => (averaged ? `${label} per article` : label);
+  const rows = [...pivot.rows.map((r) => r.key), null];
+  /* a column of views some of whose articles have none read: their counts
+     beside it, so a partial sum or average reads as one */
+  const read = (slice: PivotSlice) =>
+    amountOf(pivot.members(slice), pivot.grouped.measure);
+  const companions = (label: string, column: string | null) =>
+    pivot.grouped.measure === "views" &&
+    rows.some((row) => read({ row, column }).missing > 0)
+      ? {
+          header: [
+            `${label}: articles counted`,
+            `${label}: articles without views`,
+          ],
+          cells: (row: string | null) => {
+            const { counted, missing } = read({ row, column });
+            return [String(counted), String(missing)];
+          },
+        }
+      : null;
+  const valueColumns = [
+    ...pivot.columns.map((c) => ({
+      label: c.label,
+      cell: (row: string | null) => text({ row, column: c.key }),
+      beside: companions(c.label, c.key),
+    })),
+    pivot.ranges
+      ? {
+          label: "Difference",
+          cell: (row: string | null) => differenceText(pivot, row, 1),
+          beside: null,
+        }
+      : {
+          label: split ? "Total" : measure,
+          cell: (row: string | null) => text({ row, column: null }),
+          beside: companions(split ? "Total" : measure, null),
+        },
+  ];
   const header = [
     dimensionName(pivot.config.rows),
-    ...pivot.columns.map((c) => c.label),
-    pivot.ranges ? "Difference" : split ? "Total" : measure,
+    ...valueColumns.flatMap((c) => [
+      c.label === "Difference" ? c.label : named(c.label),
+      ...(c.beside?.header ?? []),
+    ]),
     ...(beside ? ["Per article"] : []),
   ];
   const line = (row: string | null, label: string) => [
     label,
-    ...pivot.columns.map((c) => text({ row, column: c.key })),
-    pivot.ranges ? differenceText(pivot, row, 1) : text({ row, column: null }),
+    ...valueColumns.flatMap((c) => [
+      c.cell(row),
+      ...(c.beside?.cells(row) ?? []),
+    ]),
     ...per(row),
   ];
   return [

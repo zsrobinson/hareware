@@ -37,6 +37,7 @@ import {
   post,
   summed,
 } from "./invented-archive";
+import { chartMatrix } from "./charts";
 import { COMPARES } from "./compare";
 import { VIEWS } from "./views";
 
@@ -773,4 +774,32 @@ test("per article is words or views over the articles counted, and nothing else'
       values: "per-article",
     }).draw.stacked,
   ).toBe(false);
+});
+
+/* News is posts 1, 4, 7 and 9: 4 and 9 have no views read */
+test("a CSV of views per article says so, with the articles each counted beside it", () => {
+  const config: ChartConfig = {
+    ...chartOf("sections"),
+    count: "views",
+    values: "per-article",
+  };
+  const { header, body } = chartMatrix(
+    groupOf(config, archive, NO_FILTERS, archive),
+    config,
+  );
+
+  expect(header).toEqual([
+    "Section",
+    "Views per article",
+    "Views: articles counted",
+    "Views: articles without views",
+  ]);
+  /* 37 views over posts 1 and 7 */
+  expect(body.find(([label]) => label === "News")).toEqual(["News", 19, 2, 2]);
+
+  /* a count of words has no articles without words */
+  const words = { ...config, count: "words" } as const;
+  expect(
+    chartMatrix(groupOf(words, archive, NO_FILTERS, archive), words).header,
+  ).toEqual(["Section", "Words per article"]);
 });

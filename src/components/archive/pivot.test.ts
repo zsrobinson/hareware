@@ -759,3 +759,36 @@ test("one column of views per article reads each sum, and beside it the average"
     ["Total", "703", "234"],
   ]);
 });
+
+test("a pivot of views per article heads each column so, with its articles beside it", () => {
+  const pivot = pivotOf(
+    {
+      count: "views",
+      rows: "section",
+      columns: "semester",
+      values: "per-article",
+      top: 25,
+      compare: "none",
+    },
+    archive,
+    NO_FILTERS,
+    archive,
+  );
+  const [header] = pivotMatrix(pivot);
+
+  /* Spring 2026 is posts 4 to 7, and 4 has no views read; Fall 2025 and
+     Fall 2026 have none missing except post 9, in Fall 2026 */
+  expect(header).toEqual([
+    "Section",
+    "Fall 2025 per article",
+    "Spring 2026 per article",
+    "Spring 2026: articles counted",
+    "Spring 2026: articles without views",
+    "Fall 2026 per article",
+    "Fall 2026: articles counted",
+    "Fall 2026: articles without views",
+    "Total per article",
+    "Total: articles counted",
+    "Total: articles without views",
+  ]);
+});

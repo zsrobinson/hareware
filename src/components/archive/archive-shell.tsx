@@ -636,15 +636,19 @@ const SOURCES: Record<Reload, { name: string; checking: string }> = {
  * fail on their own: being read, unreadable, being checked, not checked, or
  * their age. Reload reads them again with WordPress
  */
-function viewsStatus(
+export function viewsStatus(
   views: { summary: ViewsSummary; checking: boolean; failed: boolean },
   now: number,
 ): { text: string; warn: boolean } {
   const { summary } = views;
   if (summary.status === "reading")
     return { text: "Reading views…", warn: false };
+  /* asked again after they could not be read: being checked, not still
+     unavailable, though they were */
   if (summary.status === "unavailable")
-    return { text: "Views unavailable", warn: true };
+    return views.checking
+      ? { text: "Checking views again…", warn: false }
+      : { text: "Views unavailable", warn: true };
   if (views.checking) return { text: "Checking views…", warn: false };
   if (views.failed)
     return {

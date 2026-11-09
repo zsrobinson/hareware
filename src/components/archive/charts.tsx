@@ -2020,44 +2020,26 @@ function BarChart({
 }
 
 /** the chart's numbers, which every chart carries: the light-mode hues are not all 3:1 */
-function NumbersTable({
-  grouped,
-  config,
-  partial,
-  section,
-  ranges,
-  selected,
-  onOpen,
-}: {
-  grouped: Grouped;
-  config: ChartConfig;
-  partial: Map<string, Incomplete>;
-  section: string | undefined;
-  ranges: Compared["ranges"];
-  /** the slice open beside the chart */
-  selected: Slice | null;
-  /** each count opens what it counts, as the chart's marks do */
-  onOpen: (slice: Slice) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  /* the full record: every series, whatever the legend has off */
-  const plot = useMemo(
-    () => plotOf(grouped, config, [], partial, section, ranges),
-    [grouped, config, partial, section, ranges],
-  );
-  const split = plot.all.length > 1;
-  const totalLabel = totalName(config, split ? null : grouped.measure);
+/** a column of the numbers table, and of its CSV */
+type NumberColumn = {
+  label: string;
+  /** what a count in the column opens: one series, or (null) the category */
+  series: string | null;
+  count: (category: string) => number;
+  /** the share shown beside the count, when the chart is of shares */
+  share?: (category: string) => number;
+  /** a number that is no list, so opens nothing: two ranges' difference */
+  text?: (category: string) => string;
+};
 
-  const columns: {
-    label: string;
-    /** what a count in the column opens: one series, or (null) the category */
-    series: string | null;
-    count: (category: string) => number;
-    /** the share shown beside the count, when the chart is of shares */
-    share?: (category: string) => number;
-    /** a number that is no list, so opens nothing: two ranges' difference */
-    text?: (category: string) => string;
-  }[] = [
+/* every series, then the category's total or the pair's difference */
+function numberColumns(plot: Plot): NumberColumn[] {
+  const split = plot.all.length > 1;
+  const totalLabel = totalName(
+    plot.config,
+    split ? null : plot.grouped.measure,
+  );
+  return [
     ...(split
       ? plot.all.map((s) => ({
           label: s.label,
@@ -2085,38 +2067,106 @@ function NumbersTable({
               : undefined,
         },
   ];
+}
+
+/**
+ * The numbers table as rows of text, for a CSV that stands on its own: a
+ * per-article chart's headers say so, a count none of whose views could be
+ * read is blank, never 0, and a column of views some of whose articles have
+ * none read has their counts beside it, so a partial sum or average reads
+ * as one
+ */
+function numbersMatrix(plot: Plot): {
+  header: string[];
+  body: (string | number)[][];
+} {
+  const { grouped } = plot;
+  const per = plot.config.values === "per-article" ? " per article" : "";
+  const by = GROUPINGS.find((g) => g.id === plot.config.by)!.label;
+  const header: string[] = [by];
+  const cells: ((category: string) => string | number)[] = [];
+  for (const column of numberColumns(plot)) {
+    if (column.text) {
+      header.push(column.label);
+      cells.push(column.text);
+      continue;
+    }
+    header.push(`${column.label}${per}`);
+    cells.push((category) =>
+      plot.unread(category, column.series) ? "" : column.count(category),
+    );
+    const read = (category: string) =>
+      amountOf(
+        plot.members({ category, series: column.series }),
+        grouped.measure,
+      );
+    if (plot.categories.some((c) => read(c.key).missing > 0)) {
+      header.push(
+        `${column.label}: articles counted`,
+        `${column.label}: articles without views`,
+      );
+      cells.push(
+        (category) => read(category).counted,
+        (category) => read(category).missing,
+      );
+    }
+  }
+  return {
+    header,
+    body: plot.categories.map((c) => [
+      c.label,
+      ...cells.map((cell) => cell(c.key)),
+    ]),
+  };
+}
+
+/** the CSV of a chart's numbers table, every series on */
+export const chartMatrix = (
+  grouped: Grouped,
+  config: ChartConfig,
+  ranges: Compared["ranges"] = null,
+) => numbersMatrix(plotOf(grouped, config, [], new Map(), undefined, ranges));
+
+function NumbersTable({
+  grouped,
+  config,
+  partial,
+  section,
+  ranges,
+  selected,
+  onOpen,
+}: {
+  grouped: Grouped;
+  config: ChartConfig;
+  partial: Map<string, Incomplete>;
+  section: string | undefined;
+  ranges: Compared["ranges"];
+  /** the slice open beside the chart */
+  selected: Slice | null;
+  /** each count opens what it counts, as the chart's marks do */
+  onOpen: (slice: Slice) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  /* the full record: every series, whatever the legend has off */
+  const plot = useMemo(
+    () => plotOf(grouped, config, [], partial, section, ranges),
+    [grouped, config, partial, section, ranges],
+  );
+  const columns = numberColumns(plot);
   const by = GROUPINGS.find((g) => g.id === config.by)!.label;
 
   function download() {
     const day = new Date().toISOString().slice(0, 10);
-    /* a count none of whose views could be read is blank, never 0 */
-    const unread = (category: string, series: string | null) => {
-      const { counted, missing } = amountOf(
-        plot.members({ category, series }),
-        grouped.measure,
-      );
-      return counted === 0 && missing > 0;
-    };
-    const body = plot.categories.map((c) => [
-      c.label,
-      ...columns.map((column) =>
-        column.text
-          ? column.text(c.key)
-          : unread(c.key, column.series)
-            ? ""
-            : column.count(c.key),
-      ),
-    ]);
+    const { header, body } = numbersMatrix(plot);
     saveFile(
       /* the BOM makes excel read utf-8 */
-      new Blob(["\uFEFF", toCsv([by, ...columns.map((c) => c.label)], body)], {
+      new Blob(["\uFEFF", toCsv(header, body)], {
         type: "text/csv;charset=utf-8",
       }),
       `chart-${day}.csv`,
       "text/csv",
     );
   }
-
   /* one bordered box: its top row opens it, and the table is inside */
   return (
     <Collapsible

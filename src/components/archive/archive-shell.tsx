@@ -687,22 +687,29 @@ function Freshness({
       : `Updated ${ago(readAt, now)}`;
   const read = views && viewsStatus(views, now);
   const status = read ? `${own} · ${read.text}` : own;
-  const warn =
-    (checkFailed || read?.warn) && "text-amber-700 dark:text-amber-400";
+  /* each half warns for itself: views that failed leave the articles' age
+     as it is */
+  const amber = "text-amber-700 dark:text-amber-400";
+  const warn = (checkFailed || read?.warn) && amber;
 
   return (
     /* the last thing in its row lines its icon up with the content's edge */
     <span className="flex items-center gap-1 last:-mr-2">
       <span
         className={cn(
-          "text-xs leading-tight",
-          warn || "text-muted-foreground",
+          "text-muted-foreground text-xs leading-tight",
           compact && "sr-only",
         )}
         role="status"
         title={`Read from ${name} ${formatDateTime(readAt)}`}
       >
-        {status}
+        <span className={cn(checkFailed && amber)}>{own}</span>
+        {read && (
+          <>
+            {" · "}
+            <span className={cn(read.warn && amber)}>{read.text}</span>
+          </>
+        )}
       </span>
       <Button
         variant="ghost"
@@ -815,8 +822,9 @@ function ViewsNotice({ archive }: { archive: Archive }) {
   if (archive.views.status !== "unavailable") return null;
   return (
     <p className="text-muted-foreground border-l-2 border-amber-500/60 pl-3 text-sm">
-      Views couldn't be read, so no view counts are shown.{" "}
-      {archive.views.reason}
+      Views couldn't be read from WordPress just now. Try reloading in a minute.
+      {/* what WordPress or HareWare said, for whoever looks into it */}
+      <span className="block text-xs">{archive.views.reason}</span>
     </p>
   );
 }

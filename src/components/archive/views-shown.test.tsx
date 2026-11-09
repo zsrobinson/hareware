@@ -75,19 +75,52 @@ test("views that could not be read are said to be unavailable, beside the articl
   window.history.replaceState(null, "", "/articles");
   render(<ArticlesPage />);
 
-  expect(
-    (
-      await screen.findByText(
-        /Views couldn't be read, so no view counts/,
-        undefined,
-        WAIT,
-      )
-    ).textContent,
-  ).toContain("WordPress stats aren't set up");
+  const notice = await screen.findByText(
+    /^Views couldn't be read from WordPress just now/,
+    undefined,
+    WAIT,
+  );
+  expect(notice.textContent).toBe(
+    "Views couldn't be read from WordPress just now. Try reloading in a minute.WordPress stats aren't set up",
+  );
+  /* what was said, in small text of its own */
+  expect(notice.querySelector(".text-xs")!.textContent).toBe(
+    "WordPress stats aren't set up",
+  );
   await waitFor(
     () => expect(status()).toMatch(/^Updated .* · Views unavailable$/),
     WAIT,
   );
+  /* only the half that failed warns */
+  const [articles, views] = [
+    ...document.querySelectorAll('#page-actions [role="status"] > span'),
+  ];
+  expect(articles!.className).not.toMatch(/amber/);
+  expect(views!.className).toMatch(/amber/);
+});
+
+test("Most read sorts by date until views load, and says so", async () => {
+  stubArchive({ posts });
+  window.history.replaceState(null, "", "/articles?view=most-read");
+  render(<ArticlesPage />);
+
+  await screen.findByText(/Sorted by date until views load/, undefined, WAIT);
+  const header = (name: string) =>
+    screen
+      .getAllByRole("columnheader")
+      .find((cell) => cell.textContent === name)!;
+  /* Views claims no order it is not in; Published has the one it is in */
+  expect(header("Views").querySelector(".lucide-arrow-up-down")).toBeTruthy();
+  expect(header("Published").querySelector(".lucide-arrow-down")).toBeTruthy();
+  const titles = screen
+    .getAllByRole("row")
+    .slice(1)
+    .map((row) => within(row).getAllByRole("cell")[1]!.textContent);
+  expect(titles.map((title) => title!.split("No image")[0])).toEqual([
+    "A third invented headline",
+    "An invented headline",
+    "Another invented headline",
+  ]);
 });
 
 test("views read are dated beside the articles, with no notice", async () => {

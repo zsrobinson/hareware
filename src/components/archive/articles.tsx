@@ -260,10 +260,13 @@ function Articles({
     [shown, anyOther],
   );
   /* a sort on a column this table does not show now is held, and comes
-     back with it */
-  const sorting = held.filter((by) =>
-    columns.some((column) => column.id === by.id),
-  );
+     back with it; so is one by views until there are views to sort by,
+     the newest first meanwhile, which the caption says */
+  const viewsAwait =
+    archive.views.status !== "read" && held.some((by) => by.id === "views");
+  const sorting = viewsAwait
+    ? [{ id: "date", desc: true }]
+    : held.filter((by) => columns.some((column) => column.id === by.id));
 
   const article = editing
     ? archive.articles.find((a) => a.id === editing)
@@ -289,6 +292,7 @@ function Articles({
             {[
               `${rows.length} ${rows.length === 1 ? "article" : "articles"}`,
               filterNote,
+              viewsAwait && "Sorted by date until views load",
             ]
               .filter(Boolean)
               .join(" · ")}

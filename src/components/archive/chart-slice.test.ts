@@ -463,83 +463,86 @@ test("Headcount's caption counts each person once, which its columns do not", ()
   expect(columns).toBeGreaterThan(13);
 });
 
-test("every mark, as filters, lists on a table exactly what it counts", () => {
-  const state = clearedState("all");
-  const filters = toFilters(state);
-  const shown = applyFilters(archive, filters);
-  /* Articles lists an article nobody is credited on, which no count of
+test.each(COUNTS.map(({ id }) => id))(
+  "every mark, as filters, lists on a table exactly what it counts, counting %s",
+  (count) => {
+    const state = clearedState("all");
+    const filters = toFilters(state);
+    const shown = applyFilters(archive, filters);
+    /* Articles lists an article nobody is credited on, which no count of
      people has */
-  const credited = new Set(
-    archive.filter((a) => contributionsOn(a).length > 0).map((a) => a.id),
-  );
-  const ids = (units: Unit[]) =>
-    [...new Set(units.map((u) => u.article.id))].sort((a, b) => a - b);
-  const wrong: string[] = [];
-  let checked = 0;
-  for (const config of counting) {
-    const grouped = groupOf(config, shown, filters, archive);
-    /* one series is its column, and hiding it leaves nothing to open */
-    const keys =
-      config.split === "none" ? [] : grouped.series.map((s) => s.key);
-    for (const hidden of keys.length > 0 ? [[], keys.slice(0, 1)] : [[]])
-      for (const { key: category } of grouped.categories)
-        for (const series of [null, ...keys]) {
-          const slice = { category, series };
-          const members = sliceMembers(grouped, slice, hidden);
-          if (members.length === 0) continue;
-          const units = members.flatMap((m) => m.units);
-          const seeing = sliceFilters(
-            grouped,
-            config,
-            slice,
-            members,
-            hidden,
-            state,
-          );
-          const same = (a: unknown, b: unknown) =>
-            JSON.stringify(a) === JSON.stringify(b);
-          let ok: boolean;
-          if (grouped.measure === "newcomers")
-            /* new people are their first articles, with them named */
-            ok =
-              same(listed(seeing.articles).articles, ids(units)) &&
-              same(
-                onPeople(seeing.people)
-                  .map((row) => row.name)
-                  .sort(),
-                [...new Set(units.map((u) => u.person!))].sort(),
-              );
-          else {
-            const table = listed(seeing.articles);
-            ok =
-              same(
-                table.articles.filter(
-                  (id) => grouped.measure === "articles" || credited.has(id),
-                ),
-                ids(units),
-              ) &&
-              (grouped.measure === "articles" ||
-                (onPeople(seeing.people).reduce(
-                  (n, row) => n + row.contributions,
-                  0,
-                ) === units.length &&
-                  same(
-                    table.contributions,
-                    units
-                      .map((u) => `${u.article.id} ${u.role} ${u.person}`)
-                      .sort(),
-                  )));
-          }
-          if (!ok)
-            wrong.push(
-              `${JSON.stringify(config)} ${sliceKey(slice)} hiding ${hidden.join()}`,
+    const credited = new Set(
+      archive.filter((a) => contributionsOn(a).length > 0).map((a) => a.id),
+    );
+    const ids = (units: Unit[]) =>
+      [...new Set(units.map((u) => u.article.id))].sort((a, b) => a - b);
+    const wrong: string[] = [];
+    let checked = 0;
+    for (const config of counting.filter((c) => c.count === count)) {
+      const grouped = groupOf(config, shown, filters, archive);
+      /* one series is its column, and hiding it leaves nothing to open */
+      const keys =
+        config.split === "none" ? [] : grouped.series.map((s) => s.key);
+      for (const hidden of keys.length > 0 ? [[], keys.slice(0, 1)] : [[]])
+        for (const { key: category } of grouped.categories)
+          for (const series of [null, ...keys]) {
+            const slice = { category, series };
+            const members = sliceMembers(grouped, slice, hidden);
+            if (members.length === 0) continue;
+            const units = members.flatMap((m) => m.units);
+            const seeing = sliceFilters(
+              grouped,
+              config,
+              slice,
+              members,
+              hidden,
+              state,
             );
-          checked++;
-        }
-  }
-  expect(wrong).toEqual([]);
-  expect(checked).toBeGreaterThan(300);
-});
+            const same = (a: unknown, b: unknown) =>
+              JSON.stringify(a) === JSON.stringify(b);
+            let ok: boolean;
+            if (grouped.measure === "newcomers")
+              /* new people are their first articles, with them named */
+              ok =
+                same(listed(seeing.articles).articles, ids(units)) &&
+                same(
+                  onPeople(seeing.people)
+                    .map((row) => row.name)
+                    .sort(),
+                  [...new Set(units.map((u) => u.person!))].sort(),
+                );
+            else {
+              const table = listed(seeing.articles);
+              ok =
+                same(
+                  table.articles.filter(
+                    (id) => grouped.measure === "articles" || credited.has(id),
+                  ),
+                  ids(units),
+                ) &&
+                (grouped.measure === "articles" ||
+                  (onPeople(seeing.people).reduce(
+                    (n, row) => n + row.contributions,
+                    0,
+                  ) === units.length &&
+                    same(
+                      table.contributions,
+                      units
+                        .map((u) => `${u.article.id} ${u.role} ${u.person}`)
+                        .sort(),
+                    )));
+            }
+            if (!ok)
+              wrong.push(
+                `${JSON.stringify(config)} ${sliceKey(slice)} hiding ${hidden.join()}`,
+              );
+            checked++;
+          }
+    }
+    expect(wrong).toEqual([]);
+    expect(checked).toBeGreaterThan(50);
+  },
+);
 
 test("a period as filters is the part of it the range covers, and a running total all of it so far", () => {
   const config = chartOf("history");

@@ -244,72 +244,76 @@ test.each(byCount)(
   },
 );
 
-test("every cell and total, as filters, lists on a table exactly what it counts", () => {
-  const state = clearedState("all");
-  const credited = new Set(
-    archive.filter((a) => contributionsOn(a).length > 0).map((a) => a.id),
-  );
-  const articleIds = (units: Unit[]) =>
-    [...new Set(units.map((u) => u.article.id))].sort((a, b) => a - b);
-  const same = (a: unknown, b: unknown) =>
-    JSON.stringify(a) === JSON.stringify(b);
-  const wrong: string[] = [];
-  let checked = 0;
-  for (const config of counting) {
-    /* a month is a semester's check again, a dozen times over */
-    if (config.rows === "month" || config.columns === "month") continue;
-    const pivot = pivotOf(config, archive, NO_FILTERS, archive);
-    for (const slice of slicesOf(pivot)) {
-      const members = pivot.members(slice);
-      if (members.length === 0) continue;
-      const units = members.flatMap((m) => m.units);
-      const seeing = pivotFilters(pivot, slice, state);
-      let ok: boolean;
-      const names = [...new Set(units.map((u) => u.person!))].sort();
-      if (pivot.grouped.measure === "newcomers")
-        ok =
-          same(listed(seeing.articles).articles, articleIds(units)) &&
-          same(
-            onPeople(seeing.people)
-              .map((row) => row.name)
-              .sort(),
-            names,
-          );
-      else {
-        const table = listed(seeing.articles);
-        ok =
-          same(
-            table.articles.filter(
-              (id) => pivot.grouped.measure === "articles" || credited.has(id),
-            ),
-            articleIds(units),
-          ) &&
-          (pivot.grouped.measure === "articles" ||
-            /* and People has exactly its people, with exactly its contributions */
-            (same(
+test.each(COUNTS.map(({ id }) => id))(
+  "every cell and total, as filters, lists on a table exactly what it counts, counting %s",
+  (count) => {
+    const state = clearedState("all");
+    const credited = new Set(
+      archive.filter((a) => contributionsOn(a).length > 0).map((a) => a.id),
+    );
+    const articleIds = (units: Unit[]) =>
+      [...new Set(units.map((u) => u.article.id))].sort((a, b) => a - b);
+    const same = (a: unknown, b: unknown) =>
+      JSON.stringify(a) === JSON.stringify(b);
+    const wrong: string[] = [];
+    let checked = 0;
+    for (const config of counting.filter((c) => c.count === count)) {
+      /* a month is a semester's check again, a dozen times over */
+      if (config.rows === "month" || config.columns === "month") continue;
+      const pivot = pivotOf(config, archive, NO_FILTERS, archive);
+      for (const slice of slicesOf(pivot)) {
+        const members = pivot.members(slice);
+        if (members.length === 0) continue;
+        const units = members.flatMap((m) => m.units);
+        const seeing = pivotFilters(pivot, slice, state);
+        let ok: boolean;
+        const names = [...new Set(units.map((u) => u.person!))].sort();
+        if (pivot.grouped.measure === "newcomers")
+          ok =
+            same(listed(seeing.articles).articles, articleIds(units)) &&
+            same(
               onPeople(seeing.people)
                 .map((row) => row.name)
                 .sort(),
               names,
+            );
+        else {
+          const table = listed(seeing.articles);
+          ok =
+            same(
+              table.articles.filter(
+                (id) =>
+                  pivot.grouped.measure === "articles" || credited.has(id),
+              ),
+              articleIds(units),
             ) &&
-              onPeople(seeing.people).reduce(
-                (n, row) => n + row.contributions,
-                0,
-              ) === units.length &&
-              same(
-                table.contributions,
-                units
-                  .map((u) => `${u.article.id} ${u.role} ${u.person}`)
+            (pivot.grouped.measure === "articles" ||
+              /* and People has exactly its people, with exactly its contributions */
+              (same(
+                onPeople(seeing.people)
+                  .map((row) => row.name)
                   .sort(),
-              )));
+                names,
+              ) &&
+                onPeople(seeing.people).reduce(
+                  (n, row) => n + row.contributions,
+                  0,
+                ) === units.length &&
+                same(
+                  table.contributions,
+                  units
+                    .map((u) => `${u.article.id} ${u.role} ${u.person}`)
+                    .sort(),
+                )));
+        }
+        if (!ok) wrong.push(`${JSON.stringify(config)} ${pivotKey(slice)}`);
+        checked++;
       }
-      if (!ok) wrong.push(`${JSON.stringify(config)} ${pivotKey(slice)}`);
-      checked++;
     }
-  }
-  expect(wrong).toEqual([]);
-  expect(checked).toBeGreaterThan(1000);
-});
+    expect(wrong).toEqual([]);
+    expect(checked).toBeGreaterThan(100);
+  },
+);
 
 test("Retention counts each intake's people in each semester they contributed", () => {
   const pivot = pivotOf(pivotOfView("retention"), archive, NO_FILTERS, archive);

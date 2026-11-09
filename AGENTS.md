@@ -4,7 +4,7 @@ An Astro app on Cloudflare Workers for [The Hare](https://theumdhare.com):
 public tools that turn published articles into Instagram posts, InDesign copy
 and newsletter content; a Discord bot that posts the morning social reminder;
 and, for the Editorial Board, an archive viewer over every published post:
-Articles and People, each with its views as tabs (tables and charts), and
+Articles and People, each with its views as tabs (tables, charts and pivots), and
 Problems.
 
 **WordPress is the record.** HareWare reads it live from the public REST API

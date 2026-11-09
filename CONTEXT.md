@@ -62,17 +62,35 @@ filters: someone who has written for a year is not new when they draw their
 first image. A person is **active** in a period when they made at least one
 contribution in it.
 
+Where someone **joined in** is the period of their first contribution, cut
+as finely as the period beside it (semesters, unless the view is by another
+period): their intake. Everyone is in one intake, so people counted by it add
+up, and an intake against the semesters its people were active in is
+retention. It is no filter: an intake's people are named.
+
 ## View
 
-One way of looking at a table, Articles or People: as a table or a chart, on
-a range and filters it opens on. Each table is a page, and its views are its
+One way of looking at a table, Articles or People: as a table, a chart or a
+pivot, on a range and filters it opens on. Each table is a page, and its views are its
 tabs; the defaults are declared in `src/components/archive/views.ts`
 ([ADR 0014](docs/adr/0014-views-are-declarations.md)). **Custom** is whatever
 the builder made from one, and a view of one's own is its link. Say "view",
 never "report", "dashboard" or "saved view": nothing is saved.
 
-A **slice** is what one mark of a chart counts, which opens beside it and, as
-filters, on either table.
+A **pivot** is rows by columns, each cut by a dimension (a period, a section,
+a role, a person, or when they joined), every cell a number or a share of
+its row, its column or the total, with totals of both. Say "pivot", never
+"crosstab" or "matrix".
+
+A **slice** is what one mark of a chart or one cell or total of a pivot
+counts, which opens beside it and, as filters, on either table. Its list is
+always as long as the number it was opened from.
+
+To **compare** is to set what the range counts beside the same count over
+an earlier range as long: **the period before**, just before it, or **a year
+before**, the same dates a year back. A range that runs to today counts as
+far as today, so it is set against as many days. Only a view of categories,
+not of time, compares.
 
 ## The Sheet
 

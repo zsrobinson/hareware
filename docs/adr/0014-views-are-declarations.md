@@ -22,8 +22,9 @@ into another and share.
 ## Decision
 
 **Each table is a page, and its views are its tabs.** Articles and People each
-have a row of views over the filters: Articles has All, Sections and History;
-People has Everyone, Contributors, Newcomers and Headcount. A chart is on the
+have a row of views over the filters: Articles has All, Sections, Section
+share and History; People has Everyone, Contributors, Top this semester, New
+this semester, Newcomers, Headcount and Retention. A chart is on the
 page of the table it counts. Problems and Settings are pages as before, without
 views. There is no Contributions page: a contribution is what People's views
 count, and what an article's credits are made of.
@@ -31,10 +32,28 @@ count, and what an article's credits are made of.
 **A view is a declaration**, plain data in `src/components/archive/views.ts`:
 its label and the question it answers, the table it counts, the Time filter
 and any other filters it opens on, and its layout. A layout is a table (which
-columns, in what order, the sort it opens on, and on People the Show) or a
-chart (`ChartConfig`, and the series its legend opens with off).
-A page's views are the declarations for its table, in order, and the first is
-a table, which the page opens on. Pivot is the third layout, to come.
+columns, in what order, the sort it opens on, and on People the Show and
+whether it lists only the new), a chart (`ChartConfig`, and the series its
+legend opens with off) or a pivot (`PivotConfig`: what it counts, its rows
+and columns, and whether a cell is a number or a share). A page's views are
+the declarations for its table, in order, and the first is a table, which
+the page opens on.
+
+**A pivot is the chart's grouping laid out whole.** Its rows and columns are
+the same cuts a chart's axis and split are, and every cell and total is a
+list of what it counts, as a chart's marks are: a total is a cell with its
+row or column left open, so it opens what it adds up, and each of a share's
+wholes reads as its count. It scrolls in its own box, is one tab stop with
+arrows between its numbers, and downloads or copies as the table it shows.
+
+**Compare is a setting of a chart or a pivot, not a second range in the
+filters.** It sets each category beside its count over the period before or
+a year before, as paired bars or a pair of columns with their difference,
+and each of the pair opens on its own dates. It is offered only where the
+pair reads true: on categories (across time the axis is the comparison
+already), with nothing split (a stack of two ranges is a total of neither),
+and in numbers or a pivot's shares of each range's own total. An earlier
+range with nothing in it is said and left undrawn, never drawn as zeros.
 
 **Every view is something the builder can make.** Customize edits whichever
 view is on screen, including turning a table into a chart and back; any change
@@ -64,10 +83,11 @@ elsewhere) is cleared, and the page says so.
 
 **Selections become filters, and filters travel.** What a chart's mark counts
 can be opened on either table as ordinary filters: a period is the part of it
-the range covers, and a section, role or person is that filter. Where newness
-or a search picked what it counts, which People cannot read (its search is of
+the range covers, and a section, role or person is that filter. A pivot's
+cells and totals open the same way. Where newness, an intake or a search
+picked what it counts, which People cannot read (its search is of
 names), the mark's articles go by post id (`?articles=`), an exact filter with
-a chip of its own, beside the new people's names. Past 250 ids the link names
+a chip of its own, beside the new people's or the intake's names. Past 250 ids the link names
 the people instead, and the list says it opens on their whole record. Every
 link between archive pages carries the filters on screen and names the range
 as the page counted it, since each page opens on its own and rounds its own; a
@@ -96,6 +116,14 @@ query, so it costs the Worker nothing (ADR 0012).
   is the most common thing done to a table, and a tab that turned into Custom
   on every click would say nothing. The sort is where the view starts, as the
   range is.
+- **Comparing any two ranges, chosen in the filters.** It answers more, and
+  every view would need a second Time filter that most of them would make
+  misleading. The period before and a year before are the two the board asks
+  ("are we down this semester"), and as a view's setting the builder can
+  refuse the combinations that would not read true.
+- **The period before as the previous semester.** Semesters here are five
+  months and seven, so a whole one before is not as long; a year before is
+  the same semester, and the period before is as many days.
 
 ## Consequences
 
@@ -107,3 +135,5 @@ query, so it costs the Worker nothing (ADR 0012).
 - Articles lists articles nobody is credited on, so a chart of contributions
   opened on Articles can list an article the chart never counted. People has
   exactly what it counted.
+- A pivot of person by month can be thousands of cells. It is drawn whole,
+  in the browser, and a top few keeps people's rows or columns short.

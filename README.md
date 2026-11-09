@@ -7,7 +7,7 @@ The in-house tooling for [The Hare](https://theumdhare.com):
 - **A social reminder** that posts each morning's new articles to
   `#instagram-posting` and pings that day's poster.
 - **An archive viewer** for the Editorial Board: Articles and People, each with
-  its views as tabs (tables and charts), and Problems, over every published
+  its views as tabs (tables, charts and pivots), and Problems, over every published
   post, with real names in place of pseudonyms.
 
 WordPress is the record of what the club published. HareWare reads it and keeps

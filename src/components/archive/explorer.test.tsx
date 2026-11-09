@@ -389,3 +389,20 @@ test("articles a mark chose are a filter of their own, which a chip takes off", 
     false,
   );
 });
+
+test("Home and End choose the first and last of the views", async () => {
+  window.history.replaceState(null, "", "/articles?view=sections");
+  const user = userEvent.setup();
+  render(<ArticlesPage />);
+  const selected = () =>
+    screen
+      .getAllByRole("tab")
+      .find((tab) => tab.getAttribute("aria-selected") === "true");
+  (await screen.findByRole("tab", { name: "Sections" })).focus();
+  await user.keyboard("{End}");
+  await waitFor(() => expect(selected()?.textContent).toBe("Custom"));
+  expect(document.activeElement).toBe(selected());
+  await user.keyboard("{Home}");
+  await waitFor(() => expect(selected()?.textContent).toBe("All"));
+  expect(document.activeElement).toBe(selected());
+});

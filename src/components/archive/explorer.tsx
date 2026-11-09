@@ -453,13 +453,22 @@ function ViewTabs({
         className="relative flex [scrollbar-width:none] flex-wrap gap-x-1 overflow-x-auto overflow-y-hidden bg-[repeating-linear-gradient(to_bottom,transparent_0_39px,var(--color-border)_39px_40px)] pointer-coarse:flex-nowrap"
         style={{ maskImage: fade }}
         onKeyDown={(event) => {
-          /* the tabs pattern: arrows move between the views, and choose */
-          const step =
-            event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-          if (!step) return;
-          event.preventDefault();
+          /* the tabs pattern: arrows move between the views, Home and End
+             to the first and last, and each chooses */
           const at = tabs.findIndex((tab) => tab.id === view);
-          const next = tabs[(at + step + tabs.length) % tabs.length]!;
+          const to =
+            event.key === "ArrowRight"
+              ? at + 1
+              : event.key === "ArrowLeft"
+                ? at - 1
+                : event.key === "Home"
+                  ? 0
+                  : event.key === "End"
+                    ? tabs.length - 1
+                    : null;
+          if (to === null) return;
+          event.preventDefault();
+          const next = tabs[(to + tabs.length) % tabs.length]!;
           onChoose(next.id);
           list.current
             ?.querySelector<HTMLElement>(`[data-view="${next.id}"]`)

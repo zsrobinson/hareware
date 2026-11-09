@@ -217,6 +217,7 @@ export function PivotView({
       {slice && (
         <RowDetails>
           <SlicePanel
+            views={archive.views}
             key={pivotKey(slice)}
             title={sliceTitle(pivot, slice)}
             caption={[

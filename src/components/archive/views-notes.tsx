@@ -11,14 +11,16 @@ import { thinText, thinViews, type ViewsSummary } from "~/lib/credits/views";
 export function ThinViews({
   articles,
   summary,
+  notice = false,
 }: {
   articles: readonly Pick<ArchiveArticle, "publishedAt" | "views">[];
   summary: ViewsSummary;
+  notice?: boolean;
 }) {
   const thin = thinViews(articles, summary);
   if (!thin) return null;
   return (
-    <span className="text-muted-foreground block text-xs" role="note">
+    <span className={notice ? "block rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200" : "text-muted-foreground block text-xs"} role="note">
       {thinText(thin)}
     </span>
   );

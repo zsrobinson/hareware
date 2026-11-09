@@ -108,7 +108,7 @@ test("a count of views looks short once three, and a tenth, of its month-old art
   expect(thinViews(of(3, 27), READ)).toEqual({ none: 3, of: 30 });
   expect(thinViews(of(3, 28), READ)).toBeNull();
   expect(thinText({ none: 14, of: 32 })).toBe(
-    "14 of 32 articles have no recorded views; Jetpack may have left some out.",
+    "Among articles published over 30 days ago, 14 of 32 have no recorded views; Jetpack may have left some out.",
   );
 });
 

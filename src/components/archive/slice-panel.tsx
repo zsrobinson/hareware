@@ -1,3 +1,5 @@
+import type { ViewsSummary } from "~/lib/credits/views";
+import { ThinViews } from "./views-notes";
 import { useState, type ReactNode } from "react";
 import { SidePanel } from "~/components/panel";
 import { NewspaperIcon, UsersIcon } from "lucide-react";
@@ -42,6 +44,7 @@ export function SlicePanel({
   members,
   filters,
   seeing,
+  views,
   onClose,
   restoreFocus,
 }: {
@@ -55,6 +58,7 @@ export function SlicePanel({
   filters: Filters;
   /** the slice as each table's filters, for the links to them; none in a test of the rows alone */
   seeing?: SliceFilters;
+  views?: ViewsSummary;
   onClose: () => void;
   restoreFocus: () => HTMLElement | null;
 }) {
@@ -68,6 +72,7 @@ export function SlicePanel({
       <div className="-mt-3 space-y-3">
         <p className="text-muted-foreground text-sm">{caption}</p>
         {seeing && <SeeIn seeing={seeing} />}
+        {measure === "views" && views && <ThinViews notice articles={members.map(m => m.units[0]!.article)} summary={views} />}
         <Rows measure={measure} members={members} filters={filters} />
       </div>
     </SidePanel>

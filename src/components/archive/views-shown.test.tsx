@@ -394,3 +394,15 @@ test("Read by section reads the most per article first, each with a faint bar", 
     "counted since January 2023",
   );
 });
+
+test("a thin answer explains its base again above the slice ranking", async () => {
+ stubArchive({posts: [1,2,3,4].map(id => ({id, title: `Invented ${id}`, publishedAt: daysAgo(40), paragraphs: ["Article by: Ada Example"], categoryIds: [1]})), categories: [[1,"News"]], views: {4: 100}});
+ window.history.replaceState(null, "", "/articles?view=read-by-section&range=all");
+ render(<ArticlesPage />);
+ const row = await screen.findByRole("rowheader", {name: /News/}, WAIT);
+ await userEvent.click(within(row.closest("tr")!).getAllByRole("button")[1]!);
+ const panel = await screen.findByRole("complementary");
+ expect(within(panel).getByRole("note").textContent).toBe("Among articles published over 30 days ago, 3 of 4 have no recorded views; Jetpack may have left some out.");
+ expect(within(panel).getByRole("note").className).toContain("amber");
+ expect(within(panel).getAllByRole("listitem")).toHaveLength(4);
+});

@@ -321,6 +321,7 @@ export function ChartView({
       {slice && (
         <RowDetails>
           <SlicePanel
+            views={archive.views}
             key={sliceKey(slice)}
             {...sliceText(plot, slice, filterNote)}
             back={back}

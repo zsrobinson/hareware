@@ -176,11 +176,19 @@ export function postViewsOf(body: unknown, now = new Date()): PostViews {
   for (const [day, { postviews } = {}] of Object.entries(days)) {
     if (!/^\d{4}-\d{2}-01$/.test(day) || !Array.isArray(postviews))
       throw new Error(`WordPress stats answered a month as ${day}`);
-    /* the home page and pages are counted too, and are not articles */
     for (const row of postviews) {
-      if (row.type !== "post" || row.views <= 0) continue;
-      if (!Number.isInteger(row.id) || !Number.isFinite(row.views))
-        throw new Error("WordPress stats answered a post without its views");
+      /* checked before anything is skipped: `null <= 0`, so a row missing
+         its count would otherwise pass for one nobody read */
+      const valid =
+        typeof row?.type === "string" &&
+        Number.isInteger(row.id) &&
+        row.id >= (row.type === "post" ? 1 : 0) &&
+        Number.isInteger(row.views) &&
+        row.views >= 0;
+      if (!valid)
+        throw new Error("WordPress stats answered a row it did not count");
+      /* the home page and pages are counted too, and are not articles */
+      if (row.type !== "post" || row.views === 0) continue;
       (views[row.id] ??= {})[day.slice(0, 7)] = row.views;
     }
   }

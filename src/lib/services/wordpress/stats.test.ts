@@ -201,3 +201,22 @@ test("an answer missing any month since counting began is an error", () => {
   expect(read({ ...answered(), date: "2026-10-09" })).toThrow();
   expect(read(answered())).not.toThrow();
 });
+
+/* a row that cannot be read is not a row nobody read */
+test("a row without a type, an id or a count is an error, not a skipped row", () => {
+  const read = (bad: object) => () =>
+    postViewsOf(answered({ "2026-10": [row(8, 2), bad] }), NOW);
+
+  expect(read(row(7, null))).toThrow();
+  expect(read(row(7, undefined))).toThrow();
+  expect(read(row(7, -3))).toThrow();
+  expect(read(row(7, 2.5))).toThrow();
+  expect(read(row(7, "4"))).toThrow();
+  expect(read({ id: 7, views: 4 })).toThrow();
+  expect(read(row(Number.NaN, 4))).toThrow();
+  expect(read(row(0, 4))).toThrow();
+  expect(read({ type: "post", views: 4 })).toThrow();
+  /* a page, or the home page, is counted too, and still left out */
+  expect(read(row(0, 50, "homepage"))()).toEqual({ 8: { "2026-10": 2 } });
+  expect(read(row(7, 0))()).toEqual({ 8: { "2026-10": 2 } });
+});

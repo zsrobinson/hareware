@@ -200,6 +200,8 @@ test("views WordPress will not give are unavailable, never zero", async () => {
     () => Response.json([]),
     /* a count, but of no months, or not of October */
     () => Response.json({ ...jetpack(), days: {} }),
+    /* a count of article 7 with no number in it */
+    () => Response.json(jetpack([{ id: 7, type: "post", views: null }])),
     () =>
       Response.json(
         jetpack(

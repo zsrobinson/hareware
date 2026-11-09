@@ -39,16 +39,22 @@ export type Period = (typeof PERIODS)[number];
 /**
  * What a count can be cut by. "joined" is a person's intake: the period of
  * their first contribution ever, in any role and whatever the filters, at
- * the grain of the period beside it (`grainOf`).
+ * the grain of the period beside it (`grainOf`). "since" is how many of
+ * those periods after it a contribution came: 0 in the one they joined.
  */
-export type Dimension = Period | "section" | "role" | "person" | "joined";
+export type Dimension =
+  Period | "section" | "role" | "person" | "joined" | "since";
 
 export const isPeriod = (dimension: string): dimension is Period =>
   (PERIODS as readonly string[]).includes(dimension);
 
 /** a dimension that runs in time order, every period in it shown */
 const inTime = (dimension: string) =>
-  isPeriod(dimension) || dimension === "joined";
+  isPeriod(dimension) || dimension === "joined" || dimension === "since";
+
+/** whether a dimension is someone's intake, or measured from it */
+export const ofIntake = (dimension: string) =>
+  dimension === "joined" || dimension === "since";
 
 /** the period an intake is cut into: the period beside it, else semesters */
 export const grainOf = (...dimensions: string[]): Period =>
@@ -257,12 +263,28 @@ export function periodOf(
   };
 }
 
+/** a period's place in time, so two can be told apart by how many lie between */
+export function periodIndex(key: string, period: Period): number {
+  const [year, step] = key.split("-").map(Number) as [number, number?];
+  if (period === "month") return year * 12 + step! - 1;
+  if (period === "semester") return year * 2 + step! - 1;
+  return year;
+}
+
+/** "Joined" for the period someone joined in, "+2" for two after it */
+export const sinceLabel = (key: string) => (key === "0" ? "Joined" : `+${key}`);
+
 /** every period from the first key to the last, so an empty month still shows */
 function fillPeriods(
   keys: string[],
-  period: Period,
+  period: Period | "since",
 ): { key: string; label: string }[] {
   if (keys.length === 0) return [];
+  if (period === "since")
+    return Array.from(
+      { length: Math.max(...keys.map(Number)) + 1 },
+      (_, k) => ({ key: String(k), label: sinceLabel(String(k)) }),
+    );
   const sorted = [...keys].sort();
   const first = sorted[0]!;
   const last = sorted.at(-1)!;
@@ -434,13 +456,15 @@ function naturalOrder(dimension: Dimension | "none") {
     a: { key: string; label: string },
     b: { key: string; label: string },
   ) =>
-    inTime(dimension)
-      ? a.key.localeCompare(b.key)
-      : dimension === "section"
-        ? compareSections(a.key, b.key)
-        : dimension === "role"
-          ? ROLES.indexOf(a.key as Role) - ROLES.indexOf(b.key as Role)
-          : a.label.localeCompare(b.label);
+    dimension === "since"
+      ? Number(a.key) - Number(b.key)
+      : inTime(dimension)
+        ? a.key.localeCompare(b.key)
+        : dimension === "section"
+          ? compareSections(a.key, b.key)
+          : dimension === "role"
+            ? ROLES.indexOf(a.key as Role) - ROLES.indexOf(b.key as Role)
+            : a.label.localeCompare(b.label);
 }
 
 export function group(
@@ -463,7 +487,7 @@ export function group(
   const { by, breakdown, filters } = options;
   const history = options.history ?? articles;
   const touchesPeople = [by, breakdown].some(
-    (d) => d === "person" || d === "role" || d === "joined",
+    (d) => d === "person" || d === "role" || ofIntake(d),
   );
   const quantity = isQuantity(options.measure);
   /* an article has no one role, person or intake, so those count
@@ -501,6 +525,16 @@ export function group(
         return first
           ? periodOf(easternDate(first.article.publishedAt), grain)
           : { key: "?", label: "?" };
+      }
+      case "since": {
+        const first = everyone.get(unit.person ?? "")?.first;
+        if (!first) return { key: "?", label: "?" };
+        const at = (iso: string) =>
+          periodIndex(periodOf(easternDate(iso), grain).key, grain);
+        const key = String(
+          at(unit.article.publishedAt) - at(first.article.publishedAt),
+        );
+        return { key, label: sinceLabel(key) };
       }
       default:
         return periodOf(easternDate(unit.article.publishedAt), dimension);
@@ -551,7 +585,7 @@ export function group(
     breakdown !== "none" && inTime(breakdown)
       ? fillPeriods(
           [...seriesLabels.keys()],
-          isPeriod(breakdown) ? breakdown : grain,
+          isPeriod(breakdown) || breakdown === "since" ? breakdown : grain,
         )
       : [...seriesLabels].map(([key, label]) => ({ key, label }));
   series.sort(naturalOrder(breakdown));
@@ -562,7 +596,7 @@ export function group(
   if (inTime(by)) {
     categories = fillPeriods(
       [...categoryLabels.keys()],
-      isPeriod(by) ? by : grain,
+      isPeriod(by) || by === "since" ? by : grain,
     );
   } else {
     /* the biggest first, by what each comes to */

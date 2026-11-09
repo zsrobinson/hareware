@@ -54,11 +54,11 @@ test("a cell lists the people it counts, and Escape returns to it", async () => 
   render(<PeoplePage />);
   /* of Fall 2025's two, Ada came back in the spring */
   const cell = await screen.findByRole("button", {
-    name: "Joined Fall 2025, Spring 2026: see 1 person",
+    name: "Joined Fall 2025, 1 semester after joining: see 1 person",
   });
   await user.click(cell);
   const panel = await screen.findByRole("complementary", {
-    name: "Joined Fall 2025 · Spring 2026",
+    name: "Joined Fall 2025 · 1 semester after joining",
   });
   expect(
     within(panel)
@@ -66,10 +66,10 @@ test("a cell lists the people it counts, and Escape returns to it", async () => 
       .map((item) => item.querySelector("a")?.textContent),
   ).toEqual(["Ada Example"]);
   expect(new URLSearchParams(window.location.search).get("slice")).toBe(
-    "2025-2~2026-1",
+    "2025-2~1",
   );
 
-  /* and as filters, those people in that semester */
+  /* and as filters, those people on what they did that semester */
   const people = new URL(
     within(panel)
       .getByRole("link", { name: "See the people" })
@@ -77,8 +77,7 @@ test("a cell lists the people it counts, and Escape returns to it", async () => 
     "https://x.test",
   );
   expect(people.searchParams.getAll("people")).toEqual(["Ada Example"]);
-  expect(people.searchParams.get("from")).toBe("2026-01-01");
-  expect(people.searchParams.get("to")).toBe("2026-05-31");
+  expect(people.searchParams.get("articles")).toBe("3");
 
   await user.keyboard("{Escape}");
   await waitFor(() => expect(document.activeElement).toBe(cell));
@@ -96,17 +95,17 @@ test("the table is one tab stop, and arrows move between its numbers", async () 
   expect(stops).toHaveLength(1);
 
   const intake = within(table).getByRole("button", {
-    name: "Joined Fall 2025, Fall 2025: see 2 people",
+    name: "Joined Fall 2025, Semester joined: see 2 people",
   });
   intake.focus();
   await user.keyboard("{ArrowRight}");
   expect(document.activeElement?.getAttribute("aria-label")).toBe(
-    "Joined Fall 2025, Spring 2026: see 1 person",
+    "Joined Fall 2025, 1 semester after joining: see 1 person",
   );
-  /* nobody joined in the spring and contributed the fall before: passed over */
+  /* nobody who joined in the spring has come back yet: passed over */
   await user.keyboard("{ArrowDown}");
   expect(document.activeElement?.getAttribute("aria-label")).toBe(
-    "Joined Spring 2026, Spring 2026: see 1 person",
+    "Total, 1 semester after joining: see 1 person",
   );
   expect((document.activeElement as HTMLElement).tabIndex).toBe(0);
 });

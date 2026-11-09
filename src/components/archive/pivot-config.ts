@@ -7,6 +7,7 @@
 import {
   isPeriod,
   isQuantity,
+  ofIntake,
   type Dimension,
   type Measure,
 } from "~/lib/credits/stats";
@@ -31,6 +32,7 @@ export type PivotConfig = {
 export const DIMENSIONS: { id: Dimension; label: string }[] = [
   ...GROUPINGS,
   { id: "joined", label: "Joined in" },
+  { id: "since", label: "Semesters since joining" },
 ];
 
 /** "Joined in": a dimension as a header names it */
@@ -65,23 +67,28 @@ export function allowsPivot({
   const comparable =
     columns === "none" &&
     !isPeriod(rows) &&
-    rows !== "joined" &&
+    !ofIntake(rows) &&
     (values === "number" || values === "total") &&
     count !== "views";
   /* an article has no one role, person or intake; and by person, every
      person is one */
   const articles = !axes.some(
-    (d) => d === "person" || d === "role" || d === "joined",
+    (d) => d === "person" || d === "role" || ofIntake(d),
   );
   const people = !axes.includes("person");
+  /* periods since joining are only one intake's apart: beside anything
+     else, a cell would mix intakes whose periods are not the same ones */
   const axis = (id: Dimension, other: string) =>
     id !== other &&
-    !(comparing && (isPeriod(id) || id === "joined")) &&
+    !(comparing && (isPeriod(id) || ofIntake(id))) &&
+    (id === "since"
+      ? other === "joined"
+      : other !== "since" || id === "joined") &&
     (id === "person"
       ? count === "contributions" || quantity
       : id === "role"
         ? count !== "articles"
-        : id === "joined"
+        : ofIntake(id)
           ? count !== "articles" && !quantity
           : true);
   const split = columns !== "none";
@@ -90,7 +97,7 @@ export function allowsPivot({
   const overlaps = (id: string) =>
     quantity && (id === "person" || id === "role");
   /* an intake is people's, not articles' */
-  const ofArticles = !axes.includes("joined");
+  const ofArticles = !axes.some(ofIntake);
   return {
     count: {
       articles,
@@ -129,6 +136,8 @@ export function allowsPivot({
 export function settlePivot(config: PivotConfig): PivotConfig {
   const next = { ...config };
   if (next.columns === next.rows) next.columns = "none";
+  if (next.rows === "since" && next.columns !== "joined") next.rows = "joined";
+  if (next.columns === "since" && next.rows !== "joined") next.columns = "none";
   if (!allowsPivot(next).count[next.count]) next.count = "contributions";
   if (!allowsPivot(next).values[next.values]) next.values = "number";
   if (!allowsPivot(next).compare[next.compare]) next.compare = "none";

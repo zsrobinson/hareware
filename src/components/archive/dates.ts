@@ -38,3 +38,14 @@ export function formatDateTime(value: string | Date): string {
     minute: "2-digit",
   });
 }
+
+/** "Fall 2022" → "F22", "Nov 2022" → "Nov ’22": a period's label where every one must fit */
+export function shortLabel(label: string) {
+  const term = /^(Spring|Fall) (\d{4})$/.exec(label);
+  if (term) return `${term[1] === "Spring" ? "Sp" : "F"}${term[2]!.slice(2)}`;
+  const month = /^(\w{3}) (\d{4})$/.exec(label);
+  if (month) return `${month[1]} ’${month[2]!.slice(2)}`;
+  const school = /^\d{2}(\d{2})–(\d{2})$/.exec(label);
+  if (school) return `${school[1]}–${school[2]}`;
+  return label;
+}

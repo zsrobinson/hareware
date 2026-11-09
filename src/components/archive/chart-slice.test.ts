@@ -147,6 +147,7 @@ function under(
   if (dimension === "person") return unit.person === key;
   if (dimension === "joined")
     return periodOf(firstOf.get(unit.person!)!, grain).key === key;
+  if (dimension === "since") throw new Error("a chart is never cut by since");
   const period = periodOf(easternDate(unit.article.publishedAt), dimension).key;
   return upTo ? period <= key : period === key;
 }
@@ -692,12 +693,12 @@ test("too many articles for a link open on the people's whole record, and say so
     post(i + 1, "2026-10-01", "News", [credit("writer", ["Ada Example"])]),
   );
   const { seeing } = searched(articles, "headline");
-  expect(seeing.broader).toBe(true);
+  expect(seeing.broader).toBe("people");
   expect(seeing.people).toMatchObject({
     people: ["Ada Example"],
     articles: [],
   });
-  expect(searched(articles.slice(1), "headline").seeing.broader).toBe(false);
+  expect(searched(articles.slice(1), "headline").seeing.broader).toBeNull();
 });
 
 /* Ada writes and draws article 2: two contributions, one article's words */

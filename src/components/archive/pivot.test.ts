@@ -130,6 +130,19 @@ function under(
     return (
       periodOf(firstOf.get(unit.person!)!, grain as "semester").key === key
     );
+  if (dimension === "since") {
+    /* semesters apart, counted on the calendar: a Spring is one after a Fall */
+    const at = (date: string) => {
+      const { key } = periodOf(date, "semester");
+      return Number(key.slice(0, 4)) * 2 + Number(key.slice(5));
+    };
+    return (
+      String(
+        at(days.get(unit.article.publishedAt)!) -
+          at(firstOf.get(unit.person!)!),
+      ) === key
+    );
+  }
   return periodOf(days.get(unit.article.publishedAt)!, dimension).key === key;
 }
 
@@ -281,6 +294,12 @@ test.each(byCount)(
   },
 );
 
+/* semesters since joining, across intakes: one person's later semester can
+   be another's, on the same articles, which no filter tells apart */
+const across = ({ row, column }: PivotSlice, { config }: Pivot) =>
+  (config.columns === "since" && row === null && column !== null) ||
+  (config.rows === "since" && column === null && row !== null);
+
 test.each(COUNTS.map(({ id }) => id))(
   "every cell and total, as filters, lists on a table exactly what it counts, counting %s",
   (count) => {
@@ -327,23 +346,32 @@ test.each(COUNTS.map(({ id }) => id))(
               articleIds(units),
             ) &&
             (ofArticles ||
-              /* and People has exactly its people, with exactly its contributions */
+              /* and People has exactly its people, with exactly its
+                 contributions; or, across intakes, at least them, and says so */
               (same(
                 onPeople(seeing.people)
                   .map((row) => row.name)
                   .sort(),
                 names,
               ) &&
-                onPeople(seeing.people).reduce(
-                  (n, row) => n + row.contributions,
-                  0,
-                ) === units.length &&
-                same(
-                  table.contributions,
-                  units
-                    .map((u) => `${u.article.id} ${u.role} ${u.person}`)
-                    .sort(),
-                )));
+                (seeing.broader === "intakes"
+                  ? across(slice, pivot) &&
+                    units.every((u) =>
+                      table.contributions.includes(
+                        `${u.article.id} ${u.role} ${u.person}`,
+                      ),
+                    )
+                  : !across(slice, pivot) &&
+                    onPeople(seeing.people).reduce(
+                      (n, row) => n + row.contributions,
+                      0,
+                    ) === units.length &&
+                    same(
+                      table.contributions,
+                      units
+                        .map((u) => `${u.article.id} ${u.role} ${u.person}`)
+                        .sort(),
+                    ))));
         }
         if (!ok) wrong.push(`${JSON.stringify(config)} ${pivotKey(slice)}`);
         checked++;
@@ -354,8 +382,14 @@ test.each(COUNTS.map(({ id }) => id))(
   },
 );
 
-test("Retention counts each intake's people in each semester they contributed", () => {
-  const pivot = pivotOf(pivotOfView("retention"), archive, NO_FILTERS, archive);
+/* Retention's intakes against the calendar's semesters, which the builder makes */
+const bySemester = (): PivotConfig => ({
+  ...pivotOfView("retention"),
+  columns: "semester",
+});
+
+test("an intake against the calendar counts each intake's people in each semester they contributed", () => {
+  const pivot = pivotOf(bySemester(), archive, NO_FILTERS, archive);
   expect(pivot.rows.map((r) => r.label)).toEqual([
     "Fall 2025",
     "Spring 2026",
@@ -372,8 +406,11 @@ test("Retention counts each intake's people in each semester they contributed", 
   ]);
   expect(cell("2025-2", "2026-1")).toEqual(["Ada Example", "Bo Sample"]);
   expect(cell("2025-2", "2026-2")).toEqual(["Ada Example", "Cy Placeholder"]);
-  /* nobody contributes before they join */
+  /* nobody contributes before they join, and nobody could: a blank */
   expect(cell("2026-1", "2025-2")).toEqual([]);
+  expect(pivot.possible({ row: "2026-1", column: "2025-2" })).toBe(false);
+  expect(pivot.possible({ row: "2026-1", column: "2026-1" })).toBe(true);
+  expect(pivotMatrix(pivot)[2]).toEqual(["Spring 2026", "", "6", "1", "6"]);
   expect(cell("2026-1", "2026-2")).toEqual(["Gus Notreal"]);
   /* each intake once in its total, and each semester's people once in theirs */
   expect(pivot.count({ row: "2025-2", column: null })).toBe(4);
@@ -397,11 +434,84 @@ test("Retention counts each intake's people in each semester they contributed", 
   });
 });
 
+test("Retention counts each intake by semesters since it joined, blank where none have passed", () => {
+  const pivot = pivotOf(
+    pivotOfView("retention"),
+    archive,
+    NO_FILTERS,
+    archive,
+    "2026-11-09",
+  );
+  expect(pivot.columns.map((c) => c.label)).toEqual(["Joined", "+1", "+2"]);
+  const cell = (row: string | null, column: string | null) =>
+    ids(pivot.members({ row, column }));
+  /* the same people as the calendar's semesters, one step on from each */
+  expect(cell("2025-2", "0")).toEqual(cell("2025-2", null));
+  expect(cell("2025-2", "1")).toEqual(["Ada Example", "Bo Sample"]);
+  expect(cell("2025-2", "2")).toEqual(["Ada Example", "Cy Placeholder"]);
+  expect(cell("2026-1", "1")).toEqual(["Gus Notreal"]);
+  /* Spring 2026 has had one semester since, and Fall 2026 none */
+  expect(pivot.possible({ row: "2026-1", column: "1" })).toBe(true);
+  expect(pivot.possible({ row: "2026-1", column: "2" })).toBe(false);
+  expect(pivot.possible({ row: "2026-2", column: "1" })).toBe(false);
+  expect(pivotMatrix(pivot).map((line) => line.slice(1, 4))).toEqual([
+    ["Joined", "+1", "+2"],
+    ["4", "2", "2"],
+    ["6", "1", ""],
+    ["3", "", ""],
+    ["13", "3", "2"],
+  ]);
+
+  /* a cell is one intake in one semester: exactly its people */
+  const seeing = pivotFilters(
+    pivot,
+    { row: "2025-2", column: "1" },
+    clearedState("all"),
+  );
+  expect([...seeing.people.people].sort()).toEqual([
+    "Ada Example",
+    "Bo Sample",
+  ]);
+  expect(seeing.broader).toBeNull();
+  /* a column's total is every intake's, whose semesters are not the same */
+  expect(
+    pivotFilters(pivot, { row: null, column: "1" }, clearedState("all"))
+      .broader,
+  ).toBe("intakes");
+});
+
+test("a range blanks the semesters since joining it does not cover", () => {
+  const filters = { ...NO_FILTERS, from: "2026-06-01", to: "2026-12-31" };
+  const pivot = pivotOf(
+    pivotOfView("retention"),
+    applyFilters(archive, filters),
+    filters,
+    archive,
+    "2026-11-09",
+  );
+  /* this fall is Fall 2025's second semester since, and Spring 2026's first */
+  expect(pivot.possible({ row: "2025-2", column: "2" })).toBe(true);
+  expect(pivot.possible({ row: "2025-2", column: "1" })).toBe(false);
+  expect(pivot.possible({ row: "2026-1", column: "1" })).toBe(true);
+  expect(pivot.possible({ row: "2026-1", column: "0" })).toBe(false);
+});
+
+test("semesters since joining are offered only beside the intake", () => {
+  const retention = pivotOfView("retention");
+  expect(settlePivot({ ...retention, rows: "section" }).columns).toBe("none");
+  expect(
+    settlePivot({ ...retention, rows: "since", columns: "section" }).rows,
+  ).toBe("joined");
+  expect(
+    settlePivot({ ...retention, rows: "since", columns: "joined" }),
+  ).toMatchObject({ rows: "since", columns: "joined" });
+});
+
 test("an intake is someone's first contribution, whatever role the filters keep", () => {
   /* Bo drew in Fall 2025 and again in Spring 2026: still that intake */
   const filters = { ...NO_FILTERS, roles: ["image" as const] };
   const pivot = pivotOf(
-    pivotOfView("retention"),
+    bySemester(),
     applyFilters(archive, filters),
     filters,
     archive,

@@ -278,8 +278,10 @@ export function sliceCount(
 export type SliceFilters = {
   articles: FilterState;
   people: FilterState;
-  /** too many articles to name in a link: the tables have more than the mark */
-  broader: boolean;
+  /** where the tables have more than the mark: too many articles to name in
+      a link ("people"), or one person's articles in more than one cell of
+      periods since joining ("intakes"); null where they have the mark */
+  broader: "people" | "intakes" | null;
 };
 
 /** the most post ids a link names, about two kilobytes of address */
@@ -311,6 +313,9 @@ export function sliceFilters(
   let next: FilterState = { ...state };
   /* an intake is no filter: its people are named */
   let intake = false;
+  /* periods since joining are the same periods only within one intake */
+  let since = false;
+  let oneIntake = false;
   /* as the view cut it: a rolling range from its first whole period */
   const range = rangeOf(state, now, [config.by, config.split].find(isPeriod));
   /* the dates the slice's periods leave of the range, once one has */
@@ -322,7 +327,10 @@ export function sliceFilters(
     else if (dimension === "role")
       next = { ...next, roles: keys.filter(isRole) };
     else if (dimension === "person") next = { ...next, people: keys };
-    else if (dimension === "joined") intake = true;
+    else if (dimension === "joined") {
+      intake = true;
+      oneIntake = keys.length === 1;
+    } else if (dimension === "since") intake = since = true;
     else {
       const sorted = [...keys].sort();
       const from = periodBounds(sorted[0]!, dimension).from;
@@ -393,6 +401,11 @@ export function sliceFilters(
             : named
           : next,
     /* an intake's people by name, on its dates, are exactly the mark */
-    broader: !fits && (newcomers || searched),
+    broader:
+      !fits && (newcomers || searched || since)
+        ? "people"
+        : since && !oneIntake
+          ? "intakes"
+          : null,
   };
 }

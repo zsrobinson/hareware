@@ -80,6 +80,7 @@ import {
   stateFor,
   type Compared,
 } from "./compare";
+import { shortLabel } from "./dates";
 import { RowDetails, type OpenRow } from "./open-row";
 import { SlicePanel } from "./slice-panel";
 import { ThinViews, TooNew } from "./views-notes";
@@ -1119,17 +1120,6 @@ function axis(peak: number): { max: number; ticks: number[] } {
         return { max, ticks };
       }
     }
-}
-
-/** "Fall 2022" → "F22" when every label must fit */
-function shortLabel(label: string) {
-  const term = /^(Spring|Fall) (\d{4})$/.exec(label);
-  if (term) return `${term[1] === "Spring" ? "Sp" : "F"}${term[2]!.slice(2)}`;
-  const month = /^(\w{3}) (\d{4})$/.exec(label);
-  if (month) return `${month[1]} ’${month[2]!.slice(2)}`;
-  const school = /^\d{2}(\d{2})–(\d{2})$/.exec(label);
-  if (school) return `${school[1]}–${school[2]}`;
-  return label;
 }
 
 /** a column's top two corners rounded, its base square */

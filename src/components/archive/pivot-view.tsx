@@ -9,13 +9,14 @@ import {
 } from "react";
 import { CopyTextButton } from "~/components/copy-button";
 import { Button } from "~/components/ui/button";
-import { amountOf, applyFilters } from "~/lib/credits/stats";
+import { amountOf, applyFilters, isPeriod } from "~/lib/credits/stats";
 import { toCsv } from "~/lib/csv";
 import { saveFile } from "~/lib/save-file";
 import { cn } from "~/lib/utils";
 import { useShowsViews, type ViewProps } from "./archive-shell";
 import { COUNTS } from "./chart-config";
 import {
+  counted,
   measureNote,
   percentText,
   perArticleText,
@@ -30,6 +31,7 @@ import {
   type Incomplete,
 } from "./charts";
 import { filtersFor } from "./compare";
+import { shortLabel } from "./dates";
 import { RowDetails, type OpenRow } from "./open-row";
 import { dimensionName, type PivotConfig } from "./pivot-config";
 import {
@@ -246,7 +248,13 @@ export function PivotView({
 
 /* an intake reads as one, so "Fall 2025" is never taken for the semester */
 const headerTitle = (dimension: string, header: Header) =>
-  dimension === "joined" ? `Joined ${header.label}` : header.label;
+  dimension === "joined"
+    ? `Joined ${header.label}`
+    : dimension === "since"
+      ? header.key === "0"
+        ? "Semester joined"
+        : `${counted(Number(header.key), "semester", "semesters")} after joining`
+      : header.label;
 
 /** a cell's title ("Joined Fall 2025 · Spring 2026"), or its row's or column's for a total */
 function sliceTitle({ config, rows, columns }: Pivot, slice: PivotSlice) {
@@ -353,6 +361,8 @@ function PivotTable({
     content: ReactNode,
     className?: string,
   ) => {
+    /* blank, not 0: nobody could be counted there */
+    if (!pivot.possible(slice)) return null;
     const { count, share, average } = cellValue(pivot, slice);
     if (pivot.members(slice).length === 0)
       return (
@@ -436,10 +446,18 @@ function PivotTable({
   const number = (r: number, c: number, slice: PivotSlice, name: string) =>
     button(r, c, slice, name, null, "tabular-nums");
 
-  const label = (dimension: string, header: Header, part?: Incomplete) => (
+  const label = (
+    dimension: string,
+    header: Header,
+    part?: Incomplete,
+    /* columns of periods or intakes as the charts' axis writes them, "F25" */
+    short = false,
+  ) => (
     <>
       {dimension === "section" ? (
         <SectionName section={header.label} />
+      ) : short ? (
+        <span title={header.label}>{shortLabel(header.label)}</span>
       ) : (
         header.label
       )}
@@ -481,6 +499,7 @@ function PivotTable({
                     config.columns,
                     column,
                     partial.columns.get(column.key),
+                    isPeriod(config.columns) || config.columns === "joined",
                   ),
                 )}
               </th>

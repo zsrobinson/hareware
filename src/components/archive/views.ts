@@ -342,7 +342,7 @@ export const VIEWS = [
     id: "retention",
     label: "Retention",
     question:
-      "Of the people who joined each semester, how many contributed in each one after?",
+      "Of the people who joined each semester, how many came back each semester after?",
     source: "people",
     range: "all",
     layout: {
@@ -350,7 +350,7 @@ export const VIEWS = [
       pivot: {
         count: "people",
         rows: "joined",
-        columns: "semester",
+        columns: "since",
         values: "number",
         top: 25,
         compare: "none",

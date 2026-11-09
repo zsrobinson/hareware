@@ -11,8 +11,13 @@ import { SECTION_ORDER, sortSections } from "~/lib/credits/sections";
 import { spreadsheetCell } from "~/lib/csv";
 import {
   amountOf,
+  easternDate,
+  grainOf,
   group,
+  isPeriod,
   membersAcross,
+  periodIndex,
+  periodOf,
   type Filters,
   type Grouped,
   type Member,
@@ -55,6 +60,9 @@ export type Pivot = {
   members: (slice: PivotSlice) => Member[];
   /** what a cell's members come to: how many, or their words or views */
   count: (slice: PivotSlice) => number;
+  /** false for a cell nobody could be in, as an intake before it joined:
+      blank, where a zero would say that nobody was */
+  possible: (slice: PivotSlice) => boolean;
   /** what a share is taken of, or null when cells are numbers */
   base: (slice: PivotSlice) => PivotSlice | null;
   /** the share as a percentage, or null when cells are numbers */
@@ -224,9 +232,40 @@ export function pivotOf(
             { row: null, column: ranges ? slice.column : null }
           : null;
 
+  /* an intake against a period at its grain, or periods since it */
+  const grain = grainOf(rows, columns);
+  const at = (key: string) => periodIndex(key, grain);
+  const intakeOf = (slice: PivotSlice) =>
+    rows === "joined" ? slice.row : columns === "joined" ? slice.column : null;
+  const other = rows === "joined" ? columns : rows;
+  const otherOf = (slice: PivotSlice) =>
+    rows === "joined" ? slice.column : slice.row;
+  /* the periods the range covers, up to today */
+  const bounds = {
+    first: filters.from ? at(periodOf(filters.from, grain).key) : -Infinity,
+    last: at(
+      periodOf(
+        [filters.to, today ?? easternDate(new Date().toISOString())]
+          .filter((d) => d !== undefined)
+          .sort()[0]!,
+        grain,
+      ).key,
+    ),
+  };
+  const possible = (slice: PivotSlice) => {
+    const intake = intakeOf(slice);
+    const key = otherOf(slice);
+    if (intake === null || key === null || ranges) return true;
+    if (isPeriod(other)) return at(key) >= at(intake);
+    if (other !== "since") return true;
+    const period = at(intake) + Number(key);
+    return period >= bounds.first && period <= bounds.last;
+  };
+
   return {
     config,
     grouped,
+    possible,
     rows: rowHeaders.map((c) => nameOf(rows, c)),
     empty: !Object.values(grouped.cells).some((row) =>
       Object.values(row).some((list) => list.length > 0),
@@ -390,10 +429,12 @@ export function differenceText(pivot: Pivot, row: string | null, digits = 0) {
 /**
  * The pivot as rows of text, as it reads: its header, a row each, and the
  * totals, for a CSV or a paste into a sheet. Shares keep one decimal, and a
- * cell none of whose views could be read is blank, never 0.
+ * cell none of whose views could be read, or nobody could be in, is blank,
+ * never 0.
  */
 export function pivotMatrix(pivot: Pivot): string[][] {
   const text = (slice: PivotSlice) => {
+    if (!pivot.possible(slice)) return "";
     const { count, share, average } = cellValue(pivot, slice);
     const read = amountOf(pivot.members(slice), pivot.grouped.measure);
     if (read.counted === 0 && read.missing > 0) return "";

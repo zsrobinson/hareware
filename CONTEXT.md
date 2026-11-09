@@ -81,8 +81,15 @@ contribution in it.
 Where someone **joined in** is the period of their first contribution, cut
 as finely as the period beside it (semesters, unless the view is by another
 period): their intake. Everyone is in one intake, so people counted by it add
-up, and an intake against the semesters its people were active in is
-retention. It is no filter: an intake's people are named.
+up. **Semesters since joining** count from it: a contribution in the
+semester someone joined is theirs at "Joined", one in the semester after at
+"+1". An intake against those is **retention**, a triangle: a cell nobody
+could be in yet, or before the range, is blank, never 0, as is one of an
+intake against a semester before it. Semesters since joining go only beside
+the intake, since apart from it the same "+1" is different semesters for
+different people. Neither is a filter: an intake's people are named, and a
+total of "+1" across intakes opens on those people's credits on its
+articles, which can include another semester's, and says so.
 
 ## View
 
@@ -94,7 +101,7 @@ the builder made from one, and a view of one's own is its link. Say "view",
 never "report", "dashboard" or "saved view": nothing is saved.
 
 A **pivot** is rows by columns, each cut by a dimension (a period, a section,
-a role, a person, or when they joined), every cell a number or a share of
+a role, a person, when they joined, or semesters since), every cell a number or a share of
 its row, its column or the total, with totals of both. Say "pivot", never
 "crosstab" or "matrix".
 

@@ -102,8 +102,9 @@ function SeeIn({ seeing }: { seeing: SliceFilters }) {
       </a>
       {seeing.broader && (
         <p className="text-muted-foreground w-full text-xs">
-          Too many articles to name in a link, so these open on the people's
-          whole record in these filters, not on these articles alone.
+          {seeing.broader === "people"
+            ? "Too many articles to name in a link, so these open on the people's whole record in these filters, not on these articles alone."
+            : "These open on these people's credits on these articles, which can include a credit from another semester after they joined."}
         </p>
       )}
     </div>

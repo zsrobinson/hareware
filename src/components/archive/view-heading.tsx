@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 
 /**
  * What heads every view, whatever its layout: its title, the question it
- * answers, and what it counts, so choosing another tab moves nothing under
- * the strip. A chart's or a pivot's is its figure's caption.
+ * answers, and what it counts. A chart's or a pivot's is its figure's
+ * caption.
  */
 export function ViewHeading({
   title,

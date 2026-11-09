@@ -189,7 +189,6 @@ export function CompareRow({
   onChange: (compare: Compare) => void;
 }) {
   return (
-    /* "Compare with" is the one label the panel's column would wrap */
     <BuilderRow icon={GitCompareArrowsIcon} label="Compare">
       <Choice
         label="Compare with"

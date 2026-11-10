@@ -17,7 +17,6 @@
 @custom-variant dark (@media (prefers-color-scheme: dark));
 
 @theme inline {
-  --color-active-indicator: var(--active-indicator);
   /*
     Geist for the interface, Source Serif for anything the paper speaks in.
     the instagram slide templates set `font-serif` on their own root, so they
@@ -117,11 +116,9 @@
   --role-2: #58697b;
   --role-3: #b0c2d6;
   --series-neutral: #5c5c5c;
-  /* Navigation and view selection share one marker; maroon never encodes data. */
-  --active-indicator: #7a1f2b;
-  /* Text and border tints for unsaved changes read at least 7:1 on the page. */
-  --edited: #7a1f2b;
-  --edited-solid: #7a1f2b;
+  /* Unsaved changes use a neutral tint, never a data-series colour. */
+  --edited: #404040;
+  --edited-solid: #171717;
   --edited-solid-foreground: #ffffff;
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
@@ -136,7 +133,6 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --active-indicator: #d9939f;
     --background: oklch(0.145 0 0);
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.205 0 0);
@@ -170,9 +166,9 @@
     --role-2: #7e8d9d;
     --role-3: #33414f;
     --series-neutral: #b8b8b8;
-    --edited: #f0a3ac;
-    --edited-solid: #93303d;
-    --edited-solid-foreground: #ffffff;
+    --edited: #d4d4d4;
+    --edited-solid: #e5e5e5;
+    --edited-solid-foreground: #171717;
     --sidebar: oklch(0.205 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.488 0.243 264.376);

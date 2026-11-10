@@ -19,8 +19,7 @@ import { cn } from "~/lib/utils";
   A page's views as one row of tabs, whatever the width: on a laptop the
   views that do not fit fold into "N more" at the end, before the `+` that
   adds one, which is always shown; a touch screen swipes the row instead.
-  The chosen view is always in the row, with its menu and, while edited, a
-  dot; swapped in for the last that fits where it would be folded, so the
+  The chosen view is always in the row, with a dot while edited; the one view menu stays beside `+`; swapped in for the last that fits where it would be folded, so the
   row never wraps or moves the page under it, and a panel opening only
   folds more of it.
 */
@@ -69,7 +68,7 @@ const tabClass = (selected: boolean, icons = true) =>
     "focus-visible:ring-ring/50 flex h-10 shrink-0 items-center gap-1.5 rounded-t-md border-b-2 px-2.5 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-inset @2xl:px-3 [&_svg]:size-4 [&_svg]:shrink-0",
     icons && "@max-2xl:[&_svg]:hidden",
     selected
-      ? "text-foreground border-transparent"
+      ? "border-foreground text-foreground"
       : "text-muted-foreground hover:text-foreground border-transparent",
   );
 
@@ -212,15 +211,7 @@ export function ViewTabs({
   const tab = ({ id, label, icon: Icon }: Tab) => {
     const selected = view === id;
     return (
-      <div
-        key={id}
-        data-view-group={id}
-        className={cn(
-          "relative flex shrink-0",
-          selected &&
-            "after:bg-active-indicator after:pointer-events-none after:absolute after:inset-x-1 after:bottom-0 after:h-1 after:rounded-t-full",
-        )}
-      >
+      <div key={id} data-view-group={id} className="relative flex shrink-0">
         <button
           type="button"
           role="tab"
@@ -229,13 +220,13 @@ export function ViewTabs({
           aria-controls={panelId}
           tabIndex={selected ? 0 : -1}
           onClick={() => onChoose(id)}
-          className={cn(tabClass(selected), "pr-1 @2xl:pr-1")}
+          className={cn(tabClass(selected), "relative")}
         >
           <Icon aria-hidden />
           {label}
           <span
             className={cn(
-              "bg-edited size-1.5 shrink-0 rounded-full",
+              "bg-edited absolute top-2.5 right-1 size-1 rounded-full",
               !(selected && edited) && "invisible",
             )}
             aria-hidden={!(selected && edited)}
@@ -243,9 +234,6 @@ export function ViewTabs({
             {selected && edited && <span className="sr-only">, edited</span>}
           </span>
         </button>
-        <span className="flex w-7 shrink-0 items-center justify-center">
-          {selected && viewMenu}
-        </span>
       </div>
     );
   };
@@ -259,87 +247,95 @@ export function ViewTabs({
         aria-hidden
         className="pointer-events-none invisible absolute flex h-0 gap-x-1 overflow-hidden"
       >
-        {/* the same label, dot and menu space as every visible tab */}
+        {/* the same compact label width; dots never affect layout */}
         {tabs.map(({ id, label, icon: Icon }) => (
           <span key={id} className="relative flex shrink-0">
-            <span className={cn(tabClass(false), "pr-1 @2xl:pr-1")}>
+            <span className={tabClass(false)}>
               <Icon />
               {label}
-              <span className="size-1.5 shrink-0" />
             </span>
-            <span className="w-7 shrink-0" />
           </span>
         ))}
-        <span className={tabClass(false, false)}>
-          <PlusIcon />
+        <span className="flex shrink-0 items-center gap-1">
+          <span className="w-7" />
+          <span className={tabClass(false, false)}>
+            <PlusIcon />
+          </span>
         </span>
         <span className={tabClass(true, false)}>
           {views.length} more
           <ChevronDownIcon />
         </span>
       </div>
-      <div
-        ref={list}
-        role="tablist"
-        aria-label="Views"
-        /* the rule under the row is a background, not a border: tabs
+      <div className="flex min-w-0 gap-1">
+        <div
+          ref={list}
+          role="tablist"
+          aria-label="Views"
+          /* the rule under the row is a background, not a border: tabs
            pulled over a border made the strip scroll down by a pixel */
-        className="relative flex [scrollbar-width:none] gap-x-1 overflow-x-auto overflow-y-hidden bg-[linear-gradient(to_top,var(--color-border)_1px,transparent_1px)]"
-        style={{ maskImage: fade }}
-        onKeyDown={(event) => {
-          /* the tabs pattern: arrows move between every view, folded or
+          className="relative flex min-w-0 flex-1 [scrollbar-width:none] gap-x-1 overflow-x-auto overflow-y-hidden bg-[linear-gradient(to_top,var(--color-border)_1px,transparent_1px)]"
+          style={{ maskImage: fade }}
+          onKeyDown={(event) => {
+            /* the tabs pattern: arrows move between every view, folded or
              not, Home and End to the first and last, and each chooses */
-          if ((event.target as HTMLElement).getAttribute("role") !== "tab")
-            return;
-          const to =
-            event.key === "ArrowRight"
-              ? chosen + 1
-              : event.key === "ArrowLeft"
-                ? chosen - 1
-                : event.key === "Home"
-                  ? 0
-                  : event.key === "End"
-                    ? tabs.length - 1
-                    : null;
-          if (to === null) return;
-          event.preventDefault();
-          choose(tabs[(to + tabs.length) % tabs.length]!.id);
-        }}
-      >
-        {shown.map(tab)}
-        {menu.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger className={tabClass(false, false)}>
-              {menu.length} more
-              <ChevronDownIcon aria-hidden />
-            </DropdownMenuTrigger>
-            {/* the chosen view is in the row by the time the menu closes */}
-            <DropdownMenuContent
-              align="end"
-              finalFocus={() =>
-                list.current?.querySelector<HTMLElement>(
-                  '[aria-selected="true"]',
-                ) ?? true
-              }
-            >
-              {menu.map(({ id, label, icon: Icon }) => (
-                <DropdownMenuItem key={id} onClick={() => choose(id)}>
-                  <Icon aria-hidden />
-                  {label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        <button
-          type="button"
-          className={tabClass(false, false)}
-          aria-label="New view"
-          title="New view"
-          onClick={onNew}
+            if ((event.target as HTMLElement).getAttribute("role") !== "tab")
+              return;
+            const to =
+              event.key === "ArrowRight"
+                ? chosen + 1
+                : event.key === "ArrowLeft"
+                  ? chosen - 1
+                  : event.key === "Home"
+                    ? 0
+                    : event.key === "End"
+                      ? tabs.length - 1
+                      : null;
+            if (to === null) return;
+            event.preventDefault();
+            choose(tabs[(to + tabs.length) % tabs.length]!.id);
+          }}
         >
-          <PlusIcon aria-hidden />
-        </button>
+          {shown.map(tab)}
+          {menu.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger className={tabClass(false, false)}>
+                {menu.length} more
+                <ChevronDownIcon aria-hidden />
+              </DropdownMenuTrigger>
+              {/* the chosen view is in the row by the time the menu closes */}
+              <DropdownMenuContent
+                align="end"
+                finalFocus={() =>
+                  list.current?.querySelector<HTMLElement>(
+                    '[aria-selected="true"]',
+                  ) ?? true
+                }
+              >
+                {menu.map(({ id, label, icon: Icon }) => (
+                  <DropdownMenuItem key={id} onClick={() => choose(id)}>
+                    <Icon aria-hidden />
+                    {label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <span className="flex w-7 shrink-0 items-center justify-center">
+            {viewMenu}
+          </span>
+          <button
+            type="button"
+            className={tabClass(false, false)}
+            aria-label="New view"
+            title="New view"
+            onClick={onNew}
+          >
+            <PlusIcon aria-hidden />
+          </button>
+        </div>
       </div>
     </div>
   );

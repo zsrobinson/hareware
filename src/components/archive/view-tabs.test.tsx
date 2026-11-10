@@ -174,20 +174,15 @@ test("a touch screen narrowed keeps the chosen view in sight", async () => {
   ) {
     scrolled.set(this, value);
   });
-  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(
-    function (this: HTMLElement) {
-      return this.hasAttribute("data-view-group") ? 128 : 100;
-    },
-  );
   const user = userEvent.setup();
   render(<Row />);
   await user.click(screen.getByRole("tab", { name: "Retention" }));
   const strip = screen.getByRole("tablist");
   expect(strip.scrollLeft).toBe(0);
-  /* The last label and its menu run from 400 to 528, past a 300px strip. */
+  /* The last label runs from 400 to 500; the shared menu is pinned outside. */
   width = 300;
   act(() => observed.forEach((callback) => callback()));
-  expect(strip.scrollLeft).toBe(228);
+  expect(strip.scrollLeft).toBe(200);
 });
 
 test("a clipped strip fades its right edge even without touch detection, until scrolled to the end", () => {
@@ -207,7 +202,7 @@ test("a clipped strip fades its right edge even without touch detection, until s
   expect(strip.style.maskImage.endsWith("transparent)")).toBe(false);
 });
 
-test("every tab keeps its menu and edited-dot space across selection", () => {
+test("compact tabs keep their geometry while the single view menu stays outside the strip", () => {
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1000);
   const props = {
     tabs: TABS,
@@ -230,13 +225,21 @@ test("every tab keeps its menu and edited-dot space across selection", () => {
         .filter(
           (token) =>
             !token.includes("text-foreground") &&
-            !token.includes("text-muted-foreground"),
+            !token.includes("text-muted-foreground") &&
+            !["border-foreground", "border-transparent"].includes(token),
         )
         .join(" "),
       dot: tab.lastElementChild?.className.replace(/ invisible/g, ""),
-      menuSpace: tab.parentElement?.lastElementChild?.className,
+
       childCount: tab.parentElement?.children.length,
     }));
+  const menu = screen.getByRole("button", { name: "View menu" });
+  expect(screen.getByRole("tablist").contains(menu)).toBe(false);
+  expect(
+    screen
+      .getByRole("tablist")
+      .contains(screen.getByRole("button", { name: "New view" })),
+  ).toBe(false);
   const before = layout();
   rerender(
     <ViewTabs

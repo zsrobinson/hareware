@@ -963,7 +963,7 @@ function FilterBar({
   const phone = useIsPhone();
   const [sheetOpen, setSheetOpen] = useState(false);
   const { ref: searchInput, placeholder } = useFittingPlaceholder(
-    searchPlaceholder,
+    phone ? "Search" : searchPlaceholder,
     "Search",
   );
   const clear = opening;
@@ -994,7 +994,12 @@ function FilterBar({
           state.search.trim() && "placeholder:text-edited/70",
         )}
         description={
-          state.search.trim() ? "changed from the saved view" : undefined
+          [
+            phone ? searchPlaceholder : undefined,
+            state.search.trim() ? "changed from the saved view" : undefined,
+          ]
+            .filter(Boolean)
+            .join(". ") || undefined
         }
         suggest={suggestPeople}
       />
@@ -1206,7 +1211,7 @@ function useFittingPlaceholder(full: string, short: string) {
       context ??= document.createElement("canvas").getContext("2d");
       if (!context) return;
       const style = getComputedStyle(input);
-      context.font = style.font;
+      context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
       /* less the room a search field keeps for its clear button */
       const room =
         input.clientWidth -

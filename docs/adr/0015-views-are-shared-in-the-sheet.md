@@ -68,10 +68,9 @@ slug of its name, so a name cannot reach the log through its id.
 **A view on screen is either as saved or edited.** Any change makes it
 edited: a filter, a chip, the search, the sort, the columns, Show, the
 legend, anything in Customize. The tab gets a dot; every control that
-differs, and each changed row in Customize with what it was, gets the one
-accent, HareWare's maroon, which is never used on data. One Reset takes
+differs, and each changed row in Customize with what it was, gets a neutral tint and border, separate from data-series colours. One Reset takes
 everything back, replacing the three there were. Save for everyone keeps
-it, the only solid maroon on the page, and Save as new view keeps it as
+it with a solid monochrome action, and Save as new view keeps it as
 another tab. What a view cannot hold (a range of dates, a search, the
 articles a mark chose) is said, and stays an edit.
 

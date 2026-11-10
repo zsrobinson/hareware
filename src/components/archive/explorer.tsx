@@ -7,6 +7,7 @@ import {
   ChartColumnIcon,
   ChartPieIcon,
   ChevronDownIcon,
+  EllipsisIcon,
   CopyIcon,
   Grid3x3Icon,
   HistoryIcon,
@@ -633,7 +634,7 @@ function Explorer({
         aria-label={`${label}'s menu`}
         className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 my-auto flex size-7 items-center justify-center rounded-md outline-none focus-visible:ring-3"
       >
-        <ChevronDownIcon className="size-4" aria-hidden />
+        <EllipsisIcon className="size-4" aria-hidden />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         <DropdownMenuItem onClick={rename} {...off(why ?? writing)}>
@@ -730,7 +731,10 @@ function Explorer({
   );
   const actions = edited && (
     <div
-      className="flex shrink-0 items-center gap-1.5 pb-1 pl-2"
+      className={cn(
+        "flex shrink-0 items-center gap-1.5 pb-1 pl-2",
+        phone && "ml-auto",
+      )}
       onFocusCapture={() => {
         actionFocused.current = true;
       }}
@@ -863,8 +867,11 @@ function Explorer({
               {page.reason}
             </p>
           )}
-          <div className="flex items-end">
-            <div ref={tabsBox} className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-end gap-y-2">
+            <div
+              ref={tabsBox}
+              className={cn("min-w-0 flex-1", phone && "basis-full")}
+            >
               <ViewTabs
                 tabs={tabs}
                 view={state.view}

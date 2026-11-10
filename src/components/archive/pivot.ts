@@ -18,6 +18,7 @@ import {
   membersAcross,
   periodIndex,
   periodOf,
+  periodBounds,
   sinceLabel,
   type Filters,
   type Grouped,
@@ -64,6 +65,9 @@ export type Pivot = {
   /** false for a cell nobody could be in, as an intake before it joined:
       blank, where a zero would say that nobody was */
   possible: (slice: PivotSlice) => boolean;
+  /** a retention cell in the semester still in progress */
+  soFar: (slice: PivotSlice) => boolean;
+  totalLabel: string;
   /** what a share is taken of, or null when cells are numbers */
   base: (slice: PivotSlice) => PivotSlice | null;
   /** the share as a percentage, or null when cells are numbers */
@@ -289,6 +293,31 @@ export function pivotOf(
     config,
     grouped,
     possible,
+    soFar: (slice) => {
+      const intake = intakeOf(slice);
+      const key = otherOf(slice);
+      if (intake === null || key === null || !possible(slice)) return false;
+      const period =
+        other === "since"
+          ? at(intake) + Number(key)
+          : isPeriod(other)
+            ? at(key)
+            : null;
+      return (
+        period ===
+        at(periodOf(today ?? easternDate(new Date().toISOString()), grain).key)
+      );
+    },
+    totalLabel:
+      [rows, columns].includes("joined") &&
+      ((filters.from &&
+        (rows === "joined" ? rowHeaders : shownColumns).some(
+          (h) => periodBounds(h.key, grain).from < filters.from!,
+        )) ||
+        (filters.to &&
+          filters.to < (today ?? easternDate(new Date().toISOString()))))
+        ? "Active in range"
+        : "Total",
     rows: rowHeaders.map((c) => nameOf(rows, c)),
     empty: !Object.values(grouped.cells).some((row) =>
       Object.values(row).some((list) => list.length > 0),
@@ -463,10 +492,15 @@ export function pivotMatrix(pivot: Pivot): string[][] {
     if (read.counted === 0 && read.missing > 0) return "";
     if (pivot.config.values === "per-article" && split)
       return String(average ?? 0);
-    return shareBeside || share === null ? String(count) : `${share.toFixed(1)}%`;
+    return shareBeside || share === null
+      ? String(count)
+      : `${share.toFixed(1)}%`;
   };
   const split = pivot.config.columns !== "none";
-  const shareBeside = !split && !pivot.ranges && ["total", "row", "column"].includes(pivot.config.values);
+  const shareBeside =
+    !split &&
+    !pivot.ranges &&
+    ["total", "row", "column"].includes(pivot.config.values);
   /* one column of sums: each, and what it is per article */
   const beside =
     pivot.config.values === "per-article" && !split && !pivot.ranges;
@@ -510,7 +544,7 @@ export function pivotMatrix(pivot: Pivot): string[][] {
           beside: null,
         }
       : {
-          label: split ? "Total" : measure,
+          label: split ? pivot.totalLabel : measure,
           cell: (row: string | null) => text({ row, column: null }),
           beside: companions(split ? "Total" : measure, null),
         },
@@ -531,7 +565,9 @@ export function pivotMatrix(pivot: Pivot): string[][] {
       ...(c.beside?.cells(row) ?? []),
     ]),
     ...per(row),
-    ...(shareBeside ? [`${(pivot.share({ row, column: null }) ?? 100).toFixed(1)}%`] : []),
+    ...(shareBeside
+      ? [`${(pivot.share({ row, column: null }) ?? 100).toFixed(1)}%`]
+      : []),
   ];
   return [
     header,

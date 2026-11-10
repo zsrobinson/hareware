@@ -133,9 +133,6 @@ export function PivotView({
 
   return (
     <div className="space-y-4">
-      {config.columns === "none" && config.compare === "none" && ["total", "row", "column"].includes(config.values) && (
-        <p className="text-muted-foreground text-xs">Share is of the {pivot.count({ row: null, column: null }).toLocaleString()} {COUNTS.find((c) => c.id === pivot.grouped.measure)!.label.toLowerCase()} matching the filters, rounded.</p>
-      )}
       <figure className="space-y-3">
         <ViewHeading
           figure
@@ -166,6 +163,27 @@ export function PivotView({
             />
           )}
         </ViewHeading>
+        {config.columns === "none" &&
+          config.compare === "none" &&
+          ["total", "row", "column"].includes(config.values) && (
+            <p className="text-muted-foreground text-xs">
+              Share is of the{" "}
+              {pivot.count({ row: null, column: null }).toLocaleString()}{" "}
+              {COUNTS.find(
+                (c) => c.id === pivot.grouped.measure,
+              )!.label.toLowerCase()}{" "}
+              matching the filters, rounded.
+            </p>
+          )}
+
+        {[config.rows, config.columns].includes("since") && (
+          <p className="text-muted-foreground text-xs">
+            +1 = the semester after joining; a return can follow a gap. Blank =
+            outside the range or not reached yet.{" "}
+            <span className="font-medium">* so far</span> = the current
+            semester, still in progress.
+          </p>
+        )}
         {pivot.note && (
           <p className="bg-muted/50 rounded-lg border px-3 py-2 text-sm">
             {pivot.note}
@@ -305,8 +323,10 @@ function PivotTable({
   const pairs = pivot.ranges !== null;
   /* one column of sums per article: each sum, and beside it what it is per
      article, which opens the same list as the sum */
-  const shareBeside = !split && !pairs && ["total", "row", "column"].includes(config.values);
-  const beside = (config.values === "per-article" || shareBeside) && !split && !pairs;
+  const shareBeside =
+    !split && !pairs && ["total", "row", "column"].includes(config.values);
+  const beside =
+    (config.values === "per-article" || shareBeside) && !split && !pairs;
   /* where each button is: a row, -1 for the header and rows.length for the
      totals; a column, -1 for the row's header and columns.length for its total */
   const last = { row: rows.length, column: columns.length };
@@ -349,7 +369,9 @@ function PivotTable({
     let target: HTMLElement | null | undefined = null;
     if (event.key === "Home" || event.key === "End") {
       const ends =
-        event.key === "Home" ? [-1, last.column + 2, 1] : [last.column + 1, -2, -1];
+        event.key === "Home"
+          ? [-1, last.column + 2, 1]
+          : [last.column + 1, -2, -1];
       for (let column = ends[0]!; column !== ends[1]; column += ends[2]!)
         if ((target = find(r, column))) break;
     } else if (steps[event.key]) {
@@ -357,7 +379,10 @@ function PivotTable({
       /* the next button that way, past any empty cell */
       for (
         let row = r + dr, column = c + dc;
-        row >= -1 && row <= last.row && column >= -1 && column <= last.column + (beside ? 1 : 0);
+        row >= -1 &&
+        row <= last.row &&
+        column >= -1 &&
+        column <= last.column + (beside ? 1 : 0);
         row += dr, column += dc
       )
         if ((target = find(row, column))) break;
@@ -377,10 +402,17 @@ function PivotTable({
     /* blank, not 0: nobody could be counted there */
     if (!pivot.possible(slice)) return null;
     const { count, share, average } = cellValue(pivot, slice);
+    const soFar =
+      content === null && pivot.soFar(slice) ? (
+        <sup className="ml-0.5" title="Current semester, so far">
+          *
+        </sup>
+      ) : null;
     if (pivot.members(slice).length === 0)
       return (
-        <span className="text-muted-foreground/40 tabular-nums">
+        <span className="text-muted-foreground tabular-nums">
           {content ?? (share === null ? 0 : percentText(0))}
+          {soFar}
         </span>
       );
     /* articles none of whose views could be read: not a zero */
@@ -417,6 +449,7 @@ function PivotTable({
               : share === null
                 ? count.toLocaleString()
                 : percentText(share))}
+        {soFar}
         {content === null && (
           <TooNew
             members={pivot.members(slice)}
@@ -456,10 +489,38 @@ function PivotTable({
   };
 
   const number = (r: number, c: number, slice: PivotSlice, name: string) =>
-    button(r, c, slice, name, shareBeside ? pivot.count(slice).toLocaleString() : null, "tabular-nums");
-  const companion = (r: number, slice: PivotSlice, name: string) => shareBeside
-    ? button(r, last.column + 1, slice, `${name}, share`, percentText(pivot.share(slice) ?? 100), "tabular-nums")
-    : button(r, last.column + 1, slice, `${name}, per article`, <>{averageText(slice)}<TooNew members={pivot.members(slice)} measure={pivot.grouped.measure} /></>, "tabular-nums");
+    button(
+      r,
+      c,
+      slice,
+      name,
+      shareBeside ? pivot.count(slice).toLocaleString() : null,
+      "tabular-nums",
+    );
+  const companion = (r: number, slice: PivotSlice, name: string) =>
+    shareBeside
+      ? button(
+          r,
+          last.column + 1,
+          slice,
+          `${name}, share`,
+          percentText(pivot.share(slice) ?? 100),
+          "tabular-nums",
+        )
+      : button(
+          r,
+          last.column + 1,
+          slice,
+          `${name}, per article`,
+          <>
+            {averageText(slice)}
+            <TooNew
+              members={pivot.members(slice)}
+              measure={pivot.grouped.measure}
+            />
+          </>,
+          "tabular-nums",
+        );
 
   const label = (
     dimension: string,
@@ -520,7 +581,7 @@ function PivotTable({
               </th>
             ))}
             <th scope="col" className={cn(cell, "font-medium")}>
-              {pairs ? "Difference" : split ? "Total" : measureName}
+              {pairs ? "Difference" : split ? pivot.totalLabel : measureName}
             </th>
             {beside && (
               <th scope="col" className={cn(cell, "font-medium")}>

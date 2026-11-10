@@ -90,3 +90,51 @@ test("a list of articles names only who the filters count on each", () => {
   expect(names).toEqual(["Bo Sample"]);
   vi.unstubAllGlobals();
 });
+
+test.each(["articles", "contributions", "people", "newcomers"] as const)(
+  "%s slices keep the printed pen name beside its person",
+  (measure) => {
+    vi.stubGlobal("matchMedia", () => ({
+      matches: false,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    const written: ArchiveArticle = {
+      ...article,
+      credits: [
+        {
+          role: "writer",
+          label: "Article by",
+          printed: "Penn Example",
+          bylines: ["Penn Example"],
+          contributors: [
+            { name: "Ada Example", byline: "Penn Example", source: "article" },
+          ],
+        },
+      ],
+    };
+    render(
+      <SlicePanel
+        title="News"
+        caption="1"
+        back="Articles"
+        measure={measure}
+        members={[
+          {
+            id: measure === "articles" ? 1 : "Ada Example",
+            units: [
+              { article: written, role: "writer", person: "Ada Example" },
+            ],
+          },
+        ]}
+        filters={NO_FILTERS}
+        onClose={() => {}}
+        restoreFocus={() => null}
+      />,
+    );
+    expect(screen.getByRole("listitem").textContent).toContain(
+      "as Penn Example",
+    );
+    vi.unstubAllGlobals();
+  },
+);

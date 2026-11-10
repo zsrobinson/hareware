@@ -58,6 +58,7 @@ test("a person's panel says what the filters leave of their record, and holds th
   /* a range that is one semester is named as one */
   expect(text).toContain("1 contribution in Fall 2026");
   expect(text).toContain("3 contributions in all");
+  expect(within(panel).getByText("as Mask One")).toBeTruthy();
   expect(text).toContain("Fall 2025 1 · Spring 2026 1 · Fall 2026 1");
   /* a pen name from outside the range is still theirs */
   const credited = within(panel).getByRole("heading", { name: "Credited as" });

@@ -1,6 +1,5 @@
 import { ChevronDownIcon, PlusIcon, type LucideIcon } from "lucide-react";
 import {
-  Fragment,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -67,10 +66,10 @@ export function foldTabs(
 const tabClass = (selected: boolean, icons = true) =>
   cn(
     /* the chosen view is underlined, so a hovered tab never looks chosen */
-    "focus-visible:ring-ring/50 flex h-10 shrink-0 items-center gap-1.5 rounded-t-md border-b-2 px-2.5 text-sm whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-inset @2xl:px-3 [&_svg]:size-4 [&_svg]:shrink-0",
+    "focus-visible:ring-ring/50 flex h-10 shrink-0 items-center gap-1.5 rounded-t-md border-b-2 px-2.5 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-inset @2xl:px-3 [&_svg]:size-4 [&_svg]:shrink-0",
     icons && "@max-2xl:[&_svg]:hidden",
     selected
-      ? "border-foreground text-foreground font-medium"
+      ? "text-foreground border-transparent"
       : "text-muted-foreground hover:text-foreground border-transparent",
   );
 
@@ -173,8 +172,9 @@ export function ViewTabs({
     const reveal = () => {
       const tab = strip.querySelector<HTMLElement>('[aria-selected="true"]');
       if (!tab) return;
-      const left = tab.offsetLeft;
-      const right = left + tab.offsetWidth;
+      const footprint = tab.parentElement!;
+      const left = footprint.offsetLeft;
+      const right = left + footprint.offsetWidth;
       if (left < strip.scrollLeft) strip.scrollLeft = left;
       else if (right > strip.scrollLeft + strip.clientWidth)
         strip.scrollLeft = right - strip.clientWidth;
@@ -212,7 +212,15 @@ export function ViewTabs({
   const tab = ({ id, label, icon: Icon }: Tab) => {
     const selected = view === id;
     return (
-      <Fragment key={id}>
+      <div
+        key={id}
+        data-view-group={id}
+        className={cn(
+          "relative flex shrink-0",
+          selected &&
+            "after:bg-active-indicator after:pointer-events-none after:absolute after:inset-x-1 after:bottom-0 after:h-1 after:rounded-t-full",
+        )}
+      >
         <button
           type="button"
           role="tab"
@@ -221,18 +229,24 @@ export function ViewTabs({
           aria-controls={panelId}
           tabIndex={selected ? 0 : -1}
           onClick={() => onChoose(id)}
-          className={cn(tabClass(selected), selected && "pr-1 @2xl:pr-1")}
+          className={cn(tabClass(selected), "pr-1 @2xl:pr-1")}
         >
           <Icon aria-hidden />
           {label}
-          {selected && edited && (
-            <span className="bg-edited size-1.5 rounded-full">
-              <span className="sr-only">, edited</span>
-            </span>
-          )}
+          <span
+            className={cn(
+              "bg-edited size-1.5 shrink-0 rounded-full",
+              !(selected && edited) && "invisible",
+            )}
+            aria-hidden={!(selected && edited)}
+          >
+            {selected && edited && <span className="sr-only">, edited</span>}
+          </span>
         </button>
-        {selected && viewMenu}
-      </Fragment>
+        <span className="flex w-7 shrink-0 items-center justify-center">
+          {selected && viewMenu}
+        </span>
+      </div>
     );
   };
 
@@ -245,13 +259,15 @@ export function ViewTabs({
         aria-hidden
         className="pointer-events-none invisible absolute flex h-0 gap-x-1 overflow-hidden"
       >
-        {/* each as it is drawn chosen: with its dot and its menu */}
+        {/* the same label, dot and menu space as every visible tab */}
         {tabs.map(({ id, label, icon: Icon }) => (
-          <span key={id} className={tabClass(true)}>
-            <Icon />
-            {label}
-            <span className="size-1.5" />
-            <span className="w-7" />
+          <span key={id} className="relative flex shrink-0">
+            <span className={cn(tabClass(false), "pr-1 @2xl:pr-1")}>
+              <Icon />
+              {label}
+              <span className="size-1.5 shrink-0" />
+            </span>
+            <span className="w-7 shrink-0" />
           </span>
         ))}
         <span className={tabClass(false, false)}>

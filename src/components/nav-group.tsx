@@ -45,8 +45,8 @@ export function NavGroup({
                 className={cn(
                   "text-sidebar-foreground/80 relative flex h-8 w-full items-center gap-2 rounded-lg p-2 text-sm outline-hidden transition-colors",
                   /* the current tool's marker, snapped to the sidebar's edge
-                     (the nav's p-3); the paper's maroon, used only here */
-                  "data-active:before:bg-hare-primary data-active:before:absolute data-active:before:inset-y-1.5 data-active:before:-left-3 data-active:before:w-1 data-active:before:rounded-r-full",
+                     (the nav's p-3), shared with the chosen archive view */
+                  "data-active:before:bg-active-indicator data-active:before:absolute data-active:before:inset-y-1.5 data-active:before:-left-3 data-active:before:w-1 data-active:before:rounded-r-full",
                   "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                   "focus-visible:ring-sidebar-ring focus-visible:ring-2",
                   "data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground data-active:font-medium",

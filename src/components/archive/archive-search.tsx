@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type Ref } from "react";
+import { useId, useMemo, useRef, useState, type Ref } from "react";
 import { Input } from "~/components/ui/input";
 import type { Archive } from "~/lib/credits/archive";
 import { peopleOf } from "~/lib/credits/person";
@@ -27,6 +27,9 @@ export function ArchiveSearch({
 }) {
   const [focused, setFocused] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  const suggestionsId = useId();
+  const focusSearch = () =>
+    box.current?.querySelector<HTMLInputElement>("input")?.focus();
   const typed = searchable(state.search.trim());
   const names = useMemo(
     () =>
@@ -55,6 +58,14 @@ export function ArchiveSearch({
     <div
       ref={box}
       className="relative"
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && open) {
+          event.preventDefault();
+          event.stopPropagation();
+          focusSearch();
+          setFocused(false);
+        }
+      }}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget))
           setFocused(false);
@@ -64,6 +75,8 @@ export function ArchiveSearch({
         ref={inputRef}
         type="search"
         aria-label="Search"
+        aria-expanded={open}
+        aria-controls={open ? suggestionsId : undefined}
         placeholder={placeholder}
         className={className ?? "bg-background pl-8"}
         aria-description={description}
@@ -77,14 +90,12 @@ export function ArchiveSearch({
           if (event.key === "ArrowDown" && open) {
             event.preventDefault();
             box.current?.querySelector<HTMLButtonElement>("button")?.focus();
-          } else if (event.key === "Escape" && open) {
-            event.stopPropagation();
-            setFocused(false);
           }
         }}
       />
       {open && (
         <div
+          id={suggestionsId}
           aria-label="People matching search"
           role="group"
           className="bg-popover text-popover-foreground absolute inset-x-0 top-full z-20 mt-1 rounded-md border p-1 shadow-md"
@@ -100,6 +111,7 @@ export function ArchiveSearch({
                   people: [...state.people, name],
                   search: "",
                 });
+                focusSearch();
                 setFocused(false);
               }}
             >

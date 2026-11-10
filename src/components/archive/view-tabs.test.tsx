@@ -174,15 +174,20 @@ test("a touch screen narrowed keeps the chosen view in sight", async () => {
   ) {
     scrolled.set(this, value);
   });
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(
+    function (this: HTMLElement) {
+      return this.hasAttribute("data-view-group") ? 128 : 100;
+    },
+  );
   const user = userEvent.setup();
   render(<Row />);
   await user.click(screen.getByRole("tab", { name: "Retention" }));
   const strip = screen.getByRole("tablist");
   expect(strip.scrollLeft).toBe(0);
-  /* Retention runs from 400 to 500, past a strip 300 wide */
+  /* The last label and its menu run from 400 to 528, past a 300px strip. */
   width = 300;
   act(() => observed.forEach((callback) => callback()));
-  expect(strip.scrollLeft).toBe(200);
+  expect(strip.scrollLeft).toBe(228);
 });
 
 test("a clipped strip fades its right edge even without touch detection, until scrolled to the end", () => {
@@ -200,4 +205,50 @@ test("a clipped strip fades its right edge even without touch detection, until s
     strip.dispatchEvent(new Event("scroll"));
   });
   expect(strip.style.maskImage.endsWith("transparent)")).toBe(false);
+});
+
+test("every tab keeps its menu and edited-dot space across selection", () => {
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1000);
+  const props = {
+    tabs: TABS,
+    panelId: "panel",
+    onChoose: () => {},
+    onNew: () => {},
+  };
+  const { rerender } = render(
+    <ViewTabs
+      {...props}
+      view="all"
+      edited={false}
+      menu={<button>View menu</button>}
+    />,
+  );
+  const layout = () =>
+    screen.getAllByRole("tab").map((tab) => ({
+      classes: tab.className
+        .split(" ")
+        .filter(
+          (token) =>
+            !token.includes("text-foreground") &&
+            !token.includes("text-muted-foreground"),
+        )
+        .join(" "),
+      dot: tab.lastElementChild?.className.replace(/ invisible/g, ""),
+      menuSpace: tab.parentElement?.lastElementChild?.className,
+      childCount: tab.parentElement?.children.length,
+    }));
+  const before = layout();
+  rerender(
+    <ViewTabs
+      {...props}
+      view="history"
+      edited
+      menu={<button>View menu</button>}
+    />,
+  );
+  expect(layout()).toEqual(before);
+  expect(screen.getAllByRole("button", { name: "View menu" })).toHaveLength(1);
+  expect(
+    screen.getAllByRole("tab").filter((tab) => tab.tabIndex === 0),
+  ).toHaveLength(1);
 });

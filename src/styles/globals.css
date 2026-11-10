@@ -17,6 +17,7 @@
 @custom-variant dark (@media (prefers-color-scheme: dark));
 
 @theme inline {
+  --color-active-indicator: var(--active-indicator);
   /*
     Geist for the interface, Source Serif for anything the paper speaks in.
     the instagram slide templates set `font-serif` on their own root, so they
@@ -116,8 +117,9 @@
   --role-2: #58697b;
   --role-3: #b0c2d6;
   --series-neutral: #5c5c5c;
-  /* HareWare's maroon, for what differs from a saved view and nothing else:
-     never on data. Text and border tints read 7:1 and more on the page */
+  /* Navigation and view selection share one marker; maroon never encodes data. */
+  --active-indicator: #7a1f2b;
+  /* Text and border tints for unsaved changes read at least 7:1 on the page. */
   --edited: #7a1f2b;
   --edited-solid: #7a1f2b;
   --edited-solid-foreground: #ffffff;
@@ -134,6 +136,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    --active-indicator: #d9939f;
     --background: oklch(0.145 0 0);
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.205 0 0);

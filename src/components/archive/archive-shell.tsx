@@ -780,12 +780,18 @@ function Chip({
     <Button
       variant="secondary"
       size="sm"
-      className={cn(edited && EDITED, edited && "border")}
+      className={cn(
+        "h-auto min-h-7 max-w-full min-w-0 text-left [overflow-wrap:anywhere] whitespace-normal",
+        edited && EDITED,
+        edited && "border",
+      )}
       title={title}
       onClick={onRemove}
     >
-      {children}
-      <XIcon aria-hidden />
+      <span className="min-w-0 [overflow-wrap:anywhere] [&>svg]:mr-1.5 [&>svg]:inline [&>svg]:align-text-bottom">
+        {children}
+      </span>
+      <XIcon className="shrink-0" aria-hidden />
       <span className="sr-only">, remove</span>
     </Button>
   );

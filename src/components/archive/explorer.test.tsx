@@ -232,15 +232,25 @@ test("a name searched for says what it matched, and can count that person alone"
   const search = screen.getByRole("searchbox", { name: "Search" });
   expect(search.getAttribute("placeholder")).toBe("Search people and articles");
   await user.click(search);
+  expect(search.getAttribute("aria-expanded")).toBe("true");
+  expect(
+    document.getElementById(search.getAttribute("aria-controls")!),
+  ).toBeTruthy();
+  await user.keyboard("{ArrowDown}{Escape}");
+  expect(document.activeElement).toBe(search);
+  expect(
+    screen.queryByRole("group", { name: "People matching search" }),
+  ).toBeNull();
+  expect(search.getAttribute("aria-expanded")).toBe("false");
+  await user.type(search, " ");
   const suggestions = screen.getByRole("group", {
     name: "People matching search",
   });
   expect(within(suggestions).getAllByRole("button")[0]!.textContent).toBe(
     "Only Ada Example",
   );
-  await user.click(
-    within(suggestions).getByRole("button", { name: "Only Ada Example" }),
-  );
+  await user.keyboard("{ArrowDown}{Enter}");
+  expect(document.activeElement).toBe(search);
   await waitFor(() => expect(caption()).toContain("2 contributions"));
   expect(caption()).toContain("Ada Example");
   const params = new URLSearchParams(window.location.search);

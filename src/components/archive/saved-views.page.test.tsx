@@ -88,6 +88,7 @@ test("Save for everyone writes the starter views with the change, and says Saved
     screen.queryByRole("button", { name: "Save for everyone" }),
   ).toBeNull();
   expect(window.location.search).toBe("");
+  expect(document.activeElement).toBe(screen.getByRole("tab", { name: "All" }));
 });
 
 test("a save the Sheet refuses says so, and the view stays edited", async () => {
@@ -250,4 +251,23 @@ test("Settings lists each page's views, who saved them, the rows it couldn't rea
   expect(tabs.Views!.slice(1).map((row) => row[0])).toEqual(
     VIEWS.filter((v) => v.source === "articles").map((v) => v.id),
   );
+});
+
+test("Reset returns keyboard focus to the saved view's tab", async () => {
+  stubArchive({ posts, viewsTab: [] });
+  const user = userEvent.setup();
+  page("/articles?range=12m");
+  const reset = await screen.findByRole("button", {
+    name: "Reset",
+  });
+  reset.focus();
+  await user.keyboard("{Enter}");
+  await waitFor(() =>
+    expect(document.activeElement).toBe(
+      screen.getByRole("tab", { name: "All" }),
+    ),
+  );
+  expect(
+    screen.queryByRole("button", { name: "Save for everyone" }),
+  ).toBeNull();
 });

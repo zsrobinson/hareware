@@ -271,6 +271,16 @@ function Explorer({
   const customized = changes.some((d) =>
     ["layout", "sort", "minimum"].includes(d),
   );
+  const tabsBox = useRef<HTMLDivElement>(null);
+  const actionFocused = useRef(false);
+  useEffect(() => {
+    if (!edited && actionFocused.current) {
+      actionFocused.current = false;
+      tabsBox.current
+        ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+        ?.focus({ preventScroll: true });
+    }
+  }, [edited]);
   const canSave = page.status !== "unsaved";
   const why = page.status === "unsaved" ? page.reason : undefined;
 
@@ -719,7 +729,19 @@ function Explorer({
     />
   );
   const actions = edited && (
-    <div className="flex shrink-0 items-center gap-1.5 pb-1 pl-2">
+    <div
+      className="flex shrink-0 items-center gap-1.5 pb-1 pl-2"
+      onFocusCapture={() => {
+        actionFocused.current = true;
+      }}
+      onBlurCapture={(event) => {
+        if (
+          event.relatedTarget &&
+          !event.currentTarget.contains(event.relatedTarget)
+        )
+          actionFocused.current = false;
+      }}
+    >
       <Button
         variant="ghost"
         size={phone ? "sm" : "default"}
@@ -733,12 +755,17 @@ function Explorer({
       <span className="flex">
         <Button
           size={phone ? "sm" : "default"}
-          className={cn(SAVE, state.view !== NEW && "rounded-r-none")}
+          className={cn(SAVE, "grid", state.view !== NEW && "rounded-r-none")}
           disabled={!canSave || writer.busy}
           title={why}
           onClick={save}
         >
-          {writer.busy ? "Saving…" : phone ? "Save" : "Save for everyone"}
+          <span aria-hidden className="invisible col-start-1 row-start-1">
+            {phone ? "Saving…" : "Save for everyone"}
+          </span>
+          <span className="col-start-1 row-start-1">
+            {writer.busy ? "Saving…" : phone ? "Save" : "Save for everyone"}
+          </span>
         </Button>
         {state.view !== NEW && (
           <DropdownMenu>
@@ -837,7 +864,7 @@ function Explorer({
             </p>
           )}
           <div className="flex items-end">
-            <div className="min-w-0 flex-1">
+            <div ref={tabsBox} className="min-w-0 flex-1">
               <ViewTabs
                 tabs={tabs}
                 view={state.view}

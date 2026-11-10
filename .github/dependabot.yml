@@ -1,14 +1,5 @@
-# Dependency updates, grouped so they arrive as a handful of pull requests a
-# week rather than thirty.
-#
-# The default Dependabot opens one PR per package, which on a project this size
-# means the updates get ignored as a class — and then the security alerts that
-# matter are buried in the same pile as a patch bump to a type definition. So
-# everything routine is batched, and only the things that genuinely deserve a
-# human reading the changelog are allowed to arrive alone.
-#
-# Security updates ignore these groups by design: Dependabot always raises those
-# separately and immediately, which is what we want.
+# Routine version updates arrive weekly. Security updates remain separate from
+# these version-only groups and use GitHub's separate security-PR limit.
 version: 2
 
 updates:
@@ -19,68 +10,68 @@ updates:
       day: monday
       time: "09:00"
       timezone: America/New_York
-
-    # enough for the groups below plus any security PRs, without ever becoming
-    # a wall
-    open-pull-requests-limit: 5
-
+    # Six groups, with room for individual major updates awaiting review.
+    open-pull-requests-limit: 8
     labels:
       - dependencies
-
     commit-message:
       prefix: Update
       include: scope
-
     groups:
-      # the framework and its adapter move together — Astro, the Cloudflare
-      # adapter and the React integration are versioned against each other, and
-      # bumping one alone is how you get an afternoon of debugging
       astro:
         patterns:
           - astro
           - "@astrojs/*"
-
-      # likewise the toolchain that has to agree with itself
+        update-types: [minor, patch]
       cloudflare:
         patterns:
           - wrangler
           - "@cloudflare/*"
-
+        update-types: [minor, patch]
       react:
         patterns:
           - react
           - react-dom
           - "@types/react"
           - "@types/react-dom"
-
-      # everything that only runs on a laptop or in CI. a broken one of these
-      # fails loudly and immediately, so they can all land together
+        update-types: [minor, patch]
+      # Only this explicit group is eligible for opt-in auto-merge. Keep runtime
+      # frameworks, UI, deploy/build tools and database tooling outside it.
+      routine:
+        patterns:
+          - "@eslint/js"
+          - "@testing-library/dom"
+          - "@testing-library/react"
+          - "@testing-library/user-event"
+          - eslint
+          - eslint-config-prettier
+          - eslint-plugin-astro
+          - eslint-plugin-react-hooks
+          - globals
+          - jsdom
+          - prettier
+          - typescript-eslint
+          - vitest
+          - clsx
+        update-types: [minor, patch]
       dev:
         dependency-type: development
         patterns:
           - "*"
-        exclude-patterns:
-          - wrangler
-          - "@cloudflare/*"
-
-      # the rest of the runtime dependencies, minor and patch only. a major
-      # version is a decision, so those still come one at a time with their own
-      # changelog to read
+        update-types: [minor, patch]
       production:
         dependency-type: production
-        update-types:
-          - minor
-          - patch
+        update-types: [minor, patch]
 
-  # the actions in .github/workflows pin to a major tag, so this is mostly
-  # about being told when v5 becomes v6 rather than a weekly stream
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    open-pull-requests-limit: 5
     labels:
       - dependencies
     groups:
       actions:
         patterns:
           - "*"
+        update-types: [minor, patch]

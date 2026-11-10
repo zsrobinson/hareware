@@ -420,3 +420,30 @@ test("a thin answer explains its base again above the slice ranking", async () =
   expect(within(panel).getByRole("note").className).toContain("amber");
   expect(within(panel).getAllByRole("listitem")).toHaveLength(4);
 });
+
+test("a long time axis always labels its latest semester", async () => {
+  stubArchive({
+    posts: [
+      {
+        id: 1,
+        title: "Old invented article",
+        publishedAt: "2018-02-01T16:00:00Z",
+        paragraphs: ["Article by: Ada Example"],
+      },
+      {
+        id: 2,
+        title: "Latest invented article",
+        publishedAt: "2026-10-01T16:00:00Z",
+        paragraphs: ["Article by: Ada Example"],
+      },
+    ],
+  });
+  window.history.replaceState(null, "", "/articles?view=history&range=all");
+  render(<ArticlesPage />);
+  await screen.findByRole("button", { name: "Show as table" });
+  expect(
+    [...document.querySelectorAll("svg text")].some((text) =>
+      ["F26", "Fall 2026"].includes(text.textContent!),
+    ),
+  ).toBe(true);
+});

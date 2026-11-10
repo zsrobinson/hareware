@@ -196,10 +196,10 @@ export function ViewTabs({
       strip.removeEventListener("scroll", measure);
       observer.disconnect();
     };
-  }, []);
+  }, [ids, touch, folded]);
   const fade =
-    touch && (past.start || past.end)
-      ? `linear-gradient(to right, ${past.start ? "transparent" : "#000"}, #000 2rem, #000 calc(100% - 2rem), ${past.end ? "transparent" : "#000"})`
+    past.start || past.end
+      ? `linear-gradient(to right, ${past.start ? "transparent" : "#000"}, #000 8%, #000 92%, ${past.end ? "transparent" : "#000"})`
       : undefined;
 
   const tab = ({ id, label, icon: Icon }: Tab) => {

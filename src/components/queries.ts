@@ -1,0 +1,53 @@
+/*
+  What the islands read, as TanStack query options, against the one client in
+  ~/lib/query-client. Each first read takes the request the page's inline
+  script already sent (~/lib/early, through readWordPress), and anything read
+  once is there for the next page: back to the list, or from the slides to
+  InDesign Export for the same article.
+*/
+
+import { queryOptions } from "@tanstack/react-query";
+import type { ReminderView } from "~/lib/reminder-view";
+import { toArticleLink } from "~/lib/services/wordpress/article-url";
+import { NEWSLETTER_COUNT } from "~/lib/services/wordpress/urls";
+import { getRecentArticles } from "~/lib/services/wordpress/get-recent-articles";
+import {
+  latestArticles,
+  scrapeArticle,
+} from "~/lib/services/wordpress/scrape-article";
+import { fetchGated } from "~/lib/gated";
+
+/* WordPress changes when someone publishes, a few times a day */
+const ARTICLES_FRESH_MS = 5 * 60_000;
+
+/** the recent list on Instagram Posts, one page of it */
+export const recentQuery = (page: number) =>
+  queryOptions({
+    queryKey: ["recent", page],
+    queryFn: () => getRecentArticles(page),
+    staleTime: ARTICLES_FRESH_MS,
+  });
+
+/** one article, read and scrubbed, by its slug */
+export const articleQuery = (slug: string) =>
+  queryOptions({
+    queryKey: ["article", slug],
+    queryFn: () => scrapeArticle(toArticleLink(slug) ?? slug),
+    staleTime: ARTICLES_FRESH_MS,
+    /* the body is DOM elements, which are kept as they are */
+    structuralSharing: false,
+  });
+
+/** the newsletter's latest articles */
+export const latestQuery = queryOptions({
+  queryKey: ["latest", NEWSLETTER_COUNT],
+  queryFn: () => latestArticles(NEWSLETTER_COUNT),
+  staleTime: ARTICLES_FRESH_MS,
+});
+
+/** the Social Reminder's log and next run, behind the gate */
+export const reminderQuery = queryOptions({
+  queryKey: ["reminder"],
+  queryFn: () => fetchGated<ReminderView>("/api/reminder.json"),
+  staleTime: 30_000,
+});

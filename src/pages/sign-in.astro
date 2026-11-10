@@ -1,45 +1,12 @@
 ---
-/* Where a failed OAuth callback, or "use a different account", lands. */
+/* Where a failed OAuth callback, or "use a different account", lands. A static
+   page (ADR 0012); the island asks who is signed in. */
 import Dashboard from "~/layouts/dashboard.astro";
-import Message from "~/components/message.astro";
-import { getAuthConfig } from "~/lib/auth-config";
-import { viewer, viewerState } from "~/lib/admin";
-import { returnToOf } from "~/lib/auth";
+import { SignIn } from "~/components/sign-in";
 
-Astro.response.headers.set("cache-control", "private, no-store");
-
-const config = getAuthConfig();
-const who = viewerState(await viewer(Astro.request));
-const returnTo = returnToOf(Astro.url);
-
-const errorMessages: Record<string, string> = {
-  cancelled: "Sign-in was cancelled. Nothing changed.",
-  invalid_state: "That sign-in attempt expired. Try again.",
-  discord: "Discord sign-in failed. Try again.",
-  not_configured: import.meta.env.DEV
-    ? "Discord sign-in is not configured. Follow the README setup checklist."
-    : "Sign-in is temporarily unavailable.",
-};
-
-const errorCode = Astro.url.searchParams.get("error") ?? "";
-const error = !config
-  ? errorMessages.not_configured
-  : (errorMessages[errorCode] ?? null);
-
-if (who.session && !error) return Astro.redirect(returnTo);
-
-const title = who.session ? "Signed in" : "Sign in to HareWare";
-
-const action = config
-  ? {
-      label: who.session ? "Sign in again" : "Sign in with Discord",
-      href: `/auth/discord?${new URLSearchParams({ returnTo })}`,
-    }
-  : undefined;
+export const prerender = true;
 ---
 
-<Dashboard title="Sign in" viewer={who}>
-  <Message title={title} action={action}>
-    {error ?? "HareWare uses your Discord account to know who you are."}
-  </Message>
+<Dashboard title="Sign in" heading={false}>
+  <SignIn client:only="react" />
 </Dashboard>

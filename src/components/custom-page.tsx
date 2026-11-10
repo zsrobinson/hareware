@@ -1,10 +1,18 @@
 import { useState } from "react";
-import { FormItem, FormLabel } from "./options-form";
-import { ChevronRightIcon, FileIcon, AlignCenterIcon } from "lucide-react";
+import {
+  CameraIcon,
+  ChevronLeftIcon,
+  HeadingIcon,
+  ImageIcon,
+  PenLineIcon,
+  PilcrowIcon,
+} from "lucide-react";
+import { cn } from "~/lib/utils";
+import { FieldActions, FieldNote, FieldRow, FieldRows } from "./field-row";
+import { GeneratePage } from "./generate-page";
+import { Button, buttonVariants } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
-import { GeneratePage } from "./generate-page";
-import { Button } from "./ui/button";
 
 function fileToBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -21,96 +29,140 @@ function fileToBase64(file: File) {
 
 export function CustomPage() {
   const [hasSubmitted, setHasSubmitted] = useState(false);
-  const [title, setTitle] = useState("Lorem Ipsum");
-  const [articleByline, setArticleByline] = useState("Lorem Ipsum");
-  const [imageByline, setImageByline] = useState("Lorem Ipsum");
+  const [title, setTitle] = useState("");
+  const [articleByline, setArticleByline] = useState("");
+  const [imageByline, setImageByline] = useState("");
 
-  const [content, setContent] = useState("Lorem Ipsum");
+  const [content, setContent] = useState("");
   const [imageURI, setImageURI] = useState<string | undefined>();
+  const [imageError, setImageError] = useState(false);
 
   if (hasSubmitted) {
     return (
-      <GeneratePage
-        defaultTitle={title}
-        defaultArticleByline={articleByline}
-        defaultImageByline={imageByline}
-        articleLink={""}
-        imageURI={imageURI ?? ""}
-      >
-        {content.split("\n\n").map((para, i) => (
-          <p dangerouslySetInnerHTML={{ __html: para }} key={i} />
-        ))}
-      </GeneratePage>
+      <div className="flex flex-col gap-4">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground -ml-2 w-fit"
+          onClick={() => setHasSubmitted(false)}
+        >
+          <ChevronLeftIcon /> Back to the form
+        </Button>
+        <GeneratePage
+          defaultTitle={title}
+          defaultArticleByline={articleByline}
+          defaultImageByline={imageByline}
+          imageURI={imageURI ?? ""}
+        >
+          {content.split("\n\n").map((para, i) => (
+            <p dangerouslySetInnerHTML={{ __html: para }} key={i} />
+          ))}
+        </GeneratePage>
+      </div>
     );
-  } else {
-    return (
-      <form
-        className="flex max-w-[416px] grow flex-col gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setHasSubmitted(true);
-        }}
-      >
-        <h2 className="text-xl font-semibold">Custom Article</h2>
+  }
 
-        <FormItem>
-          <AlignCenterIcon className="size-5 min-w-max" />
-          <FormLabel>Title Content</FormLabel>
-          <Input
-            type="text"
+  return (
+    <form
+      className="max-w-2xl"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setHasSubmitted(true);
+      }}
+    >
+      <FieldRows>
+        <FieldRow icon={HeadingIcon} label="Title" htmlFor="title" top>
+          <Textarea
+            id="title"
+            rows={1}
+            /* one line high when empty, like the bylines beside it; it grows with the title */
+            className="min-h-8 resize-none py-[3px] md:py-[5px]"
             value={title}
+            required
             onChange={(e) => setTitle(e.target.value)}
           />
-        </FormItem>
-
-        <FormItem>
-          <AlignCenterIcon className="size-5 min-w-max" />
-          <FormLabel>Article Byline</FormLabel>
+        </FieldRow>
+        <FieldRow
+          icon={PenLineIcon}
+          label="Article byline"
+          htmlFor="article-byline"
+        >
           <Input
-            type="text"
+            id="article-byline"
             value={articleByline}
             onChange={(e) => setArticleByline(e.target.value)}
           />
-        </FormItem>
-
-        <FormItem>
-          <AlignCenterIcon className="size-5 min-w-max" />
-          <FormLabel>Image Byline</FormLabel>
+        </FieldRow>
+        <FieldRow icon={CameraIcon} label="Image byline" htmlFor="image-byline">
           <Input
-            type="text"
+            id="image-byline"
             value={imageByline}
             onChange={(e) => setImageByline(e.target.value)}
           />
-        </FormItem>
+        </FieldRow>
+        <FieldNote>
+          <code>&lt;br&gt;</code> breaks a line in the title or bylines.
+        </FieldNote>
 
-        <FormItem>
-          <FileIcon className="size-5 min-w-max" />
-          <FormLabel>Image Upload</FormLabel>
-          <Input
-            type="file"
-            onChange={(e) => {
-              if (e.target.files?.length !== 1) return;
-              fileToBase64(e.target.files[0])
-                .then(setImageURI)
-                .catch((error: unknown) => {
-                  console.error("could not read the image", error);
-                });
-            }}
+        <FieldRow icon={ImageIcon} label="Image" htmlFor="image">
+          <div className="flex items-center gap-3">
+            {/* the native chooser crowds a phone, so a button stands in for it */}
+            <label
+              className={cn(
+                buttonVariants({ variant: "outline" }),
+                "cursor-pointer has-[:focus-visible]:ring-3",
+              )}
+            >
+              {imageURI ? "Change image" : "Choose image"}
+              <input
+                id="image"
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={(e) => {
+                  setImageError(false);
+                  if (e.target.files?.length !== 1) return;
+                  fileToBase64(e.target.files[0])
+                    .then(setImageURI)
+                    .catch((error: unknown) => {
+                      console.error("could not read the image", error);
+                      setImageURI(undefined);
+                      setImageError(true);
+                    });
+                }}
+              />
+            </label>
+            {imageURI && (
+              <img
+                src={imageURI}
+                alt=""
+                className="h-8 w-auto rounded-md border object-contain"
+              />
+            )}
+          </div>
+        </FieldRow>
+        {imageError && (
+          <FieldNote>
+            <span className="text-destructive">
+              That file couldn't be read as an image.
+            </span>
+          </FieldNote>
+        )}
+
+        <FieldRow icon={PilcrowIcon} label="Text" htmlFor="text" top>
+          <Textarea
+            id="text"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Leave a blank line between paragraphs."
+            className="h-64 w-full"
           />
-        </FormItem>
+        </FieldRow>
 
-        <Textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Article Content"
-          className="h-64 w-full"
-        />
-
-        <Button type="submit">
-          Next Step
-          <ChevronRightIcon />
-        </Button>
-      </form>
-    );
-  }
+        <FieldActions>
+          <Button type="submit">Make slides</Button>
+        </FieldActions>
+      </FieldRows>
+    </form>
+  );
 }

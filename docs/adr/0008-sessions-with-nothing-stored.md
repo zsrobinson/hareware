@@ -26,7 +26,7 @@ cookie the browser kept anyway is still dead. `__Host-` prefixed, `HttpOnly`,
 `Secure`, `SameSite=Lax`. Nothing is stored server-side — no table, no KV entry,
 nothing to migrate or clean up. See `src/lib/session.ts`.
 
-**Everything else about a member is read live, on every page load.** The
+**Everything else about a member is read live, on every gated request.** The
 nickname, the avatar, and the roles all come from one
 `GET /guilds/{id}/members/{user}`, which is the request the role check was
 already making. Identity is therefore free: the reply carries the profile
@@ -42,22 +42,21 @@ Per-server avatars come along for the same reason.
 **An unreachable Discord denies.** Failing open on the surface that names who
 did what is not worth it, so a lookup that cannot be completed is a refusal.
 `guildMember()` distinguishes a `member`, somebody `absent` from the server, and
-Discord being `unreachable`, and the admin tools answer 401, 403 or 503 with a
-page saying which (ADR 0007).
+Discord being `unreachable`, and the gated APIs answer 401, 403 or 503 and the
+page's island says which (ADR 0007).
 
 ## Consequences
 
 **A session cannot be revoked before it expires.** Seven days is the only bound
 on a stolen cookie. It is bearable because the thing worth revoking is not the
 session but the role, and the role is checked against Discord on every admin
-request: remove it and access is gone on the next page load, cookie or no
+request: remove it and access is gone on the next request, cookie or no
 cookie. Rotating `SESSION_SECRET` signs everybody out, which is the escape
 hatch.
 
-**One Discord request per admin page view.** ADR 0007 already accepted this for
-the role check. Identity rides along at no additional cost, and pages that
-render server-side pass what they found to the sidebar so the island does not
-ask again.
+**One Discord request per gated request.** ADR 0007 already accepted this for
+the role check. Identity rides along at no additional cost, and the account
+panel asks `/api/session.json` once per window.
 
 **A profile is not something to hold onto.** Anything that caches a display name
 — in the cookie, in D1, in a module — reintroduces exactly the staleness this

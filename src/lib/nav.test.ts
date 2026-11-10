@@ -1,23 +1,11 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { expect, test } from "vitest";
-import { ADMIN_ROUTES, isAdminPath } from "./admin-routes";
-import { adminNav, isActive, toolsNav } from "./nav";
+import { adminNav, isActive, pagePath, toolsNav } from "./nav";
 
-/*
-  Nothing about a url says which tools need the role, so `ADMIN_ROUTES` says it
-  and three things have to agree with it: the nav a member clicks, the guard,
-  and the pages on disk.
-*/
+/* the board's tools are the sidebar's admin group: one list, nothing to sync */
+const ADMIN_ROUTES = adminNav.map((item) => item.href);
 
-test("the sidebar's admin tools are exactly the guarded routes", () => {
-  /* a tool listed but unguarded is open to anyone, and a route guarded but not
-     listed is one nobody can find */
-  expect([...ADMIN_ROUTES].sort()).toEqual(
-    adminNav.map((item) => item.href).sort(),
-  );
-});
-
-test("every guarded route has a page to render", () => {
+test("every one of the board's routes has a page", () => {
   const pages = readdirSync(new URL("../pages", import.meta.url))
     .filter((name) => name.endsWith(".astro"))
     .map((name) => `/${name.replace(/\.astro$/, "")}`);
@@ -28,38 +16,115 @@ test("every guarded route has a page to render", () => {
 });
 
 /*
-  `admitted()` is what turns a missing admission into a fault somebody sees, so
-  a page that skips it would serve quietly if its route ever fell off
-  ADMIN_ROUTES. AGENTS.md promises that fails loudly; this is why it does.
+  The admin pages are static shells and the gate is on the APIs (ADR 0012), so
+  what has to hold is that a shell carries nothing private: it is prerendered,
+  reads nothing on the server, and gets its data from an API that asks
+  `adminAccess` before answering.
 */
-test("every admin page asks the guard who it is rendering for", () => {
+/* only /api and /auth reach the Worker (wrangler.jsonc's run_worker_first);
+   a page that is not prerendered works under `astro dev` and is the 404 page
+   in production */
+test("every page is a static file", () => {
+  const pages = (dir: string): string[] =>
+    readdirSync(new URL(`../pages/${dir}`, import.meta.url), {
+      withFileTypes: true,
+    }).flatMap((entry) =>
+      entry.isDirectory()
+        ? pages(`${dir}${entry.name}/`)
+        : entry.name.endsWith(".astro")
+          ? [`${dir}${entry.name}`]
+          : [],
+    );
+  for (const page of pages("")) {
+    const source = readFileSync(
+      new URL(`../pages/${page}`, import.meta.url),
+      "utf8",
+    );
+    expect(source, page).toContain("export const prerender = true");
+  }
+});
+
+test("every admin page is a static shell that reads nothing on the server", () => {
   for (const route of ADMIN_ROUTES) {
     const source = readFileSync(
       new URL(`../pages${route}.astro`, import.meta.url),
       "utf8",
     );
 
-    expect(source).toContain("admitted(Astro.locals)");
+    expect(source).toContain("export const prerender = true");
+    for (const server of ["cloudflare:workers", "~/lib/admin", "Astro.request"])
+      expect(source).not.toContain(server);
   }
 });
 
-test("no public tool is sitting on a guarded route", () => {
-  for (const item of toolsNav) {
-    expect(isAdminPath(item.href)).toBe(false);
+test("every API that hands out board data asks the gate first", () => {
+  const gated = [
+    "api/archive.json.ts",
+    "api/reminder.json.ts",
+    "api/sheet.ts",
+    "api/access.json.ts",
+    "api/automations/run.ts",
+  ];
+  for (const file of gated) {
+    const source = readFileSync(
+      new URL(`../pages/${file}`, import.meta.url),
+      "utf8",
+    );
+    expect(source, file).toContain("adminAccess(request)");
+  }
+
+  /* and no other api route quietly reads the Sheet or the log */
+  const all = (dir: string): string[] =>
+    readdirSync(new URL(`../pages/${dir}`, import.meta.url), {
+      withFileTypes: true,
+    }).flatMap((entry) =>
+      entry.isDirectory()
+        ? all(`${dir}/${entry.name}`)
+        : [`${dir}/${entry.name}`],
+    );
+  for (const file of all("api").filter((f) => !f.endsWith(".test.ts"))) {
+    const source = readFileSync(
+      new URL(`../pages/${file}`, import.meta.url),
+      "utf8",
+    );
+    const private_ =
+      /loadSheet|sheetsClient|readSheet|services\/google|reminderView|faces|recent\(|env\.DB/.test(
+        source,
+      );
+    /* Discord signs every interaction; it writes the log and answers Discord,
+       and hands nothing from the Sheet or the log back to anyone */
+    const signed = file === "api/discord/interactions.ts";
+    if (private_ && !signed) expect(gated, file).toContain(file);
   }
 });
 
-/*
-  the guard matches exactly, so a public route is safe from being caught by a
-  guarded one that happens to start the same way — but Astro also routes the
-  trailing-slash form to the page, so the guard has to catch that one too
-*/
-test("guards the route itself, not everything beginning with it", () => {
-  expect(isAdminPath("/log")).toBe(true);
-  expect(isAdminPath("/log/")).toBe(true);
-  expect(isAdminPath("/logout")).toBe(false);
-  expect(isAdminPath("/log/2026")).toBe(false);
-  expect(isAdminPath("/generate")).toBe(false);
+/* /api/stats is answered ahead of Astro, so not under src/pages, and with an
+   administrator's password. That it asks the gate first, for GETs only, is
+   held by stats-api.test and ahead-of-astro.test; this holds that nothing
+   else reads the password */
+test("no module but the stats route reads the stats credentials", () => {
+  const files = (dir: string): string[] =>
+    readdirSync(new URL(`../${dir}`, import.meta.url), {
+      withFileTypes: true,
+    }).flatMap((entry) =>
+      entry.isDirectory()
+        ? files(`${dir}/${entry.name}`)
+        : /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)
+          ? [`${dir}/${entry.name}`]
+          : [],
+    );
+  const reading = files(".")
+    .filter((file) => !file.endsWith("env.d.ts"))
+    .filter((file) =>
+      readFileSync(new URL(`../${file}`, import.meta.url), "utf8").includes(
+        "WORDPRESS_STATS_",
+      ),
+    );
+  expect(reading).toEqual(["./lib/stats-api.ts"]);
+});
+
+test("no public tool is listed among the board's", () => {
+  for (const item of toolsNav) expect(ADMIN_ROUTES).not.toContain(item.href);
 });
 
 test("lights the nav item for the page being looked at", () => {
@@ -69,4 +134,13 @@ test("lights the nav item for the page being looked at", () => {
   /* the generator's other working page belongs to the same item */
   expect(isActive("/custom", generate)).toBe(true);
   expect(isActive("/words", generate)).toBe(false);
+});
+
+/* every page is prerendered, and the build names each one by its file */
+test("lights the item for a page built as a file", () => {
+  const people = adminNav.find((item) => item.href === "/people")!;
+
+  expect(isActive(pagePath("/people.html"), people)).toBe(true);
+  expect(pagePath("/index.html")).toBe("/");
+  expect(pagePath("/people")).toBe("/people");
 });

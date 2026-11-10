@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test, vi } from "vitest";
-import { completeDiscordSignOut, returnToOf } from "./auth";
+import { completeDiscordSignOut } from "./auth";
+import { returnToOf } from "./return-to";
 
 /* `safeReturnTo`, through the sign-out route's Location header */
 async function redirectedTo(returnTo: string) {
@@ -87,11 +88,12 @@ test("the sign-in page's returnTo is held to the same rule", () => {
 /* the page redirects a signed-in member straight to it, so reading the raw
    query anywhere on that page is an open redirect on the login path */
 test("the sign-in page reads returnTo only through returnToOf", () => {
+  /* a static page now, so the reading happens in its island */
   const page = readFileSync(
-    new URL("../pages/sign-in.astro", import.meta.url),
+    new URL("../components/sign-in.tsx", import.meta.url),
     "utf8",
   );
 
-  expect(page).toContain("returnToOf(Astro.url)");
-  expect(page).not.toContain('"returnTo"');
+  expect(page).toContain("returnToOf(url)");
+  expect(page).not.toContain('get("returnTo")');
 });

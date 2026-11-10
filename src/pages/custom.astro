@@ -7,8 +7,10 @@ import { CustomPage } from "../components/custom-page";
 export const prerender = true;
 ---
 
-<Dashboard title="Custom Instagram Post" width="full">
+<Dashboard title="Custom post" width="full">
   <SlideFonts slot="head" />
 
-  <CustomPage client:load />
+  <div class="space-y-6">
+    <CustomPage client:load />
+  </div>
 </Dashboard>

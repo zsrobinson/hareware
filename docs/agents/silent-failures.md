@@ -4,8 +4,8 @@ The traps in this codebase that report success. Each one here cost real time,
 and none is discoverable by reading the config — the API returns `200`, the
 build goes green, the tests pass, and the thing you wanted did not happen.
 
-Read this before changing anything that talks to Discord, Notion, or the
-deployed Worker.
+Read this before changing anything that talks to Discord, WordPress, Google,
+or the deployed Worker.
 
 The habit all of them argue for: **verify, don't infer.** Every entry below was
 first diagnosed wrongly from a plausible guess, and settled by going and
@@ -15,11 +15,9 @@ looking. When you find yourself reasoning about what an API did, go and ask it.
 
 **A role mention renders whether or not it notified anyone.** Discord draws
 `<@&id>` as a pill regardless, and only highlights it for people it actually
-reached. A reminder mentioning `@Editorial Board` in grey has been posted,
+reached. A reminder with a poster-role mention in grey has been posted,
 rendered, and dropped on the way to everyone in it. The bot needs **Mention
-@everyone, @here, and All Roles**, or the role must be Mentionable. Webhooks are
-exempt from this, which is why the pings worked before the switch to posting as
-the bot and stopped after it, with no code change to blame.
+@everyone, @here, and All Roles**, or the role must be Mentionable.
 
 **`allowed_mentions` does not gate a mention inside a Components V2 text
 display.** An empty `roles` array notifies the role exactly as though the field
@@ -33,59 +31,65 @@ strips `custom_id` while editing a message shows the user "HareWare didn't
 respond in time" — even though the endpoint returned `200` with a body Discord
 read. `togglePosted()` keeps the id for this reason.
 
-**Join requests answer `200 {}` when the bot may not read them.** Every other
-guild endpoint refuses with a clean `403`; `GET /guilds/{id}/requests` returns
-an empty object — no list, no count. The bot read fifty-one applications while
-it held Administrator, and `{}` the moment its role was narrowed to Manage
-Server; a status-code check called that success, and the sync would have
-reported "no new applications" every hour. Reading applications needs **Kick
-Members**. `approvedJoinRequests()` in
-`src/lib/services/discord/join-requests.ts` refuses an answer carrying neither a
-list nor a count, and names the permission.
+## WordPress
 
-**A join-request answer is in `response`, not `values`.** Each entry in
-`form_responses` carries both. `values` echoes the question's configured options
-and holds one empty string for every free-text field, so reading it produces a
-complete-looking set of applications in which every answer is blank.
+**WordPress.com throttles what its cache cannot answer, per address, and says
+nothing about it.** No limit is documented. A dozen uncached requests at once
+from one address drew 429s; the same through the Worker, which leaves from
+Cloudflare's many addresses, drew none; cached answers are never refused
+(2026-11-08). The 429 is a small HTML page from its edge with no
+`Retry-After`, no rate-limit headers and no CORS headers, and a throttled
+WordPress has also answered `200` with an HTML page. So every read goes through
+`readWordPress()`, retries on waits of our own choosing, and `jsonOf()` turns a
+body that is not JSON into `Throttled`, never "no posts".
 
-## Notion
+**In a browser, its 429 is a failed fetch.** With no CORS headers the page sees
+`TypeError: Failed to fetch`, not a status. `readWordPress()` counts a failed
+fetch as a refusal and ends in `Throttled`, which the pages word as "WordPress
+is busy", never as a bad link.
 
-**A database is not where the rows are.** `databases/{id}` returns an empty
-`properties` and there is no `databases/{id}/query`. Resolve
-`data_sources[0].id` first and query `data_sources/{id}/query`.
+**Any `Origin` header skips WordPress.com's cache; no-cache headers do not.** A
+browser's cross-origin request always sends one, so it reaches WordPress's
+server: about 400 ms for an article against about 130 ms cached, and it counts
+against that address's allowance. `x-ac: BYPASS` in the response shows it.
+`Cache-Control: no-cache` and `Pragma: no-cache` are ignored (`x-ac: HIT`). So
+browser reads go through `/api/wordpress`, which asks without an Origin, and a
+read that must be current (`{ fresh: true }`, Refresh after a fix in
+WordPress) goes the same way with `fresh=1`, which the pass-through turns into
+a query key WordPress has never seen.
 
-**Date filters compare to millisecond precision and assume UTC.**
-`date: { equals: "2026-09-10" }` means midnight, so it matches nothing once a
-meeting has a time on it — and the Meetings database holds both kinds, so this
-fails on half the rows and looks like "no meeting today". Query a window wide
-enough to hold the Eastern day under any offset and filter in code, as
-`findTodaysMeeting()` does.
+**`after` compares against the site's local date, whatever offset you give
+it.** The reminder asks for a day earlier than it needs and compares
+`date_gmt` itself. `date_gmt` has no zone marker either; `Date.parse` reads it
+as local time unless a `Z` is appended, which `toPost()` does.
 
-**A date with no time carries no instant.** Notion writes it as a bare
-`YYYY-MM-DD`. Running that through a timezone parses it as UTC midnight and
-lands it on the previous evening, so a meeting with no time set is missed every
-time. `startsOn()` compares those as strings and only converts the ones with a
-`T` in them.
+**`x-wp-totalpages` is absent on an empty result.** Read naively it is `NaN`,
+which goes into a URL. `readPage()` treats a missing header as one page.
 
-**A relation stops at 25 entries inside a page object.** A `pages/{id}` read and
-a data source query both truncate it, and `has_more` on the property is the only
-sign. A general body meeting is thirty people: standing silently stopped
-counting the twenty-sixth onward, and the kiosk, which merges into the attendee
-list before writing it back, deleted the back half of the room on the next tap.
-`relationIds()` in `src/lib/services/notion/client.ts` reads the rest from the
-property item endpoint, and only when `has_more` says to.
+## Google Sheets
 
-**A property id goes into the URL verbatim.** Notion returns ids already
-percent-encoded (`c%3CLo`), so `encodeURIComponent` asks for a property that
-does not exist — and Notion answers `200` with an empty relation rather than a
-`404`. A caller merging against that writes the empty list back.
+**A tab that does not exist and a tab with no rows are different answers.**
+`Sheets.read()` leaves a missing tab out of its result rather than returning
+`[]`, so a renamed `Overrides` tab is reported, not read as "no overrides".
 
-**A relation whose target is not shared with the integration disappears.**
-Notion drops it from the schema and reads its value as `[]`, which looks like an
-empty field. A write appending to it deletes the entries nobody could see. Check
-the schema before writing a relation, as `notSharing()` in
-`src/lib/articles/choices.ts` does, and treat absent and empty as different
-answers.
+**A Sheet that cannot be read must not look like an empty one.** `readSheet()`
+returns `{ status: "failed" }`, and every archive page says so in a banner,
+because otherwise every pseudonym would quietly count as its own person.
+
+**A save rewrites the tab, so it must not lose what it did not mean to
+change.** `rewrite()` in `src/lib/credits/sheet.ts` reads the tab, changes only
+its own rows, keeps every other row — including ones it cannot parse — and
+writes back in the tab's own column order. `Sheets.replace()` writes over the
+top before clearing the tail, so a save cut off halfway leaves a stale row
+rather than an empty tab.
+
+**The log must never learn a real name.** A Sheet change is logged through
+`describeEdit()`, which names the kind of change and the post id only;
+`edits.test.ts` fails if a name gets into it.
+
+**A service account sees only what is shared with it.** Google answers `403`
+or `404` for a Sheet that exists but was not shared, and the archive's banner
+shows Google's own message, which names the cause.
 
 ## Cloudflare and Astro
 
@@ -102,16 +106,32 @@ is live before concluding anything about it.
 **`locals.runtime.env` was removed in Astro v6.** Its getter now exists only to
 throw. Read `import { env } from "cloudflare:workers"` instead.
 
+**A page that is not prerendered is the 404 page in production.** Only `/api/*`
+and `/auth/*` reach the Worker (`run_worker_first`); anything else the asset
+server answers from files, and a page with no file gets `404.html`. Under
+`astro dev` the same page renders fine. `nav.test.ts` checks every page sets
+`export const prerender = true`.
+
+**A Preview's settings are copied when it is first created.** Changing the
+Worker's Preview settings reaches only Previews created afterwards; an existing
+one keeps what it had, even through a rebuild, and reads exactly like the change
+not working. Delete it and push again. The dashboard's "Previews Base" tab has
+also shown nothing while the API and every new Preview had the settings, so
+check a Preview's latest deployment, not that tab.
+
+**Measure what one run costs with uncached requests.** Answers Cloudflare's
+edge serves from cache never reach the Worker, so a measurement undercounts
+unless each request is new. Measure CPU on production after a deploy: Preview
+requests don't show in Workers Logs.
+
 **`wrangler types` reads `.dev.vars`.** Whatever is in that untracked file is
 added to the generated `Env`, so a variable can type check on one machine and
-nowhere else. `SESSION_SECRET` and `DISCORD_CLIENT_SECRET` were typed this way
-for weeks. Every variable the code reads belongs in `HareWareEnv` in
+nowhere else. Every variable the code reads belongs in `HareWareEnv` in
 `src/env.d.ts`.
 
 ## Testing against the real thing
 
-`#instagram-posting` and `#editorial-board` are the club's real channels, and
-the channel ids are compiled into `src/lib/automations/config.ts` rather than
+`#instagram-posting` is the club's real channel, and the channel ids are compiled into `src/lib/automations/config.ts` rather than
 supplied per environment — so a local run with no other setting posts to them
 for real. Messages can be deleted; the pings they send cannot be taken back.
 
@@ -174,7 +194,7 @@ costs three lines. `ok | skipped | misconfigured | failed` costs a type.
 # The test that catches them
 
 A helper can be perfectly tested while nothing checks that anything calls it.
-Deleting `inert()` from the social ping left all 126 tests passing — the fix was
+Deleting `inert()` from the social ping left every test passing — the fix was
 covered, the wiring was not.
 
 > **A fix is not tested until deleting the fix fails a test.**

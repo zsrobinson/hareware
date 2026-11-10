@@ -1,14 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "vitest";
-import { easternNow } from "~/lib/eastern";
-import { sendMeetingReminder } from "./meeting";
 import { sendSocialPing } from "./social";
 
 /*
-  not a test so much as a way to fire the reminders by hand while working on
+  not a test so much as a way to fire the reminder by hand while working on
   what they say. `npm run reminders:send` runs this and nothing else; `npm test`
   never does, because this posts real messages into whichever channel the
-  webhooks in .dev.vars point at.
+  REMINDERS_TEST_CHANNEL in .dev.vars points at.
 
   point those at a private channel while iterating. set REMINDERS_DRY_RUN in
   .dev.vars to print the payloads instead of sending them
@@ -44,13 +42,8 @@ function readEnv(): Env {
 }
 
 test.skipIf(!existsSync(DEV_VARS))(
-  "send both reminders for today",
+  "send the social reminder as of now",
   async () => {
-    const env = readEnv();
-    const now = easternNow(new Date());
-
-    console.log("eastern now:", JSON.stringify(now));
-    console.log("meeting:", await sendMeetingReminder(env, now));
-    console.log("social :", await sendSocialPing(env, now));
+    console.log("social:", await sendSocialPing(readEnv(), new Date()));
   },
 );

@@ -38,14 +38,14 @@ export type MutableLayoutState = LayoutState & {
   setImageByline: (imageByline: string) => void;
   setBylineSize: (bylineSize: number) => void;
 
-  incParagraphShift: () => void;
+  setParagraphShift: (paragraphShift: number) => void;
   setRenderImages: (renderImages: boolean) => void;
 
   clearArticle: () => void;
   reset: () => void;
 };
 
-export const useLayoutState = create<MutableLayoutState>()((set, curr) => ({
+export const useLayoutState = create<MutableLayoutState>()((set) => ({
   ...DEFAULTS,
 
   /* not part of defaults since shouldn't be reset */
@@ -64,7 +64,8 @@ export const useLayoutState = create<MutableLayoutState>()((set, curr) => ({
   setImageByline: (imageByline: string) => set({ imageByline }),
   setBylineSize: (bylineSize: number) => set({ bylineSize }),
 
-  incParagraphShift: () => set({ paragraphShift: curr().paragraphShift + 1 }),
+  setParagraphShift: (paragraphShift: number) =>
+    set({ paragraphShift: Math.max(0, paragraphShift) }),
   setRenderImages: (renderImages: boolean) => set({ renderImages }),
 
   /* hands back everything that belongs to one article. this store is a module

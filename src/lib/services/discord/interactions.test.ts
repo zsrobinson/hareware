@@ -1,39 +1,26 @@
 import { expect, test } from "vitest";
-import { handleInteraction, type InteractionDeps } from "./interactions";
+import {
+  describePress,
+  handleInteraction,
+  type InteractionResponse,
+} from "./interactions";
 import { postedId } from "./posted-button";
-import type {
-  BodyResponse,
-  InteractionResponse,
-  MessageResponse,
-} from "./interaction-response";
-import { EDITORIAL_BOARD_ROLE_ID } from "./config";
-import type { Article } from "~/lib/articles/page";
-import type { ArticlePage } from "~/lib/articles/page";
-import type { CommandMessage } from "./message";
-import { ARTICLES_DATA_SOURCE_ID } from "~/lib/articles/config";
 
 const IS_COMPONENTS_V2 = 1 << 15;
 
-const PAGE = "22cbe415-e24c-80d1-a2b3-c4d5e6f70001";
-const OTHER_PAGE = "22cbe415-e24c-80d1-a2b3-c4d5e6f70002";
-
 /** the reply narrowed to a message, failing loudly if it is not one */
-function asMessage(reply: InteractionResponse | undefined): BodyResponse {
-  if (!reply?.data || !("components" in reply.data))
+function asMessage(reply: InteractionResponse | undefined) {
+  if (!reply?.data?.components)
     throw new Error("expected a message reply, got " + JSON.stringify(reply));
 
-  return reply as BodyResponse;
+  return reply as InteractionResponse & {
+    data: {
+      flags: number;
+      components: NonNullable<InteractionResponse["data"]>["components"] &
+        object;
+    };
+  };
 }
-
-/** the choices of an autocomplete reply, same reason */
-function asChoices(reply: InteractionResponse | undefined) {
-  if (!reply?.data || !("choices" in reply.data))
-    throw new Error("expected an autocomplete reply");
-
-  return reply.data.choices;
-}
-
-const text = (reply: MessageResponse) => JSON.stringify(reply.data!.components);
 
 /** a message like the social ping's: two articles, each with its own row */
 const message = () => ({
@@ -80,11 +67,11 @@ const press = (customId: string, name = "zsrobinson") => ({
 });
 
 test("answers discord's ping with a pong", async () => {
-  expect(await handleInteraction({ type: 1 })).toEqual({ type: 1 });
+  expect(handleInteraction({ type: 1 })).toEqual({ type: 1 });
 });
 
 test("marks the pressed button posted, crediting whoever pressed it", async () => {
-  const reply = asMessage(await handleInteraction(press(postedId("first"))));
+  const reply = asMessage(handleInteraction(press(postedId("first"))));
 
   expect(reply.type).toBe(7);
   expect(reply.data!.flags).toBe(IS_COMPONENTS_V2);
@@ -103,7 +90,7 @@ test("pressing a posted button un-posts it", async () => {
     custom_id: postedId("first"),
   };
 
-  const reply = asMessage(await handleInteraction(posted));
+  const reply = asMessage(handleInteraction(posted));
   const button = reply.data!.components[1].components![0];
 
   expect(button.style).toBe(4);
@@ -111,7 +98,7 @@ test("pressing a posted button un-posts it", async () => {
 });
 
 test("nothing is ever disabled", async () => {
-  const reply = asMessage(await handleInteraction(press(postedId("first"))));
+  const reply = asMessage(handleInteraction(press(postedId("first"))));
 
   for (const row of reply.data!.components) {
     for (const child of row.components ?? []) {
@@ -122,7 +109,7 @@ test("nothing is ever disabled", async () => {
 
 /* without a custom_id Discord rejects the whole response (silent-failures.md) */
 test("keeps the custom_id, without which the reply is invalid", async () => {
-  const reply = asMessage(await handleInteraction(press(postedId("first"))));
+  const reply = asMessage(handleInteraction(press(postedId("first"))));
 
   expect(reply.data!.components[1].components![0].custom_id).toBe(
     postedId("first"),
@@ -130,7 +117,7 @@ test("keeps the custom_id, without which the reply is invalid", async () => {
 });
 
 test("every interactive button in the reply still has a custom_id", async () => {
-  const reply = asMessage(await handleInteraction(press(postedId("first"))));
+  const reply = asMessage(handleInteraction(press(postedId("first"))));
 
   for (const row of reply.data!.components) {
     for (const child of row.components ?? []) {
@@ -141,7 +128,7 @@ test("every interactive button in the reply still has a custom_id", async () => 
 });
 
 test("leaves the other article's button alone", async () => {
-  const reply = asMessage(await handleInteraction(press(postedId("first"))));
+  const reply = asMessage(handleInteraction(press(postedId("first"))));
 
   const other = reply.data!.components[4].components![0];
   expect(other.label).toBe("Not posted");
@@ -150,7 +137,7 @@ test("leaves the other article's button alone", async () => {
 });
 
 test("leaves link buttons alone", async () => {
-  const reply = asMessage(await handleInteraction(press(postedId("first"))));
+  const reply = asMessage(handleInteraction(press(postedId("first"))));
 
   const link = reply.data!.components[1].components![1];
   expect(link.url).toBe("https://x.test/1");
@@ -158,7 +145,7 @@ test("leaves link buttons alone", async () => {
 });
 
 test("keeps the text and dividers exactly as they were", async () => {
-  const reply = asMessage(await handleInteraction(press(postedId("first"))));
+  const reply = asMessage(handleInteraction(press(postedId("first"))));
 
   expect(reply.data!.components[0]).toEqual(message().components[0]);
   expect(reply.data!.components[2]).toEqual(message().components[2]);
@@ -166,7 +153,7 @@ test("keeps the text and dividers exactly as they were", async () => {
 
 test("prefers a member's display name over their username", async () => {
   const reply = asMessage(
-    await handleInteraction({
+    handleInteraction({
       ...press(postedId("first")),
       member: { user: { username: "zsrobinson", global_name: "Zachary" } },
     }),
@@ -178,830 +165,60 @@ test("prefers a member's display name over their username", async () => {
 });
 
 test("ignores a component it did not put there", async () => {
-  expect(await handleInteraction(press("something_else"))).toBeUndefined();
+  expect(handleInteraction(press("something_else"))).toBeUndefined();
 });
 
 test("ignores an interaction type it does not handle", async () => {
-  expect(await handleInteraction({ type: 99 })).toBeUndefined();
+  expect(handleInteraction({ type: 99 })).toBeUndefined();
 });
 
 test("a custom_id stays inside discord's 100 character limit", () => {
   expect(postedId("a".repeat(200)).length).toBe(100);
 });
 
-/* ---- slash commands ----------------------------------------------------- */
+test("answers a slash command left over from an older deploy", () => {
+  const reply = handleInteraction({ type: 2, data: { name: "article" } });
 
-const EPHEMERAL = 64;
-
-const command = (
-  subcommand: string,
-  options: {
-    name: string;
-    value?: string | number | boolean;
-    focused?: boolean;
-  }[] = [],
-  roles: string[] = [EDITORIAL_BOARD_ROLE_ID],
-) => ({
-  type: 2,
-  data: { name: "article", options: [{ name: subcommand, options }] },
-  member: {
-    roles,
-    user: { username: "zsrobinson", global_name: "Zachary" },
-  },
+  expect(reply?.type).toBe(4);
+  expect(reply?.data?.content).toContain("/article");
 });
 
-test("/article ping answers inline, crediting whoever ran it", async () => {
-  const reply = asMessage(await handleInteraction(command("ping")));
-
-  expect(reply.type).toBe(4);
-  expect(text(reply)).toContain("Zachary");
-});
-
-test("a reply's own Markdown renders, and a name inside it adds none", async () => {
-  const reply = asMessage(
-    await handleInteraction({
-      ...command("ping"),
-      member: {
-        roles: [EDITORIAL_BOARD_ROLE_ID],
-        user: { username: "z", global_name: "*Zach*" },
-      },
-    }),
-  );
-
-  expect(reply.data!.components[0]).toEqual({
-    type: 10,
-    content: "HareWare is listening. Discord says you are **\\*Zach\\***.",
-  });
-});
-
-test("credits a member by their server nickname first", async () => {
-  const reply = asMessage(
-    await handleInteraction({
-      ...command("ping"),
-      member: {
-        roles: [EDITORIAL_BOARD_ROLE_ID],
-        nick: "Robbo",
-        user: { username: "zsrobinson", global_name: "Zachary" },
-      },
-    }),
-  );
-
-  expect(text(reply)).toContain("**Robbo**");
-});
-
-/* Discord refuses the ephemeral bit alone with a components body */
-test("a command reply is ephemeral, and says so in components v2", async () => {
-  const reply = asMessage(await handleInteraction(command("ping")));
-
-  expect(reply.data!.flags).toBe(EPHEMERAL | IS_COMPONENTS_V2);
-});
-
-test("refuses somebody without the editorial board role", async () => {
-  const reply = asMessage(
-    await handleInteraction(command("ping", [], ["some-other-role"])),
-  );
-
-  expect(text(reply)).not.toContain("listening");
-  expect(text(reply)).toContain("Editorial Board");
-  expect(reply.data!.flags).toBe(EPHEMERAL | IS_COMPONENTS_V2);
-});
-
-/* a DM carries no member at all */
-test("refuses a command with no member on it", async () => {
-  const reply = asMessage(
-    await handleInteraction({
-      type: 2,
-      data: { name: "article", options: [{ name: "ping" }] },
+test("logs a press as the state the reply shows, by display name", () => {
+  const pressed = {
+    ...press(postedId("first")),
+    member: {
+      nick: "Zach",
       user: { username: "zsrobinson", global_name: "Zachary" },
-    }),
-  );
-
-  expect(text(reply)).toContain("Editorial Board");
-});
-
-test("answers a subcommand it does not know rather than going quiet", async () => {
-  const reply = asMessage(await handleInteraction(command("nonexistent")));
-
-  expect(reply.type).toBe(4);
-  expect(text(reply)).toContain("does not know");
-});
-
-test("answers /article with no subcommand at all", async () => {
-  const reply = asMessage(
-    await handleInteraction({
-      type: 2,
-      data: { name: "article" },
-      member: { roles: [EDITORIAL_BOARD_ROLE_ID], user: { username: "z" } },
-    }),
-  );
-
-  expect(reply.type).toBe(4);
-});
-
-/* ---- the read commands --------------------------------------------------- */
-
-/** an index row, with only what a test cares about spelled out */
-const row = (over: Partial<Article> = {}): Article => ({
-  pageId: PAGE,
-  headline: "Terps lose again",
-  lastEdited: "2026-09-01T00:00:00.000Z",
-  ...over,
-});
-
-/** a notion page as `/article show` reads one */
-const notionPage = (): ArticlePage => ({
-  id: PAGE,
-  url: "https://notion.so/page-1",
-  parent: { type: "data_source_id", data_source_id: ARTICLES_DATA_SOURCE_ID },
-  properties: {
-    Headline: { type: "title", title: [{ plain_text: "Terps lose again" }] },
-    "Article Status": { type: "status", status: { name: "Written" } },
-  },
-});
-
-const deps = (over: InteractionDeps = {}): InteractionDeps => ({
-  articles: () => Promise.resolve([row()]),
-  page: () => Promise.resolve(notionPage()),
-  ...over,
-});
-
-test("/article show reads the page live rather than from the picker", async () => {
-  let asked: string | undefined;
-  const reply = asMessage(
-    await handleInteraction(
-      command("show", [{ name: "article", value: OTHER_PAGE }]),
-      deps({
-        page: (id) => {
-          asked = id;
-          return Promise.resolve(notionPage());
-        },
-        articles: () => {
-          throw new Error("the picker must not answer /article show");
-        },
-      }),
-    ),
-  );
-
-  expect(asked).toBe(OTHER_PAGE);
-  expect(text(reply)).toContain("Terps lose again");
-});
-
-test("/article show says something when notion does not answer", async () => {
-  const reply = asMessage(
-    await handleInteraction(
-      command("show", [{ name: "article", value: OTHER_PAGE }]),
-      deps({ page: () => Promise.reject(new Error("notion is down")) }),
-    ),
-  );
-
-  expect(reply.type).toBe(4);
-  expect(text(reply)).toContain("Notion");
-});
-
-test("/article show asks for an Article when nobody picked one", async () => {
-  const reply = asMessage(await handleInteraction(command("show", []), deps()));
-
-  expect(text(reply)).toContain("Pick an Article");
-});
-
-test("/article show refuses a page that is not in Articles", async () => {
-  const reply = asMessage(
-    await handleInteraction(
-      command("show", [{ name: "article", value: PAGE }]),
-      deps({
-        page: () => Promise.resolve({ ...notionPage(), parent: undefined }),
-      }),
-    ),
-  );
-
-  expect(text(reply)).toContain("not a page in Articles");
-  expect(text(reply)).not.toContain("Terps lose again");
-});
-
-test("the read commands are gated on the editorial board role too", async () => {
-  const reply = asMessage(
-    await handleInteraction(
-      command("show", [{ name: "article", value: PAGE }], ["nope"]),
-      deps({
-        page: () => {
-          throw new Error("must not read notion for somebody off the board");
-        },
-      }),
-    ),
-  );
-
-  expect(text(reply)).toContain("Editorial Board");
-});
-
-/* ---- autocomplete -------------------------------------------------------- */
-
-const AUTOCOMPLETE_RESULT = 8;
-
-const typing = (
-  value: string,
-  roles: string[] = [EDITORIAL_BOARD_ROLE_ID],
-) => ({
-  type: 4,
-  data: {
-    name: "article",
-    options: [
-      { name: "show", options: [{ name: "article", value, focused: true }] },
-    ],
-  },
-  member: {
-    roles,
-    user: { username: "zsrobinson", global_name: "Zachary" },
-  },
-});
-
-test("autocomplete answers with choices, not a message", async () => {
-  const reply = await handleInteraction(typing("terps"), deps());
-
-  expect(reply!.type).toBe(AUTOCOMPLETE_RESULT);
-  expect(asChoices(reply)).toEqual([{ name: "Terps lose again", value: PAGE }]);
-});
-
-test("autocomplete matches what was typed, against what it read", async () => {
-  const choices = asChoices(
-    await handleInteraction(
-      typing("looney"),
-      deps({
-        articles: () =>
-          Promise.resolve([
-            row({ pageId: "hit", headline: "Looney's patrons banned" }),
-            row({ pageId: "miss", headline: "Terps lose again" }),
-          ]),
-      }),
-    ),
-  );
-
-  expect(choices.map((choice) => choice.value)).toEqual(["hit"]);
-});
-
-test("autocomplete tells somebody off the board nothing", async () => {
-  const choices = asChoices(
-    await handleInteraction(
-      typing("terps", ["some-other-role"]),
-      deps({
-        articles: () => {
-          throw new Error("must not read articles for somebody off the board");
-        },
-      }),
-    ),
-  );
-
-  expect(choices).toEqual([]);
-});
-
-test("autocomplete refuses a payload with no member on it", async () => {
-  const choices = asChoices(
-    await handleInteraction(
-      {
-        type: 4,
-        data: {
-          name: "article",
-          options: [
-            {
-              name: "show",
-              options: [{ name: "article", value: "t", focused: true }],
-            },
-          ],
-        },
-        user: { username: "zsrobinson" },
-      },
-      deps(),
-    ),
-  );
-
-  expect(choices).toEqual([]);
-});
-
-test("an index that never answers becomes an empty dropdown", async () => {
-  const reply = await handleInteraction(
-    typing("terps"),
-    deps({ articles: () => new Promise<Article[]>(() => {}), timeoutMs: 1 }),
-  );
-
-  expect(reply!.type).toBe(AUTOCOMPLETE_RESULT);
-  expect(asChoices(reply)).toEqual([]);
-});
-
-test("an index that throws becomes an empty dropdown", async () => {
-  const reply = await handleInteraction(
-    typing("terps"),
-    deps({ articles: () => Promise.reject(new Error("d1 is unreachable")) }),
-  );
-
-  expect(reply!.type).toBe(AUTOCOMPLETE_RESULT);
-  expect(asChoices(reply)).toEqual([]);
-});
-
-test("autocomplete with no reads wired up still answers", async () => {
-  const reply = await handleInteraction(typing("terps"));
-
-  expect(reply!.type).toBe(AUTOCOMPLETE_RESULT);
-  expect(asChoices(reply)).toEqual([]);
-});
-
-/* ---- the write commands ------------------------------------------------- */
-
-const DEFERRED = 5;
-
-/**
- * deps that record the edit and follow-up, with `settle` to await the deferred
- * work
- */
-function writing(over: Partial<InteractionDeps> = {}) {
-  const seen = {
-    requests: [] as unknown[],
-    actors: [] as { id: string; name: string }[],
-    followed: [] as {
-      applicationId: string;
-      token: string;
-      content: CommandMessage;
-    }[],
-  };
-  const work: Promise<void>[] = [];
-
-  const deps: InteractionDeps = {
-    edit: async (request, actor) => {
-      seen.requests.push(request);
-      seen.actors.push(actor);
-      return {
-        status: "updated",
-        page: notionPage(),
-        changes: [{ property: "status", before: "Approved", after: "Written" }],
-        notes: [],
-      };
     },
-    reply: async (applicationId, token, content) => {
-      seen.followed.push({ applicationId, token, content });
-      return { outcome: "ok", summary: "sent" };
-    },
-    defer: (run) => work.push(run()),
-    ...over,
   };
 
-  return { deps, seen, settle: () => Promise.all(work) };
-}
-
-/** a command carrying the two things a follow-up needs */
-const writeCommand = (
-  subcommand: string,
-  options: Parameters<typeof command>[1] = [],
-  resolved?: {
-    members?: Record<string, { nick?: string | null }>;
-    users?: Record<
-      string,
-      { id?: string; username?: string; global_name?: string | null }
-    >;
-  },
-) => ({
-  ...command(subcommand, options),
-  application_id: "app-1",
-  token: "tok-1",
-  data: { ...command(subcommand, options).data, resolved },
-});
-
-test("a write defers, then follows up with what the edit said", async () => {
-  const { deps, seen, settle } = writing();
-
-  const reply = await handleInteraction(
-    writeCommand("status", [
-      { name: "article", value: PAGE },
-      { name: "status", value: "Approved" },
-    ]),
-    deps,
-  );
-
-  // no body on a deferral, and the plain ephemeral flag rather than the v2 pair
-  expect(reply).toEqual({ type: DEFERRED, data: { flags: EPHEMERAL } });
-
-  await settle();
-
-  expect(seen.requests).toEqual([
-    {
-      kind: "property",
-      pageId: PAGE,
-      intent: { property: "status", option: "Approved" },
-    },
-  ]);
-  expect(seen.followed).toHaveLength(1);
-  expect(seen.followed[0]).toMatchObject({
-    applicationId: "app-1",
-    token: "tok-1",
-  });
-  expect(seen.followed[0]!.content.components[0]).toEqual({
-    type: 10,
-    content: "Updated **Article Status** from **Approved** to **Written**.",
-  });
-});
-
-test("/article delete defers a request for the selected Article", async () => {
-  const { deps, seen, settle } = writing();
-  const reply = await handleInteraction(
-    writeCommand("delete", [{ name: "article", value: OTHER_PAGE }]),
-    deps,
-  );
-  expect(reply).toEqual({ type: DEFERRED, data: { flags: EPHEMERAL } });
-  await settle();
-  expect(seen.requests).toEqual([{ kind: "delete", pageId: OTHER_PAGE }]);
-});
-
-test("an edit that throws still follows up", async () => {
-  const { deps, seen, settle } = writing({
-    edit: async () => {
-      throw new Error("notion fell over");
-    },
-  });
-
-  await handleInteraction(
-    writeCommand("headline", [
-      { name: "article", value: PAGE },
-      { name: "headline", value: "Looney's line" },
-    ]),
-    deps,
-  );
-  await settle();
-
-  expect(seen.followed).toHaveLength(1);
-  expect(JSON.stringify(seen.followed[0]!.content)).toContain(
-    "could not confirm",
+  expect(describePress(pressed, handleInteraction(pressed)!)).toBe(
+    "Zach marked first posted",
   );
 });
 
-test("nowhere to run the work is refused inline rather than deferred", async () => {
-  const { deps } = writing({ defer: undefined });
-
-  const reply = asMessage(
-    await handleInteraction(
-      writeCommand("status", [
-        { name: "article", value: PAGE },
-        { name: "status", value: "Approved" },
-      ]),
-      deps,
-    ),
-  );
-
-  expect(reply.type).toBe(4);
-  expect(text(reply)).toContain("Nothing was changed");
-});
-
-test("a headline the picker did not fill in is answered before deferring", async () => {
-  const { deps, seen } = writing();
-
-  const reply = asMessage(
-    await handleInteraction(
-      writeCommand("status", [{ name: "status", value: "Approved" }]),
-      deps,
-    ),
-  );
-
-  expect(reply.type).toBe(4);
-  expect(text(reply)).toContain("Pick an Article");
-  expect(seen.requests).toEqual([]);
-});
-
-/* discord sends whatever was typed when nobody picked a suggestion */
-test("typed text that is not a page id never reaches notion", async () => {
-  const { deps, seen } = writing({
-    page: () => {
-      throw new Error("typed text reached notion");
-    },
-  });
-  const typed = {
-    name: "article",
-    value: `${PAGE}/../../blocks/${OTHER_PAGE}`,
+test("logs an un-press as not posted", () => {
+  const pressed = press(postedId("first"));
+  pressed.message.components[1]!.components![0] = {
+    type: 2,
+    style: 3,
+    label: "Posted by someone else",
+    custom_id: postedId("first"),
   };
 
-  for (const [subcommand, ...options] of [
-    ["show"],
-    ["delete"],
-    ["status", { name: "status", value: "Approved" }],
-    ["author", { name: "member", value: "222" }],
-  ] as const) {
-    const reply = asMessage(
-      await handleInteraction(
-        writeCommand(subcommand, [typed, ...options]),
-        deps,
-      ),
-    );
-
-    expect(text(reply)).toContain("Pick an Article");
-  }
-
-  expect(seen.requests).toEqual([]);
-});
-
-test("an empty status picker asks with the right article", async () => {
-  const { deps } = writing();
-  const asked = async (subcommand: string) =>
-    text(
-      asMessage(
-        await handleInteraction(
-          writeCommand(subcommand, [{ name: "article", value: PAGE }]),
-          deps,
-        ),
-      ),
-    );
-
-  expect(await asked("image-status")).toContain("Pick an image status.");
-  expect(await asked("status")).toContain("Pick a status.");
-});
-
-/* ---- the date ----------------------------------------------------------- */
-
-test("a publication date that is not one is refused rather than written", async () => {
-  const { deps, seen } = writing();
-
-  for (const bad of [
-    "next tuesday",
-    "09/10/2026",
-    "2026-13-01",
-    "2026-02-31",
-  ]) {
-    const reply = asMessage(
-      await handleInteraction(
-        writeCommand("publication-date", [
-          { name: "article", value: PAGE },
-          { name: "date", value: bad },
-        ]),
-        deps,
-      ),
-    );
-
-    expect(text(reply)).toContain("YYYY-MM-DD");
-  }
-
-  expect(seen.requests).toEqual([]);
-});
-
-test("a publication date with no date clears it", async () => {
-  const { deps, seen, settle } = writing();
-
-  await handleInteraction(
-    writeCommand("publication-date", [{ name: "article", value: PAGE }]),
-    deps,
+  expect(describePress(pressed, handleInteraction(pressed)!)).toBe(
+    "zsrobinson marked first not posted",
   );
-  await settle();
-
-  expect(seen.requests).toEqual([
-    {
-      kind: "property",
-      pageId: PAGE,
-      intent: { property: "publicationDate", date: null },
-    },
-  ]);
 });
 
-test("a real date is passed through as notion writes it", async () => {
-  const { deps, seen, settle } = writing();
+test("does not claim a state the reply does not show", () => {
+  const pressed = press(postedId("first"));
 
-  await handleInteraction(
-    writeCommand("publication-date", [
-      { name: "article", value: PAGE },
-      { name: "date", value: "2026-09-10" },
-    ]),
-    deps,
+  expect(describePress(pressed, { type: 7, data: { components: [] } })).toBe(
+    "zsrobinson pressed the button for first",
   );
-  await settle();
-
-  expect(seen.requests[0]).toMatchObject({
-    intent: { property: "publicationDate", date: "2026-09-10" },
-  });
 });
 
-/* ---- credits ------------------------------------------------------------ */
-
-test("the picked member's name comes out of the payload, nickname first", async () => {
-  const { deps, seen, settle } = writing();
-
-  await handleInteraction(
-    writeCommand(
-      "author",
-      [
-        { name: "article", value: PAGE },
-        { name: "member", value: "222" },
-        { name: "also", value: true },
-      ],
-      {
-        members: { "222": { nick: "Bay" } },
-        users: { "222": { username: "bayh", global_name: "Bay Hoffman" } },
-      },
-    ),
-    deps,
-  );
-  await settle();
-
-  expect(seen.requests).toEqual([
-    {
-      kind: "credit",
-      pageId: PAGE,
-      credit: "author",
-      member: { discordId: "222", displayName: "Bay" },
-      byline: null,
-      also: true,
-    },
-  ]);
-});
-
-test("no nickname falls back to the display name, then the handle", async () => {
-  const { deps, seen, settle } = writing();
-
-  await handleInteraction(
-    writeCommand(
-      "image-crew",
-      [
-        { name: "article", value: PAGE },
-        { name: "member", value: "222" },
-      ],
-      { users: { "222": { username: "bayh", global_name: null } } },
-    ),
-    deps,
-  );
-  await settle();
-
-  expect(seen.requests[0]).toMatchObject({
-    credit: "image",
-    member: { displayName: "bayh" },
-    also: false,
-  });
-});
-
-test("a credit without a Discord member is refused before deferring", async () => {
-  const { deps, seen } = writing();
-
-  const reply = asMessage(
-    await handleInteraction(
-      writeCommand("author", [
-        { name: "article", value: PAGE },
-        { name: "byline", value: "Gale de Silva" },
-      ]),
-      deps,
-    ),
-  );
-
-  expect(reply.type).toBe(4);
-  expect(seen.requests).toEqual([]);
-});
-
-/* ---- creating ----------------------------------------------------------- */
-
-test("a new article carries its selected member and optional pseudonym", async () => {
-  const { deps, seen, settle } = writing();
-
-  await handleInteraction(
-    writeCommand(
-      "new",
-      [
-        { name: "headline", value: "Looney's line" },
-        { name: "member", value: "222" },
-        { name: "section", value: "News" },
-        { name: "byline", value: "A Concerned Terrapin" },
-      ],
-      { users: { "222": { username: "bayh", global_name: "Bay Hoffman" } } },
-    ),
-    deps,
-  );
-  await settle();
-
-  expect(seen.requests).toEqual([
-    {
-      kind: "create",
-      headline: "Looney's line",
-      section: "News",
-      member: { discordId: "222", displayName: "Bay Hoffman" },
-      byline: "A Concerned Terrapin",
-    },
-  ]);
-  expect(seen.actors).toEqual([{ id: "", name: "Zachary" }]);
-});
-
-test("a new article without a Discord member is refused before deferring", async () => {
-  const { deps, seen } = writing();
-  const reply = asMessage(
-    await handleInteraction(
-      writeCommand("new", [
-        { name: "headline", value: "Looney's line" },
-        { name: "section", value: "News" },
-      ]),
-      deps,
-    ),
-  );
-
-  expect(reply.type).toBe(4);
-  expect(seen.requests).toEqual([]);
-});
-
-test("a new article without a section is refused before deferring", async () => {
-  const { deps, seen } = writing();
-  const reply = asMessage(
-    await handleInteraction(
-      writeCommand(
-        "new",
-        [
-          { name: "headline", value: "Looney's line" },
-          { name: "member", value: "222" },
-        ],
-        { users: { "222": { username: "bayh" } } },
-      ),
-      deps,
-    ),
-  );
-
-  expect(reply.type).toBe(4);
-  expect(seen.requests).toEqual([]);
-});
-
-test("a new article with no headline is refused before anything is written", async () => {
-  const { deps, seen } = writing();
-
-  const reply = asMessage(await handleInteraction(writeCommand("new"), deps));
-
-  expect(text(reply).toLowerCase()).toContain("headline");
-  expect(seen.requests).toEqual([]);
-});
-
-test("autocomplete falls back to a search when nothing recent matches", async () => {
-  const choices = asChoices(
-    await handleInteraction(
-      typing("ellicott"),
-      deps({
-        articles: () =>
-          Promise.resolve([row({ headline: "Terps lose again" })]),
-        search: () =>
-          Promise.resolve([
-            row({ pageId: "old", headline: "Ellicott Hall Stolen" }),
-          ]),
-      }),
-    ),
-  );
-
-  expect(choices.map((choice) => choice.value)).toEqual(["old"]);
-});
-
-test("a recent match never costs a search", async () => {
-  let searched = false;
-
-  await handleInteraction(
-    typing("terps"),
-    deps({
-      articles: () => Promise.resolve([row({ headline: "Terps lose again" })]),
-      search: () => {
-        searched = true;
-        return Promise.resolve([]);
-      },
-    }),
-  );
-
-  expect(searched).toBe(false);
-});
-
-test("a one-character query is not searched for", async () => {
-  let searched = false;
-
-  await handleInteraction(
-    typing("z"),
-    deps({
-      articles: () => Promise.resolve([]),
-      search: () => {
-        searched = true;
-        return Promise.resolve([]);
-      },
-    }),
-  );
-
-  expect(searched).toBe(false);
-});
-
-test("the whole answer shares one deadline, not one per read", async () => {
-  const started = Date.now();
-
-  await handleInteraction(
-    typing("ellicott"),
-    deps({
-      articles: () => new Promise<Article[]>(() => {}),
-      search: () => new Promise<Article[]>(() => {}),
-      timeoutMs: 60,
-    }),
-  );
-
-  expect(Date.now() - started).toBeLessThan(150);
-});
-
-test("a read that failed does not spend a request on the search", async () => {
-  let searched = false;
-
-  await handleInteraction(
-    typing("ellicott"),
-    deps({
-      articles: () => Promise.reject(new Error("notion returned 429")),
-      search: () => {
-        searched = true;
-        return Promise.resolve([]);
-      },
-    }),
-  );
-
-  expect(searched).toBe(false);
+test("logs nothing for an interaction that is not a press", () => {
+  expect(describePress({ type: 1 }, { type: 1 })).toBeUndefined();
 });

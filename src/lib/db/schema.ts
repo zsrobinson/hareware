@@ -12,13 +12,16 @@ export const invocations = sqliteTable(
     }).notNull(),
     action: text("action", {
       enum: [
-        "meeting-reminder",
         "social-ping",
         "mark-posted",
+        "sheet-edit",
+        /* written by earlier versions; rows of them may still be read */
+        "sheet-setup",
+        "sheet-ignore",
+        "meeting-reminder",
         "article-edit",
         "command-surface",
         "application-sync",
-        /* every roster change on the ADR 0010 pages; the summary says which */
         "roster-edit",
       ],
     }).notNull(),

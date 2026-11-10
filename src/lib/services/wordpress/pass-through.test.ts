@@ -1,0 +1,98 @@
+import { afterEach, expect, test, vi } from "vitest";
+import { passThrough } from "./pass-through";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+/* answers like WordPress: compressed, with the page count; records the ask */
+function wordpress() {
+  const asked: { url: string; headers: Headers }[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      asked.push({ url, headers: new Headers(init?.headers) });
+      return new Response("[]", {
+        headers: {
+          "content-type": "application/json",
+          "content-encoding": "gzip",
+          "x-wp-totalpages": "42",
+          "set-cookie": "wordpress=1",
+        },
+      });
+    }),
+  );
+  return asked;
+}
+
+const at = (path: string) => new URL(`https://hareware.test${path}`);
+
+test("asks WordPress for the same posts, without an Origin, so its cache answers", async () => {
+  const asked = wordpress();
+  const response = await passThrough(
+    at("/api/wordpress/wp/v2/posts?slug=a&_fields=title"),
+  );
+
+  expect(response.status).toBe(200);
+  expect(asked.map(({ url }) => url)).toEqual([
+    "https://theumdhare.com/wp-json/wp/v2/posts?slug=a&_fields=title",
+  ]);
+  expect(asked[0]?.headers.has("origin")).toBe(false);
+});
+
+test("keeps the compression and the page count, and nothing else of WordPress's", async () => {
+  wordpress();
+  const response = await passThrough(at("/api/wordpress/wp/v2/posts?page=2"));
+
+  expect(response.headers.get("content-encoding")).toBe("gzip");
+  expect(response.headers.get("x-wp-totalpages")).toBe("42");
+  expect(response.headers.has("set-cookie")).toBe(false);
+  /* kept at the edge for a minute, never in the browser */
+  expect(response.headers.get("cache-control")).toBe(
+    "public, max-age=0, s-maxage=60",
+  );
+});
+
+test("passes only the collections and query keys the pages use", async () => {
+  const asked = wordpress();
+
+  expect((await passThrough(at("/api/wordpress/wp/v2/users"))).status).toBe(
+    404,
+  );
+  expect(
+    (await passThrough(at("/api/wordpress/wp/v2/posts/../settings"))).status,
+  ).toBe(404);
+  /* refused rather than dropped: without its filter WordPress would answer
+     the wrong posts, with a 200 */
+  expect(
+    (await passThrough(at("/api/wordpress/wp/v2/posts?slug=a&context=edit")))
+      .status,
+  ).toBe(400);
+
+  expect(asked).toEqual([]);
+});
+
+test("a refusal from WordPress is not kept at the edge", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(null, { status: 429 })),
+  );
+  const response = await passThrough(at("/api/wordpress/wp/v2/posts?page=1"));
+
+  expect(response.status).toBe(429);
+  expect(response.headers.get("cache-control")).toBe("no-store");
+});
+
+/* WordPress's cache ignores no-cache headers; a key it has never seen is what
+   makes it answer from its server */
+test("a fresh read reaches WordPress past its cache, and is kept nowhere", async () => {
+  const asked = wordpress();
+  const response = await passThrough(
+    at("/api/wordpress/wp/v2/posts?slug=a&fresh=1"),
+  );
+
+  expect(asked[0]?.url).toMatch(
+    /^https:\/\/theumdhare\.com\/wp-json\/wp\/v2\/posts\?slug=a&_fresh=\d+$/,
+  );
+  expect(response.headers.get("cache-control")).toBe("no-store");
+});

@@ -26,6 +26,8 @@
   --font-heading: var(--font-sans);
   --font-serif: "Source Serif 4", serif;
   --font-display: "Source Serif 4 Display", serif;
+  /* tailwind's own stack tries Courier New before the system's monospace */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   /* the hare's own colours. the slide templates paint from these and from the
      hex presets in lib/color-presets, never from the shadcn tokens below */
@@ -64,6 +66,9 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
+  --color-edited: var(--edited);
+  --color-edited-solid: var(--edited-solid);
+  --color-edited-solid-foreground: var(--edited-solid-foreground);
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -98,6 +103,23 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
+  /* the archive charts' series, validated as a set for each mode */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #6250d6;
+  --series-5: #e87ba4;
+  --series-other: #898781;
+  /* roles are one quiet slate at three steps, at least 3:1 apart where they
+     stack, so they never read as a section; one series alone is a grey */
+  --role-1: #0f1b28;
+  --role-2: #58697b;
+  --role-3: #b0c2d6;
+  --series-neutral: #5c5c5c;
+  /* Unsaved changes use a neutral tint, never a data-series colour. */
+  --edited: #404040;
+  --edited-solid: #171717;
+  --edited-solid-foreground: #ffffff;
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -134,6 +156,19 @@
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #9085e9;
+    --series-5: #d55181;
+    --series-other: #898781;
+    --role-1: #eff7ff;
+    --role-2: #7e8d9d;
+    --role-3: #33414f;
+    --series-neutral: #b8b8b8;
+    --edited: #d4d4d4;
+    --edited-solid: #e5e5e5;
+    --edited-solid-foreground: #171717;
     --sidebar: oklch(0.205 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.488 0.243 264.376);
@@ -156,6 +191,13 @@
 
   html {
     @apply font-sans;
+  }
+
+  /* tailwind v4 leaves buttons on the default cursor; this is shadcn's
+     snippet for bringing the pointer back */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
   }
 }
 
@@ -208,4 +250,10 @@
   #nav-progress[data-state="done"] {
     transition: opacity 120ms linear;
   }
+}
+
+/* a name field with suggestions keeps the look of every other text field:
+   Chrome would add its own arrow */
+input[list]::-webkit-calendar-picker-indicator {
+  display: none !important;
 }

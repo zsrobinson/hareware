@@ -1,4 +1,4 @@
-/* The four refusals, in one table. Imports nothing: the guard reads it. */
+/* The four refusals, in one table. Imports nothing: the browser bundles it. */
 
 /**
  * Why somebody may not see the admin tools. Separate because a member acts on
@@ -33,15 +33,16 @@ export type DenialCopy = {
 export const DENIALS: Record<Denial, DenialCopy> = {
   "signed-out": {
     status: 401,
-    title: "Sign in to continue",
-    body: () => "This tool is for the Editorial Board.",
+    title: "Editorial Board only",
+    body: () => "Your Discord account needs the Editorial Board role.",
     action: "sign-in",
   },
 
   "no-role": {
     status: 403,
     title: "This tool is for the Editorial Board",
-    body: (you) => `You are signed in as ${you}, who is not on the board.`,
+    body: (you) =>
+      `You are signed in as ${you}, who is not on the board. A board member can give you the role in Discord.`,
     action: "leave",
   },
 

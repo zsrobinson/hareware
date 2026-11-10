@@ -4,27 +4,8 @@ import react from "@astrojs/react";
 import cloudflare from "@astrojs/cloudflare";
 
 import tailwindcss from "@tailwindcss/vite";
-import { execFileSync } from "node:child_process";
-
-/**
- * what is deployed, as a string a person can act on.
- *
- * `git describe` gives the nearest tag plus how far past it we are, falling
- * back to a bare short hash before the first tag exists. the build runs in a
- * real clone on Workers Builds, so this works there too — and if it ever does
- * not, the env var Workers CI sets is the backstop and "unknown" is the floor.
- * a version nobody can read is worse than one that admits it does not know
- */
-function version() {
-  try {
-    return execFileSync("git", ["describe", "--tags", "--always", "--dirty"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch {
-    return process.env.WORKERS_CI_COMMIT_SHA?.slice(0, 7) ?? "unknown";
-  }
-}
+import { version } from "./src/lib/build-version.mjs";
+import { preloadIslands } from "./src/lib/preload-islands.mjs";
 
 // https://astro.build/config
 export default defineConfig({
@@ -32,18 +13,27 @@ export default defineConfig({
   // HareWare signs its own stateless session cookie; ADR 0008 deliberately
   // has no server-side session store.
   session: false,
-  integrations: [react()],
+  integrations: [react(), preloadIslands()],
 
-  // the admin tools moved out from under /admin to sit beside the public ones,
-  // because nothing a member does with them cares which is which. these keep
-  // the old urls working: they are in Discord messages the bot has already
-  // posted, and one of them is what an alert tells somebody to go and read
+  // these become _redirects rules, which the asset server answers with a 301
+  // and without the Worker. the front door is the tool people came for. the
+  // old admin urls are in Discord messages the bot has already posted, and
+  // one of them is what an alert tells somebody to go and read; the reminder,
+  // its log and its commands are all one page now
   redirects: {
-    "/admin": "/automations",
-    "/admin/automations": "/automations",
-    "/admin/commands": "/commands",
-    "/admin/log": "/log",
+    "/": "/generate",
+    "/admin": "/reminder",
+    "/admin/automations": "/reminder",
+    "/admin/commands": "/reminder",
+    "/admin/log": "/reminder",
+    "/automations": "/reminder",
+    "/commands": "/reminder",
+    "/log": "/reminder",
   },
+
+  // `/generate` is served as generate.html; the default, generate/index.html,
+  // would have the asset server redirect every visit to `/generate/`
+  build: { format: "file" },
 
   adapter: cloudflare({
     // nothing here goes through astro:assets — every image is already a
@@ -53,14 +43,15 @@ export default defineConfig({
     imageService: "passthrough",
 
     // workerd needs a 48-bit virtual address space and the raspberry pi's
-    // 39-bit kernel cannot give it one, so prerendering /custom in workerd
-    // aborts before it starts. node renders the one prerendered route we have
-    // identically — it is static markup with no runtime-specific code in it
+    // 39-bit kernel cannot give it one, so prerendering in workerd aborts
+    // before it starts. node renders every page identically: they are static
+    // shells with no runtime-specific code in them (ADR 0012)
     prerenderEnvironment: "node",
   }),
 
-  // opt-in rather than prefetchAll: /generate and /magazine must always read
-  // the article live, so only links that don't hit wordpress get prefetched
+  // opt-in rather than prefetchAll: a link marked data-astro-prefetch has its
+  // page fetched on hover. the pages are static shells, so that reads nothing
+  // from WordPress; Instagram Posts reads the article itself on hover
   prefetch: { prefetchAll: false, defaultStrategy: "hover" },
 
   vite: {
@@ -69,6 +60,46 @@ export default defineConfig({
     /* baked in at build time: there is no git repository at runtime, and the
        worker has no way to ask what it was built from */
     define: { __APP_VERSION__: JSON.stringify(version()) },
+
+    /*
+      the browser's code in a few chunks rather than sixty. every page is a
+      static shell whose island asks WordPress itself (ADR 0012), and each
+      chunk an island imports is another round trip before it can draw: split
+      finely, the slides waited about a second behind the chain of imports.
+      ~/lib/preload-islands now asks for them all with the HTML, and this
+      keeps that to about a dozen files. the Worker's own bundle is left as
+      it is
+    */
+    environments: {
+      client: {
+        build: {
+          rolldownOptions: {
+            output: {
+              codeSplitting: {
+                groups: [
+                  /* only the archive's tables use it */
+                  {
+                    name: "table",
+                    test: /node_modules[\\/]@tanstack[\\/](react-)?table/,
+                  },
+                  /* every library but those two: modern-screenshot is
+                     imported only when slides are saved, and a group here
+                     would load it with every page */
+                  {
+                    name: "vendor",
+                    test: /node_modules[\\/](?!modern-screenshot|@tanstack[\\/](react-)?table)/,
+                  },
+                  {
+                    name: "shared",
+                    test: /src[\\/](lib|components[\\/]ui)[\\/]/,
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
 
     /*
       both of these are pulled in by astro at request time rather than at boot,

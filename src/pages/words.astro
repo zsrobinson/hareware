@@ -1,101 +1,16 @@
 ---
-import { Textarea } from "~/components/ui/textarea";
-import { Button } from "~/components/ui/button";
+/*
+  A static file (ADR 0012): the island counts in the browser, so serving this
+  costs the Worker nothing.
+*/
+import { WordCounter } from "~/components/word-counter";
 import Dashboard from "~/layouts/dashboard.astro";
-import { viewer, viewerState } from "~/lib/admin";
-import {
-  ChevronRightIcon,
-  TriangleAlertIcon,
-  Link2Icon,
-  QuoteIcon,
-} from "lucide-react";
-import { toArticleLink } from "~/lib/services/wordpress/article-url";
-import { getWordCount } from "~/lib/get-word-count";
-import { scrapeArticle } from "~/lib/services/wordpress/scrape-article";
-import { mapLimit } from "~/lib/map-limit";
-import { FormItem, FormLabel } from "~/components/options-form";
 
-function redirectError(error: string) {
-  const params = Astro.url.searchParams;
-  params.set("error", error);
-  return Astro.redirect("/words?" + params);
-}
-
-const error = Astro.url.searchParams.get("error");
-
-const articlesStr = Astro.url.searchParams.get("articles");
-let counts: (number | null)[] = [];
-if (articlesStr && !error) {
-  /* CRLF or LF: `URL` strips newlines, so an unsplit blob would parse as one
-     link */
-  const articles = articlesStr
-    .split(/\r?\n/)
-    .map((a) => a.trim())
-    .filter((a) => a !== "");
-
-  if (articles.length > 10) return redirectError("too-many");
-  if (articles.length < 1) return redirectError("too-few");
-
-  const links = articles.map(toArticleLink);
-  if (links.some((link) => link === undefined))
-    return redirectError("invalid-url");
-
-  /* ten at once draws 429s */
-  counts = await mapLimit(links as string[], 3, async (link) => {
-    try {
-      const { body } = await scrapeArticle(link);
-      return getWordCount(body);
-    } catch {
-      return null;
-    }
-  });
-}
-Astro.response.headers.set("cache-control", "private, no-store");
-
-const who = viewerState(await viewer(Astro.request));
+export const prerender = true;
 ---
 
-<Dashboard title="Word Counter" viewer={who} width="form">
-  <div class="flex flex-col gap-2">
-    <FormItem>
-      <Link2Icon className="size-5 min-w-max" />
-      <FormLabel>Article Links</FormLabel>
-    </FormItem>
-
-    <form action="/words" class="mb-4 flex flex-col gap-2">
-      <Textarea
-        name="articles"
-        className="h-56 resize-none"
-        defaultValue={articlesStr ?? ""}
-        placeholder="Enter up to ten article links or slugs, each on its own line."
-      />
-      <Button variant="secondary">Count Words <ChevronRightIcon /></Button>
-
-      {
-        error && (
-          <div class="ml-4 flex items-center gap-2 pt-2 text-sm font-medium text-red-500">
-            <TriangleAlertIcon className="mt-0.5" />
-            <span>{error}</span>
-          </div>
-        )
-      }
-    </form>
-
-    {
-      counts.length !== 0 && (
-        <>
-          <FormItem>
-            <QuoteIcon className="size-5 min-w-max" />
-            <FormLabel>Word Counts</FormLabel>
-          </FormItem>
-
-          <Textarea
-            className="h-56 resize-none"
-            readOnly
-            value={counts.map((count) => count ?? "—").join("\n")}
-          />
-        </>
-      )
-    }
+<Dashboard title="Word Counter" width="form">
+  <div class="space-y-6">
+    <WordCounter client:only="react" />
   </div>
 </Dashboard>

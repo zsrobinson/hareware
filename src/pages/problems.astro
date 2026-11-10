@@ -1,0 +1,16 @@
+---
+import Dashboard from "~/layouts/dashboard.astro";
+import EarlyFetch from "~/components/early-fetch.astro";
+import { ProblemsPage } from "~/components/archive/problems";
+
+/* a static shell: the island asks the gated /api/archive.json for the data,
+   and draws the refusal itself if the answer is no (ADR 0012) */
+export const prerender = true;
+---
+
+<Dashboard title="Problems">
+  <EarlyFetch slot="head" early={{ api: "/api/archive.json" }} />
+  <div class="space-y-6">
+    <ProblemsPage client:load />
+  </div>
+</Dashboard>

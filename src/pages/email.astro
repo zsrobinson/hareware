@@ -1,90 +1,18 @@
 ---
-import {
-  EMAIL_IMAGE_WIDTH,
-  toSizedImage,
-} from "~/lib/services/wordpress/image-url";
-import { toArticleLink } from "~/lib/services/wordpress/article-url";
-import { getRecentArticles } from "~/lib/services/wordpress/get-recent-articles";
-import { mapLimit } from "~/lib/map-limit";
-import { scrapeArticle } from "~/lib/services/wordpress/scrape-article";
+/*
+  A static file (ADR 0012): the island reads the latest articles from WordPress
+  itself, so serving this costs the Worker nothing.
+*/
+import { NewsletterPage } from "~/components/newsletter-page";
+import Dashboard from "~/layouts/dashboard.astro";
+import EarlyFetch from "~/components/early-fetch.astro";
 
-/* short, so a title fixed mid-build is not served stale */
-Astro.response.headers.set(
-  "cache-control",
-  "public, s-maxage=30, stale-while-revalidate=60",
-);
-
-const articles = await getRecentArticles();
-if (!articles) throw Error("cannot fetch recent articles");
-
-/* the feed's urls go through the host allow-list before anything fetches them */
-const ours = articles.filter(({ link }) => toArticleLink(link) !== undefined);
-
-/* more at once trips wordpress.com's rate limit */
-const scraped = (
-  await mapLimit(ours, 3, async ({ link }) => {
-    try {
-      return await scrapeArticle(link);
-    } catch {
-      return null;
-    }
-  })
-).filter((post) => post !== null);
+export const prerender = true;
 ---
 
-<meta charset="utf-8" />
-
-<div
-  style="background-color: #5b2218 !important; padding: 8px 12px 8px 12px; line-height: 1.15; text-align: center;"
->
-  <img
-    src="https://i0.wp.com/theumdhare.com/wp-content/uploads/2026/02/combination-mark.png?h=90"
-    style="height: 30px;"
-  />
-</div>
-
-<p>Hey Everyone,</p>
-
-<div
-  style="background-color: rgb(244, 204, 204); padding: 8px 12px 8px 12px; line-height: 1.15;"
->
-  <b
-    ><font size="4"
-      >Our next general body meeting will be [DATE] at [TIME] in [LOCATION].</font
-    ></b
-  >
-</div>
-
-<p>[EMAIL BODY]</p>
-
-<br />
-<br />
-
-<hr />
-<b><font size="4">Latest Articles</font></b>
-<br />
-<br />
-
-<table>
-  {
-    scraped?.map((post) => (
-      <tr>
-        <td style="vertical-align: top; padding: 0 0 12px 0;">
-          <img
-            src={toSizedImage(post.image, EMAIL_IMAGE_WIDTH)}
-            style="width: 150px"
-          />
-        </td>
-        <td style="vertical-align: top; padding: 0 0 12px 12px;">
-          <strong>
-            <a href={post.link} set:html={post.title} />
-          </strong>
-          <br />
-          Article by {post.author}
-          <br />
-          Image by {post.imageCredits}
-        </td>
-      </tr>
-    ))
-  }
-</table>
+<Dashboard title="Newsletter" width="wide">
+  <EarlyFetch slot="head" early={"latest"} />
+  <div class="space-y-6">
+    <NewsletterPage client:load />
+  </div>
+</Dashboard>

@@ -1,10 +1,10 @@
-/* The reminders' settings, as constants (ADR 0006). */
+/* The reminder's settings, as constants: a one-line pull request is a cheaper
+   way to change them than a store nobody remembers exists. */
 
 /** Eastern. Not 1 or 2: DST makes 1am happen twice and 2am not at all. */
 export const REMINDER_HOUR = 8;
 
 export const SOCIAL_CHANNEL_ID = "1155994296219091014"; // #instagram-posting
-export const BOARD_CHANNEL_ID = "670351492107993118"; // #editorial-board
 
 /**
  * where a failed run is reported: the bot-noise channel, not one the club reads
@@ -33,17 +33,3 @@ export const SOCIAL_ROLE_IDS: Record<string, string | undefined> = {
  */
 export const HAREWARE_ORIGIN: string | undefined =
   "https://hareware.zsrobinson.com";
-
-/**
- * @Editorial Board. To test, set REMINDERS_NO_PING rather than clearing this.
- */
-export const MEETING_MENTION_ROLE_ID: string | undefined = "669611068938780673";
-
-/** the title prefix `meeting.ts` falls back to for a row with no `Type` set */
-export const MEETING_TITLE_PREFIX = "Editorial Board";
-
-/**
- * Meetings' date property; undefined finds its only `date` property in the
- * schema
- */
-export const MEETING_DATE_PROPERTY: string | undefined = undefined;

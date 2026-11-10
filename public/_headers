@@ -1,0 +1,6 @@
+# The same headers src/middleware.ts sets on the routes the Worker serves:
+# static pages never reach it (ADR 0012). Keep the two in step.
+/*
+  Content-Security-Policy: base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin

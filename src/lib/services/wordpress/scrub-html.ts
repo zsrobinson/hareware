@@ -1,4 +1,4 @@
-import { parseHTML } from "linkedom";
+import { parseDocument } from "./parse-document";
 /*
   making scraped markup safe to render.
 
@@ -137,7 +137,7 @@ function safeUrl(value: string) {
 
   /*
     `//evil.example/x` reads as relative to this pattern and as a different
-    origin to a browser — the same confusion `safeReturnTo` closes in auth.ts,
+    origin to a browser — the same confusion `safeReturnTo` closes in ~/lib/return-to,
     and the two halves of this codebase should not disagree about what
     "relative" means
   */
@@ -172,13 +172,6 @@ type Elementish = {
   replaceWith: (...nodes: unknown[]) => void;
 };
 
-/**
- * strips anything executable out of a parsed document, in place.
- *
- * takes the document rather than a string so it runs on the tree both scraping
- * paths already build, and so there is one place to correct if wordpress starts
- * emitting something new
- */
 /** the DOM's number for a comment node */
 const COMMENT_NODE = 8;
 
@@ -205,6 +198,13 @@ function removeComments(node: { childNodes?: unknown[] }) {
   }
 }
 
+/**
+ * strips anything executable out of a parsed document, in place.
+ *
+ * takes the document rather than a string so it runs on the tree the reader
+ * already built, and so there is one place to correct if wordpress starts
+ * emitting something new
+ */
 export function scrub<T>(root: T): T {
   /*
     linkedom's Document and Element both satisfy this, but neither exposes a
@@ -259,12 +259,12 @@ export function scrub<T>(root: T): T {
 /**
  * the same treatment for a bare markup string rather than a whole document.
  *
- * wrapped in a div rather than a body: linkedom builds an odd tree for a bare
- * `<body>` and `document.body` comes back empty, which looked exactly like the
- * scrubber deleting everything
+ * wrapped in a div rather than a body: linkedom, which the tests parse with,
+ * builds an odd tree for a bare `<body>` and `document.body` comes back empty,
+ * which looked exactly like the scrubber deleting everything
  */
 export function scrubFragment(html: string) {
-  const { document } = parseHTML(`<div id="fragment">${html}</div>`);
+  const document = parseDocument(`<div id="fragment">${html}</div>`);
   scrub(document);
 
   return document.querySelector("#fragment")?.innerHTML.trim() ?? "";

@@ -1,0 +1,1332 @@
+import { QueryClientProvider } from "@tanstack/react-query";
+import {
+  CalendarIcon,
+  ChevronDownIcon,
+  IdCardIcon,
+  NewspaperIcon,
+  RefreshCwIcon,
+  SearchIcon,
+  UserRoundIcon,
+  UsersRoundIcon,
+  XIcon,
+  type LucideIcon,
+} from "lucide-react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
+import { toast } from "sonner";
+import { Button } from "~/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu";
+import { Input } from "~/components/ui/input";
+import type { Archive } from "~/lib/credits/archive";
+import type { ViewsSummary } from "~/lib/credits/views";
+import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
+import { sortSections } from "~/lib/credits/sections";
+import { type Filters, type Period } from "~/lib/credits/stats";
+import { cn } from "~/lib/utils";
+import { FieldRow, FieldRows } from "~/components/field-row";
+import { DenialMessage } from "~/components/gated";
+import { PageActions } from "~/components/page-actions";
+import { BottomSheet, PanelGroup, useIsPhone } from "~/components/panel";
+import { couldNotRead, ReadFailed, Reading } from "~/components/read-state";
+import { Refused } from "~/lib/gated";
+import { ArchiveSearch } from "./archive-search";
+import { Choice } from "./choice";
+import { Throttled } from "~/lib/services/wordpress/request";
+import { queryClient } from "~/lib/query-client";
+import { useHydrated } from "~/lib/use-hydrated";
+import { useArchive, useReadProgress, type ArchiveState } from "./archive-data";
+import { formatDate, formatDateTime } from "./dates";
+import {
+  asCounted,
+  clearedState,
+  periodNamed,
+  PRESETS,
+  readState,
+  roundedStart,
+  toFilters,
+  writeState,
+  type FilterState,
+  type Preset,
+  type Searching,
+} from "./filters";
+import type { Trail } from "./open-row";
+import { useInAddress } from "./page-state";
+import { counted } from "./chart-slice";
+import { EDITED } from "./edited";
+import { SectionDot } from "./section-name";
+
+/* where a view puts its own controls: the end of the toolbar on a laptop
+   (Columns, Customize), and its own group in the phone's Customize sheet */
+type Slots = {
+  toolbar: HTMLElement | null;
+  sheet: HTMLElement | null;
+  filters: HTMLElement | null;
+  above: HTMLElement | null;
+  row: HTMLElement | null;
+};
+const SlotsContext = createContext<Slots>({
+  toolbar: null,
+  sheet: null,
+  filters: null,
+  above: null,
+  row: null,
+});
+
+/* a page of views says how far what is on screen is from the view as
+   saved, and how to go back to it: the one Reset, which the filters' own
+   Clear gives way to, and the count on the phone's Customize */
+type Edits = { count: number; reset: () => void };
+const EditsContext = createContext<(edits: Edits | null) => void>(() => {});
+
+/**
+ * Says what differs from the saved view: `count` differences, which
+ * `reset` takes back, all of them, filters and view alike (ADR 0015).
+ */
+export function useViewEdits(count: number, reset: () => void) {
+  const set = useContext(EditsContext);
+  const latest = useRef(reset);
+  useLayoutEffect(() => {
+    latest.current = reset;
+  });
+  useEffect(() => {
+    set({ count, reset: () => latest.current() });
+  }, [count, set]);
+  useEffect(() => () => set(null), [set]);
+}
+
+const TrailContext = createContext<Trail>({
+  state: clearedState("all"),
+  searching: "articles",
+});
+
+/** the filters on screen, for a link to another archive page to take along */
+export const useTrail = () => useContext(TrailContext);
+
+/* how many views on screen count views, each adding itself while it does */
+const ViewsShownContext = createContext<() => () => void>(() => () => {});
+
+/**
+ * Says that the view on screen counts views, so the page says how old they
+ * are and when they could not be read; a page none of whose views counts
+ * them (People's table, Problems) says nothing of a read it has no use for
+ */
+export function useShowsViews(shows: boolean) {
+  const add = useContext(ViewsShownContext);
+  useEffect(() => (shows ? add() : undefined), [shows, add]);
+}
+
+/** a view's controls at the end of the toolbar, after a divider (laptop) */
+export function ToolbarEnd({ children }: { children: ReactNode }) {
+  const { toolbar } = useContext(SlotsContext);
+  return toolbar ? createPortal(children, toolbar) : null;
+}
+
+/** a page-wide action at the end of a phone's search row, beside Reload */
+export function SearchRowEnd({ children }: { children: ReactNode }) {
+  const { row } = useContext(SlotsContext);
+  return row ? createPortal(children, row) : null;
+}
+
+/** what outranks the filters (Charts' views), over the toolbar */
+export function AboveToolbar({ children }: { children: ReactNode }) {
+  const { above } = useContext(SlotsContext);
+  return above ? createPortal(children, above) : null;
+}
+
+/** a view's own filter (People's "All people"), among the shell's filters:
+    before the divider on a laptop, in the sheet's Filter group on a phone,
+    where a `label` gives it a row of its own like the shell's filters */
+export function ToolbarFilters({
+  children,
+  label,
+  icon,
+}: {
+  children: ReactNode;
+  /** the row's label in the phone's sheet ("People") */
+  label?: string;
+  icon?: LucideIcon;
+}) {
+  const { filters } = useContext(SlotsContext);
+  const phone = useIsPhone();
+  if (!filters) return null;
+  return createPortal(
+    phone && label ? (
+      <SheetFilter icon={icon} label={label}>
+        {children}
+      </SheetFilter>
+    ) : (
+      children
+    ),
+    filters,
+  );
+}
+
+/** a view's own group in the phone's Customize sheet, after Filter */
+export function SheetGroup({ children }: { children: ReactNode }) {
+  const { sheet } = useContext(SlotsContext);
+  return sheet ? createPortal(children, sheet) : null;
+}
+
+/* a filter's row in the phone's sheet: the control stays beside its label */
+function SheetFilter({
+  icon,
+  label,
+  children,
+}: {
+  icon?: LucideIcon;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <FieldRow
+      icon={icon}
+      /* the control is named for itself; this only shows it */
+      label={<span aria-hidden>{label}</span>}
+      inline
+      width="panel"
+    >
+      {children}
+    </FieldRow>
+  );
+}
+
+type Reload = "wordpress" | "sheet";
+
+export type ViewProps = {
+  archive: Archive;
+  filters: Filters;
+  /** rereads WordPress now, for a page where someone just fixed an article */
+  refresh: () => void;
+  refreshing: boolean;
+  /** what the filters narrow to, for a caption ("Last 3 months · Sports");
+      empty when nothing is set. A phone hides the filters in a sheet, so the
+      caption is where the cut shows */
+  filterNote: string;
+  /** the filters as set, which choosing a chart view may change */
+  filterState: FilterState;
+  setFilterState: (state: FilterState) => void;
+  /** a phone's Reload, on a page with no filter bar to end: the view puts it
+      at the end of its first row. Null where the shell has placed it */
+  reloadButton: ReactNode;
+};
+
+/* what the box says it looks at: on People a chart's search is of the
+   articles it counts, which saying so tells apart from the table's names */
+const SEARCHES: Record<Searching, { placeholder: string; note: string }> = {
+  articles: {
+    placeholder: "Search articles by title or byline",
+    note: "in a title or byline",
+  },
+  people: {
+    placeholder: "Search names and bylines",
+    note: "in a name or byline",
+  },
+};
+
+/* "Fall 2025" for a range that is one, else its dates */
+function customRange({ from, to }: FilterState): string {
+  const named = periodNamed(from, to);
+  if (named) return named;
+  if (from && to) return `${formatDate(from)} to ${formatDate(to)}`;
+  if (from) return `From ${formatDate(from)}`;
+  if (to) return `Until ${formatDate(to)}`;
+  return "Custom range";
+}
+
+const chosenArticles = (ids: readonly number[]) =>
+  `${ids.length} chosen ${ids.length === 1 ? "article" : "articles"}`;
+
+/** the filters that are set, in words, for a view's caption */
+export function describeFilters(
+  state: FilterState,
+  period?: Period,
+  searching: Searching = "articles",
+): string {
+  const parts: string[] = [];
+  const rounded = roundedStart(state, period);
+  /* named even when it is the page's own range, which is not all time and
+     would otherwise go unsaid */
+  if (state.preset !== "all")
+    parts.push(
+      state.preset === "custom"
+        ? customRange(state)
+        : `${PRESETS.find((p) => p.id === state.preset)?.label ?? ""}${
+            rounded ? `, from ${rounded.label}` : ""
+          }`,
+    );
+  if (state.sections.length > 0)
+    parts.push(
+      state.sections.length <= 2
+        ? sortSections(state.sections).join(", ")
+        : `${state.sections.length} sections`,
+    );
+  if (state.roles.length > 0)
+    parts.push(state.roles.map((role) => ROLE_NAMES[role]).join(", "));
+  /* what a mark sent, by the mark, rather than its count of each */
+  if (state.via && (state.articles.length > 0 || state.people.length > 0))
+    parts.push(`from ${state.via}`);
+  else {
+    if (state.people.length > 0)
+      parts.push(
+        state.people.length <= 2
+          ? state.people.join(" and ")
+          : `${state.people.length} people`,
+      );
+    if (state.articles.length > 0) parts.push(chosenArticles(state.articles));
+  }
+  if (state.search.trim())
+    parts.push(`“${state.search.trim()}” ${SEARCHES[searching].note}`);
+  return parts.filter(Boolean).join(" · ");
+}
+
+/** the archive, the filter bar, and whichever view is handed in */
+export function ArchiveShell({
+  children,
+  peopleSearch = false,
+  searching = "articles",
+  filters = true,
+  roleFilter = true,
+  reload = "wordpress",
+  /* without a filter bar there is no Time to see, so nothing is cut */
+  defaultPreset = filters ? "3m" : "all",
+  opening = clearedState(defaultPreset),
+  period,
+}: {
+  children: (props: ViewProps) => ReactNode;
+  searching?: Searching;
+  peopleSearch?: boolean;
+  /** false on a page about the Sheet rather than the archive */
+  filters?: boolean;
+  /** false where a role means nothing, as on Problems */
+  roleFilter?: boolean;
+  /** what the title row's Reload is named for: on Settings, the Sheet */
+  reload?: Reload;
+  /** the Time filter a page opens on and Clear goes back to */
+  defaultPreset?: Preset;
+  /** every filter the page opens on, which a link leaves out and Clear goes
+      back to: a view's own (ADR 0014); its Time filter alone otherwise */
+  opening?: FilterState;
+  /** the period a chart's axis is cut into, which a rolling Time range is
+      rounded to (see `roundedStart`) */
+  period?: Period;
+}) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Shell
+        peopleSearch={peopleSearch}
+        searching={searching}
+        showFilters={filters}
+        roleFilter={roleFilter}
+        reload={reload}
+        opening={opening}
+        period={period}
+      >
+        {children}
+      </Shell>
+    </QueryClientProvider>
+  );
+}
+
+function Shell({
+  children,
+  peopleSearch = false,
+  searching,
+  showFilters,
+  roleFilter,
+  reload,
+  opening,
+  period,
+}: {
+  children: (props: ViewProps) => ReactNode;
+  searching: Searching;
+  peopleSearch?: boolean;
+  showFilters: boolean;
+  roleFilter: boolean;
+  reload: Reload;
+  opening: FilterState;
+  period?: Period;
+}) {
+  const state = useArchive();
+  const hydrated = useHydrated();
+
+  if (!hydrated || state.status === "access")
+    return <Reading>Opening the archive…</Reading>;
+  if (state.status === "reading") return <FirstRead />;
+  if (state.status === "refused")
+    return <DenialMessage refusal={state.refusal.body} />;
+  if (state.status === "failed")
+    return (
+      <ReadFailed
+        message={
+          state.error instanceof Throttled
+            ? couldNotRead(state.error, "the archive")
+            : state.error.message
+        }
+        onRetry={state.retry}
+        retrying={state.retrying}
+      />
+    );
+
+  return (
+    <Ready
+      state={state}
+      peopleSearch={peopleSearch}
+      searching={searching}
+      showFilters={showFilters}
+      roleFilter={roleFilter}
+      reload={reload}
+      opening={opening}
+      period={period}
+    >
+      {children}
+    </Ready>
+  );
+}
+
+function Ready({
+  state: {
+    archive,
+    sheetReadAt,
+    checking,
+    checkFailed,
+    viewsChecking,
+    viewsCheckFailed,
+    refresh: reread,
+  },
+  children,
+  peopleSearch = false,
+  searching,
+  showFilters,
+  roleFilter,
+  reload,
+  opening,
+  period,
+}: {
+  state: Extract<ArchiveState, { status: "ready" }>;
+  children: (props: ViewProps) => ReactNode;
+  searching: Searching;
+  peopleSearch?: boolean;
+  showFilters: boolean;
+  roleFilter: boolean;
+  reload: Reload;
+  opening: FilterState;
+  period?: Period;
+}) {
+  /* asked for by a person, as against a read behind the page: only this one
+     dims the page, since only here are they waiting on it */
+  const [refreshing, setRefreshing] = useState(false);
+  /* a page without the Roles filter counts every role, so a role in its
+     link is dropped, from the address too, rather than named in a caption
+     it does not cut */
+  const supported = useCallback(
+    (next: FilterState) => (roleFilter ? next : { ...next, roles: [] }),
+    [roleFilter],
+  );
+  const [state, setRawState] = useInAddress<FilterState>(
+    (search) => supported(readState(search, opening)),
+    (value, params) => writeState(value, params, opening),
+  );
+  const setState = useCallback(
+    (next: FilterState) => setRawState(supported(next)),
+    [supported, setRawState],
+  );
+
+  const filters = useMemo(() => toFilters(state, period), [state, period]);
+  /* a link takes the range as counted here, which another page would not round */
+  const trail = useMemo(
+    () => ({ state: asCounted(state, period), searching }),
+    [state, period, searching],
+  );
+
+  /* stable, so a view that listens for something to refresh on (Problems,
+     on coming back from WordPress) is not re-subscribed on every render */
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await reread();
+    } catch (error) {
+      if (error instanceof Refused) return;
+      console.error(error);
+      /* what was on screen stays; this says it is not fresher */
+      toast.error(
+        error instanceof Throttled
+          ? "Couldn't refresh: WordPress is busy. Try again in a minute."
+          : `Couldn't refresh: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      setRefreshing(false);
+    }
+  }, [reread]);
+  const refreshNow = useCallback(() => void refresh(), [refresh]);
+
+  const [slots, setSlots] = useState<Slots>({
+    toolbar: null,
+    sheet: null,
+    filters: null,
+    above: null,
+    row: null,
+  });
+  const setRow = useCallback(
+    (row: HTMLElement | null) => setSlots((s) => ({ ...s, row })),
+    [],
+  );
+  const setAbove = useCallback(
+    (above: HTMLElement | null) => setSlots((s) => ({ ...s, above })),
+    [],
+  );
+  const setToolbar = useCallback(
+    (toolbar: HTMLElement | null) => setSlots((s) => ({ ...s, toolbar })),
+    [],
+  );
+  const setFilters = useCallback(
+    (filters: HTMLElement | null) => setSlots((s) => ({ ...s, filters })),
+    [],
+  );
+  const setSheet = useCallback(
+    (sheet: HTMLElement | null) => setSlots((s) => ({ ...s, sheet })),
+    [],
+  );
+
+  const [edits, setEdits] = useState<Edits | null>(null);
+
+  const [viewsShown, setViewsShown] = useState(0);
+  const showViews = useCallback(() => {
+    setViewsShown((n) => n + 1);
+    return () => setViewsShown((n) => n - 1);
+  }, []);
+
+  const freshness = (compact: boolean) =>
+    reload === "sheet" ? (
+      /* Reload rereads WordPress with the Sheet, but the Sheet is what
+         Settings shows, so its read is the one dated */
+      <Freshness
+        source="sheet"
+        readAt={sheetReadAt}
+        checking={refreshing}
+        checkFailed={false}
+        onRefresh={refreshNow}
+        compact={compact}
+      />
+    ) : (
+      <Freshness
+        source="wordpress"
+        readAt={archive.fetchedAt}
+        checking={checking}
+        checkFailed={!refreshing && checkFailed !== null}
+        onRefresh={refreshNow}
+        compact={compact}
+        views={
+          viewsShown > 0
+            ? {
+                summary: archive.views,
+                checking: viewsChecking,
+                failed: viewsCheckFailed !== null,
+              }
+            : undefined
+        }
+      />
+    );
+  /* a phone keeps the title row for the h1 alone, so the reload sits at the
+     end of the search row, where there is one */
+  const phone = useIsPhone();
+  const inToolbar = phone && showFilters;
+  const inView = phone && !showFilters;
+
+  return (
+    <SlotsContext.Provider value={slots}>
+      <EditsContext.Provider value={setEdits}>
+        <ViewsShownContext.Provider value={showViews}>
+          <TrailContext.Provider value={trail}>
+            {/* page-wide, so in the title row beside the h1 */}
+            {!phone && <PageActions>{freshness(false)}</PageActions>}
+            <div className="space-y-6">
+              <div ref={setAbove} className="empty:hidden" />
+              {showFilters && (
+                <FilterBar
+                  archive={archive}
+                  state={state}
+                  setState={setState}
+                  searchPlaceholder={
+                    peopleSearch
+                      ? "Search people and articles"
+                      : SEARCHES[searching].placeholder
+                  }
+                  suggestPeople={searching === "articles"}
+                  roleFilter={roleFilter}
+                  opening={opening}
+                  reloadButton={inToolbar && freshness(true)}
+                  edits={edits}
+                  toolbarSlot={setToolbar}
+                  sheetSlot={setSheet}
+                  filtersSlot={setFilters}
+                  rowSlot={setRow}
+                />
+              )}
+              {showFilters && (
+                <PeopleFilter
+                  state={state}
+                  setState={setState}
+                  opening={opening}
+                />
+              )}
+              {showFilters && <SheetNotice archive={archive} />}
+              {showFilters && viewsShown > 0 && (
+                <ViewsNotice archive={archive} />
+              )}
+              <div
+                className={cn("transition-opacity", refreshing && "opacity-60")}
+              >
+                {children({
+                  archive,
+                  filters,
+                  refresh: refreshNow,
+                  refreshing,
+                  filterNote: describeFilters(state, period, searching),
+                  filterState: state,
+                  setFilterState: setState,
+                  reloadButton: inView ? freshness(true) : null,
+                })}
+              </div>
+            </div>
+          </TrailContext.Provider>
+        </ViewsShownContext.Provider>
+      </EditsContext.Provider>
+    </SlotsContext.Provider>
+  );
+}
+
+/* the one slow load: a browser that has never read the archive, or not for a
+   day. Saying how far it has got, and that it is only this once, keeps a few
+   seconds from reading as a hang */
+function FirstRead() {
+  const { read, total } = useReadProgress();
+  return (
+    <div className="max-w-sm space-y-2">
+      <Reading>
+        Reading every published article from WordPress…
+        {total > 1 && (
+          <span className="tabular-nums">
+            {" "}
+            {read} of {total}
+          </span>
+        )}
+      </Reading>
+      <div className="bg-muted h-1 overflow-hidden rounded-full">
+        <div
+          className="bg-foreground/60 h-full rounded-full transition-[width] duration-500"
+          style={{ width: `${total ? Math.max(8, (read / total) * 100) : 8}%` }}
+        />
+      </div>
+      <p className="text-muted-foreground text-xs">
+        This takes a few seconds the first time. After that the archive opens at
+        once and checks for new articles in the background.
+      </p>
+    </div>
+  );
+}
+
+/** "just now", "12 min ago", "3 hr ago", or the date */
+function ago(at: string, now: number): string {
+  const minutes = Math.floor((now - Date.parse(at)) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} hr ago`;
+  return formatDateTime(at);
+}
+
+/* re-renders once a minute, so "12 min ago" does not go stale on screen */
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  return now;
+}
+
+/* how old the articles on screen are, and whether a newer read is coming:
+   the stored read is shown at once, so the page has to say when it is old
+   and being checked, or a new article missing from it reads as a bug */
+const SOURCES: Record<Reload, { name: string; checking: string }> = {
+  wordpress: { name: "WordPress", checking: "Checking for new articles…" },
+  sheet: { name: "the Sheet", checking: "Reading the Sheet…" },
+};
+
+/**
+ * How old the views beside the articles are, read on their own and able to
+ * fail on their own: being read, unreadable, being checked, not checked, or
+ * their age. Reload reads them again with WordPress
+ */
+export function viewsStatus(
+  views: { summary: ViewsSummary; checking: boolean; failed: boolean },
+  now: number,
+): { text: string; warn: boolean } {
+  const { summary } = views;
+  if (summary.status === "reading")
+    return { text: "Reading views…", warn: false };
+  /* asked again after they could not be read: being checked, not still
+     unavailable, though they were */
+  if (summary.status === "unavailable")
+    return views.checking
+      ? { text: "Checking views again…", warn: false }
+      : { text: "Views unavailable", warn: true };
+  if (views.checking) return { text: "Checking views…", warn: false };
+  if (views.failed)
+    return {
+      text: `Couldn't check views. As of ${ago(summary.fetchedAt, now)}`,
+      warn: true,
+    };
+  return { text: `Views ${ago(summary.fetchedAt, now)}`, warn: false };
+}
+
+function Freshness({
+  source,
+  readAt,
+  checking,
+  checkFailed,
+  onRefresh,
+  compact,
+  views,
+}: {
+  source: Reload;
+  readAt: string;
+  checking: boolean;
+  checkFailed: boolean;
+  onRefresh: () => void;
+  /** the button alone, the age in its tooltip (a phone's search row) */
+  compact: boolean;
+  /** Jetpack's views, beside WordPress's articles */
+  views?: { summary: ViewsSummary; checking: boolean; failed: boolean };
+}) {
+  const now = useNow();
+  const { name, checking: checkingText } = SOURCES[source];
+  const label = `Reload from ${name}`;
+  const own = checking
+    ? checkingText
+    : checkFailed
+      ? `Couldn't check ${name}. As of ${ago(readAt, now)}`
+      : `Updated ${ago(readAt, now)}`;
+  const read = views && viewsStatus(views, now);
+  const status = read ? `${own} · ${read.text}` : own;
+  /* each half warns for itself: views that failed leave the articles' age
+     as it is */
+  const amber = "text-amber-700 dark:text-amber-400";
+  const warn = (checkFailed || read?.warn) && amber;
+
+  return (
+    /* the last thing in its row lines its icon up with the content's edge */
+    <span className="flex items-center gap-1 last:-mr-2">
+      <span
+        className={cn(
+          "text-muted-foreground text-xs leading-tight",
+          compact && "sr-only",
+        )}
+        role="status"
+        title={`Read from ${name} ${formatDateTime(readAt)}`}
+      >
+        <span className={cn(checkFailed && amber)}>{own}</span>
+        {read && (
+          <>
+            {" · "}
+            <span className={cn(read.warn && amber)}>{read.text}</span>
+          </>
+        )}
+      </span>
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn(compact && warn)}
+        onClick={onRefresh}
+        disabled={checking}
+        aria-label={label}
+        title={compact ? `${status} · ${label}` : label}
+      >
+        <RefreshCwIcon className={cn(checking && "animate-spin")} />
+      </Button>
+    </span>
+  );
+}
+
+/* a chip for one change: tinted where the saved view does not have it */
+function Chip({
+  edited,
+  title,
+  onRemove,
+  children,
+}: {
+  edited: boolean;
+  title: string;
+  onRemove: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      className={cn(
+        "h-auto min-h-7 max-w-full min-w-0 text-left [overflow-wrap:anywhere] whitespace-normal",
+        edited && EDITED,
+        edited && "border",
+      )}
+      title={title}
+      onClick={onRemove}
+    >
+      <span className="min-w-0 [overflow-wrap:anywhere] [&>svg]:mr-1.5 [&>svg]:inline [&>svg]:align-text-bottom">
+        {children}
+      </span>
+      <XIcon className="shrink-0" aria-hidden />
+      <span className="sr-only">, remove</span>
+    </Button>
+  );
+}
+
+/**
+ * What a chart's mark sent with its name (`via`) is one chip, whose people
+ * open out to a removable chip each.
+ */
+function PeopleFilter({
+  state,
+  setState,
+  opening,
+}: {
+  state: FilterState;
+  setState: (state: FilterState) => void;
+  /** the saved view's filters, whose own people are not a change */
+  opening: FilterState;
+}) {
+  const [open, setOpen] = useState(false);
+  if (state.people.length === 0 && state.articles.length === 0) return null;
+  const own = (name: string) => opening.people.includes(name);
+  const arrived = state.people.filter((name) => !own(name));
+  const grouped =
+    Boolean(state.via) && (state.articles.length > 0 || arrived.length > 0);
+  const person = (name: string) => (
+    <Chip
+      key={name}
+      edited={!own(name)}
+      title={`Count everyone, not only ${name}`}
+      onRemove={() =>
+        setState({
+          ...state,
+          people: state.people.filter((p) => p !== name),
+        })
+      }
+    >
+      <UserRoundIcon />
+      {name}
+    </Chip>
+  );
+  return (
+    <div role="group" aria-label="People" className="flex flex-wrap gap-2">
+      {grouped ? (
+        <>
+          <Chip
+            edited
+            title={`Count every article and everyone, not only what ${state.via} sent`}
+            onRemove={() =>
+              setState({
+                ...state,
+                articles: [],
+                people: [...opening.people],
+                via: undefined,
+              })
+            }
+          >
+            <NewspaperIcon />
+            From {state.via}
+            {state.articles.length > 0 &&
+              ` · ${counted(state.articles.length, "article", "articles")}`}
+          </Chip>
+          {arrived.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-edited"
+              aria-expanded={open}
+              onClick={() => setOpen(!open)}
+            >
+              <UsersRoundIcon />
+              {counted(arrived.length, "person", "people")}
+              <ChevronDownIcon
+                className={cn("transition-transform", open && "rotate-180")}
+                aria-hidden
+              />
+            </Button>
+          )}
+          {state.people.filter(own).map(person)}
+          {open && arrived.map(person)}
+        </>
+      ) : (
+        <>
+          {state.articles.length > 0 && (
+            <Chip
+              edited
+              title="Count every article, not only those a chart's mark picked"
+              onRemove={() => setState({ ...state, articles: [] })}
+            >
+              <NewspaperIcon />
+              {chosenArticles(state.articles)}
+            </Chip>
+          )}
+          {state.people.map(person)}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* views that could not be read are not zero, and say why once, under the
+   filters; a stored count that could not be checked says so in Freshness */
+function ViewsNotice({ archive }: { archive: Archive }) {
+  if (archive.views.status !== "unavailable") return null;
+  return (
+    <p className="text-muted-foreground border-l-2 border-amber-500/60 pl-3 text-sm">
+      Views couldn't be read from WordPress just now. Try reloading in a minute.
+      {/* what WordPress or HareWare said, for whoever looks into it */}
+      <span className="block text-xs">{archive.views.reason}</span>
+    </p>
+  );
+}
+
+function SheetNotice({ archive }: { archive: Archive }) {
+  const { sheet } = archive;
+  const message =
+    sheet.status === "unconfigured"
+      ? "The Sheet isn't connected, so pen names count as their own people."
+      : sheet.status === "failed"
+        ? `The Sheet couldn't be read, so pen names count as their own people. ${sheet.reason}`
+        : archive.sheetProblems.length > 0
+          ? `${archive.sheetProblems.length} ${archive.sheetProblems.length === 1 ? "row" : "rows"} in the Sheet couldn't be used. Settings lists them.`
+          : null;
+  if (!message) return null;
+
+  return (
+    <p className="text-muted-foreground border-l-2 border-amber-500/60 pl-3 text-sm">
+      {message}
+    </p>
+  );
+}
+
+function FilterBar({
+  archive,
+  state,
+  setState,
+  searchPlaceholder,
+  suggestPeople,
+  roleFilter,
+  opening,
+  reloadButton,
+  edits,
+  toolbarSlot,
+  sheetSlot,
+  filtersSlot,
+  rowSlot,
+}: {
+  archive: Archive;
+  state: FilterState;
+  setState: (state: FilterState) => void;
+  searchPlaceholder: string;
+  suggestPeople: boolean;
+  roleFilter: boolean;
+  opening: FilterState;
+  /** a phone's Reload, at the end of the search row */
+  reloadButton: ReactNode;
+  /** on a page of views, what differs from the saved view, which its one
+      Reset takes back in place of Clear */
+  edits: Edits | null;
+  /** where the view's own controls go, after the divider */
+  toolbarSlot: (element: HTMLElement | null) => void;
+  /** where the view's own group goes in the phone's sheet */
+  sheetSlot: (element: HTMLElement | null) => void;
+  /** where a view's own filter goes, among these */
+  filtersSlot: (element: HTMLElement | null) => void;
+  /** where a phone's page-wide action goes, beside Reload */
+  rowSlot: (element: HTMLElement | null) => void;
+}) {
+  const phone = useIsPhone();
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const { ref: searchInput, placeholder } = useFittingPlaceholder(
+    phone ? "Search" : searchPlaceholder,
+    "Search",
+  );
+  const clear = opening;
+  const changed = JSON.stringify(state) !== JSON.stringify(clear);
+  const differs = (key: "preset" | "sections" | "roles") =>
+    JSON.stringify(state[key]) !== JSON.stringify(opening[key]) ||
+    (key === "preset" && state.preset === "custom");
+  /* on a phone, counted on the button that opens the sheet: every
+     difference from the saved view, or where there are no views, the
+     filters the sheet hides */
+  const active =
+    edits?.count ??
+    [differs("preset"), differs("sections"), differs("roles")].filter(Boolean)
+      .length;
+
+  const search = (
+    <div className="relative min-w-0 flex-1 sm:min-w-24 @2xl:min-w-36">
+      <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2" />
+      <ArchiveSearch
+        archive={archive}
+        state={state}
+        setState={setState}
+        inputRef={searchInput}
+        placeholder={placeholder}
+        className={cn(
+          "bg-background pl-8",
+          state.search.trim() && EDITED,
+          state.search.trim() && "placeholder:text-edited/70",
+        )}
+        description={
+          [
+            phone ? searchPlaceholder : undefined,
+            state.search.trim() ? "changed from the saved view" : undefined,
+          ]
+            .filter(Boolean)
+            .join(". ") || undefined
+        }
+        suggest={suggestPeople}
+      />
+    </div>
+  );
+
+  /* in the sheet each control fills its row's control column; on a laptop
+     each is as wide as what it says, so the toolbar keeps to one line beside
+     a side panel */
+  const fill = phone ? "w-full justify-between" : undefined;
+  const time = (
+    <Choice
+      label="Time"
+      hideLabel
+      width={fill ?? "w-fit"}
+      edited={differs("preset")}
+      value={state.preset}
+      options={PRESETS}
+      onChange={(preset) => setState({ ...state, preset })}
+    />
+  );
+  const range = state.preset === "custom" && (
+    <span className="flex items-center gap-1.5">
+      <DateField
+        label="From"
+        value={state.from}
+        onChange={(from) => setState({ ...state, from })}
+      />
+      <span className="text-muted-foreground text-sm">to</span>
+      <DateField
+        label="To"
+        value={state.to}
+        onChange={(to) => setState({ ...state, to })}
+      />
+    </span>
+  );
+  const sections = (
+    <MultiSelect
+      label="Sections"
+      all="All sections"
+      className={fill}
+      edited={differs("sections")}
+      options={archive.sections.map((section) => ({
+        value: section,
+        label: section,
+        icon: <SectionDot section={section} />,
+      }))}
+      selected={state.sections}
+      onChange={(sections) => setState({ ...state, sections })}
+    />
+  );
+  const roles = roleFilter && (
+    <MultiSelect
+      label="Roles"
+      all="All roles"
+      className={fill}
+      edited={differs("roles")}
+      options={ROLES.map((role) => ({
+        value: role,
+        label: ROLE_NAMES[role],
+      }))}
+      selected={state.roles}
+      onChange={(roles) => setState({ ...state, roles: roles as Role[] })}
+    />
+  );
+
+  if (phone) {
+    /* on a page of views, the one Reset, of everything; elsewhere the
+       search, the people and the chosen articles are outside the sheet, so
+       its Reset leaves them */
+    const cleared = {
+      ...clear,
+      search: state.search,
+      people: state.people,
+      articles: state.articles,
+    };
+    const reset = edits ? edits.reset : () => setState(cleared);
+    const resettable = edits
+      ? edits.count > 0
+      : JSON.stringify(state) !== JSON.stringify(cleared);
+
+    return (
+      <section aria-label="Filters" className="flex items-center gap-2">
+        {search}
+        <Button
+          variant="outline"
+          aria-expanded={sheetOpen}
+          className={cn(sheetOpen && "bg-muted")}
+          onClick={() => setSheetOpen((open) => !open)}
+        >
+          Customize
+          {active > 0 && (
+            <span
+              className={cn(
+                "inline-flex size-4.5 items-center justify-center rounded-full text-[0.6875rem] tabular-nums",
+                edits
+                  ? "bg-edited-solid text-edited-solid-foreground"
+                  : "bg-foreground text-background",
+              )}
+            >
+              {active}
+              <span className="sr-only">
+                {edits
+                  ? active === 1
+                    ? " change from the saved view"
+                    : " changes from the saved view"
+                  : active === 1
+                    ? " filter on"
+                    : " filters on"}
+              </span>
+            </span>
+          )}
+        </Button>
+        {/* before Reload, which lines up with the content's edge as the last */}
+        <div ref={rowSlot} className="contents" />
+        {reloadButton}
+        {sheetOpen && (
+          <BottomSheet
+            title="Customize"
+            onClose={() => setSheetOpen(false)}
+            actions={
+              <Button variant="ghost" onClick={reset} disabled={!resettable}>
+                Reset
+              </Button>
+            }
+          >
+            <PanelGroup label="Filter">
+              <FieldRows>
+                <SheetFilter icon={CalendarIcon} label="Time">
+                  {time}
+                </SheetFilter>
+                {range && (
+                  <FieldRow label="Range" width="panel">
+                    {range}
+                  </FieldRow>
+                )}
+                <SheetFilter icon={NewspaperIcon} label="Sections">
+                  {sections}
+                </SheetFilter>
+                {roles && (
+                  <SheetFilter icon={IdCardIcon} label="Roles">
+                    {roles}
+                  </SheetFilter>
+                )}
+                <div ref={filtersSlot} className="contents" />
+              </FieldRows>
+            </PanelGroup>
+            {/* the view's own group (Chart, Table) */}
+            <div ref={sheetSlot} className="contents" />
+          </BottomSheet>
+        )}
+      </section>
+    );
+  }
+
+  return (
+    /* a container, so its controls can shorten beside a side panel and the
+     toolbar stays one line */
+    <div className="@container">
+      <section
+        aria-label="Filters"
+        className="flex flex-wrap items-center gap-2 @max-2xl:gap-1"
+      >
+        {search}
+        {time}
+        {range}
+        {sections}
+        {roles}
+        <div ref={filtersSlot} className="contents" />
+        {/* last of the filters, since it clears them all; beside a panel,
+            its icon alone, as Columns is. A page of views has its one
+            Reset instead, by its tabs */}
+        {changed && !edits && (
+          <Button
+            variant="ghost"
+            className="@max-2xl:px-2"
+            title="Clear filters"
+            onClick={() => setState(clear)}
+          >
+            <XIcon />
+            <span className="@max-2xl:sr-only">Clear</span>
+          </Button>
+        )}
+        {/* the view's own controls, set apart from the filters */}
+        <div
+          ref={toolbarSlot}
+          className="flex items-center gap-2 border-l pl-2 empty:hidden @max-2xl:pl-1.5"
+        />
+      </section>
+    </div>
+  );
+}
+
+/**
+ * The placeholder while all of it shows, else the short one, else none (the
+ * icon and the field's name still say what it is): an input cuts its
+ * placeholder off wherever the box ends, mid-word.
+ */
+function useFittingPlaceholder(full: string, short: string) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [placeholder, setPlaceholder] = useState(full);
+  useLayoutEffect(() => {
+    const input = ref.current;
+    if (!input) return;
+    let context: CanvasRenderingContext2D | null = null;
+    const check = () => {
+      /* nothing laid out (a test's document) has nothing to measure */
+      if (!input.clientWidth) return;
+      context ??= document.createElement("canvas").getContext("2d");
+      if (!context) return;
+      const style = getComputedStyle(input);
+      context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      /* less the room a search field keeps for its clear button */
+      const room =
+        input.clientWidth -
+        parseFloat(style.paddingLeft) -
+        parseFloat(style.paddingRight) -
+        20;
+      const measure = context;
+      setPlaceholder(
+        [full, short].find((text) => measure.measureText(text).width <= room) ??
+          "",
+      );
+    };
+    check();
+    /* measured in the fallback font, it would fit text the real one does not */
+    void document.fonts?.ready.then(check);
+    const observer = new ResizeObserver(check);
+    observer.observe(input);
+    return () => observer.disconnect();
+  }, [full, short]);
+  return { ref, placeholder };
+}
+
+function DateField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Input
+      type="date"
+      aria-label={label}
+      className="bg-background w-auto"
+      value={value ?? ""}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  );
+}
+
+/** a dropdown of checkboxes; none checked means all */
+function MultiSelect({
+  label,
+  all,
+  options,
+  selected,
+  onChange,
+  className,
+  edited,
+}: {
+  label: string;
+  all: string;
+  options: { value: string; label: string; icon?: ReactNode }[];
+  selected: string[];
+  onChange: (selected: string[]) => void;
+  className?: string;
+  /** differs from the saved view, which its tint says */
+  edited: boolean;
+}) {
+  const summary =
+    selected.length === 0
+      ? all
+      : selected.length === 1
+        ? options.find((o) => o.value === selected[0])?.label
+        : `${selected.length} selected`;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={label}
+        aria-description={edited ? "changed from the saved view" : undefined}
+        render={
+          <Button
+            variant="outline"
+            className={cn(
+              "bg-background font-normal",
+              edited && EDITED,
+              className,
+            )}
+          />
+        }
+      >
+        {summary}
+        <ChevronDownIcon
+          className={edited ? "text-edited/70" : "text-muted-foreground"}
+        />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        {options.map((option) => (
+          <DropdownMenuCheckboxItem
+            key={option.value}
+            checked={selected.includes(option.value)}
+            onCheckedChange={(on) =>
+              onChange(
+                on
+                  ? [...selected, option.value]
+                  : selected.filter((v) => v !== option.value),
+              )
+            }
+          >
+            {option.icon}
+            {option.label}
+          </DropdownMenuCheckboxItem>
+        ))}
+        {selected.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => onChange([])}>
+              {all}
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}

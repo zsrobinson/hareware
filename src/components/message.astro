@@ -11,10 +11,10 @@ type Props = {
 const { title, action } = Astro.props;
 ---
 
-<section class="mx-auto max-w-md px-1 py-16 sm:py-24">
-  <h2 class="text-xl font-semibold tracking-tight">{title}</h2>
+<section class="max-w-md">
+  <h1 class="text-2xl font-semibold tracking-tight">{title}</h1>
 
-  <div class="text-muted-foreground mt-2 text-sm leading-6">
+  <div class="text-muted-foreground mt-1 text-sm">
     <slot />
   </div>
 
@@ -22,14 +22,14 @@ const { title, action } = Astro.props;
     action &&
       (action.method === "post" ? (
         /* signing out is a POST, like the account menu's */
-        <form method="post" action="/auth/logout" class="mt-6">
+        <form method="post" action="/auth/logout" class="mt-4">
           <input type="hidden" name="returnTo" value={action.href} />
-          <button type="submit" class={buttonVariants({ size: "lg" })}>
+          <button type="submit" class={buttonVariants()}>
             {action.label}
           </button>
         </form>
       ) : (
-        <a href={action.href} class={`${buttonVariants({ size: "lg" })} mt-6`}>
+        <a href={action.href} class={`${buttonVariants()} mt-4`}>
           {action.label}
         </a>
       ))

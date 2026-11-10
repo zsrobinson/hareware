@@ -5,248 +5,179 @@ word to use. The reasons behind the design live in `docs/adr/`.
 
 ## Article
 
-The central entity: one piece of writing, tracked from the moment the club
-decides to run it until long after it is published.
+One published piece of writing. "Article" is the club's own word and the only
+noun used in the interface.
 
-"Article" is the club's own word and is the only noun used in the interface.
-Every Article has a record in Notion for its whole life. An Article may or may
-not be **on WordPress** yet.
+HareWare only knows about Articles once they are published on WordPress. Work
+in progress lives in Discord and in people's drafts, and HareWare has no record
+of it ([ADR 0011](docs/adr/0011-wordpress-is-the-record.md)).
 
-Not to be confused with **WordPress Post** — the same writing as WordPress
+Not to be confused with **WordPress Post**, the same writing as WordPress
 represents it. "Post" is a WordPress word: it is fine in code that talks to the
-WordPress API, and never appears in language a club member reads.
+WordPress API, and never appears in language a club member reads, except in
+"post id", the number the Sheet is keyed by.
 
-## On WordPress
+## Words and views
 
-The property of an Article having a WordPress Post linked to it.
+An Article's **words** are its prose: paragraphs, subheadings and list items,
+less its credit lines. Captions and embeds are not counted.
 
-An Article starts off **not on WordPress**: it exists only as a Notion record
-while it is being written, edited, and illustrated. An editor later creates the
-WordPress Post and copies the content across, at which point the Article is **on
-WordPress** and stays that way.
+Its **views** are how often Jetpack counted it read, by month, from January 2023. Views that could not be read are _unavailable_, never zero: zero means
+Jetpack has counted nobody reading it.
 
-This is the single most important thing to know about an Article, because it
-determines where each of its details is authoritative. Before: Notion is the
-authority on everything. After: WordPress is the authority on the writing itself
-— title, body, publish date, section, image — and Notion remains the authority
-on everything WordPress has no concept of.
-
-Interface language says "this article isn't on WordPress yet", never "phase one"
-or "unlinked".
-
-## Instagram Post
-
-The image or images the club puts on Instagram for an Article — the thing the
-post generator draws.
-
-A third meaning of "post", and the only one a club member reads in the
-interface. The interface always says **Instagram Post** in full where it could
-be mistaken for a **WordPress Post**, and never shortens it to "post" outside a
-screen that is already about Instagram.
-
-An Instagram Post is not a record anywhere. It is generated from an Article on
-demand, downloaded, and posted by hand, and Notion does not track whether one
-went out — the _Posted to Instagram_ property was removed with the rest of the
-tracker integration. The daily reminder in `#instagram-posting` is where the
-social team sees what needs posting, and where they mark each one posted.
-
-## Publish Date
-
-The single date an Article carries: the day it goes live on the website.
-
-There is no separate planned or target date. An Article's date is not meaningful
-until it is **on WordPress**; before then it is simply unscheduled, because
-timing depends on when editing and images actually get finished.
-
-The club aims to put an Article on Instagram the same day it publishes.
-
-## Duty Roster
-
-Who is responsible for posting to Instagram on a given day of the week.
-
-Not a database at all: it is seven Discord roles, `@Social Sunday` through
-`@Social Saturday`. Set once per semester and changes rarely. Anyone with Manage
-Roles can edit it without going through a developer, and the reminder bot pings
-the role for the day rather than resolving a person.
-
-It used to be a **Social Media Day** property on Members; ADR 0006 moved it to
-Discord roles, which a non-developer can change just as easily.
+Both are an Article's, so a count of them is a sum over Articles, each once.
+Someone's words are those of the Articles they are credited on, however many
+roles they had on each, never once a contribution. Views of a period are the
+lifetime views of the Articles published in it, not the views it received.
+**Per article** is a sum over the Articles in it; an Article without views is
+in neither half, and is counted after the sum ("1 article too new to count
+yet": a read of views that answered leaves out only what it is older than).
 
 ## Section
 
-Which desk an Article belongs to: News, Features, Entertainment, Sports,
-Rabbithole, or Social Media. Every Article has exactly one.
+Which desk an Article belongs to: News, Features, Entertainment, Sports or
+Rabbithole. It is the post's WordPress category, and every Article has exactly
+one. An Article left in the default category, Uncategorized, has no Section and
+is listed under **Problems**.
 
-Social Media is the odd one out — it is not a desk with a Section Editor, and it
-covers writing made for the club's own accounts rather than the website.
+## Credit line
 
-A Section has a **Section Editor** who approves ideas, edits drafts, and decides
-when an Article is ready to move on. Each Section has its own Discord channel,
-where drafts and images are handed back and forth.
-
-## Bouncing
-
-Moving an Article from one Section to another, because its content turned out to
-suit a different desk — a News piece that got absurd enough to belong in
-Rabbithole.
-
-Bouncing is a normal editorial outcome, not a correction. It re-points the
-Article at a new Section Editor, who picks the Article up where the previous one
-left off.
-
-## Status
-
-How far an Article has moved through the writing process, plus — once it is **on
-WordPress** — its publication state. One value at a time, and it only ever moves
-forward, except when an Article is bounced.
-
-- **Backlog** — an idea, not yet approved to be written
-- **Approved** — a Section Editor has approved the idea
-- **Written** — a draft exists and has gone to the Section Editor
-- **Section Edited** — the Section Editor has approved the writing
-- **Managing Edited** — the Managing Editor has passed it for grammar and brand
-- **Scheduled**, **Published** — facts about the Article's WordPress Post
-
-Status is always set by a person, in Notion or through `/article` (ADR 0009).
-Nothing sets it automatically from WordPress, so WordPress remains the authority
-on whether an Article is really published — Notion's Status is a description of
-that, maintained by people.
-
-## Image Status
-
-How far an Article's image has got, tracked apart from Status because image work
-runs alongside the writing rather than after it.
-
-- **Not Started**, **N/A** (the Article needs no image)
-- **Unclaimed** — requested from the **Image Crew**, nobody has taken it yet
-- **In Progress** — a member of the Image Crew has claimed it
-- **Done**
+A short paragraph in an Article's body that says who made it: "Article by: …",
+"Image Credits: …". Its label sets the **role** it credits: writing, image or
+other. Which labels count is in the Sheet's Labels tab, editable in Settings.
 
 ## Byline
 
-The name printed on a published Article — which is not necessarily the name of
-the person who wrote it. A writer may publish under a pseudonym, and so may an
-image creator.
+A name as a credit line prints it. Often it is the person; sometimes it is a
+**pen name** or a joke written for one Article, and the printed byline is part
+of the joke, so it is never rewritten.
 
-An Article carries the Byline as text, filled on every Article rather than only
-pseudonymous ones, plus a separate relation to the Member who actually wrote it,
-which may be empty or hold several Members for co-Bylines. The text is
-authoritative for what gets printed and is its own column rather than derived
-from the Member, so a published Byline stays frozen and the Articles table stays
-readable without resolving a relation per row. See ADR 0004. Image credits have
-the same split, as Image Byline text and an Image Crew relation.
+## Pen name
 
-WordPress has no idea about any of this: on the website a Byline is simply text
-inside the article body. Notion holds both the Byline and the real member behind
-it.
+A byline that stands for someone else, said article by article: the Sheet
+says who it is on that Article, and nowhere else. Most pen names are used once;
+when one is printed again, the Article's panel offers whoever it was before and
+Problems lists the Article until someone says. A series that changes hands is
+just each part saying who wrote it.
 
-The real name behind a pseudonymous Byline never reaches WordPress.
+## Contribution
 
-## Member
+One person in one role on one Article. Someone who writes an Article and also
+draws its image has made two contributions. It is the only unit people are
+counted in: never "credits", never "articles" for a person.
 
-A person in the club. One row per human, ever.
+## Person
 
-Members carry the things the club needs to remember about a person: their real
-name, their email, whether they are an Undergrad, a Grad or an Alum, which
-Articles and images are theirs, and which meetings they attended.
+Everyone credited is a person, and two credits are one person when they count
+as the same name exactly: the printed byline, or who the Sheet says it is on
+that Article. Nothing joins two spellings; a misspelling is fixed in
+WordPress, and Problems points out names a letter apart.
 
-A Member is usually identified by their Discord account, but not always. Rows
-created at the **Kiosk** by people who have not applied on Discord yet carry a
-name and an email and no Discord ID until an **Application** is linked to them.
+A person is **new** at their first contribution, in any role, whatever the
+filters: someone who has written for a year is not new when they draw their
+first image. A person is **active** in a period when they made at least one
+contribution in it.
 
-There is no such thing as joining or leaving. Anyone may write, attend and vote
-subject to **Standing**; nothing is revoked, and nobody is removed.
+Where someone **joined in** is the period of their first contribution, cut
+as finely as the period beside it (semesters, unless the view is by another
+period): their intake. Everyone is in one intake, so people counted by it add
+up. **Semesters since joining** count from it: a contribution in the
+semester someone joined is theirs at "Joined", one in the semester after at
+"+1". An intake against those is **retention**, a triangle: a cell nobody
+could be in yet, or before the range, is blank, never 0, as is one of an
+intake against a semester before it. Semesters since joining go only beside
+the intake, since apart from it the same "+1" is different semesters for
+different people. Neither is a filter: an intake's people are named, and a
+total of "+1" across intakes opens on those people's credits on its
+articles, which can include another semester's, and says so.
 
-Pseudonyms are not recorded. A pseudonymous Byline is **detected** rather than
-stored — an Article whose printed Byline differs from the linked Member's name
-is one, and Notion computes that. So "who is Gale de Silva?" is answered by
-opening the Article, not by looking the name up on a Member.
+## View
 
-What a Member is allowed to _do_ is not recorded on the row. It is read live
-from their Discord roles — HareWare's admin tools and `/article` check
-`@Editorial Board` — so a promotion in Discord takes effect without anyone
-updating a second list.
+One way of looking at a table, Articles or People: as a table, a chart or a
+pivot, on a range and filters it opens on. Each table is a page, and its views are its
+tabs ([ADR 0014](docs/adr/0014-views-are-declarations.md)). Views are the
+board's: rows of the Sheet's Views tab, which any member changes, adds,
+renames, moves or deletes from the page, for everyone
+([ADR 0015](docs/adr/0015-views-are-shared-in-the-sheet.md)). Say "view",
+never "report", "dashboard" or "saved view": every view is saved.
 
-Historical Articles were linked to a Member by hand where one could be
-identified (ADR 0004). Alumni do have rows — they keep contributing and never
-leave the server — and are marked `Alum` by hand, which is the one field in the
-roster a person has to maintain.
+The **starter set** is what a page shows while the Sheet has no views for
+it, declared in `src/components/archive/views.ts`; the first change anyone
+makes there writes it to the Sheet.
 
-Graduation year is deliberately not recorded. People change it without telling
-the club, and winter versus spring is not a distinction anyone here needs. See
-ADR 0010.
+A view is **edited** once anything on screen differs from it as saved: a
+filter, the search, the sort, the columns, anything in Customize. **Reset**
+takes it back to the view as saved, and **Save for everyone** keeps the
+edits as the view. Edits belong to their view: choosing another drops them,
+which Undo brings back. A link carries a view's edits, so it opens edited.
 
-## Standing
+A **pivot** is rows by columns, each cut by a dimension (a period, a section,
+a role, a person, when they joined, or semesters since), every cell a number or a share of
+its row, its column or the total, with totals of both. Say "pivot", never
+"crosstab" or "matrix".
 
-What a person has done in a window of time, and whether it was enough.
+A **slice** is what one mark of a chart or one cell or total of a pivot
+counts, which opens beside it and, as filters, on either table. Its list is
+always as long as the number it was opened from.
 
-Standing is **computed, never stored**. There is no eligible flag and nothing to
-tick: HareWare counts general body meetings, volunteer events and contributions
-over a date range and compares them against thresholds. The constitution's rule
-— within the past year, 3 meetings or 2 contributions or 1 volunteer event,
-alumni excluded — is a preset on that query rather than something the code
-enforces, because the rule belongs to the club.
+To **compare** is to set what the range counts beside the same count over
+an earlier range as long: **the period before**, just before it, or **a year
+before**, the same dates a year back. A range that runs to today counts as
+far as today, so it is set against as many days. Only a view of categories,
+not of time, compares.
 
-The masthead is the same question with different numbers, which is why there is
-one page and not two. See ADR 0010.
+## The Sheet
 
-Standing is the club's one **coordination** tool: people act on it during
-elections, so unlike the Article tracker it has to be right. Say "who has
-standing to vote", not "who is a member" — membership is not the question.
+The club's Google Sheet, owned by the club's account, holding the only facts
+WordPress does not, and the board's views:
 
-## Application
+- **Overrides**: who a byline really is, on one Article per row.
+- **Labels**: which credit line labels count, and their roles.
+- **Ignored**: Articles whose problems are intended, and similar names that are
+  different people.
+- **Views**: each page's views, one per row.
 
-What somebody fills in to join the Discord server: their full name, email,
-graduation year and a paragraph about why. An editor approves it by hand.
+HareWare reads it on every load and writes it from the signed-in pages, so
+nobody needs to open it in normal use. It holds corrections and views only,
+never a copy of WordPress. What is in it is private: it never appears on WordPress, in the
+repository, in the log, or on a page anyone outside the Editorial Board can
+reach.
 
-Applications are read, never written. They are the cleanest identity data the
-club has, and the origin of most Members — but they only reach back to December
-2025, so most of the server predates them.
+## Problem
 
-## Attendance
+Something about a published Article that HareWare cannot read: no writing or
+image credit, a line shaped like a credit that no label matches or that lacks
+its colon, a credit line
+with no readable name, a "name" that reads like a sentence, or no Section. The
+fix for those is almost always in WordPress, where readers see it too. The one
+answered in HareWare instead is a pen name printed again with nobody said for it
+on this Article. Two names a letter apart, like "Cleo Dombroksy" and "Cleo
+Dombrosky", are pointed out alongside, and so are names first credited in the
+last 30 days, in case one is a pen name.
 
-Who was in the room. A relation between a Member and a **Meeting**, recorded at
-the **Kiosk** and stored on the Meeting page in Notion.
+## Duty Roster
 
-Attendance at an Editorial Board meeting counts toward nothing. Only General
-Body meetings and Volunteer Events feed Standing.
+Who posts to Instagram on a given day of the week: six Discord roles, one per weekday and one for the weekend, set once
+a semester. Anyone with Manage Roles can change it, and the reminder pings the
+role for the day rather than a person.
 
-## Kiosk
+## Social Reminder
 
-The laptop at the front of the room at a meeting, showing `/attendance`, where
-people enter their own names.
-
-It is signed in as an officer and sits beside one. It creates Members as well as
-recording Attendance, which is why a new person is asked for an email: that
-address is what later ties them to their Application.
-
-## Reconciler
-
-The page holding everything about the roster that needs a person to decide:
-Applications the hourly sync would not act on, rows that look like the same
-person twice, Members missing a Status, Discord ID or email, addresses outside
-the university's domains, and the comparison against the Google Group.
-
-Nothing on it happens automatically. A duplicate Member splits somebody's
-Attendance across two rows and can cost them a vote they earned, so the
-reconciler is run _before_ an election, and the Standing page says so while
-anything is outstanding.
+The one **Automation**: every morning at 8 Eastern it **announces** each Article
+published since the previous morning's run in `#instagram-posting` and pings
+that day's poster role. "Posted" and "Not posted" belong to the Instagram button
+on each announced Article, never to the run itself.
 
 ## Automation
 
-Something HareWare does on a schedule without being asked: today, the two
-morning reminders and the application sync.
-
-"Automation" is the word the interface uses (`/automations`, the sidebar, the
-trigger buttons) and the word to use in code and in issues. It is broader than
-**Reminder** on purpose: a reminder is an automation that posts a message, and
-the application sync is one that posts nothing.
-
-Say "the social ping did not run", never "the social job failed".
+Something HareWare does on a schedule without being asked. Listed in
+`src/lib/automations/registry.ts`, which also dispatches them. Say "the social
+reminder did not run", never "the job failed".
 
 ## Invocation
 
-One thing HareWare did, as recorded in the log at `/log`: an automation's run, a
-manual trigger, a button press, an `/article` edit or a roster change. Each
-records what happened and, where there was one, the Discord user behind it. The
-log records Invocations; an automation is one of the things that produces them.
+One thing HareWare did, as recorded in the log: a run of an automation, a manual
+trigger, a press of a "Not posted" button, or a change to the Sheet. Each
+records what happened and, where there was one, the Discord user behind it. A
+Sheet change is logged by kind and post id, or page and view id, only: the log never carries a real
+name.

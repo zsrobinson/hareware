@@ -1,0 +1,18 @@
+---
+/*
+  A static shell (ADR 0012): the island asks the gated /api/reminder.json for
+  the log and the next run, and draws the refusal itself if the answer is no.
+*/
+import Dashboard from "~/layouts/dashboard.astro";
+import EarlyFetch from "~/components/early-fetch.astro";
+import { ReminderPage } from "~/components/reminder-page";
+
+export const prerender = true;
+---
+
+<Dashboard title="Social Reminder">
+  <EarlyFetch slot="head" early={{ api: "/api/reminder.json" }} />
+  <div class="space-y-6">
+    <ReminderPage client:load />
+  </div>
+</Dashboard>

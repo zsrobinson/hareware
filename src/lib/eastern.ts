@@ -16,7 +16,7 @@ const parts = new Intl.DateTimeFormat("en-US", {
 });
 
 export type EasternNow = {
-  /** `YYYY-MM-DD` in eastern time, for comparing against a notion date */
+  /** `YYYY-MM-DD` in eastern time */
   date: string;
   /** 0-23, eastern */
   hour: number;
@@ -36,21 +36,29 @@ export function easternNow(now: Date): EasternNow {
   };
 }
 
-const clock = new Intl.DateTimeFormat("en-US", {
-  timeZone: ZONE,
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
-});
+/** the day before a `YYYY-MM-DD` */
+export function dayBefore(date: string): string {
+  const [year, month, day] = date.split("-").map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return new Date(Date.UTC(year, month - 1, day - 1))
+    .toISOString()
+    .slice(0, 10);
+}
 
-/** "8pm", "7:30pm" — undefined for a bare `YYYY-MM-DD`, which has no time */
-export function easternTime(start: string): string | undefined {
-  if (!start.includes("T")) return undefined;
-
-  const found: Record<string, string> = {};
-  for (const part of clock.formatToParts(new Date(start)))
-    found[part.type] = part.value;
-
-  const minutes = found.minute === "00" ? "" : `:${found.minute}`;
-  return `${found.hour}${minutes}${found.dayPeriod?.toLowerCase()}`;
+/**
+ * The instant an Eastern date reaches an hour. Not for 1am or 2am, which DST
+ * can repeat or skip; the reminder hour is neither.
+ */
+export function easternInstant(date: string, hour: number): Date {
+  /* Eastern is UTC-4 or UTC-5; only one of the two lands on that hour */
+  for (const offset of [4, 5]) {
+    const guess = new Date(`${date}T${String(hour).padStart(2, "0")}:00:00Z`);
+    guess.setUTCHours(guess.getUTCHours() + offset);
+    const back = easternNow(guess);
+    if (back.date === date && back.hour === hour) return guess;
+  }
+  throw new Error(`${date} has no ${hour}:00 in Eastern time`);
 }

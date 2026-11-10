@@ -1,0 +1,4 @@
+# HareWare is a club's internal tool; there is nothing here for a search index,
+# and every crawl of a missing page used to wake the Worker.
+User-agent: *
+Disallow: /

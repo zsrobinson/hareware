@@ -1,188 +1,58 @@
 ---
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  TriangleAlertIcon,
-} from "lucide-react";
-import { GeneratePage } from "~/components/generate-page";
+/*
+  A static file (ADR 0012): the island reads `?article=` and `?page=` and asks
+  WordPress itself, so serving this costs the Worker nothing.
+*/
+import { InstagramPosts } from "~/components/instagram-posts";
 import SlideFonts from "~/components/slide-fonts.astro";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Link } from "~/components/ui/link";
 import Dashboard from "~/layouts/dashboard.astro";
-import { viewer, viewerState } from "~/lib/admin";
-import {
-  toArticleLink,
-  toArticleSlug,
-} from "~/lib/services/wordpress/article-url";
-import {
-  SLIDE_IMAGE_WIDTH,
-  toSizedImage,
-} from "~/lib/services/wordpress/image-url";
-import { getRecentArticles } from "~/lib/services/wordpress/get-recent-articles";
-import { scrapeArticle } from "~/lib/services/wordpress/scrape-article";
+import EarlyFetch from "~/components/early-fetch.astro";
 
-const param = Astro.url.searchParams.get("article") || "";
-const invalid = Astro.url.searchParams.get("error") !== null;
-
-let link: string | undefined;
-let post: Awaited<ReturnType<typeof scrapeArticle>> | null = null;
-
-if (param) {
-  link = toArticleLink(param);
-  if (!link) return Astro.redirect("/generate?error");
-
-  const slug = toArticleSlug(link);
-  if (param !== slug) return Astro.redirect(`/generate?article=${slug}`);
-
-  try {
-    post = await scrapeArticle(link);
-  } catch {
-    return Astro.redirect("/generate?error");
-  }
-}
-
-const pageParam = Number(Astro.url.searchParams.get("page") ?? "1");
-const page = isNaN(pageParam) || pageParam < 0 ? 1 : pageParam;
-
-/* only the landing is cached: an article must show as it stands now */
-if (post) {
-  Astro.response.headers.set("cache-control", "private, no-store");
-} else {
-  Astro.response.headers.set(
-    "cache-control",
-    "public, s-maxage=30, stale-while-revalidate=300",
-  );
-}
-
-const articles = post ? null : await getRecentArticles(page);
-/* the cached landing passes `undefined`, so the island asks who is viewing */
-const who = post ? viewerState(await viewer(Astro.request)) : undefined;
+export const prerender = true;
 ---
 
-<Dashboard title="Instagram Posts" viewer={who} width="full">
+<Dashboard title="Instagram Posts" width="full">
+  <EarlyFetch slot="head" early={"article-or-recent"} />
   <SlideFonts slot="head" />
-
-  {
-    post ? (
-      <GeneratePage
-        defaultTitle={post.title}
-        defaultArticleByline={post.author ?? ""}
-        defaultImageByline={post.imageCredits ?? ""}
-        articleLink={link!}
-        imageURI={toSizedImage(post.image, SLIDE_IMAGE_WIDTH)}
-        client:load
-      >
-        {/* must render here, cannot pass Element[] as prop since it gets serialized */}
-        {post.body.map((para) => (
-          <Fragment set:html={para.outerHTML} />
-        ))}
-      </GeneratePage>
-    ) : (
-      <>
-        <h2 class="pb-2 font-semibold">
-          Paste an article link to get started:
-        </h2>
-
-        <form action="/generate" class="ml-4 flex gap-2">
-          <Input
-            type="text"
-            name="article"
-            placeholder="Article Link"
-            className="max-w-72 font-mono"
-          />
-          <Button type="submit">
-            Create Instagram Post
-            <ChevronRightIcon />
-          </Button>
-        </form>
-
-        {invalid && (
-          <div class="ml-4 flex items-center gap-2 pt-2 text-sm font-medium text-red-500">
-            <TriangleAlertIcon className="mt-0.5" />
-            <span>Please double check your link and try again</span>
-          </div>
-        )}
-
-        <h2 class="pt-8 pb-2 font-semibold">
-          Or, start from one of our recent articles:
-        </h2>
-
-        {articles ? (
-          <>
-            <ul class="ml-4 pb-2">
-              {articles.map((article) => (
-                <li class="flex pb-1">
-                  <span
-                    set:html={article.date}
-                    class="text-muted-foreground w-16 shrink-0 pr-4 text-nowrap"
-                  />
-                  <a
-                    class="decoration-muted-foreground hover:text-muted-foreground underline"
-                    href={"/generate?article=" + toArticleSlug(article.link)}
-                    set:html={article.title}
-                  />
-                </li>
-              ))}
-            </ul>
-
-            <div class="text-muted-foreground ml-4 flex max-w-fit gap-4 border-t pt-2">
-              {page > 1 && (
-                <a href={`/generate?page=${page - 1}`} data-keep-scroll>
-                  <ChevronLeftIcon className="inline mb-0.5" />
-                  <span class="underline">Previous</span>
-                </a>
-              )}
-              <p>Page {page}</p>
-              <a href={`/generate?page=${page + 1}`} data-keep-scroll>
-                <span class="underline">Next</span>
-                <ChevronRightIcon className="inline mb-0.5" />
-              </a>
-            </div>
-          </>
-        ) : (
-          <div class="ml-4 flex items-center gap-2 text-sm font-medium text-red-500">
-            <TriangleAlertIcon className="mt-0.5" />
-            <span>Cannot get recent articles</span>
-          </div>
-        )}
-
-        <h2 class="pt-8 pb-2 font-semibold">
-          Or, create a custom post for unpublished or draft articles:
-        </h2>
-
-        <Link
-          variant="secondary"
-          href="/custom"
-          className="ml-4"
-          data-astro-prefetch
-        >
-          Open Creator
-          <ChevronRightIcon />
-        </Link>
-      </>
-    )
-  }
+  <InstagramPosts client:only="react" />
 </Dashboard>
 
 <script>
+  import { pageScroller } from "~/lib/page-scroll";
+
   /* paging through the list scrolls back to the top otherwise, which loses the
      place you were reading from. the listeners live on document, so they
      survive the swaps and only need registering once */
   let keepScroll: number | null = null;
 
-  const content = () => document.getElementById("content");
-
   document.addEventListener("astro:before-preparation", (event) => {
     const source = (event as any).sourceElement as Element | undefined;
     keepScroll = source?.closest("[data-keep-scroll]")
-      ? (content()?.scrollTop ?? null)
+      ? pageScroller().element.scrollTop
       : null;
   });
 
+  /* after the router has scrolled the new page to its top. The list is drawn
+     after the swap, so the page is too short to hold the place until it has
+     drawn: try each frame until it does, for a couple of seconds at most */
   document.addEventListener("astro:after-swap", () => {
-    const el = content();
-    if (keepScroll !== null && el) el.scrollTop = keepScroll;
+    const place = keepScroll;
     keepScroll = null;
+    if (place === null) return;
+    const until = performance.now() + 2000;
+    /* someone scrolling in the meantime has a place of their own */
+    let moved = false;
+    const stop = () => (moved = true);
+    const inputs = ["wheel", "touchstart", "keydown"] as const;
+    for (const type of inputs)
+      addEventListener(type, stop, { once: true, passive: true });
+    const restore = () => {
+      const scroller = pageScroller().element;
+      if (!moved) scroller.scrollTop = place;
+      if (!moved && scroller.scrollTop < place - 1 && performance.now() < until)
+        requestAnimationFrame(restore);
+      else for (const type of inputs) removeEventListener(type, stop);
+    };
+    restore();
   });
 </script>

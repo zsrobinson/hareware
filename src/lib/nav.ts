@@ -1,17 +1,15 @@
 import {
-  ClipboardCheckIcon,
-  CodeIcon,
+  BellIcon,
   FileTextIcon,
   ImageIcon,
   MailIcon,
-  ScaleIcon,
-  SquareActivityIcon,
+  NewspaperIcon,
+  SettingsIcon,
+  TriangleAlertIcon,
   TypeIcon,
   UsersIcon,
-  ZapIcon,
   type LucideIcon,
 } from "lucide-react";
-import type { AdminRoute } from "./admin-routes";
 
 export type NavItem = {
   href: string;
@@ -34,15 +32,23 @@ export const toolsNav: NavItem[] = [
   { href: "/email", label: "Newsletter", icon: MailIcon },
 ];
 
-/* The admin tools, shown to everybody: the guard refuses in person (ADR 0007). */
-export const adminNav: (NavItem & { href: AdminRoute })[] = [
-  { href: "/attendance", label: "Attendance", icon: ClipboardCheckIcon },
-  { href: "/reconciler", label: "Reconciler", icon: UsersIcon },
-  { href: "/standing", label: "Standing", icon: ScaleIcon },
-  { href: "/automations", label: "Automations", icon: ZapIcon },
-  { href: "/commands", label: "Slash Commands", icon: CodeIcon },
-  { href: "/log", label: "Invocation Log", icon: SquareActivityIcon },
+/* The board's tools, shown to everybody: what they show is gated by the APIs
+   they ask, which say why when they refuse (ADR 0007, ADR 0012). */
+export const adminNav: NavItem[] = [
+  { href: "/articles", label: "Articles", icon: NewspaperIcon },
+  { href: "/people", label: "People", icon: UsersIcon },
+  { href: "/problems", label: "Problems", icon: TriangleAlertIcon },
+  { href: "/settings", label: "Settings", icon: SettingsIcon },
+  { href: "/reminder", label: "Social Reminder", icon: BellIcon },
 ];
+
+/**
+ * a page's own path as its links name it: a prerendered page is built as
+ * `people.html`, so at build time Astro calls it `/people.html`
+ */
+export function pagePath(pathname: string) {
+  return pathname.replace(/(\/index)?\.html$/, "") || "/";
+}
 
 /* `/` would otherwise light up on every page */
 export function isActive(pathname: string, item: NavItem) {

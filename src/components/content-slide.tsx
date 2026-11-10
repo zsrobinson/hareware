@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { useLayoutState } from "~/lib/layout-state";
 
 /** Children as article content */
@@ -10,12 +10,15 @@ export function ContentSlide({
   ref: RefObject<HTMLDivElement | null>;
 }) {
   const state = useLayoutState();
+  const body = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // must query manually since the astro-slot element isn't exposed to React
-    const slotRef = document.querySelector("#content-slide astro-slot");
-
-    const children = [...(slotRef?.children ?? [])] as HTMLElement[];
+    /* an article's paragraphs arrive inside astro's slot element, which react
+       cannot see; a custom post's are this slide's own children */
+    const slot = body.current?.querySelector("astro-slot");
+    const children = [
+      ...((slot ?? body.current)?.children ?? []),
+    ] as HTMLElement[];
 
     // the shift counter has no ceiling, so this can index past the end
     const shift = Math.min(state.paragraphShift, children.length);
@@ -35,10 +38,11 @@ export function ContentSlide({
         backgroundColor: state.bgColor,
         aspectRatio: state.ratio,
       }}
-      id="content-slide" // must keep, see lines 14-15
+      id="content-slide"
       ref={ref}
     >
       <div
+        ref={body}
         className="[&_h2]:font-display absolute top-0 flex max-w-full list-inside flex-col gap-2 p-6 break-words [&_*]:my-[0.00001px]! [&_h2]:pt-1 [&_h2]:text-xl [&_h2]:font-semibold"
         // must keep my-[0.00001px] for bug with modern-screenshot and firefox
         style={{ color: state.textColor }}

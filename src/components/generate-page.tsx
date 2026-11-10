@@ -1,31 +1,43 @@
-import { useAutoAnimate } from "@formkit/auto-animate/react";
-import { TriangleAlertIcon, InfoIcon } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Children,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { useLayoutState } from "~/lib/layout-state";
-import { useDebouncedEffect } from "~/lib/use-debounced-effect";
 import { ContentSlide } from "./content-slide";
+import { FitWidth } from "./fit-width";
 import { LoaderCircle } from "./loader-circle";
 import { OptionsForm } from "./options-form";
 import { TitleSlide } from "./title-slide";
 
+/*
+  The form beside the slides it shapes. A phone (or any narrow column) puts the
+  slides first, as a row to swipe, since they are what the form is for; a wide
+  one keeps the form at the left and the slides in view beside it.
+*/
 export function GeneratePage({
   defaultTitle,
   defaultArticleByline,
   defaultImageByline,
-  articleLink,
   imageURI,
+  linkBar,
   children,
 }: {
   defaultTitle: string;
   defaultArticleByline: string;
   defaultImageByline: string;
-  articleLink: string;
   imageURI?: string;
+  /** the article's link and the button to read another, above the form */
+  linkBar?: ReactNode;
   children: ReactNode;
 }) {
   const state = useLayoutState();
   const [isOverflowing, setIsOverflowing] = useState(false);
-  const [animate] = useAutoAnimate();
+  /* a render that fails would otherwise leave "Rendering" up for good */
+  const [renderFailed, setRenderFailed] = useState(false);
 
   const titleSlideRef = useRef<HTMLDivElement>(null);
   const contentSlideRef = useRef<HTMLDivElement>(null);
@@ -40,13 +52,14 @@ export function GeneratePage({
     }
   }, [state]);
 
-  // on layout change, generate new images. the renderer is imported here so
-  // it does not delay hydration
-  useDebouncedEffect(
-    () => {
-      if (!state.renderImages) return;
+  // on layout change, generate new images, once the edits pause. the renderer
+  // is imported here so it does not delay hydration
+  useEffect(() => {
+    if (!state.renderImages) return;
 
-      let cancelled = false;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      setRenderFailed(false);
 
       void (async () => {
         const { domToPng } = await import("modern-screenshot");
@@ -56,9 +69,17 @@ export function GeneratePage({
         const contentNode = contentSlideRef.current;
         if (!titleNode || !contentNode) return; // unmounted while importing
 
+        /* the slide's own size, not its size on screen: a phone shows it
+           scaled down, and the saved image must not shrink with it */
+        const render = (node: HTMLElement) =>
+          domToPng(node, {
+            scale: 4,
+            width: node.offsetWidth,
+            height: node.offsetHeight,
+          });
         const [titleURI, contentURI] = await Promise.all([
-          domToPng(titleNode, { scale: 4 }),
-          domToPng(contentNode, { scale: 4 }),
+          render(titleNode),
+          render(contentNode),
         ]);
         if (cancelled) return;
 
@@ -68,16 +89,16 @@ export function GeneratePage({
           contentSlideImgRef.current.src = contentURI;
       })().catch((error: unknown) => {
         console.error("could not render the slides", error);
+        if (!cancelled) setRenderFailed(true);
       });
+    }, 300);
 
-      // a newer layout supersedes whatever this run was about to paint
-      return () => {
-        cancelled = true;
-      };
-    },
-    300,
-    [state],
-  );
+    // a newer layout, or leaving the page, supersedes this run
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [state]);
 
   // set the title and bylines on mount and clear them on unmount: the store
   // outlives this island across client-side navigation
@@ -98,79 +119,100 @@ export function GeneratePage({
   }, [state]);
 
   return (
-    <div className="flex flex-col items-start gap-8 md:flex-row">
-      <div className="flex flex-col gap-4">
-        <h2 className="text-xl font-semibold">Layout Options</h2>
-        <OptionsForm articleLink={articleLink} />
-      </div>
+    <div className="@container">
+      <div className="grid grid-cols-1 items-start gap-6 @4xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] @4xl:grid-rows-[auto_1fr] @4xl:gap-x-10">
+        {linkBar}
 
-      <div className="flex flex-wrap items-start gap-8">
-        <div className="mr-4 flex w-96 flex-col gap-4">
-          <div className="flex justify-between" ref={animate}>
-            <h2 className="text-xl font-semibold">Title Slide</h2>
-            {isOverflowing && (
-              <div className="flex items-center gap-2 text-sm font-medium text-red-500">
-                <TriangleAlertIcon className="mt-0.5" />
-                <span>Content may be overflowing</span>
-              </div>
-            )}
+        <section
+          aria-label="Slides"
+          className="space-y-2 @4xl:col-start-2 @4xl:row-span-2 @4xl:row-start-1"
+        >
+          <div className="flex gap-4 @max-md:-mx-4 @max-md:snap-x @max-md:snap-mandatory @max-md:scroll-px-4 @max-md:overflow-x-auto @max-md:px-4">
+            <Slide
+              label="Title slide"
+              imgRef={titleSlideImgRef}
+              rendering={state.renderImages}
+              failed={renderFailed}
+            >
+              <TitleSlide imageURI={imageURI} ref={titleSlideRef} />
+            </Slide>
+            <Slide
+              label="Content slide"
+              imgRef={contentSlideImgRef}
+              rendering={state.renderImages}
+              failed={renderFailed}
+            >
+              <ContentSlide ref={contentSlideRef}>{children}</ContentSlide>
+            </Slide>
           </div>
 
-          <div className="relative">
-            <TitleSlide imageURI={imageURI} ref={titleSlideRef} />
-            {state.renderImages && (
-              <>
-                <div className="absolute top-0 left-0 z-10 flex h-full w-full items-center justify-center gap-2 bg-black/50 text-white">
-                  <LoaderCircle className="animate-spin" />
-                  Rendering
-                </div>
-                <img
-                  className="absolute top-0 left-0 z-20 w-full"
-                  ref={titleSlideImgRef}
-                />
-              </>
-            )}
-          </div>
-
-          <div className="text-muted-foreground flex items-center justify-center gap-2 text-sm leading-[1.1]">
-            <InfoIcon className="size-5 min-w-max" />
+          <p className="text-muted-foreground text-sm">
             {state.renderImages ? (
-              <p>Hold or right click the image to save.</p>
-            ) : (
-              <p>Screenshot the image to save.</p>
-            )}
-          </div>
-        </div>
-
-        <div className="flex w-96 flex-col gap-4">
-          <h2 className="text-xl font-semibold">Content Slide</h2>
-
-          <div className="relative">
-            <ContentSlide ref={contentSlideRef}>{children}</ContentSlide>
-            {state.renderImages && (
               <>
-                <div className="absolute top-0 left-0 z-10 flex h-full w-full items-center justify-center gap-2 bg-black/50 text-white">
-                  <LoaderCircle className="animate-spin" />
-                  Rendering
-                </div>
-                <img
-                  className="absolute top-0 left-0 z-20 w-full"
-                  ref={contentSlideImgRef}
-                />
+                <span className="pointer-coarse:hidden">
+                  Right-click a slide to save it.
+                </span>
+                <span className="pointer-fine:hidden">
+                  Press and hold a slide to save it.
+                </span>
               </>
-            )}
-          </div>
-
-          <div className="text-muted-foreground flex items-center justify-center gap-2 text-sm leading-[1.1]">
-            <InfoIcon className="size-5 min-w-max" />
-            {state.renderImages ? (
-              <p>Hold or right click the image to save.</p>
             ) : (
-              <p>Screenshot the image to save.</p>
+              "Take a screenshot of each slide to save it."
             )}
-          </div>
-        </div>
+          </p>
+        </section>
+
+        <OptionsForm
+          paragraphs={Children.count(children)}
+          titleOverflow={isOverflowing}
+        />
       </div>
     </div>
+  );
+}
+
+/** one slide, shown to fit its column, with its saved image laid over it */
+function Slide({
+  label,
+  imgRef,
+  rendering,
+  failed,
+  children,
+}: {
+  label: string;
+  imgRef: RefObject<HTMLImageElement | null>;
+  rendering: boolean;
+  failed: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <figure
+      aria-label={label}
+      className="min-w-0 shrink-0 @max-md:w-[85%] @max-md:snap-start @md:max-w-96 @md:flex-1"
+    >
+      <FitWidth>
+        <div className="relative">
+          {children}
+          {rendering && (
+            <>
+              <div className="absolute top-0 left-0 z-10 flex h-full w-full items-center justify-center gap-2 bg-black/50 text-white">
+                {failed ? (
+                  <span className="px-6 text-center text-sm">
+                    Couldn't make the image. Turn off Slides as images and take
+                    a screenshot instead.
+                  </span>
+                ) : (
+                  <>
+                    <LoaderCircle className="animate-spin" />
+                    Rendering
+                  </>
+                )}
+              </div>
+              <img className="absolute top-0 left-0 z-20 w-full" ref={imgRef} />
+            </>
+          )}
+        </div>
+      </FitWidth>
+    </figure>
   );
 }

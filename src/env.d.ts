@@ -14,8 +14,8 @@
  * saying which one and does nothing, so the worker runs clean with none of
  * them set and starts working the moment they appear. Nothing here throws.
  *
- * Settings that are not secret — the duty roster's role ids, the Meetings
- * database id, the reminder hour, HareWare's own origin — are constants in
+ * Settings that are not secret — the duty roster's role ids, the reminder
+ * hour, HareWare's own origin — are constants in
  * `~/lib/automations/config`, not variables. They change about once a year and a
  * one-line pull request is a cheaper way to change them than a store nobody
  * remembers exists.
@@ -32,19 +32,17 @@ interface HareWareEnv {
   /* ---- secrets ---------------------------------------------------------- */
 
   /**
-   * Notion internal integration token. Needs access to Meetings, which the
-   * meeting reminder reads, and to Articles and Members, which the editor
-   * commands read and write — see ADR 0009.
-   *
-   * The picker reads Notion on every use, so this is not only a write
-   * credential: without it `/article` has nothing to offer and says so.
-   *
-   * Members in particular: Notion omits a relation property from a schema
-   * entirely when the integration cannot reach its target, and its value then
-   * reads back as `[]` rather than as missing. Lose that access and an author
-   * write looks like it succeeded on an empty field.
+   * The Google service account's key: the whole JSON file Google hands out,
+   * as one secret. The account needs Editor on the Sheet — Viewer reads, and
+   * Editor also lets the setup button create the tabs.
    */
-  NOTION_TOKEN?: string;
+  GOOGLE_SERVICE_ACCOUNT_KEY?: string;
+
+  /**
+   * The Sheet's id, from its url. A secret rather than a constant because the
+   * repository is public, and the id is half of what finding the Sheet takes.
+   */
+  GOOGLE_SHEET_ID?: string;
 
   /**
    * Guards `POST /api/automations/run`, which fires the reminders by hand so one
@@ -76,14 +74,24 @@ interface HareWareEnv {
   DISCORD_CLIENT_SECRET?: string;
 
   /**
-   * The Discord bot token. Both reminders post as the bot, so this is what
-   * sends every message.
+   * The Discord bot token. The reminder posts as the bot, and sign-in reads
+   * guild roles with it.
    *
    * The channels themselves are not secret and are constants in
    * `~/lib/automations/config`, so moving a reminder is a one-line change rather
    * than a credential to rotate.
    */
   DISCORD_BOT_TOKEN?: string;
+
+  /**
+   * The WordPress account and application password HareWare reads Jetpack's
+   * view counts with, sent as Basic auth to the site's own REST API. The
+   * account is a site administrator, so `passStats()` in
+   * services/wordpress/stats.ts sends them only on a GET it allow-lists, and
+   * never to the browser.
+   */
+  WORDPRESS_STATS_USER?: string;
+  WORDPRESS_STATS_PASSWORD?: string;
 
   /* ---- switches, for .dev.vars only -------------------------------------- */
 
@@ -108,7 +116,7 @@ interface HareWareEnv {
   REMINDERS_NO_PING?: string;
 
   /**
-   * Post both reminders to this channel instead of their real ones.
+   * Post the reminder to this channel instead of their real ones.
    *
    * The channels are constants, so without this a local run would post to the
    * club's actual channels. Never set it in production.
@@ -116,9 +124,9 @@ interface HareWareEnv {
   REMINDERS_TEST_CHANNEL?: string;
 
   /**
-   * Run both reminders on every tick rather than only at `REMINDER_HOUR`.
+   * Run the reminder on every tick rather than only at `REMINDER_HOUR`.
    *
-   * Deployed, this posts both reminders **once an hour, all day**. It is the
+   * Deployed, this posts the reminder **once an hour, all day**. It is the
    * single most damaging variable here.
    */
   REMINDERS_IGNORE_HOUR?: string;
@@ -134,19 +142,6 @@ interface Env extends HareWareEnv {}
 
 declare namespace Cloudflare {
   interface Env extends HareWareEnv {}
-}
-
-declare namespace App {
-  interface Locals {
-    /**
-     * what the admin guard decided, for the page rendering after it.
-     *
-     * absent on every other route, and absent on an admin route only if the
-     * guard did not run — which is why the admin pages throw on it rather
-     * than treating it as "no admission"
-     */
-    admission?: import("./lib/admin-guard").Admission;
-  }
 }
 
 /** the tag or short hash this was built from — see `version()` in astro.config */

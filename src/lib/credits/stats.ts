@@ -1,0 +1,801 @@
+/*
+  Slicing the archive for the pages: filtering, grouping by period, section,
+  role or person, and the people table. Pure, and shared by every view so a
+  filter means the same thing on each.
+*/
+
+import type { ArchiveArticle } from "./archive";
+import { ROLES, type Role } from "./labels";
+import {
+  contributionsOn,
+  peopleOf,
+  type Contribution,
+  type Person,
+} from "./person";
+import { compareSections } from "./sections";
+
+export type Filters = {
+  /** inclusive `YYYY-MM-DD`, Eastern; absent for open-ended */
+  from?: string;
+  to?: string;
+  /** empty means every section */
+  sections: string[];
+  /** empty means every role */
+  roles: Role[];
+  /** names, exactly: only these people's own contributions count. Empty
+      means everyone */
+  people: string[];
+  /** post ids, exactly: only these articles count, as a chart's mark picked
+      them. Absent or empty means every article */
+  articles?: readonly number[];
+  /** a substring of a title or a credit line as printed */
+  search?: string;
+};
+
+export const NO_FILTERS: Filters = { sections: [], roles: [], people: [] };
+
+const PERIODS = ["month", "semester", "school-year", "year"] as const;
+export type Period = (typeof PERIODS)[number];
+/**
+ * What a count can be cut by. "joined" is a person's intake: the period of
+ * their first contribution ever, in any role and whatever the filters, at
+ * the grain of the period beside it (`grainOf`). "since" is how many of
+ * those periods after it a contribution came: 0 in the one they joined.
+ */
+export type Dimension =
+  Period | "section" | "role" | "person" | "joined" | "since";
+
+export const isPeriod = (dimension: string): dimension is Period =>
+  (PERIODS as readonly string[]).includes(dimension);
+
+/** a dimension that runs in time order, every period in it shown */
+const inTime = (dimension: string) =>
+  isPeriod(dimension) || dimension === "joined" || dimension === "since";
+
+/** whether a dimension is someone's intake, or measured from it */
+export const ofIntake = (dimension: string) =>
+  dimension === "joined" || dimension === "since";
+
+/** the period an intake is cut into: the period beside it, else semesters */
+export const grainOf = (...dimensions: string[]): Period =>
+  dimensions.find(isPeriod) ?? "semester";
+
+/**
+ * What a chart adds up. An article counts once. A contribution is one person
+ * in one role on one article, so someone who writes and illustrates an
+ * article has made two. People are the distinct names behind the
+ * contributions, so one person writing in two sections is one person in each
+ * and still one in the total. A newcomer is a person counted once, where
+ * their first contribution falls.
+ *
+ * Words and views are quantities of articles: a number's members are the
+ * articles `articles` would list, each once however many people are credited
+ * on it, and the number is the sum of theirs (`amountOf`). Grouped by person,
+ * someone's are the words of the articles they are credited on. Views are an
+ * article's lifetime views, so views by period are of the articles published
+ * in it, not views received in it.
+ */
+export type Measure =
+  "articles" | "contributions" | "people" | "newcomers" | "words" | "views";
+
+const QUANTITIES = ["words", "views"] as const;
+export type Quantity = (typeof QUANTITIES)[number];
+
+/** whether a measure sums its articles' words or views rather than counting */
+export const isQuantity = (measure: string): measure is Quantity =>
+  (QUANTITIES as readonly string[]).includes(measure);
+
+/** an article's words or views, or null when its views are unavailable */
+export function quantityOf(
+  article: ArchiveArticle,
+  measure: Quantity,
+): number | null {
+  if (measure === "words") return article.words;
+  return article.views.status === "counted" ? article.views.total : null;
+}
+
+/** what a number adds up to */
+export type Amount = {
+  value: number;
+  /** the members in `value`: all of them, but for articles without views */
+  counted: number;
+  /** articles whose views are unavailable, left out of `value`, never zero */
+  missing: number;
+};
+
+/**
+ * What a list of members comes to: how many there are, or for words and
+ * views, the sum of their articles'. Every number a chart or a pivot shows
+ * is this of the list it opens, so the two cannot disagree.
+ */
+export function amountOf(members: readonly Member[], measure: Measure): Amount {
+  if (!isQuantity(measure))
+    return { value: members.length, counted: members.length, missing: 0 };
+  let value = 0;
+  let counted = 0;
+  for (const member of members) {
+    const own = quantityOf(member.units[0]!.article, measure);
+    if (own === null) continue;
+    value += own;
+    counted++;
+  }
+  return { value, counted, missing: members.length - counted };
+}
+
+const day = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/New_York",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** `YYYY-MM-DD` in Eastern */
+export function easternDate(iso: string): string {
+  return day.format(new Date(iso));
+}
+
+/** text as a search compares it: no case, accents or curly quotes */
+export function searchable(text: string) {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .toLowerCase();
+}
+
+/** whether the filters count a contribution: in a role and by a person picked */
+export const isCounted =
+  ({ roles, people }: Filters) =>
+  ({ role, person }: { role: Role; person: string }) =>
+    (roles.length === 0 || roles.includes(role)) &&
+    (people.length === 0 || people.includes(person));
+
+/** an article stays under a role or person filter only with a contribution it counts */
+function hasCounted(article: ArchiveArticle, filters: Filters) {
+  if (filters.roles.length === 0 && filters.people.length === 0) return true;
+  return contributionsOn(article).some(isCounted(filters));
+}
+
+/**
+ * The articles the filters leave. The search looks at what the article
+ * prints, its title and credit lines, never at who the Sheet says a byline
+ * is: a person's own contributions are the people filter's, and a name
+ * searched for would count everyone on the articles it is on.
+ */
+export function applyFilters(
+  articles: ArchiveArticle[],
+  filters: Filters,
+): ArchiveArticle[] {
+  const search = filters.search?.trim()
+    ? searchable(filters.search.trim())
+    : "";
+
+  const picked = filters.articles?.length ? new Set(filters.articles) : null;
+  return articles.filter((article) => {
+    if (picked && !picked.has(article.id)) return false;
+    const date = easternDate(article.publishedAt);
+    if (filters.from && date < filters.from) return false;
+    if (filters.to && date > filters.to) return false;
+    if (
+      filters.sections.length > 0 &&
+      !filters.sections.includes(article.section)
+    )
+      return false;
+    if (search) {
+      const haystack = searchable(
+        [
+          article.title,
+          ...article.credits.map((credit) => credit.printed),
+        ].join(" "),
+      );
+      if (!haystack.includes(search)) return false;
+    }
+    return hasCounted(article, filters);
+  });
+}
+
+/* Spring is January to May and Fall the rest of the year: the club barely
+   publishes over the summer, and a near-empty Summer between two terms reads
+   as a slump rather than a break */
+function semesterOf(month: number) {
+  return month <= 5 ? { order: 1, name: "Spring" } : { order: 2, name: "Fall" };
+}
+
+/** the first and last `YYYY-MM-DD` of the period a key names */
+export function periodBounds(
+  key: string,
+  period: Period,
+): { from: string; to: string } {
+  const year = key.slice(0, 4);
+  if (period === "year") return { from: `${year}-01-01`, to: `${year}-12-31` };
+  if (period === "school-year")
+    return { from: `${year}-06-01`, to: `${Number(year) + 1}-05-31` };
+  if (period === "month") {
+    const [y, m] = key.split("-").map(Number) as [number, number];
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return { from: `${key}-01`, to: `${key}-${String(last).padStart(2, "0")}` };
+  }
+  return key.endsWith("-1")
+    ? { from: `${year}-01-01`, to: `${year}-05-31` }
+    : { from: `${year}-06-01`, to: `${year}-12-31` };
+}
+
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+/** a sortable key and a label for the period a date falls in */
+export function periodOf(
+  date: string,
+  period: Period,
+): { key: string; label: string } {
+  const year = Number(date.slice(0, 4));
+  const month = Number(date.slice(5, 7));
+
+  if (period === "year") return { key: `${year}`, label: `${year}` };
+  if (period === "school-year") {
+    /* Fall and the Spring after it, keyed by the year it starts */
+    const start = month <= 5 ? year - 1 : year;
+    return {
+      key: `${start}`,
+      label: `${start}–${String(start + 1).slice(2)}`,
+    };
+  }
+  if (period === "month")
+    return { key: date.slice(0, 7), label: `${MONTHS[month - 1]} ${year}` };
+
+  const semester = semesterOf(month);
+  return {
+    key: `${year}-${semester.order}`,
+    label: `${semester.name} ${year}`,
+  };
+}
+
+/** a period's place in time, so two can be told apart by how many lie between */
+export function periodIndex(key: string, period: Period): number {
+  const [year, step] = key.split("-").map(Number) as [number, number?];
+  if (period === "month") return year * 12 + step! - 1;
+  if (period === "semester") return year * 2 + step! - 1;
+  return year;
+}
+
+/** "Joined" for the period someone joined in, "+2" for two after it */
+export const sinceLabel = (key: string) => (key === "0" ? "Joined" : `+${key}`);
+
+/** every period from the first key to the last, so an empty month still shows */
+function fillPeriods(
+  keys: string[],
+  period: Period | "since",
+): { key: string; label: string }[] {
+  if (keys.length === 0) return [];
+  if (period === "since")
+    return Array.from(
+      { length: Math.max(...keys.map(Number)) + 1 },
+      (_, k) => ({ key: String(k), label: sinceLabel(String(k)) }),
+    );
+  const sorted = [...keys].sort();
+  const first = sorted[0]!;
+  const last = sorted.at(-1)!;
+  const out: { key: string; label: string }[] = [];
+
+  let [year, step] = first.split("-").map(Number) as [
+    number,
+    number | undefined,
+  ];
+  const steps = period === "month" ? 12 : period === "semester" ? 2 : 1;
+  const yearly = period === "year" || period === "school-year";
+
+  for (let guard = 0; guard < 2000; guard++) {
+    const key = yearly
+      ? `${year}`
+      : period === "month"
+        ? `${year}-${String(step).padStart(2, "0")}`
+        : `${year}-${step}`;
+    const date = yearly
+      ? `${year}-${period === "year" ? "01" : "06"}-01`
+      : period === "month"
+        ? `${key}-01`
+        : `${year}-${String([1, 6][step! - 1]).padStart(2, "0")}-01`;
+    out.push({ key, label: periodOf(date, period).label });
+    if (key === last) break;
+
+    if (yearly) year++;
+    else if (step! >= steps) {
+      year++;
+      step = 1;
+    } else step = step! + 1;
+  }
+  return out;
+}
+
+/** one countable thing: an article, or one person in one role on it */
+export type Unit = { article: ArchiveArticle; role?: Role; person?: string };
+
+/**
+ * One of the things a number counts: an article, a contribution or a
+ * newcomer's first contribution, each one unit; or, when people are counted,
+ * a person with every contribution of theirs the number covers.
+ */
+export type Member = { id: string | number; units: Unit[] };
+
+function contributions(
+  articles: ArchiveArticle[],
+  filters: Filters,
+): Contribution[] {
+  return articles.flatMap((article) =>
+    contributionsOn(article).filter(isCounted(filters)),
+  );
+}
+
+function units(
+  articles: ArchiveArticle[],
+  measure: Measure,
+  filters: Filters,
+  history: ArchiveArticle[],
+): Unit[] {
+  if (measure === "articles")
+    /* every article counts once; with a role or person picked, only those
+       with a contribution the filters count */
+    return articles
+      .filter((article) => hasCounted(article, filters))
+      .map((article) => ({ article }));
+
+  if (measure === "newcomers") {
+    /* new once, at their first contribution in the whole archive in any
+       role: a period filter must not make everyone in its first month new,
+       nor a role filter make someone new at their first image */
+    const shown = new Set(articles.map((article) => article.id));
+    const counted = isCounted(filters);
+    return [...peopleOf(history).values()].flatMap(
+      ({ first, contributions }) => {
+        if (!shown.has(first.article.id)) return [];
+        const unit = contributions.find(
+          (c) => c.article === first.article && counted(c),
+        );
+        return unit ? [unit] : [];
+      },
+    );
+  }
+
+  return contributions(articles, filters);
+}
+
+/** how many contributions someone made in each period they made any */
+export function periodsOf(person: Person, period: Period): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const { article } of person.contributions) {
+    const { key } = periodOf(easternDate(article.publishedAt), period);
+    out.set(key, (out.get(key) ?? 0) + 1);
+  }
+  return out;
+}
+
+export type Grouped = {
+  /** what was counted, which grouping by person or role can change */
+  measure: Measure;
+  /** what the series are cut by */
+  breakdown: Dimension | "none";
+  categories: { key: string; label: string }[];
+  series: { key: string; label: string }[];
+  /** value[categoryKey][seriesKey]: what the cell's members come to (`amountOf`) */
+  values: Record<string, Record<string, number>>;
+  /**
+   * each category's own total. The sum of its values, except where one
+   * member is in two series: someone in two sections is one person in each
+   * and one in the total, and an article credited in two roles is one
+   * article's words in each and in the total
+   */
+  totals: Record<string, number>;
+  /** what was counted, across every category */
+  total: number;
+  /** distinct articles behind `total` */
+  articles: number;
+  /** how many categories there were before `limit` cut them */
+  available: number;
+  cutTie?: { count: number; tied: number } | null;
+  /** what each cell counts, before a running total gathers it; read through `membersOf` */
+  cells: Record<string, Record<string, Member[]>>;
+  /** each period holds everything up to and including it */
+  running: boolean;
+};
+
+/** A top cut is arbitrary when the last included count also occurs outside it. */
+export function tieAtCut(
+  keys: readonly string[],
+  sizeOf: (key: string) => number,
+  limit?: number,
+) {
+  if (!limit || limit >= keys.length) return null;
+  const count = sizeOf(keys[limit - 1]!);
+  if (!keys.slice(limit).some((key) => sizeOf(key) === count)) return null;
+  return { count, tied: keys.filter((key) => sizeOf(key) === count).length };
+}
+
+/**
+ * What a category's number counts, in the series given (every series if
+ * none are): its members. Every value and total is `amountOf` this list,
+ * so a list and the number it explains cannot disagree.
+ */
+export function membersOf(
+  grouped: Pick<Grouped, "categories" | "series" | "cells" | "running">,
+  category: string,
+  series: readonly string[] = grouped.series.map((s) => s.key),
+): Member[] {
+  const at = grouped.categories.findIndex((c) => c.key === category);
+  const keys =
+    grouped.running && at >= 0
+      ? grouped.categories.slice(0, at + 1).map((c) => c.key)
+      : [category];
+  return membersAcross(grouped, keys, series);
+}
+
+/** what several categories count together, each as counted, not running */
+export function membersAcross(
+  grouped: Pick<Grouped, "cells">,
+  categories: readonly string[],
+  series: readonly string[],
+): Member[] {
+  /* one person in two cells is one member, with both cells' contributions */
+  const merged = new Map<string | number, Unit[]>();
+  for (const key of categories)
+    for (const s of series)
+      for (const member of grouped.cells[key]?.[s] ?? []) {
+        const held = merged.get(member.id);
+        if (held) held.push(...member.units);
+        else merged.set(member.id, [...member.units]);
+      }
+  return [...merged].map(([id, units]) => ({ id, units }));
+}
+
+export type Order = "largest" | "natural";
+
+const ALL = "all";
+
+/** a dimension's own order: the paper's sections, the roles as listed, else by name */
+function naturalOrder(dimension: Dimension | "none") {
+  return (
+    a: { key: string; label: string },
+    b: { key: string; label: string },
+  ) =>
+    dimension === "since"
+      ? Number(a.key) - Number(b.key)
+      : inTime(dimension)
+        ? a.key.localeCompare(b.key)
+        : dimension === "section"
+          ? compareSections(a.key, b.key)
+          : dimension === "role"
+            ? ROLES.indexOf(a.key as Role) - ROLES.indexOf(b.key as Role)
+            : a.label.localeCompare(b.label);
+}
+
+export function group(
+  articles: ArchiveArticle[],
+  options: {
+    measure: Measure;
+    by: Dimension;
+    breakdown: Dimension | "none";
+    filters: Filters;
+    /** for a category, the biggest first (the default) or the dimension's own order */
+    order?: Order;
+    /** the biggest this many categories; periods are never cut */
+    limit?: number;
+    /** each period as everything up to and including it */
+    running?: boolean;
+    /** the whole archive, where a newcomer's first contribution is looked for */
+    history?: ArchiveArticle[];
+  },
+): Grouped {
+  const { by, breakdown, filters } = options;
+  const history = options.history ?? articles;
+  const touchesPeople = [by, breakdown].some(
+    (d) => d === "person" || d === "role" || ofIntake(d),
+  );
+  const quantity = isQuantity(options.measure);
+  /* an article has no one role, person or intake, so those count
+     contributions; and by person, every person would be one person. Words
+     and views stay theirs: an article is counted once in each cell, from
+     whichever of its contributions put it there */
+  const measure: Measure = quantity
+    ? options.measure
+    : options.measure === "articles" && touchesPeople
+      ? "contributions"
+      : options.measure !== "articles" &&
+          (by === "person" || breakdown === "person")
+        ? "contributions"
+        : options.measure;
+  const list =
+    quantity && touchesPeople
+      ? contributions(articles, filters)
+      : units(articles, quantity ? "articles" : measure, filters, history);
+  const grain = grainOf(by, breakdown);
+  const everyone = peopleOf(history);
+
+  const keyOf = (
+    unit: Unit,
+    dimension: Dimension,
+  ): { key: string; label: string } => {
+    switch (dimension) {
+      case "section":
+        return { key: unit.article.section, label: unit.article.section };
+      case "role":
+        return { key: unit.role ?? "?", label: unit.role ?? "?" };
+      case "person":
+        return { key: unit.person ?? "?", label: unit.person ?? "?" };
+      case "joined": {
+        const first = everyone.get(unit.person ?? "")?.first;
+        return first
+          ? periodOf(easternDate(first.article.publishedAt), grain)
+          : { key: "?", label: "?" };
+      }
+      case "since": {
+        const first = everyone.get(unit.person ?? "")?.first;
+        if (!first) return { key: "?", label: "?" };
+        const at = (iso: string) =>
+          periodIndex(periodOf(easternDate(iso), grain).key, grain);
+        const key = String(
+          at(unit.article.publishedAt) - at(first.article.publishedAt),
+        );
+        return { key, label: sinceLabel(key) };
+      }
+      default:
+        return periodOf(easternDate(unit.article.publishedAt), dimension);
+    }
+  };
+
+  /* what makes two units one member: the same person, when people are
+     counted; the same article, for its words or views */
+  const identity = (unit: Unit, index: number): string | number =>
+    measure === "people" ? unit.person! : quantity ? unit.article.id : index;
+  const amount = (members: Member[]) => amountOf(members, measure).value;
+
+  const cells = new Map<string, Map<string, Map<string | number, Unit[]>>>();
+  const categoryLabels = new Map<string, string>();
+  const seriesLabels = new Map<string, string>();
+
+  list.forEach((unit, index) => {
+    const category = keyOf(unit, by);
+    const series =
+      breakdown === "none"
+        ? { key: ALL, label: measure }
+        : keyOf(unit, breakdown);
+    categoryLabels.set(category.key, category.label);
+    seriesLabels.set(series.key, series.label);
+    const row =
+      cells.get(category.key) ??
+      new Map<string, Map<string | number, Unit[]>>();
+    cells.set(category.key, row);
+    const cell = row.get(series.key) ?? new Map<string | number, Unit[]>();
+    row.set(series.key, cell);
+    const id = identity(unit, index);
+    cell.set(id, [...(cell.get(id) ?? []), unit]);
+  });
+
+  const members: Grouped["cells"] = Object.fromEntries(
+    [...cells].map(([key, row]) => [
+      key,
+      Object.fromEntries(
+        [...row].map(([series, cell]) => [
+          series,
+          [...cell].map(([id, units]) => ({ id, units })),
+        ]),
+      ),
+    ]),
+  );
+  /* a period or an intake with nothing in it still shows, as nothing */
+  const series =
+    breakdown !== "none" && inTime(breakdown)
+      ? fillPeriods(
+          [...seriesLabels.keys()],
+          isPeriod(breakdown) || breakdown === "since" ? breakdown : grain,
+        )
+      : [...seriesLabels].map(([key, label]) => ({ key, label }));
+  series.sort(naturalOrder(breakdown));
+  const running = Boolean(options.running) && isPeriod(by);
+  const own = { categories: [], series, cells: members, running: false };
+
+  let categories: { key: string; label: string }[];
+  let cutTie = null;
+  if (inTime(by)) {
+    categories = fillPeriods(
+      [...categoryLabels.keys()],
+      isPeriod(by) || by === "since" ? by : grain,
+    );
+  } else {
+    /* the biggest first, by what each comes to */
+    const sizes = new Map(
+      [...cells.keys()].map((key) => [key, amount(membersOf(own, key))]),
+    );
+    const sizeOf = (key: string) => sizes.get(key) ?? 0;
+    categories = [...categoryLabels].map(([key, label]) => ({ key, label }));
+    categories.sort(
+      (a, b) => sizeOf(b.key) - sizeOf(a.key) || a.label.localeCompare(b.label),
+    );
+    cutTie = tieAtCut(
+      categories.map((c) => c.key),
+      sizeOf,
+      options.limit,
+    );
+    if (options.limit) categories = categories.slice(0, options.limit);
+    if (options.order === "natural") categories.sort(naturalOrder(by));
+  }
+
+  /* every number here is `amount` of a list `membersOf` gives; a cell
+     with members is there even at zero, which words and views can be */
+  const shape = { categories, series, cells: members, running };
+  const values: Record<string, Record<string, number>> = {};
+  const totals: Record<string, number> = {};
+  for (const key of running ? categories.map((c) => c.key) : cells.keys()) {
+    const all = membersOf(shape, key);
+    if (all.length === 0) continue;
+    totals[key] = amount(all);
+    values[key] = Object.fromEntries(
+      series.flatMap(({ key: s }) => {
+        const cell = membersOf(shape, key, [s]);
+        return cell.length > 0 ? [[s, amount(cell)] as const] : [];
+      }),
+    );
+  }
+  const distinct = new Map<string | number, Unit[]>();
+  list.forEach((unit, index) => {
+    const id = identity(unit, index);
+    distinct.set(id, [...(distinct.get(id) ?? []), unit]);
+  });
+
+  return {
+    measure,
+    breakdown,
+    categories,
+    series,
+    values,
+    totals,
+    total: amount([...distinct].map(([id, units]) => ({ id, units }))),
+    articles: new Set(list.map((unit) => unit.article.id)).size,
+    available: categoryLabels.size,
+    cutTie,
+    cells: members,
+    running,
+  };
+}
+
+/**
+ * The same count over two ranges, side by side: each category's series are
+ * `now` and `then`, each the category's own members in that range. Both
+ * come whole, and the top few are chosen once, over the two together: the
+ * biggest now, then the biggest before, so someone only the earlier range
+ * has is cut only where the pair is.
+ */
+export function paired(
+  now: Grouped,
+  then: Grouped,
+  options: { by: Dimension; order?: Order; limit?: number },
+): Grouped {
+  const sizeOf = (grouped: Grouped, key: string) => grouped.totals[key] ?? 0;
+  let categories = [
+    ...now.categories,
+    ...then.categories.filter(
+      (c) => !now.categories.some((own) => own.key === c.key),
+    ),
+  ];
+  categories.sort(
+    (a, b) =>
+      sizeOf(now, b.key) - sizeOf(now, a.key) ||
+      sizeOf(then, b.key) - sizeOf(then, a.key) ||
+      a.label.localeCompare(b.label),
+  );
+  const available = categories.length;
+  const cutTie = tieAtCut(
+    categories.map((c) => c.key),
+    (key) => sizeOf(now, key),
+    options.limit,
+  );
+  if (options.limit) categories = categories.slice(0, options.limit);
+  if (options.order === "natural" || inTime(options.by))
+    categories.sort(naturalOrder(options.by));
+  const series = [
+    { key: "now", label: "now" },
+    { key: "then", label: "then" },
+  ];
+  const cells: Grouped["cells"] = {};
+  const values: Grouped["values"] = {};
+  const totals: Grouped["totals"] = {};
+  for (const { key } of categories) {
+    const own = { now: now.cells[key]?.[ALL], then: then.cells[key]?.[ALL] };
+    cells[key] = Object.fromEntries(
+      Object.entries(own).filter(([, list]) => list && list.length > 0),
+    ) as Record<string, Member[]>;
+    values[key] = Object.fromEntries(
+      Object.entries(cells[key]).map(([s, list]) => [
+        s,
+        amountOf(list, now.measure).value,
+      ]),
+    );
+    totals[key] = amountOf(
+      membersOf({ categories, series, cells, running: false }, key),
+      now.measure,
+    ).value;
+  }
+  return {
+    measure: now.measure,
+    breakdown: "none",
+    categories,
+    series,
+    values,
+    totals,
+    total: now.total,
+    articles: now.articles,
+    available,
+    cutTie,
+    cells,
+    running: false,
+  };
+}
+
+export type PersonRow = {
+  name: string;
+  /** contributions per role */
+  counts: Record<Role, number>;
+  contributions: number;
+  /** their first and latest contribution in the whole archive, whatever the filters */
+  first: string;
+  last: string;
+  /** printed bylines the Sheet counts as this person */
+  bylines: string[];
+  /** the sections of the contributions counted, in the paper's order */
+  sections: string[];
+  articleIds: number[];
+};
+
+/** each person's contributions the filters count, with their whole span */
+export function people(
+  articles: ArchiveArticle[],
+  filters: Filters,
+  /** the whole archive, where a person's first and latest are looked for */
+  history: ArchiveArticle[] = articles,
+): PersonRow[] {
+  const everyone = peopleOf(history);
+  const rows = new Map<string, PersonRow>();
+
+  for (const unit of contributions(articles, filters)) {
+    const { article, role, person: name, bylines } = unit;
+    let row = rows.get(name);
+    if (!row) {
+      const own = everyone.get(name);
+      const date = easternDate(article.publishedAt);
+      row = {
+        name,
+        counts: { writer: 0, image: 0, other: 0 },
+        contributions: 0,
+        first: own ? easternDate(own.first.article.publishedAt) : date,
+        last: own ? easternDate(own.latest.article.publishedAt) : date,
+        bylines: [],
+        sections: [],
+        articleIds: [],
+      };
+      rows.set(name, row);
+    }
+    row.counts[role]++;
+    row.contributions++;
+    if (!row.articleIds.includes(article.id)) row.articleIds.push(article.id);
+    if (!row.sections.includes(article.section))
+      row.sections.push(article.section);
+    for (const byline of bylines)
+      if (!row.bylines.includes(byline)) row.bylines.push(byline);
+  }
+
+  for (const row of rows.values()) row.sections.sort(compareSections);
+  return [...rows.values()].sort(
+    (a, b) => b.contributions - a.contributions || a.name.localeCompare(b.name),
+  );
+}

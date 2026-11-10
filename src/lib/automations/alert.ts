@@ -22,10 +22,7 @@ export async function reportFailure(
     const token = env.DISCORD_BOT_TOKEN;
     if (!token) return;
 
-    const retry =
-      automation.hour === "hourly"
-        ? "next hour"
-        : `tomorrow at ${hourLabel(automation.hour)} Eastern`;
+    const retry = `tomorrow at ${hourLabel(automation.hour)} Eastern`;
 
     await postMessage(
       token,
@@ -39,8 +36,8 @@ export async function reportFailure(
               `\`\`\`\n${clip(summary)}\n\`\`\``,
               "",
               HAREWARE_ORIGIN
-                ? `Check [the log](${HAREWARE_ORIGIN}/log) for details. The automation will try again ${retry}.`
-                : `Check the log for details. The automation will try again ${retry}.`,
+                ? `It will try again ${retry}. [See the history](${HAREWARE_ORIGIN}/reminder)`
+                : `It will try again ${retry}.`,
             ].join("\n"),
           ),
         ],

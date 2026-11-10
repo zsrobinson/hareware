@@ -2,47 +2,60 @@
 
 An Astro app on Cloudflare Workers for [The Hare](https://theumdhare.com):
 public tools that turn published articles into Instagram posts, InDesign copy
-and newsletter content; a Discord bot that posts the club's recurring reminders
-on a cron; an `/article` slash command for editing Articles from Discord; and
-the membership pages (attendance kiosk, reconciler, standing) that work out who
-may vote.
+and newsletter content; a Discord bot that posts the morning social reminder;
+and, for the Editorial Board, an archive viewer over every published post:
+Articles and People, each with its views as tabs (tables, charts and pivots)
+that the board saves for everyone, and Problems.
 
-HareWare is **not** the article tracker. The tracker stays in Notion, maintained
-by hand, and nothing here may depend on its workflow state being current.
-[ADR 0006](docs/adr/0006-hareware-is-a-reminder-bot.md) has the argument, and
-its opening note says which of its original limits ADRs 0007, 0009 and 0010 have
-since lifted. Read it before proposing anything that reads the tracker to decide
-something.
+**WordPress is the record.** HareWare reads it live from the public REST API
+and keeps no copy. The one fact WordPress lacks — who is really behind a
+pseudonymous byline — lives in a Google Sheet owned by the club, as overrides
+only, beside the board's views of the archive. Nothing here reads Notion or
+tracks work in progress.
+[ADR 0011](docs/adr/0011-wordpress-is-the-record.md) has the reasoning; read it
+before proposing that HareWare store articles or track anything unpublished.
+
+**What is in the Sheet is private.** It never goes into WordPress, the
+repository, logs, or any page or route reachable without `@Editorial Board`.
+HareWare writes it too, through `/api/sheet` only, so nobody needs to open it;
+tests use invented names, never a real byline paired with a real person.
 
 ## Where things are
 
 ```
 src/lib/
-  services/{discord,notion,wordpress}/  how to talk to each outside system
+  services/{discord,google,wordpress}/  how to talk to each outside system
   automations/                          what runs on a schedule
-  articles/                             Article behavior and Notion's shapes
-  members/                              the roster: applications, matching,
-                                        kiosk, reconciler and standing
+  credits/                              the archive: parsing credits, the
+                                        Sheet's tabs, and slicing for the pages
   db/ log.ts                            the invocation record
   session · auth · admin · member       who is asking, and whether they may
-  admin-routes · admin-guard · denial   which tools need the role, and the gate
+  admin-api · denial                    the gate, and the four ways it refuses
+src/components/archive/                 the archive pages' islands
+  views.ts                              the starter set of views
+  saved-views · view-writes             the board's views, read from the Sheet
+                                        and written back
 src/pages/api/                          the routes those answer
 ```
 
 Three outside systems, and everything about talking to one lives in its folder:
 credentials, quirks, and the shapes it returns. **Nothing in `services/` knows
-what a reminder is**, so the slash commands and the membership pages use the
-same clients the automations do.
-
-Discord payloads and presentation stay in `services/discord`; Article behavior
-stays in `articles`. Dependencies point from the Discord adapter into Article
-modules, never back from Article modules into Discord. `members/` reads Discord
-data (applications, the member list) through `services/discord`, but never
-builds a Discord message.
+what a credit or a reminder is.** Domain modules depend on services, never the
+reverse, and `credits/` never builds a Discord message.
 
 An automation is an entry in `src/lib/automations/registry.ts` — id, hour,
 channel, and the function that runs it — plus its module. The registry is what
 dispatches, so adding one is those two things and nothing else.
+
+The archive's views are the board's, rows of the Sheet's `Views` tab that any
+member saves from the page ([ADR 0015](docs/adr/0015-views-are-shared-in-the-sheet.md)).
+`src/components/archive/views.ts` is only the starter set, what a page shows
+until the first change there writes it to the tab, so a change to it reaches
+no page that has rows. The Worker passes the rows on unread; the browser
+checks each with the code that reads a view from a link, and lists one it
+cannot read rather than dropping it. Every write carries the `updated at` it
+was based on, a conflict is a 409 the page offers to reload or overwrite, and
+Saved is said only once a read of the Sheet shows it.
 
 ## Who is asking
 
@@ -52,33 +65,40 @@ live from the same Discord lookup that decides admission — one request answers
 "may they" and "what are they called" together, so the two cannot disagree.
 [ADR 0008](docs/adr/0008-sessions-with-nothing-stored.md) has the reasoning.
 
-`viewer(request)` in `~/lib/admin` is the one entry point. A page the CDN does
-not cache resolves it and passes the whole thing down as `viewer`; a cached page
-passes nothing and the island asks `/api/session.json`, which makes the same
-lookup. Passing part of it is what put a raw Discord id in the sidebar for a
-week — see below.
+`viewer(request)` in `~/lib/admin` is the one entry point on the server, and
+`adminAccess` and `/api/session.json` both go through it. Every page is static,
+so nothing renders who is looking on the server: the account panel asks
+`/api/session.json` through `useViewer()`, once per window, and the sidebar and
+the drawer read the same answer.
 
-**No admin page guards itself.** Every tool lives at the top level, public and
-gated alike — `ADMIN_ROUTES` in `~/lib/admin-routes` is the only thing that says
-which is which, and both the nav and the guard read it, so a tool in the sidebar
-is a tool that is guarded. `nav.test.ts` holds those to each other.
+**The gate is on the data, not the pages.** Every page is a static file served
+without waking the Worker ([ADR 0012](docs/adr/0012-static-pages-gated-data.md)):
+on the Workers free plan a request gets 10 ms of CPU. An admin page is an empty
+shell, and its island asks a gated API — `/api/archive.json`, `/api/sheet`,
+`/api/reminder.json`, `/api/access.json`, `/api/automations/run`, `/api/stats`
+— each of which calls `adminAccess(request)` first and refuses with `refusal()` from
+`~/lib/admin-api`. The island draws that refusal with `DenialMessage` from
+`~/components/gated`: which of four things is wrong, rather than claiming the
+page does not exist (ADR 0007), and `~/lib/denial` is the one table those four
+live in. `adminNav` in `~/lib/nav` is the list of the board's tools.
+`nav.test.ts` holds it together: every admin page is
+prerendered and reads nothing on the server, and every API that touches the
+Sheet or the log is gated, except Discord's signed interactions endpoint, which
+hands nothing back.
 
-The middleware runs `guardAdmin` from `~/lib/admin-guard`: it resolves the
-viewer once, leaves it in `locals.admission`, and rewrites anybody it refuses to
-`/access-denied` with the status that fits — 401, 403 or 503. A gated page calls
-`admitted(Astro.locals)`, which hands back the member or throws, so reaching the
-page is the permission and a page whose route fell off `ADMIN_ROUTES` fails
-loudly rather than quietly serving. That last part only holds while every gated
-page actually calls it, so `nav.test.ts` checks that too. A refusal says which
-of four things is wrong rather than claiming the page does not exist; ADR 0007
-explains why, and `~/lib/denial` is the one table those four live in. The
-`/api/members/*` routes refuse with the same statuses.
-
-`~/lib/admin-guard` must not import `~/lib/admin` at the top level. Middleware
-is in every route's module graph, the prerendered `/custom` is built by node,
-and node cannot load a `cloudflare:` url — the import lives inside the guard,
-past the route check. `npm run build` is what catches a regression here, and it
-is why `admin-routes` and `denial` import nothing.
+**Nothing heavy runs in the Worker.** WordPress is read and parsed in the
+browser (its REST API answers any origin), and the archive is built there too;
+the Worker hands out only what needs a secret. A new route under `/api` or
+`/auth` must stay well under 10 ms of CPU: no parsing article bodies, no
+building the archive, no linkedom (a dev dependency, for tests only).
+`/api/wordpress` passes WordPress's cached answers to the browser, answered in
+`src/worker.ts` ahead of Astro, whose pipeline alone would cost several times
+as much (ADR 0012). `/api/stats` is answered there too, behind the gate, with a
+WordPress administrator's application password: it GETs only the Jetpack stats
+`passStats()` allow-lists. Keep both out of `src/pages`, and never read or
+parse the body there. Anything
+else under `src/pages` must be `export const prerender = true`. A test file
+under `src/pages` must start with `_`, or Astro routes it and bundles vitest.
 
 ## Working here
 
@@ -99,13 +119,42 @@ touches bindings or a route's `Request`.
 `REMINDERS_TEST_CHANNEL` is set. Messages can be deleted; the pings they send
 cannot.
 
+**A preview has its own settings, not production's.** Every non-`main` push
+builds a Worker Preview, served at `<branch>.hareware.zsrobinson.com` (slashes
+become hyphens). Workers Builds runs `npx wrangler@4.149.0 preview`, pinned in
+the build settings rather than `package.json`, so every branch builds without a
+change. Previews take the Worker's Preview settings, not production's: their
+own `SESSION_SECRET`, and the same Discord and Google secrets and D1 log as
+production, so a preview reads and writes the club's real Sheet and log. They
+run no crons and have no `REMINDERS_TRIGGER_SECRET`, so a manual trigger on one
+answers 404. A Preview keeps the settings it was created with through
+rebuilds: after changing them, delete it and push again.
+
+**`beta.hareware.zsrobinson.com` follows one branch, the beta branch.** It is
+the Preview named `beta`, and the beta branch is whichever branch's Preview
+deploys it too: its build settings run
+`npx wrangler@4.149.0 preview && npx wrangler@4.149.0 preview --name beta`, so
+every push to that branch updates its own Preview and beta together. Change the
+beta branch only when the person you are working for asks: it is shared. Move
+the `&& npx wrangler@4.149.0 preview --name beta` from the old branch's deploy
+command to the new one's (Worker → Settings → Builds → Previews, or the Builds
+API's `previews/{id}` with `settings.deploy_command`), then build the new branch
+once. A branch has a Preview only after its first push, and two branches must
+not both carry it, or beta shows whichever pushed last. The `beta` git branch is
+no longer used. To send beta to production instead, turn on the zone's redirect
+rule "HareWare beta off: send beta to production" (zsrobinson.com → Rules →
+Redirect Rules), and off again to bring it back.
+
+**Dashboard variables do not survive a deploy.** Wrangler replaces them with
+`wrangler.jsonc`'s, so every value the code reads is a secret.
+
 ### Silent failures
 
 Everything expensive here has failed the same way: it reported success. A ping
-that rendered and notified nobody. A Notion filter that matched nothing. A
+that rendered and notified nobody. A WordPress throttle that read as no posts. A
 scrubber that approved markup it never examined. A curl served by the previous
 deploy. **Read `docs/agents/silent-failures.md`** before changing anything that
-talks to Discord, Notion or the deployed Worker, and before reviewing a fix —
+talks to Discord, WordPress, Google or the deployed Worker, and before reviewing a fix —
 the second half is the shapes these bugs take in our own code, and the test that
 catches them.
 

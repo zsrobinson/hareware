@@ -1,5 +1,21 @@
 import { handle } from "@astrojs/cloudflare/handler";
+import { aheadOfAstro } from "~/lib/ahead-of-astro";
 import { runScheduled } from "~/lib/automations/run";
+import "./middleware";
+
+/*
+  Every route the Worker serves, loaded at startup. Startup has its own limit
+  (a second, once per isolate) and is not billed to any request, but a module
+  first imported during a request is, and Astro imports each route lazily.
+  Measured on the preview (2026-11-07, about 150 requests each), this moved
+  p90 from 4.1 ms to 3.4 ms and left the outliers where they were: a fresh
+  isolate's first request still costs 10-13 ms, most likely the runtime
+  compiling what it runs for the first time rather than the imports. Tests
+  under src/pages start with _.
+*/
+import.meta.glob(["./pages/api/**/*.ts", "./pages/auth/**/*.ts", "!**/_*"], {
+  eager: true,
+});
 
 /*
   the adapter's own entrypoint is `{ fetch: handle }` and nothing else, so a
@@ -12,7 +28,9 @@ import { runScheduled } from "~/lib/automations/run";
   reach the astro pipeline
 */
 export default {
-  fetch: handle,
+  fetch(request, env, ctx) {
+    return aheadOfAstro(request) ?? handle(request, env, ctx);
+  },
 
   /*
     not async: `waitUntil` is what keeps the isolate alive for the run, and

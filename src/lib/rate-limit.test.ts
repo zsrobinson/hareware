@@ -17,7 +17,7 @@ test("a 429 then a success comes back as the success", async () => {
     .mockResolvedValueOnce(limited())
     .mockResolvedValueOnce(new Response("ok", { status: 200 }));
 
-  const answered = sendPatiently(send, "notion databases/x");
+  const answered = sendPatiently(send, "discord guild members");
   await vi.advanceTimersByTimeAsync(10_000);
 
   expect((await answered).status).toBe(200);
@@ -30,7 +30,7 @@ test("nothing is sent again until Retry-After has elapsed", async () => {
     .mockResolvedValueOnce(limited("2"))
     .mockResolvedValue(new Response("ok", { status: 200 }));
 
-  const answered = sendPatiently(send, "notion databases/x");
+  const answered = sendPatiently(send, "discord guild members");
 
   /* the default backoff is shorter, so a retry here would mean the header was ignored */
   await vi.advanceTimersByTimeAsync(1_900);
@@ -48,7 +48,7 @@ test("a Retry-After longer than the cap does not hold the page for a minute", as
     .mockResolvedValueOnce(limited("60"))
     .mockResolvedValue(new Response("ok", { status: 200 }));
 
-  const answered = sendPatiently(send, "notion databases/x");
+  const answered = sendPatiently(send, "discord guild members");
   await vi.advanceTimersByTimeAsync(5_000);
 
   expect(send).toHaveBeenCalledTimes(2);
@@ -58,14 +58,14 @@ test("a Retry-After longer than the cap does not hold the page for a minute", as
 test("running out of retries throws an error that says it was rate limited", async () => {
   const send = vi.fn().mockResolvedValue(limited());
 
-  const answered = sendPatiently(send, "notion databases/x");
+  const answered = sendPatiently(send, "discord guild members");
   const caught = answered.catch((thrown: unknown) => thrown);
   await vi.advanceTimersByTimeAsync(60_000);
 
   const thrown = await caught;
   expect((thrown as Error).message).toMatch(/rate limited/);
   /* and it names the call, so the log line says which read gave up */
-  expect((thrown as Error).message).toContain("notion databases/x");
+  expect((thrown as Error).message).toContain("discord guild members");
 
   /* the first attempt plus the bounded retries, and then it stops */
   expect(send).toHaveBeenCalledTimes(4);
@@ -74,7 +74,7 @@ test("running out of retries throws an error that says it was rate limited", asy
 test("any other failure is handed straight back", async () => {
   const send = vi.fn().mockResolvedValue(new Response("nope", { status: 403 }));
 
-  const response = await sendPatiently(send, "notion databases/x");
+  const response = await sendPatiently(send, "discord guild members");
 
   expect(response.status).toBe(403);
   expect(send).toHaveBeenCalledTimes(1);
@@ -97,7 +97,7 @@ test.each([
     )
     .mockResolvedValue(new Response("ok", { status: 200 }));
 
-  const answered = sendPatiently(send, "notion databases/x");
+  const answered = sendPatiently(send, "discord guild members");
 
   await vi.advanceTimersByTimeAsync(waits - 1);
   expect(send).toHaveBeenCalledTimes(1);

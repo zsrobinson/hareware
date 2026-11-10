@@ -47,3 +47,13 @@ export function toCsv(headers: string[], rows: unknown[][]): string {
     .join("\r\n")
     .concat("\r\n");
 }
+
+/** A paste into a sheet: one guarded cell per tab, and one row per line. */
+export const toTsv = (matrix: unknown[][]) =>
+  matrix
+    .map((row) =>
+      row
+        .map((value) => spreadsheetCell(text(value).replace(/[\t\r\n]+/g, " ")))
+        .join("\t"),
+    )
+    .join("\n");

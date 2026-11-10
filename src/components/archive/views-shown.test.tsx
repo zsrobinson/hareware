@@ -191,7 +191,7 @@ test("Read by section is each section's views, and what they are per article", a
   /* 150 views over the two articles counted; the third is too new, which
      its sum is marked for, and which the caption says last */
   const [sum, average] = within(news.closest("tr")!).getAllByRole("cell");
-  expect(average!.textContent).toBe("75");
+  expect(average!.textContent).toBe("75†, 1 article too new to count yet");
   expect(sum!.textContent).toBe("150†, 1 article too new to count yet");
   expect(sum!.querySelector("sup")!.title).toBe(
     "1 article too new to count yet",
@@ -201,8 +201,9 @@ test("Read by section is each section's views, and what they are per article", a
   expect(caption).toMatch(/ · 1 article too new to count yet$/);
 
   /* and its list names it last, as not counted yet */
-  await userEvent.click(within(sum!).getByRole("button"));
+  await userEvent.click(within(average!).getByRole("button"));
   const list = await screen.findByRole("complementary", undefined, WAIT);
+  expect(list.textContent).toContain("150 views ÷ 2 counted articles ≈ 75");
   const items = within(list).getAllByRole("listitem");
   expect(items.at(-1)!.textContent).toMatch(
     /^A third invented headlinenot counted yet/,
@@ -350,7 +351,7 @@ test("a count of views that looks short says so under its caption", async () => 
 
   expect(
     await screen.findByText(
-      "3 of 4 articles have no recorded views; Jetpack may have left some out.",
+      "Among articles published over 30 days ago, 3 of 4 have no recorded views; Jetpack may have left some out.",
       undefined,
       WAIT,
     ),
@@ -384,12 +385,65 @@ test("Read by section reads the most per article first, each with a faint bar", 
   /* a bar for each row with views per article, and none for the total */
   expect(document.querySelectorAll("[data-bar]")).toHaveLength(2);
   expect(
-    screen.getByText(
-      "Which section's articles are read most, per article, this semester?",
-    ),
+    screen.getByText("Which section's articles are read most, per article?"),
   ).toBeTruthy();
   /* nothing on screen is from before Jetpack began counting */
   expect(document.querySelector("figcaption")!.textContent).not.toContain(
     "counted since January 2023",
   );
+});
+
+test("a thin answer explains its base again above the slice ranking", async () => {
+  stubArchive({
+    posts: [1, 2, 3, 4].map((id) => ({
+      id,
+      title: `Invented ${id}`,
+      publishedAt: daysAgo(40),
+      paragraphs: ["Article by: Ada Example"],
+      categoryIds: [1],
+    })),
+    categories: [[1, "News"]],
+    views: { 4: 100 },
+  });
+  window.history.replaceState(
+    null,
+    "",
+    "/articles?view=read-by-section&range=all",
+  );
+  render(<ArticlesPage />);
+  const row = await screen.findByRole("rowheader", { name: /News/ }, WAIT);
+  await userEvent.click(within(row.closest("tr")!).getAllByRole("button")[1]!);
+  const panel = await screen.findByRole("complementary");
+  expect(within(panel).getByRole("note").textContent).toBe(
+    "Among articles published over 30 days ago, 3 of 4 have no recorded views; Jetpack may have left some out.",
+  );
+  expect(within(panel).getByRole("note").className).toContain("amber");
+  expect(within(panel).getAllByRole("listitem")).toHaveLength(4);
+});
+
+test("a long time axis always labels its latest semester", async () => {
+  stubArchive({
+    posts: [
+      {
+        id: 1,
+        title: "Old invented article",
+        publishedAt: "2018-02-01T16:00:00Z",
+        paragraphs: ["Article by: Ada Example"],
+      },
+      {
+        id: 2,
+        title: "Latest invented article",
+        publishedAt: "2026-10-01T16:00:00Z",
+        paragraphs: ["Article by: Ada Example"],
+      },
+    ],
+  });
+  window.history.replaceState(null, "", "/articles?view=history&range=all");
+  render(<ArticlesPage />);
+  await screen.findByRole("button", { name: "Show as table" });
+  expect(
+    [...document.querySelectorAll("svg text")].some((text) =>
+      ["F26", "Fall 2026"].includes(text.textContent!),
+    ),
+  ).toBe(true);
 });

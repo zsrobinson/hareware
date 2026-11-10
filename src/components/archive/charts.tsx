@@ -321,6 +321,7 @@ export function ChartView({
       {slice && (
         <RowDetails>
           <SlicePanel
+            views={archive.views}
             key={sliceKey(slice)}
             {...sliceText(plot, slice, filterNote)}
             back={back}
@@ -1524,7 +1525,9 @@ function TimeChart({
 
         {categories.map((category, index) => (
           <g key={category.key} pointerEvents="none">
-            {index % every === 0 && (
+            {(index === categories.length - 1 ||
+              (index % every === 0 &&
+                categories.length - 1 - index >= every)) && (
               <text
                 x={cx(index)}
                 y={y(0) + 18}
@@ -1539,19 +1542,22 @@ function TimeChart({
                 {short ? shortLabel(category.label) : category.label}
               </text>
             )}
-            {stackedShare && index % every === 0 && (
-              <text
-                x={cx(index)}
-                y={y(0) + 32}
-                textAnchor="middle"
-                className="fill-muted-foreground text-[11px] tabular-nums"
-              >
-                {/* what each share is of, in words where there is room */}
-                {band * every >= 72
-                  ? plot.unit(plot.total(category.key))
-                  : plot.total(category.key).toLocaleString()}
-              </text>
-            )}
+            {stackedShare &&
+              (index === categories.length - 1 ||
+                (index % every === 0 &&
+                  categories.length - 1 - index >= every)) && (
+                <text
+                  x={cx(index)}
+                  y={y(0) + 32}
+                  textAnchor="middle"
+                  className="fill-muted-foreground text-[11px] tabular-nums"
+                >
+                  {/* what each share is of, in words where there is room */}
+                  {band * every >= 72
+                    ? plot.unit(plot.total(category.key))
+                    : plot.total(category.key).toLocaleString()}
+                </text>
+              )}
           </g>
         ))}
 

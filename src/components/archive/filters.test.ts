@@ -68,3 +68,22 @@ test("a caption names the people picked and what the search looked at", () => {
     describeFilters({ ...picked, people: ["A", "B", "C"], search: "" }),
   ).toBe("3 people");
 });
+
+test("school-year presets use the grouping's June boundary on both sides of it", () => {
+  expect(rangeOf(state("school-year"), now)).toEqual({
+    from: "2026-06-01",
+    to: "2027-05-31",
+  });
+  expect(rangeOf(state("last-school-year"), now)).toEqual({
+    from: "2025-06-01",
+    to: "2026-05-31",
+  });
+  expect(
+    rangeOf(state("school-year"), new Date("2026-05-31T16:00:00Z")),
+  ).toEqual({ from: "2025-06-01", to: "2026-05-31" });
+  for (const preset of ["school-year", "last-school-year"] as const) {
+    const params = new URLSearchParams();
+    writeState(state(preset), params, "all");
+    expect(readState(`?${params}`, "all").preset).toBe(preset);
+  }
+});

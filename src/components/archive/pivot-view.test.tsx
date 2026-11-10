@@ -45,6 +45,7 @@ beforeEach(() =>
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
   window.history.replaceState(null, "", "/");
 });
 
@@ -261,6 +262,64 @@ test("a section with nothing is a row of zeros, which opens nothing", async () =
     within(rabbithole)
       .getAllByRole("cell")
       .map((cell) => cell.textContent),
-  ).toEqual(["0%"]);
+  ).toEqual(["0", "0%"]);
   expect(within(rabbithole).queryByRole("button")).toBeNull();
+});
+
+test("one-column shares show a count and a share, both opening the same slice", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    "/articles?view=section-share&range=all",
+  );
+  const user = userEvent.setup();
+  render(<ArticlesPage />);
+  const table = await screen.findByRole("table");
+  expect(
+    within(table)
+      .getAllByRole("columnheader")
+      .map((c) => c.textContent),
+  ).toEqual(["Section", "Articles", "Share"]);
+  expect(within(table).getByRole("row", { name: /^Total/ }).textContent).toBe(
+    "Total4100%",
+  );
+  const row = within(table).getByRole("row", { name: /^News/ });
+  const cells = within(row).getAllByRole("cell");
+  expect(cells.map((c) => c.textContent)).toEqual(["3", "75%"]);
+  for (const cell of cells) {
+    await user.click(within(cell).getByRole("button"));
+    expect(
+      within(
+        await screen.findByRole("complementary", { name: "News" }),
+      ).getAllByRole("listitem"),
+    ).toHaveLength(3);
+    await user.keyboard("{Escape}");
+  }
+});
+
+test("retention explains gaps and blanks, marks this semester, and names totals within a cut range", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-09T16:00:00Z"));
+  window.history.replaceState(
+    null,
+    "",
+    "/people?view=retention&range=custom&from=2026-01-01",
+  );
+  render(<PeoplePage />);
+  const table = await screen.findByRole("table");
+  expect(screen.getByText(/a return can follow a gap/).textContent).toContain(
+    "Blank = outside the range or not reached yet",
+  );
+  expect(
+    within(table).getByRole("columnheader", { name: "Active in range" }),
+  ).toBeTruthy();
+  const current = within(table).getAllByTitle("Current semester, so far");
+  expect(current.length).toBeGreaterThan(0);
+  expect(current.some((mark) => mark.parentElement?.textContent === "0*")).toBe(
+    true,
+  );
+  expect(
+    current.find((mark) => mark.parentElement?.textContent === "0*")!
+      .parentElement!.className,
+  ).not.toContain("/40");
 });

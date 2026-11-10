@@ -5,6 +5,7 @@ import {
   easternDate,
   grainOf,
   isPeriod,
+  group,
   NO_FILTERS,
   periodOf,
   type Dimension,
@@ -474,11 +475,11 @@ test("a top ten's caption counts the ten people's contributions", () => {
   expect(grouped.available).toBe(13);
   expect(drawn).toBe(18);
   expect(chartCount(grouped, [])).toBe(
-    "Top 10 of 13 people · 18 of 21 contributions",
+    "Top 10 of 13 people · 8 tied at 1 · 18 of 21 contributions",
   );
   /* five of the ten's are images */
   expect(chartCount(grouped, ["image"])).toBe(
-    "Top 10 of 13 people · 13 of 21 contributions",
+    "Top 10 of 13 people · 8 tied at 1 · 13 of 21 contributions",
   );
 });
 
@@ -753,7 +754,9 @@ test("per article is words or views over the articles counted, and nothing else'
   const news = sliceMembers(views, { category: "News", series: null }, []);
   /* 37 views over posts 1 and 7, the two with views read */
   expect(perArticle(news, "views")).toBe(19);
-  expect(perArticleText(news, "views")).toBe("19 views per article");
+  expect(perArticleText(news, "views")).toBe(
+    "37 views ÷ 2 counted articles ≈ 19",
+  );
 
   const sections = chartOf("sections");
   expect(allows({ ...sections, count: "articles" }).values["per-article"]).toBe(
@@ -827,4 +830,30 @@ test("views say counting began in January 2023 only where an article is older", 
   expect(note(older)).toBe(
     "Lifetime views of the articles published in the range, counted since January 2023",
   );
+});
+
+test("a top cut names the full tie it falls inside, but not a tie wholly shown", () => {
+  const articles = ["Ada Example", "Ben Sample", "Cy Placeholder"].map(
+    (name, i) => post(i + 1, "2026-02-01", "News", [credit("writer", [name])]),
+  );
+  const grouped = group(articles, {
+    measure: "contributions",
+    by: "person",
+    breakdown: "none",
+    filters: NO_FILTERS,
+    order: "largest",
+    limit: 2,
+    history: articles,
+  });
+  expect(chartCount(grouped, [])).toContain("Top 2 of 3 people · 3 tied at 1");
+  const whole = group(articles, {
+    measure: "contributions",
+    by: "person",
+    breakdown: "none",
+    filters: NO_FILTERS,
+    order: "largest",
+    limit: 3,
+    history: articles,
+  });
+  expect(chartCount(whole, [])).not.toContain("tied");
 });

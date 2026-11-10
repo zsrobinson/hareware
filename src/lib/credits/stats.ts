@@ -404,11 +404,24 @@ export type Grouped = {
   articles: number;
   /** how many categories there were before `limit` cut them */
   available: number;
+  cutTie?: { count: number; tied: number } | null;
   /** what each cell counts, before a running total gathers it; read through `membersOf` */
   cells: Record<string, Record<string, Member[]>>;
   /** each period holds everything up to and including it */
   running: boolean;
 };
+
+/** A top cut is arbitrary when the last included count also occurs outside it. */
+export function tieAtCut(
+  keys: readonly string[],
+  sizeOf: (key: string) => number,
+  limit?: number,
+) {
+  if (!limit || limit >= keys.length) return null;
+  const count = sizeOf(keys[limit - 1]!);
+  if (!keys.slice(limit).some((key) => sizeOf(key) === count)) return null;
+  return { count, tied: keys.filter((key) => sizeOf(key) === count).length };
+}
 
 /**
  * What a category's number counts, in the series given (every series if
@@ -593,6 +606,7 @@ export function group(
   const own = { categories: [], series, cells: members, running: false };
 
   let categories: { key: string; label: string }[];
+  let cutTie = null;
   if (inTime(by)) {
     categories = fillPeriods(
       [...categoryLabels.keys()],
@@ -607,6 +621,11 @@ export function group(
     categories = [...categoryLabels].map(([key, label]) => ({ key, label }));
     categories.sort(
       (a, b) => sizeOf(b.key) - sizeOf(a.key) || a.label.localeCompare(b.label),
+    );
+    cutTie = tieAtCut(
+      categories.map((c) => c.key),
+      sizeOf,
+      options.limit,
     );
     if (options.limit) categories = categories.slice(0, options.limit);
     if (options.order === "natural") categories.sort(naturalOrder(by));
@@ -644,6 +663,7 @@ export function group(
     total: amount([...distinct].map(([id, units]) => ({ id, units }))),
     articles: new Set(list.map((unit) => unit.article.id)).size,
     available: categoryLabels.size,
+    cutTie,
     cells: members,
     running,
   };
@@ -675,6 +695,11 @@ export function paired(
       a.label.localeCompare(b.label),
   );
   const available = categories.length;
+  const cutTie = tieAtCut(
+    categories.map((c) => c.key),
+    (key) => sizeOf(now, key),
+    options.limit,
+  );
   if (options.limit) categories = categories.slice(0, options.limit);
   if (options.order === "natural" || inTime(options.by))
     categories.sort(naturalOrder(options.by));
@@ -711,6 +736,7 @@ export function paired(
     total: now.total,
     articles: now.articles,
     available,
+    cutTie,
     cells,
     running: false,
   };

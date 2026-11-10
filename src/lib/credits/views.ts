@@ -110,4 +110,4 @@ export function thinViews(
 
 /** "14 of 32 articles have no recorded views; Jetpack may have left some out." */
 export const thinText = ({ none, of }: { none: number; of: number }) =>
-  `${none} of ${of} articles have no recorded views; Jetpack may have left some out.`;
+  `Among articles published over 30 days ago, ${none} of ${of} have no recorded views; Jetpack may have left some out.`;

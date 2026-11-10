@@ -215,6 +215,7 @@ function Page({
   const saved = savedOf(views, state.view);
   return (
     <ArchiveShell
+      peopleSearch={source === "people" && state.shape.type !== "table"}
       searching={searchingOf(state.shape, source)}
       opening={openingOf(saved)}
       period={periodOfShape(state.shape)}

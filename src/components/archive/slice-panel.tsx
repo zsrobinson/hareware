@@ -1,3 +1,5 @@
+import type { ViewsSummary } from "~/lib/credits/views";
+import { ThinViews } from "./views-notes";
 import { useState, type ReactNode } from "react";
 import { SidePanel } from "~/components/panel";
 import { NewspaperIcon, UsersIcon } from "lucide-react";
@@ -42,6 +44,7 @@ export function SlicePanel({
   members,
   filters,
   seeing,
+  views,
   onClose,
   restoreFocus,
 }: {
@@ -55,6 +58,7 @@ export function SlicePanel({
   filters: Filters;
   /** the slice as each table's filters, for the links to them; none in a test of the rows alone */
   seeing?: SliceFilters;
+  views?: ViewsSummary;
   onClose: () => void;
   restoreFocus: () => HTMLElement | null;
 }) {
@@ -68,6 +72,13 @@ export function SlicePanel({
       <div className="-mt-3 space-y-3">
         <p className="text-muted-foreground text-sm">{caption}</p>
         {seeing && <SeeIn seeing={seeing} via={`${back} · ${title}`} />}
+        {measure === "views" && views && (
+          <ThinViews
+            notice
+            articles={members.map((m) => m.units[0]!.article)}
+            summary={views}
+          />
+        )}
         <Rows measure={measure} members={members} filters={filters} />
       </div>
     </SidePanel>
@@ -162,6 +173,7 @@ function rowsOf(
             <Title article={article} />
             <Meta article={article}>
               <Names
+                article={article}
                 names={contributionsOn(article)
                   .filter(isCounted(filters))
                   .map((c) => ({ name: c.person }))}
@@ -193,6 +205,7 @@ function rowsOf(
             </div>
             <Meta article={article}>
               <Names
+                article={article}
                 names={contributionsOn(article)
                   .filter(isCounted(filters))
                   .map((c) => ({ name: c.person }))}
@@ -226,7 +239,7 @@ function rowsOf(
           <>
             <Title article={article} />
             <Meta article={article}>
-              <Names names={who} />
+              <Names article={article} names={who} />
             </Meta>
           </>
         ),
@@ -241,7 +254,12 @@ function rowsOf(
         key: unit.person!,
         content: (
           <>
-            <Person name={unit.person!} />
+            <Person
+              name={unit.person!}
+              bylines={contributionsOn(unit.article)
+                .filter((c) => c.person === unit.person)
+                .flatMap((c) => c.bylines)}
+            />
             <div className="text-muted-foreground text-xs">
               First:{" "}
               <a
@@ -277,7 +295,18 @@ function rowsOf(
         content: (
           <>
             <div className="flex items-baseline gap-2">
-              <Person name={name} className="min-w-0 flex-1" />
+              <Person
+                name={name}
+                className="min-w-0 flex-1"
+                bylines={units.flatMap((u) =>
+                  contributionsOn(u.article)
+                    .filter(
+                      (c) =>
+                        c.person === name && (!u.role || c.role === u.role),
+                    )
+                    .flatMap((c) => c.bylines),
+                )}
+              />
               <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
                 {counted(units.length, "contribution", "contributions")}
               </span>
@@ -314,7 +343,15 @@ function Title({
   );
 }
 
-function Person({ name, className }: { name: string; className?: string }) {
+function Person({
+  name,
+  className,
+  bylines = [],
+}: {
+  name: string;
+  className?: string;
+  bylines?: string[];
+}) {
   return (
     <a
       href={personHref(name, useTrail())}
@@ -324,6 +361,11 @@ function Person({ name, className }: { name: string; className?: string }) {
       )}
     >
       {name}
+      {bylines.length > 0 && (
+        <span className="text-muted-foreground block text-xs font-normal">
+          as {[...new Set(bylines)].join(", ")}
+        </span>
+      )}
     </a>
   );
 }
@@ -346,7 +388,13 @@ function Meta({
 }
 
 /** each person once, with every role of theirs: "Ada Example (Writing, Image)" */
-function Names({ names }: { names: { name: string; role?: Role }[] }) {
+function Names({
+  names,
+  article,
+}: {
+  names: { name: string; role?: Role }[];
+  article: ArchiveArticle;
+}) {
   const trail = useTrail();
   if (names.length === 0) return <span>No credits</span>;
   const roles = new Map<string, Role[]>();
@@ -355,20 +403,34 @@ function Names({ names }: { names: { name: string; role?: Role }[] }) {
     if (role && !held.includes(role)) held.push(role);
     roles.set(name, held);
   }
-  return [...roles].map(([name, held], index) => (
-    <span key={name}>
-      {index > 0 && ", "}
-      <a
-        href={personHref(name, trail)}
-        className="text-foreground underline-offset-4 hover:underline"
-      >
-        {name}
-      </a>
-      {held.length > 0 &&
-        ` (${held
-          .sort((a, b) => ROLES.indexOf(a) - ROLES.indexOf(b))
-          .map((role) => ROLE_NAMES[role])
-          .join(", ")})`}
-    </span>
-  ));
+  const contributions = contributionsOn(article);
+  return [...roles].map(([name, held], index) => {
+    const as = [
+      ...new Set(
+        contributions
+          .filter(
+            (c) =>
+              c.person === name && (held.length === 0 || held.includes(c.role)),
+          )
+          .flatMap((c) => c.bylines),
+      ),
+    ];
+    return (
+      <span key={name}>
+        {index > 0 && ", "}
+        <a
+          href={personHref(name, trail)}
+          className="text-foreground underline-offset-4 hover:underline"
+        >
+          {name}
+        </a>
+        {as.length > 0 && ` as ${as.join(", ")}`}
+        {held.length > 0 &&
+          ` (${held
+            .sort((a, b) => ROLES.indexOf(a) - ROLES.indexOf(b))
+            .map((role) => ROLE_NAMES[role])
+            .join(", ")})`}
+      </span>
+    );
+  });
 }

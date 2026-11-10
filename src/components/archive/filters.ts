@@ -18,6 +18,8 @@ export type Preset =
   | "12m"
   | "2y"
   | "year"
+  | "school-year"
+  | "last-school-year"
   | "custom";
 
 /* the calendar's own periods, then the rolling ranges; `short` is what a
@@ -27,6 +29,8 @@ export const PRESETS: { id: Preset; label: string; short?: string }[] = [
   { id: "semester", label: "This semester" },
   { id: "last-semester", label: "Last semester" },
   { id: "year", label: "This year" },
+  { id: "school-year", label: "This school year" },
+  { id: "last-school-year", label: "Last school year" },
   { id: "3m", label: "Last 3 months", short: "3 months" },
   { id: "6m", label: "Last 6 months", short: "6 months" },
   { id: "12m", label: "Last 12 months", short: "12 months" },
@@ -174,6 +178,14 @@ function exactRange(
       return { from: monthsBack(today, 24) };
     case "year":
       return { from: `${today.slice(0, 4)}-01-01` };
+    case "school-year":
+    case "last-school-year": {
+      const current = Number(periodOf(today, "school-year").key);
+      return periodBounds(
+        String(current - (state.preset === "last-school-year" ? 1 : 0)),
+        "school-year",
+      );
+    }
     case "custom":
       return { from: state.from || undefined, to: state.to || undefined };
   }

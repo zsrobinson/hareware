@@ -128,7 +128,9 @@ export function perArticle(
 /** "468 words per article", or nothing where none was counted */
 export function perArticleText(members: readonly Member[], measure: Measure) {
   const n = perArticle(members, measure);
-  return n === null ? "" : `${unitOf(n, measure)} per article`;
+  if (n === null) return "";
+  const amount = amountOf(members, measure);
+  return `${unitOf(amount.value, measure)} ÷ ${counted(amount.counted, "counted article", "counted articles")} ≈ ${n.toLocaleString()}`;
 }
 
 export const percentText = (value: number) =>
@@ -226,6 +228,10 @@ export function chartCount(grouped: Grouped, hidden: readonly string[]) {
     parts.push(
       `Top ${grouped.categories.length} of ${counted(grouped.available, "person", "people")}`,
     );
+  if (grouped.cutTie)
+    parts.push(
+      `${grouped.cutTie.tied} tied at ${grouped.cutTie.count.toLocaleString()}`,
+    );
   parts.push(
     drawn === whole
       ? unit(whole)
@@ -244,7 +250,7 @@ export function pairCount(grouped: Grouped): string {
   const pair = `${unitOf(now, grouped.measure)}, against ${then.toLocaleString()}`;
   /* only people are ever cut to a top few */
   return keys.length < grouped.available
-    ? `Top ${keys.length} of ${counted(grouped.available, "person", "people")} · ${pair}`
+    ? `Top ${keys.length} of ${counted(grouped.available, "person", "people")}${grouped.cutTie ? ` · ${grouped.cutTie.tied} tied at ${grouped.cutTie.count.toLocaleString()}` : ""} · ${pair}`
     : pair;
 }
 

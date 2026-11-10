@@ -387,7 +387,7 @@ test("a top few is chosen once over both ranges, so each total is its list", () 
   const ten = pivotOf({ ...config, top: 10 }, shown, SPRING, crowd, TODAY);
   expect(ten.rows).toHaveLength(10);
   expect(pivotCount(ten)).toBe(
-    "Top 10 of 16 people · 2 contributions, against 9",
+    "Top 10 of 16 people · 14 tied at 0 · 2 contributions, against 9",
   );
   expect(ten.count(before)).toBe(9);
   const some = pivotFilters(ten, before, SPRING_STATE);

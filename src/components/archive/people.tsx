@@ -388,6 +388,11 @@ function PersonPanel({
   return (
     <SidePanel title={person.name} back="All people" onClose={onClose}>
       <p className="text-muted-foreground -mt-3 text-xs">
+        {person.penNames.length > 0 && (
+          <span className="mb-1 block">
+            as {person.penNames.map((p) => p.byline).join(", ")}
+          </span>
+        )}
         {contributions === 0 ? "No" : contributions}{" "}
         {contributions === 1 ? "contribution" : "contributions"}
         {inRange?.scope && <> {inRange.scope}</>}

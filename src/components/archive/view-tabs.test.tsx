@@ -184,3 +184,20 @@ test("a touch screen narrowed keeps the chosen view in sight", async () => {
   act(() => observed.forEach((callback) => callback()));
   expect(strip.scrollLeft).toBe(200);
 });
+
+test("a clipped strip fades its right edge even without touch detection, until scrolled to the end", () => {
+  let left = 0;
+  vi.spyOn(HTMLElement.prototype, "scrollLeft", "get").mockImplementation(
+    () => left,
+  );
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(500);
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(700);
+  render(<Row />);
+  const strip = screen.getByRole("tablist");
+  expect(strip.style.maskImage).toContain("transparent");
+  act(() => {
+    left = 200;
+    strip.dispatchEvent(new Event("scroll"));
+  });
+  expect(strip.style.maskImage.endsWith("transparent)")).toBe(false);
+});

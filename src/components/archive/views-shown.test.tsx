@@ -385,7 +385,7 @@ test("Read by section reads the most per article first, each with a faint bar", 
   /* a bar for each row with views per article, and none for the total */
   expect(document.querySelectorAll("[data-bar]")).toHaveLength(2);
   expect(
-    screen.getByText("Which section's articles are read most, per article, this semester?"),
+    screen.getByText("Which section's articles are read most, per article?"),
   ).toBeTruthy();
   /* nothing on screen is from before Jetpack began counting */
   expect(document.querySelector("figcaption")!.textContent).not.toContain(

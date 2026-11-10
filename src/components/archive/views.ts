@@ -164,7 +164,7 @@ export const VIEWS = [
     id: "section-share",
     label: "Section share",
     title: "Each section's share of the articles",
-    question: "What share of this semester's articles is each section's?",
+    question: "What share of the articles is each section's?",
     source: "articles",
     range: "semester",
     layout: {
@@ -204,7 +204,7 @@ export const VIEWS = [
     id: "most-read",
     label: "Most read",
     title: "The most read articles",
-    question: "Which of this semester's articles have been read the most?",
+    question: "Which articles have been read the most?",
     source: "articles",
     range: "semester",
     layout: {
@@ -219,8 +219,7 @@ export const VIEWS = [
     id: "read-by-section",
     label: "Read by section",
     title: "Views per article, by section",
-    question:
-      "Which section's articles are read most, per article, this semester?",
+    question: "Which section's articles are read most, per article?",
     source: "articles",
     range: "semester",
     layout: {
@@ -262,7 +261,7 @@ export const VIEWS = [
     id: "top",
     label: "Top contributors",
     title: "Who did the most, and as what",
-    question: "Who has done the most this semester, and what?",
+    question: "Who has done the most, and what?",
     source: "people",
     range: "semester",
     layout: {
@@ -283,8 +282,7 @@ export const VIEWS = [
     id: "new",
     label: "New people",
     title: "Who joined, and where they started",
-    question:
-      "Who made their first contribution this semester, where, and as what?",
+    question: "Who made their first contribution, where, and as what?",
     source: "people",
     range: "semester",
     layout: {

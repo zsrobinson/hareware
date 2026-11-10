@@ -591,15 +591,15 @@ test("Section share reads each section as a share of the articles, over their co
   /* the whole a share is of reads as its count */
   expect(read(null)).toEqual({ count: 10, share: null, average: null });
   expect(pivotMatrix(pivot)).toEqual([
-    ["Section", "Articles"],
-    ["News", "40.0%"],
-    ["Features", "30.0%"],
-    ["Entertainment", "0.0%"],
-    ["Sports", "30.0%"],
-    ["Rabbithole", "0.0%"],
-    ["Total", "10"],
+    ["Section", "Articles", "Share"],
+    ["News", "4", "40.0%"],
+    ["Features", "3", "30.0%"],
+    ["Entertainment", "0", "0.0%"],
+    ["Sports", "3", "30.0%"],
+    ["Rabbithole", "0", "0.0%"],
+    ["Total", "10", "100.0%"],
   ]);
-  expect(toTsv(pivotMatrix(pivot)).split("\n")[1]).toBe("News\t40.0%");
+  expect(toTsv(pivotMatrix(pivot)).split("\n")[1]).toBe("News\t4\t40.0%");
 });
 
 test("a pivot of people keeps the top few, and its totals are theirs", () => {
@@ -618,7 +618,7 @@ test("a pivot of people keeps the top few, and its totals are theirs", () => {
   );
   expect(pivot.rows).toHaveLength(10);
   expect(pivotCount(pivot)).toBe(
-    "Top 10 of 13 people · 18 of 21 contributions",
+    "Top 10 of 13 people · 8 tied at 1 · 18 of 21 contributions",
   );
   const shown = pivot.rows.map((r) => r.key);
   for (const { units } of pivot.members({ row: null, column: "writer" }))
@@ -647,7 +647,7 @@ test("a pivot of people keeps the top few, and its totals are theirs", () => {
   );
   expect(across.columns).toHaveLength(10);
   expect(pivotCount(across)).toBe(
-    "Top 10 of 13 people · 18 of 21 contributions",
+    "Top 10 of 13 people · 8 tied at 1 · 18 of 21 contributions",
   );
 });
 
@@ -729,13 +729,13 @@ test("every section is a row or a column, one with nothing a zero, unless the fi
     average: null,
   });
   expect(toTsv(pivotMatrix(share)).split("\n")).toEqual([
-    "Section\tArticles",
-    "News\t100.0%",
-    "Features\t0.0%",
-    "Entertainment\t0.0%",
-    "Sports\t0.0%",
-    "Rabbithole\t0.0%",
-    "Total\t1",
+    "Section\tArticles\tShare",
+    "News\t1\t100.0%",
+    "Features\t0\t0.0%",
+    "Entertainment\t0\t0.0%",
+    "Sports\t0\t0.0%",
+    "Rabbithole\t0\t0.0%",
+    "Total\t1\t100.0%",
   ]);
 
   /* a section the filters pick is a row though it has nothing, and no other is */

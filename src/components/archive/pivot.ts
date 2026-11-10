@@ -19,6 +19,7 @@ import {
   periodIndex,
   periodOf,
   periodBounds,
+  tieAtCut,
   sinceLabel,
   type Filters,
   type Grouped,
@@ -68,6 +69,7 @@ export type Pivot = {
   /** a retention cell in the semester still in progress */
   soFar: (slice: PivotSlice) => boolean;
   totalLabel: string;
+  columnTie: Grouped["cutTie"];
   /** what a share is taken of, or null when cells are numbers */
   base: (slice: PivotSlice) => PivotSlice | null;
   /** the share as a percentage, or null when cells are numbers */
@@ -235,6 +237,7 @@ export function pivotOf(
         : columns === "since"
           ? sinceThrough(grouped.series, grouped.categories)
           : grouped.series;
+  let columnTie = null;
   if (columns === "person") {
     const sizes = new Map(
       grouped.series.map((s) => [
@@ -245,6 +248,11 @@ export function pivotOf(
     shownColumns = [...shownColumns].sort(
       (a, b) =>
         sizes.get(b.key)! - sizes.get(a.key)! || a.label.localeCompare(b.label),
+    );
+    columnTie = tieAtCut(
+      shownColumns.map((c) => c.key),
+      (key) => sizes.get(key) ?? 0,
+      top,
     );
     if (top) shownColumns = shownColumns.slice(0, top);
   }
@@ -292,6 +300,7 @@ export function pivotOf(
   return {
     config,
     grouped,
+    columnTie,
     possible,
     soFar: (slice) => {
       const intake = intakeOf(slice);
@@ -431,6 +440,8 @@ export function pivotCount(pivot: Pivot): string {
     parts.push(
       `Top ${pivot.columns.length} of ${counted(available.columns, "person", "people")}`,
     );
+  for (const tie of [grouped.cutTie, pivot.columnTie])
+    if (tie) parts.push(`${tie.tied} tied at ${tie.count.toLocaleString()}`);
   parts.push(
     shown === whole
       ? unit(whole)

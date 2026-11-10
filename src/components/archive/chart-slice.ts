@@ -228,6 +228,10 @@ export function chartCount(grouped: Grouped, hidden: readonly string[]) {
     parts.push(
       `Top ${grouped.categories.length} of ${counted(grouped.available, "person", "people")}`,
     );
+  if (grouped.cutTie)
+    parts.push(
+      `${grouped.cutTie.tied} tied at ${grouped.cutTie.count.toLocaleString()}`,
+    );
   parts.push(
     drawn === whole
       ? unit(whole)
@@ -246,7 +250,7 @@ export function pairCount(grouped: Grouped): string {
   const pair = `${unitOf(now, grouped.measure)}, against ${then.toLocaleString()}`;
   /* only people are ever cut to a top few */
   return keys.length < grouped.available
-    ? `Top ${keys.length} of ${counted(grouped.available, "person", "people")} · ${pair}`
+    ? `Top ${keys.length} of ${counted(grouped.available, "person", "people")}${grouped.cutTie ? ` · ${grouped.cutTie.tied} tied at ${grouped.cutTie.count.toLocaleString()}` : ""} · ${pair}`
     : pair;
 }
 

@@ -326,11 +326,13 @@ export function strayRows(payload: SheetPayload | undefined): Unreadable[] {
 
 /** the page's views, once the Sheet has been read; undefined until then */
 export function usePageViews(source: Page): PageViews | undefined {
-  const { data, isError } = useQuery({
+  const { data } = useQuery({
     queryKey: SHEET_KEY,
     queryFn: readSheetPayload,
     staleTime: 60_000,
   });
-  if (!data && !isError) return undefined;
+  /* Keep the gate mounted on failure: switching to Page would remount its
+     query, whose retry-on-mount restarts even a terminal refusal. */
+  if (!data) return undefined;
   return pageViews(data, source);
 }

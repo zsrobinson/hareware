@@ -67,11 +67,11 @@ export function newsletterHtml({
     })
     .join("\n");
 
-  return `<div style="background-color: #5b2218; padding: 8px 12px; line-height: 1.15; text-align: center;">
+  return `<div style="background-color: #171717; padding: 8px 12px; line-height: 1.15; text-align: center;">
   <img src="${LOGO}" style="height: 30px;" />
 </div>
 <p>Hey everyone,</p>
-<div style="background-color: rgb(244, 204, 204); padding: 8px 12px; line-height: 1.15;">
+<div style="background-color: #eeeeee; padding: 8px 12px; line-height: 1.15;">
   <b><font size="4">Our next general body meeting will be ${
     /* the sentence brings its own full stop */
     meeting.trim()

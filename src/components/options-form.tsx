@@ -37,9 +37,9 @@ function toSingle(value: number | readonly number[]) {
 
 /* what the closed selects show, matching their menus */
 const PRESETS = [
-  { value: "black", label: "Black" },
-  { value: "gray", label: "Gray" },
-  { value: "lightGray", label: "Light gray" },
+  { value: "maroon", label: "Maroon" },
+  { value: "pink", label: "Pink" },
+  { value: "pinkOld", label: "Pink (old)" },
   { value: "white", label: "White" },
   { value: "custom", label: "Custom" },
 ];
@@ -87,9 +87,9 @@ export function OptionsForm({
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                <SelectItem value="black">Black</SelectItem>
-                <SelectItem value="gray">Gray</SelectItem>
-                <SelectItem value="lightGray">Light gray</SelectItem>
+                <SelectItem value="maroon">Maroon</SelectItem>
+                <SelectItem value="pink">Pink</SelectItem>
+                <SelectItem value="pinkOld">Pink (old)</SelectItem>
                 <SelectItem value="white">White</SelectItem>
                 <SelectItem value="custom" disabled>
                   Custom

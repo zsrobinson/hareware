@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { presets } from "./color-presets";
 
 const DEFAULTS = {
-  ...presets.black,
+  ...presets.maroon,
   ratio: "3/4",
   titleSize: 24,
   bylineSize: 16,

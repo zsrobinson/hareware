@@ -36,9 +36,8 @@ import { Input } from "~/components/ui/input";
 import type { Archive } from "~/lib/credits/archive";
 import type { ViewsSummary } from "~/lib/credits/views";
 import { ROLE_NAMES, ROLES, type Role } from "~/lib/credits/labels";
-import { peopleOf } from "~/lib/credits/person";
 import { sortSections } from "~/lib/credits/sections";
-import { searchable, type Filters, type Period } from "~/lib/credits/stats";
+import { type Filters, type Period } from "~/lib/credits/stats";
 import { cn } from "~/lib/utils";
 import { FieldRow, FieldRows } from "~/components/field-row";
 import { DenialMessage } from "~/components/gated";
@@ -46,6 +45,7 @@ import { PageActions } from "~/components/page-actions";
 import { BottomSheet, PanelGroup, useIsPhone } from "~/components/panel";
 import { couldNotRead, ReadFailed, Reading } from "~/components/read-state";
 import { Refused } from "~/lib/gated";
+import { ArchiveSearch } from "./archive-search";
 import { Choice } from "./choice";
 import { Throttled } from "~/lib/services/wordpress/request";
 import { queryClient } from "~/lib/query-client";
@@ -293,6 +293,7 @@ export function describeFilters(
 /** the archive, the filter bar, and whichever view is handed in */
 export function ArchiveShell({
   children,
+  peopleSearch = false,
   searching = "articles",
   filters = true,
   roleFilter = true,
@@ -304,6 +305,7 @@ export function ArchiveShell({
 }: {
   children: (props: ViewProps) => ReactNode;
   searching?: Searching;
+  peopleSearch?: boolean;
   /** false on a page about the Sheet rather than the archive */
   filters?: boolean;
   /** false where a role means nothing, as on Problems */
@@ -322,6 +324,7 @@ export function ArchiveShell({
   return (
     <QueryClientProvider client={queryClient}>
       <Shell
+        peopleSearch={peopleSearch}
         searching={searching}
         showFilters={filters}
         roleFilter={roleFilter}
@@ -337,6 +340,7 @@ export function ArchiveShell({
 
 function Shell({
   children,
+  peopleSearch = false,
   searching,
   showFilters,
   roleFilter,
@@ -346,6 +350,7 @@ function Shell({
 }: {
   children: (props: ViewProps) => ReactNode;
   searching: Searching;
+  peopleSearch?: boolean;
   showFilters: boolean;
   roleFilter: boolean;
   reload: Reload;
@@ -376,6 +381,7 @@ function Shell({
   return (
     <Ready
       state={state}
+      peopleSearch={peopleSearch}
       searching={searching}
       showFilters={showFilters}
       roleFilter={roleFilter}
@@ -399,6 +405,7 @@ function Ready({
     refresh: reread,
   },
   children,
+  peopleSearch = false,
   searching,
   showFilters,
   roleFilter,
@@ -409,6 +416,7 @@ function Ready({
   state: Extract<ArchiveState, { status: "ready" }>;
   children: (props: ViewProps) => ReactNode;
   searching: Searching;
+  peopleSearch?: boolean;
   showFilters: boolean;
   roleFilter: boolean;
   reload: Reload;
@@ -558,7 +566,12 @@ function Ready({
                   archive={archive}
                   state={state}
                   setState={setState}
-                  searchPlaceholder={SEARCHES[searching].placeholder}
+                  searchPlaceholder={
+                    peopleSearch
+                      ? "Search people and articles"
+                      : SEARCHES[searching].placeholder
+                  }
+                  suggestPeople={searching === "articles"}
                   roleFilter={roleFilter}
                   opening={opening}
                   reloadButton={inToolbar && freshness(true)}
@@ -570,12 +583,7 @@ function Ready({
                 />
               )}
               {showFilters && (
-                <PeopleFilter
-                  archive={archive}
-                  state={state}
-                  setState={setState}
-                  suggest={searching === "articles"}
-                />
+                <PeopleFilter state={state} setState={setState} />
               )}
               {showFilters && <SheetNotice archive={archive} />}
               {showFilters && viewsShown > 0 && (
@@ -755,43 +763,15 @@ function Freshness({
   );
 }
 
-const SUGGESTED = 3;
-
-/**
- * The people filter, a chip per person that removes them; and, while the
- * search box holds part of a name, the people it could mean, any of whom
- * counts their own contributions alone in place of the search.
- */
+/** The exact people and articles selected, each removable. */
 function PeopleFilter({
-  archive,
   state,
   setState,
-  suggest,
 }: {
-  archive: Archive;
   state: FilterState;
   setState: (state: FilterState) => void;
-  /** false where the search already looks at names (People) */
-  suggest: boolean;
 }) {
-  const typed = suggest ? searchable(state.search.trim()) : "";
-  const suggested = useMemo(() => {
-    if (typed.length < 2) return [];
-    return [...peopleOf(archive.articles).keys()]
-      .filter(
-        (name) =>
-          !state.people.includes(name) && searchable(name).includes(typed),
-      )
-      .sort((a, b) => a.localeCompare(b))
-      .slice(0, SUGGESTED);
-  }, [archive, typed, state.people]);
-
-  if (
-    state.people.length === 0 &&
-    state.articles.length === 0 &&
-    suggested.length === 0
-  )
-    return null;
+  if (state.people.length === 0 && state.articles.length === 0) return null;
   return (
     <div role="group" aria-label="People" className="flex flex-wrap gap-2">
       {state.articles.length > 0 && (
@@ -824,21 +804,6 @@ function PeopleFilter({
           {name}
           <XIcon aria-hidden />
           <span className="sr-only">, remove</span>
-        </Button>
-      ))}
-      {suggested.map((name) => (
-        <Button
-          key={name}
-          variant="outline"
-          size="sm"
-          className="text-muted-foreground border-dashed"
-          title={`Count ${name}'s own contributions, not everyone on articles the search finds`}
-          onClick={() =>
-            setState({ ...state, people: [...state.people, name], search: "" })
-          }
-        >
-          <UserRoundIcon />
-          {state.people.length === 0 ? "Only" : "Also"} {name}
         </Button>
       ))}
     </div>
@@ -882,6 +847,7 @@ function FilterBar({
   state,
   setState,
   searchPlaceholder,
+  suggestPeople,
   roleFilter,
   opening,
   reloadButton,
@@ -895,6 +861,7 @@ function FilterBar({
   state: FilterState;
   setState: (state: FilterState) => void;
   searchPlaceholder: string;
+  suggestPeople: boolean;
   roleFilter: boolean;
   opening: FilterState;
   /** a phone's Reload, at the end of the search row */
@@ -924,20 +891,17 @@ function FilterBar({
   const active = differs("preset") + differs("sections") + differs("roles");
 
   const search = (
-    /* narrow enough that search, filters and Columns share one line in the
-       600px a side panel leaves */
-    <label className="relative min-w-0 flex-1 sm:min-w-24 @2xl:min-w-36">
-      <span className="sr-only">Search</span>
-      <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-      <Input
-        ref={searchInput}
-        type="search"
+    <div className="relative min-w-0 flex-1 sm:min-w-24 @2xl:min-w-36">
+      <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2" />
+      <ArchiveSearch
+        archive={archive}
+        state={state}
+        setState={setState}
+        inputRef={searchInput}
         placeholder={placeholder}
-        className="bg-background pl-8"
-        value={state.search}
-        onChange={(event) => setState({ ...state, search: event.target.value })}
+        suggest={suggestPeople}
       />
-    </label>
+    </div>
   );
 
   /* in the sheet each control fills its row's control column; on a laptop

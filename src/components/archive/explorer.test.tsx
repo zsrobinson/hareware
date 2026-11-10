@@ -217,7 +217,18 @@ test("a name searched for says what it matched, and can count that person alone"
   await waitFor(() => expect(caption()).toContain("3 contributions"));
   expect(caption()).toContain("“ada” in a title or byline");
 
-  await user.click(screen.getByRole("button", { name: "Only Ada Example" }));
+  const search = screen.getByRole("searchbox", { name: "Search" });
+  expect(search.getAttribute("placeholder")).toBe("Search people and articles");
+  await user.click(search);
+  const suggestions = screen.getByRole("group", {
+    name: "People matching search",
+  });
+  expect(within(suggestions).getAllByRole("button")[0]!.textContent).toBe(
+    "Only Ada Example",
+  );
+  await user.click(
+    within(suggestions).getByRole("button", { name: "Only Ada Example" }),
+  );
   await waitFor(() => expect(caption()).toContain("2 contributions"));
   expect(caption()).toContain("Ada Example");
   const params = new URLSearchParams(window.location.search);

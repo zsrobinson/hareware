@@ -126,6 +126,7 @@ export function ExplorerPage({
   const shape = shapeOf(state, source);
   return (
     <ArchiveShell
+      peopleSearch={source === "people" && shape.type !== "table"}
       searching={searchingOf(shape, source)}
       opening={openingOf(state, source)}
       period={periodOfShape(shape)}

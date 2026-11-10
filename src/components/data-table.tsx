@@ -22,11 +22,13 @@ import {
   ArrowUpDownIcon,
   ChevronDownIcon,
   Columns3Icon,
+  ClipboardCopyIcon,
   DownloadIcon,
   XIcon,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { toCsv } from "~/lib/csv";
+import { CopyTextButton } from "~/components/copy-button";
+import { toCsv, toTsv } from "~/lib/csv";
 import { Button } from "~/components/ui/button";
 import {
   DropdownMenu,
@@ -227,7 +229,7 @@ export function DataTable<T>({
 
   /* what is on screen: `getSortedRowModel()` is filtered and sorted but not
      paginated, and only visible columns are written */
-  function exportCsv() {
+  function exportMatrix() {
     const shown = table.getVisibleLeafColumns();
     const rows = table.getSortedRowModel().rows;
     const headers = shown.map(headerOf);
@@ -236,6 +238,11 @@ export function DataTable<T>({
       shown.map((column) => row.getValue(column.id)),
     );
 
+    return { headers, body };
+  }
+
+  function exportCsv() {
+    const { headers, body } = exportMatrix();
     const day = new Date().toISOString().slice(0, 10);
     saveFile(
       /* the BOM makes excel read utf-8 */
@@ -277,15 +284,27 @@ export function DataTable<T>({
       </DropdownMenu>
     ),
     download: csv ? (
-      <Button
-        variant="outline"
-        className="bg-background"
-        onClick={exportCsv}
-        disabled={shownRows === 0}
-      >
-        <DownloadIcon />
-        Download CSV
-      </Button>
+      <>
+        <CopyTextButton
+          text={() => {
+            const { headers, body } = exportMatrix();
+            return toTsv([headers, ...body]);
+          }}
+          label="Copy table"
+          what="the table, to paste into a sheet"
+          icon={ClipboardCopyIcon}
+          failed="Download the CSV instead."
+        />
+        <Button
+          variant="outline"
+          className="bg-background"
+          onClick={exportCsv}
+          disabled={shownRows === 0}
+        >
+          <DownloadIcon />
+          Download CSV
+        </Button>
+      </>
     ) : null,
   };
   const placed = controls?.(own);

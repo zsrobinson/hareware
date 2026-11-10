@@ -10,7 +10,7 @@ import {
 import { CopyTextButton } from "~/components/copy-button";
 import { Button } from "~/components/ui/button";
 import { amountOf, applyFilters, isPeriod } from "~/lib/credits/stats";
-import { toCsv } from "~/lib/csv";
+import { toCsv, toTsv } from "~/lib/csv";
 import { saveFile } from "~/lib/save-file";
 import { cn } from "~/lib/utils";
 import { useShowsViews, type ViewProps } from "./archive-shell";
@@ -45,7 +45,6 @@ import {
   pivotTitle,
   readPivotSlice,
   sameSlice,
-  toTsv,
   type Header,
   type Pivot,
   type PivotSlice,

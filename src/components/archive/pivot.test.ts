@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { toCsv } from "~/lib/csv";
+import { toCsv, toTsv } from "~/lib/csv";
 import { contributionsOn } from "~/lib/credits/person";
 import {
   applyFilters,
@@ -39,7 +39,6 @@ import {
   pivotMatrix,
   pivotOf,
   readPivotSlice,
-  toTsv,
   type Pivot,
   type PivotSlice,
 } from "./pivot";

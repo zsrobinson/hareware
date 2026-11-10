@@ -8,7 +8,6 @@
 import type { ArchiveArticle } from "~/lib/credits/archive";
 import { ROLE_NAMES, type Role } from "~/lib/credits/labels";
 import { SECTION_ORDER, sortSections } from "~/lib/credits/sections";
-import { spreadsheetCell } from "~/lib/csv";
 import {
   amountOf,
   easternDate,
@@ -586,14 +585,3 @@ export function pivotMatrix(pivot: Pivot): string[][] {
     line(null, "Total"),
   ];
 }
-
-/** the matrix as a sheet takes a paste: tab between cells, a line a row,
-    and every cell guarded as the CSV's are */
-export const toTsv = (matrix: string[][]) =>
-  matrix
-    .map((row) =>
-      row
-        .map((cell) => spreadsheetCell(cell.replace(/[\t\r\n]+/g, " ")))
-        .join("\t"),
-    )
-    .join("\n");

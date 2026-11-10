@@ -96,7 +96,7 @@ test("a row that cannot be read is listed with why, and the rest still show", ()
     {
       row: 5,
       id: "x5",
-      reason: "its chart's draw “pie” isn't one HareWare can show",
+      reason: "its chart's draw \"pie\" isn't one HareWare can show",
     },
     {
       row: 6,

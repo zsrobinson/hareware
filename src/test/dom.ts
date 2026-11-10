@@ -4,3 +4,15 @@
 import { DOMParser } from "linkedom";
 
 globalThis.DOMParser ??= DOMParser as unknown as typeof globalThis.DOMParser;
+
+/* jsdom has no pointer capture, which a dialog's controls ask for as they
+   are pressed; unanswered, the press throws outside any test */
+if (
+  typeof Element !== "undefined" &&
+  !("setPointerCapture" in Element.prototype)
+)
+  Object.assign(Element.prototype, {
+    setPointerCapture() {},
+    releasePointerCapture() {},
+    hasPointerCapture: () => false,
+  });

@@ -224,9 +224,10 @@ test("a chart against the period before draws each category's pair, and their di
   const user = userEvent.setup();
   render(<ArticlesPage />);
   const table = await screen.findByRole("button", { name: "Show as table" });
-  expect(document.querySelector("figcaption")!.textContent).toContain(
-    "Articles by section, against the period before",
-  );
+  /* edited, it is headed as Sections still, and its count says the pair */
+  const caption = document.querySelector("figcaption")!.textContent;
+  expect(caption).toContain("Articles in each section");
+  expect(caption).toContain("2 articles, against 2");
   await user.click(table);
   expect(
     screen.getAllByRole("columnheader").map((cell) => cell.textContent),

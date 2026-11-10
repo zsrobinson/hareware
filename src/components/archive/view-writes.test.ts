@@ -56,7 +56,7 @@ function serve(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       if (url === "/api/sheet") {
-        sent.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        sent.push(JSON.parse(init?.body as string) as Record<string, unknown>);
         return answer();
       }
       return then();

@@ -114,7 +114,7 @@ function checked<T extends Record<string, unknown>>(
     if (given[key] !== value)
       return given[key] === undefined
         ? `its ${what} has no ${key}`
-        : `its ${what}'s ${key} “${String(given[key])}” isn't one HareWare can show`;
+        : `its ${what}'s ${key} ${JSON.stringify(given[key])} isn't one HareWare can show`;
   return read;
 }
 

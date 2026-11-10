@@ -60,62 +60,47 @@ everything below and wins over ADR 0014 and plan.md.
 
 ## Left to do
 
-1. **Run every gate**: `astro check`, lint, the full test suite,
-   `format:check` and `build`. None of these has passed yet. The page
-   tests are written but have never run:
-   - `saved-views.page.test.tsx`
-   - `explorer.test.tsx`
-   - `declared-view.test.tsx`
-   - `view-tabs.test.tsx` passes.
-
-   Expect some fixes to queries and toast text.
-2. **The phone layout of Reset / Save** beside the swiping tab strip is
-   unchecked. Look at it in screenshots.
-3. **QA screenshots.**
-   - The harness server (`qa/server.mjs` in the parent's scratchpad) now has
-     an in-memory Views tab, `/qa/views/touch` and `/qa/views/reset`. The
+1. **QA screenshots.** None are taken yet.
+   - The harness server (`qa/server.mjs` in the parent's scratchpad) has an
+     in-memory Views tab, `/qa/views/touch` and `/qa/views/reset`. The
      original is kept as `server.mjs.bak-before-saved`.
+   - `qa/browsers`, `qa/node_modules`, `qa/shots` and `qa/sites` were
+     deleted to free RAM. Run `npm install` in `qa/` and download Chromium
+     again first.
+   - `build.sh` calls `npx astro build`, which may stall here the way npx
+     did (see Gotchas).
    - The states file is in this session's scratchpad as
-     `qa/states-saved.mjs`. Copy it across if needed.
+     `qa/states-saved.mjs`.
    - Command:
      `node shots.mjs <worktree> --name saved --states states-saved.mjs`
    - Shots to capture: the edited state, the tab menu, the Save menu, a
      conflict, and Settings' Views section.
-4. **Recheck the delete-then-Undo path on a page still on its starter
-   set.** Undo writes against the latest read, so it should not resend the
-   starter set.
-5. **Split the WIP commit** into small commits, then report to the parent.
+2. **Check the phone layout** of Reset / Save beside the swiping tab strip,
+   in those screenshots.
+3. **Recheck delete-then-Undo on a page still on its starter set.** Undo
+   writes against the latest read, so it should not resend the starter set;
+   no test covers that case yet.
+4. **Split the WIP commits** into small commits, then report to the parent.
 
-## Test status (Pi, after the last change)
+## Gates (Pi, at the head after this note)
 
-`vitest run src/lib/credits src/pages/api` plus `saved-views.test.ts`,
-`view-writes.test.ts`, `view-state.test.ts` and `view-tabs.test.tsx`: 14
-files, 151 tests, all passing.
+| Gate                              | Result                                                                                                                                                                                           |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `astro check`                     | 0 errors, 0 warnings, 4 hints. Two hints are a deprecated `fetchQuery` overload in `view-actions.tsx` and `view-writes.ts`.                                                                      |
+| Full suite, default 5 s timeout   | 602 of 603 pass. The one failure is the known Pi timeout in `pivot-view.test.tsx`'s "the builder makes a pivot".                                                                                 |
+| Full suite, `--testTimeout=30000` | 64 files, 603 tests, all pass.                                                                                                                                                                   |
+| `prettier --check .`              | Clean once this note was formatted.                                                                                                                                                              |
+| `astro build`                     | Passes, with Vite's existing chunk-size warning.                                                                                                                                                 |
+| Lint                              | Every `.ts`/`.tsx` file this branch changes or adds is clean. A whole-repo `eslint .` never finished on the Pi: it thrashed at 1.4 GB with too little memory. Run it on a roomier host or in CI. |
 
-`tsc --noEmit` shows no errors in this branch's code. The 5 errors it does
-show are Astro virtual modules (`astro:middleware`, `import.meta.env` and
-`glob`), which only `astro check` resolves.
+Fixes made in this run:
 
-### Page tests (Pi, after the handoff push)
-
-`saved-views.page.test.tsx`, `explorer.test.tsx` and
-`declared-view.test.tsx` ran with `--testTimeout=30000`: 25 tests, 19
-passed, 6 failed.
-
-- **Three timed out at 30 s:** the first test in each file. This looks like
-  a cold first render of a page on the Pi; check it on the new host first.
-- **Two failures are bugs in the tests, not the app:**
-  - In "a save the Sheet refuses", `queryByText(/^Saved/)` matches Sonner's
-    empty `data-title` div. Match the toast's text exactly instead.
-  - In "a save over someone else's since", "Saved All for everyone" shows
-    twice, because the previous test's toast stays in the Toaster. Clear
-    toasts between tests, or use `findAllByText`.
-- **One was not followed up:** in "a view is headed by its own title,
-  edited or not", the old Custom link's page never showed "What News
-  published". It may be the same cold-render timing, or an old link not
-  opening its base view.
-- jsdom logs `setPointerCapture is not a function` from the Select. It is
-  noise, but it may want a stub in `src/test/dom.ts`.
+- Starter rows were numbered from 0; they now start at 1.
+- The unsaved view's id is `draft`, because `new` was a starter id.
+- A pivot test's expectation changed: an edited view keeps its own title.
+- Toasts are dismissed between page tests.
+- jsdom gets a pointer-capture stub in `src/test/dom.ts`.
+- Seven lint errors are fixed.
 
 ### Merging with display fixes
 

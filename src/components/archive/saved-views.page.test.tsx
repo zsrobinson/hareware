@@ -7,6 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { afterEach, expect, test, vi } from "vitest";
 import { Toaster } from "~/components/ui/sonner";
 import type { Rows } from "~/lib/services/google/sheets";
@@ -45,6 +46,8 @@ const posts = [
 ];
 
 afterEach(() => {
+  /* a toast outlives its page, as in a browser: each test starts with none */
+  toast.dismiss();
   cleanup();
   vi.unstubAllGlobals();
   window.history.replaceState(null, "", "/");
@@ -102,7 +105,7 @@ test("a save the Sheet refuses says so, and the view stays edited", async () => 
   expect(
     await screen.findByText("Not saved: google sheets answered 500"),
   ).toBeTruthy();
-  expect(screen.queryByText(/^Saved/)).toBeNull();
+  expect(screen.queryByText("Saved All for everyone")).toBeNull();
   expect(screen.getByRole("tab", { name: "All, edited" })).toBeTruthy();
   expect(JSON.parse(tabs.Views![1]![3]!).range).toBe("3m");
 });

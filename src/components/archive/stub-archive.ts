@@ -59,14 +59,18 @@ export function stubArchive({
   };
   const tabs: Record<string, Rows> = viewsTab ? { Views: viewsTab } : {};
   const sheets = {
-    tabs: async () => Object.keys(tabs),
-    read: async (titles: string[]) =>
-      new Map(titles.filter((t) => t in tabs).map((t) => [t, tabs[t]!])),
-    addTab: async (title: string) => {
+    tabs: () => Promise.resolve(Object.keys(tabs)),
+    read: (titles: string[]) =>
+      Promise.resolve(
+        new Map(titles.filter((t) => t in tabs).map((t) => [t, tabs[t]!])),
+      ),
+    addTab: (title: string) => {
       tabs[title] = [];
+      return Promise.resolve();
     },
-    replace: async (title: string, rows: Rows) => {
+    replace: (title: string, rows: Rows) => {
       tabs[title] = rows;
+      return Promise.resolve();
     },
   } as unknown as Sheets;
   const sheet = async () => {
@@ -113,7 +117,7 @@ export function stubArchive({
       String(url).startsWith("/api/stats/")
         ? new Response("WordPress stats aren't set up", { status: 503 })
         : String(url) === "/api/sheet"
-          ? write(String(init?.body))
+          ? write(init?.body as string)
           : Response.json({ sheet: await sheet() }),
     ),
   );

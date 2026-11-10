@@ -1,0 +1,77 @@
+name: Dependabot auto-merge
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions: {}
+
+jobs:
+  routine:
+    if: >-
+      vars.DEPENDABOT_AUTO_MERGE == 'true' &&
+      github.repository == 'zsrobinson/hareware' &&
+      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == 'main' &&
+      !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # Never check out or execute PR code under pull_request_target. Keep
+      # Dependabot's author and signed-commit verification enabled.
+      - name: Verify Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2.5.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for routine updates
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          DEPENDENCY_GROUP: ${{ steps.metadata.outputs.dependency-group }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
+          DIRECTORY: ${{ steps.metadata.outputs.directory }}
+          MAINTAINER_CHANGES: ${{ steps.metadata.outputs.maintainer-changes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$DEPENDENCY_GROUP" != routine || "$DIRECTORY" != / || "$MAINTAINER_CHANGES" != false ]]; then
+            echo "Manual review: not an unchanged-maintainer routine group."
+            exit 0
+          fi
+          case "$ECOSYSTEM" in
+            npm|npm_and_yarn) ;;
+            *) echo "Manual review: not npm."; exit 0 ;;
+          esac
+          case "$HEAD_REF" in
+            dependabot/npm_and_yarn/routine-*) ;;
+            *) echo "Manual review: unexpected update branch."; exit 0 ;;
+          esac
+          case "$UPDATE_TYPE" in
+            version-update:semver-minor|version-update:semver-patch) ;;
+            *) echo "Manual review: major or unknown version change."; exit 0 ;;
+          esac
+          files=$(gh api --paginate "repos/$GH_REPO/pulls/$PR_NUMBER/files" --jq '.[].filename')
+          if [[ -z "$files" ]]; then
+            echo "Manual review: no changed files."
+            exit 0
+          fi
+          while IFS= read -r path; do
+            case "$path" in
+              package.json|package-lock.json) ;;
+              *) echo "Manual review: files beyond the npm manifest and lockfile."; exit 0 ;;
+            esac
+          done <<< "$files"
+          # GitHub waits for main's required checks; this never bypasses them.
+          gh pr merge "$PR_URL" --auto --squash --match-head-commit "$PR_HEAD"
